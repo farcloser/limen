@@ -1,0 +1,91 @@
+# Per-language rules
+
+The [mandatory files](./mandatory-files.md) apply to every repository without exception.
+This chapter collects the rules that apply *conditionally* — only when a project uses a
+given language or tool. `limen` detects the trigger automatically and enforces the rule only
+when it is relevant, so a pure-Go repository is never asked for a shell config, and a
+repository that ships shell or YAML cannot quietly skip one.
+
+The shape of every per-language rule is the same: **if the trigger is present, the
+requirement is mandatory; if it is absent, the rule does not apply** and `limen` reports
+nothing for it.
+
+## Shell — `.just/.shellcheckrc`
+
+| Trigger | Requirement |
+|---------|-------------|
+| The repository contains shell sources. | A `.just/.shellcheckrc` is present and matches the canonical baseline **exactly**. |
+
+Any project that ships shell must lint it, and lint it *the same way everywhere*.
+[ShellCheck](https://www.shellcheck.net) is the linter; `.shellcheckrc` is how its
+configuration — which checks are disabled, which shell dialect is assumed — travels with the
+code.
+
+**What counts as shell.** `limen` treats a file as a shell source when it is:
+
+- a `*.sh` or `*.bash` file, or
+- an **extensionless** file whose first line is a shebang for a dialect ShellCheck lints
+  (`#!/bin/sh`, `#!/usr/bin/env bash`, and the like — `sh`, `bash`, `dash`, `ksh`).
+
+"Counts as shell" deliberately equals "ShellCheck can lint it": the trigger exists to require
+the linter's config, so a `zsh` (or `fish`) script does not fire it — ShellCheck has no
+dialect for those, and the config would be dead weight. (A zsh script *named* `*.sh` still
+counts: the extension claims a dialect, and ShellCheck holds it to that claim.) The scan skips
+`.git` and vendored dependency directories (`node_modules`, `vendor`), so a dependency's
+scripts never trigger the rule — only shell that is genuinely *ours* does.
+
+**What `.just/.shellcheckrc` must be.** The file is **content-pinned**: `limen` requires it to
+equal the canonical baseline **byte for byte** — the directives that follow sourced files and
+opt into the high-value optional checks ShellCheck ships but does not run by default. The
+baseline is defined once and lives in one place: this repository's own
+[`.just/.shellcheckrc`](../.just/.shellcheckrc), embedded into `limen` and exposed as
+`rules.CanonicalShellcheckrc`. **That file is the source of truth.** A repo may not add, remove,
+or reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to
+the canonical. (This is the same exact-match rule as the `.editorconfig`, the `Justfile`, and
+the `.just/*.just` modules — only `.gitignore` and `aqua.yaml` use the subset,
+"contains the baseline" model.)
+
+**How to accommodate specific projects**
+
+Projects that need overrides can use inline `# shellcheck` disable directives.
+Global changes / improvements to the baseline should be submitted to project limen for review,
+as the shared file should never be modified locally in a project.
+
+## YAML — `.just/.yamlfmt`
+
+| Trigger | Requirement |
+|---------|-------------|
+| The repository contains YAML files. | A `.just/.yamlfmt` is present and matches the canonical baseline **exactly**. |
+
+YAML is whitespace-significant and easy to format inconsistently — indentation, quoting, and
+flow vs block style all drift between authors and editors. Any project that ships YAML must
+format it *the same way everywhere*. [yamlfmt](https://github.com/google/yamlfmt) is the
+formatter; `.yamlfmt` is how its configuration travels with the code instead of living in
+someone's head or CI script. A repo that contains YAML but no `.yamlfmt`, or one whose
+`.yamlfmt` differs from the baseline, is unformatted or formatted inconsistently; both are
+failures.
+
+**What counts as YAML.** `limen` treats a file as YAML when it is a `*.yaml` or `*.yml` file.
+The scan skips `.git` and vendored dependency directories (`node_modules`, `vendor`), so a
+dependency's manifests never trigger the rule — only YAML that is genuinely *ours* does.
+(`.yamlfmt` itself is not matched: its extension is `.yamlfmt`, not `.yaml`/`.yml`.)
+
+In practice the trigger always fires: every compliant repository carries `aqua.yaml`
+([tooling is mandatory](./tooling.md)), so the YAML rule is effectively universal. It stays a
+per-language rule because the *mechanism* is what limen checks — the trigger, not the mandate
+— and the uniform shape keeps the chapter honest if the trigger set ever changes.
+
+**What `.just/.yamlfmt` must be.** As with `.just/.shellcheckrc`, the file is **content-pinned**:
+`limen` requires it to equal the canonical baseline **byte for byte** — the yamlfmt settings that
+keep formatting consistent across repos and match our editorconfig indentation. The baseline is
+defined once and lives in one place: this repository's own
+[`.just/.yamlfmt`](../.just/.yamlfmt), embedded into `limen` and exposed as
+`rules.CanonicalYamlfmt`. **That file is the source of truth.** A repo may not add, remove, or
+reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to the
+canonical.
+
+## Enforcement
+
+`limen check [path]` evaluates the applicable per-language rules alongside the mandatory
+ones. A rule whose trigger is absent produces no finding; a rule whose trigger is present
+must pass like any other. See [`../cmd/limen/`](../cmd/limen).

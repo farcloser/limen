@@ -1,0 +1,102 @@
+# goreleaser — https://goreleaser.com — release automation for the limen CLI.
+# Local dry-run: `just release --dry-run` (no tag, no publish, artifacts under
+# build/). Real release: `just release vX.Y.Z` (see project.just).
+version: 2
+
+project_name: limen
+
+# Everything lands under build/release/ — covered by the canonical .gitignore
+# (/build); goreleaser's default dist/ is not. A subdirectory of build/, not
+# build/ itself: goreleaser --clean wipes its dist directory, and the dev
+# builds (build/limen*), coverage, and profiles the other recipes put in
+# build/ must survive a release run.
+dist: build/release
+
+# Twin of the `release` recipe in .just/build-go.just — the developer-facing
+# builder. A flag change here must land there too (and vice versa); the
+# intended differences are: the version stamp source ({{ .Version }} here,
+# `git describe` there — identical on a release tag), mod_timestamp
+# (reproducibility is a shipped-artifact concern), and the target matrix
+# (releases cross-compile, dev builds are native).
+builds:
+  - main: ./cmd/limen
+    binary: limen
+    # CGO off, categorically: it is what makes the whole target matrix
+    # buildable from one laptop (each foreign target would otherwise need its
+    # platform's C cross-toolchain).
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+    # No-ops under CGO_ENABLED=0 (pure Go already) — stated for parity with
+    # the just builder, where they keep DNS and user lookups out of libc.
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # Exactly the platforms aqua.yaml lists under checksum.supported_envs.
+    targets:
+      - darwin_amd64
+      - darwin_arm64
+      - linux_amd64
+      - linux_arm64
+    # Reproducible builds: stamp the commit time, not the build time.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: ["tar.gz"]
+
+checksum:
+  # The single checksums file aqua verifies release assets against.
+  name_template: checksums.txt
+
+# cosign (v3, Sigstore bundle format) over the checksums file — signing that
+# one file transitively covers every artifact it lists. Two lanes, switched by
+# whether COSIGN_KEY is set (the `just release` recipe controls that):
+#
+#   Key-based (local: `just release vX.Y.Z`) — COSIGN_KEY + COSIGN_PASSWORD in
+#   the environment; --use-signing-config=false means no signing services are
+#   contacted (nothing lands in Rekor's public log — the lane for private
+#   repos) and signing works fully offline. Verify with the published
+#   cosign.pub (committing it is tracked in TODO.md; --insecure-ignore-tlog
+#   only means "no transparency log entry to check", by design here):
+#     cosign verify-blob --key cosign.pub --bundle checksums.txt.sigstore.json \
+#       --insecure-ignore-tlog checksums.txt
+#
+#   Keyless (CI: the release workflow runs `just release --ci`) — no key
+#   exists at all: cosign exchanges the workflow's OIDC token (id-token:
+#   write) for a short-lived Fulcio certificate whose identity IS the
+#   workflow@tag, and the signature is logged in Rekor. Verify against that
+#   identity:
+#     cosign verify-blob --bundle checksums.txt.sigstore.json \
+#       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#       --certificate-identity-regexp \
+#         'https://github.com/<owner>/<repo>/\.github/workflows/release\.yaml@refs/tags/v.*' \
+#       checksums.txt
+#
+# goreleaser only substitutes ${signature}/${artifact} in args; ${COSIGN_KEY:-}
+# survives for the shell to branch on. One line, not a block scalar: yamlfmt
+# corrupts folded scalars (its internal line marker leaks into the content).
+signs:
+  - cmd: sh
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - -c
+      - 'if [ -n "${COSIGN_KEY:-}" ]; then cosign sign-blob --yes --key "${COSIGN_KEY}" --use-signing-config=false --bundle "${signature}" "${artifact}"; else cosign sign-blob --yes --bundle "${signature}" "${artifact}"; fi'
+
+release:
+  # Any prerelease-suffixed tag (e.g. the disposable v0.0.0-test.N tags used to
+  # exercise the pipeline) is published as a GitHub prerelease, so it can never
+  # become the repo's "latest release".
+  prerelease: auto
+  # Laptop releases fail halfway (network, guards) and get retried: overwrite
+  # assets a previous partial attempt already uploaded instead of 422-ing on
+  # "already_exists". Same-tag reruns are deliberate retries here by design —
+  # the release recipe only reuses a tag that still points at HEAD.
+  replace_existing_artifacts: true
+
+changelog:
+  sort: asc

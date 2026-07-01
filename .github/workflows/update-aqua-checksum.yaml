@@ -1,0 +1,75 @@
+# DO NOT EDIT MANUALLY.
+# This workflow is generic — no project-specific content — and is destined to
+# become part of the canonical baseline limen distributes.
+#
+# The other half of Renovate: the bot can bump versions in aqua.yaml but
+# cannot regenerate aqua-checksums.json, so without this workflow every
+# version-bump PR would merge a stale checksum and break every install. This
+# runs on pushes to Renovate's branches, regenerates the checksums with real
+# aqua, and pushes the fix-up commit onto the same branch.
+#
+# This is a WRITE workflow — the hardening is deliberate:
+#   - `push:` on the branch prefix, never pull_request_target: it runs in the
+#     repo's own context, on branches only writers (the Renovate app) can
+#     create.
+#   - The checkout keeps no credential, and the regenerate step runs with no
+#     secrets in its environment: it executes raw aqua (not `just` — the one
+#     sanctioned deviation: a write-capable workflow does not execute recipe
+#     code the branch controls), and `aqua update-checksum` only downloads
+#     and hashes declared artifacts, it executes nothing.
+#   - The push step runs only git, with the token scoped to that single step.
+#   - The branch name reaches the shell via env, never template interpolation
+#     (script-injection hygiene).
+#   - No loop: a push made with the default GITHUB_TOKEN triggers no further
+#     workflows — and the no-diff early exit terminates recursion regardless.
+#
+# Known trade of the default token: GitHub suppresses workflow runs for
+# commits it pushes, so the PR's CI does not re-run on the checksum commit.
+# To get CI on the final state of Renovate PRs, add a fine-grained PAT (or
+# GitHub App token) with contents:write as the UPDATE_AQUA_CHECKSUM_TOKEN
+# secret — the workflow prefers it automatically.
+name: update-aqua-checksum
+
+on:
+  push:
+    branches: ["renovate/**"]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install aqua (pinned, checksum-verified)
+        uses: ./.github/actions/setup-aqua
+
+      - name: Regenerate aqua-checksums.json
+        # No tool install: update-checksum only reads the manifest and hashes
+        # upstream artifacts — the smallest possible surface for a write job.
+        run: aqua update-checksum --prune
+
+      - name: Push the update, if any
+        env:
+          BRANCH: ${{ github.ref_name }}
+          TOKEN: ${{ secrets.UPDATE_AQUA_CHECKSUM_TOKEN || github.token }}
+        run: |
+          git diff --quiet -- aqua-checksums.json && { echo "checksums already in sync"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add aqua-checksums.json
+          # Signed-off-by: `just lint commits` enforces DCO on the PR range,
+          # bot commits included.
+          git commit -m "chore: update aqua-checksums.json" \
+            -m "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${BRANCH}"
