@@ -11,8 +11,9 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | `.editorconfig` | Present, and **content-pinned**: equals the [canonical baseline](#canonical-editorconfig) byte for byte — no extra sections, no edited values. |
 | `.gitignore` | Present, and covers the shared [gitignore baseline](#required-gitignore-patterns). |
 | `README` | Present, as `README.md`. |
-| `Justfile` | Present and canonical, with the shared [`.just/` modules](#justfile). |
-| `.just/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--justlycheetoml). |
+| `Justfile` | Present, carrying the shared-baseline import — the rest of the file is the project’s own. The [`.limen/` modules](#justfile) it mounts are canonical. |
+| `.limen/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--limenlycheetoml). |
+| `.github/` workflows | The [CI surface](#ci-workflows--github): two content-pinned limen pieces, plus seeded-once workflows and renovate config. |
 
 `limen` resolves common spelling/extension variants (`LICENSE`, `LICENSE.md`, `LICENSE.txt`,
 `COPYING`; `README`, `README.md`, `README.txt`) so a repo is not failed on a technicality,
@@ -20,12 +21,15 @@ but **`README.md` and a bare `LICENSE` are the canonical names** and what new re
 use.
 
 Every repository must *also* pin its build/CI tooling through aqua — equally mandatory, but
-substantial enough to have its own chapter. See [project tooling](./tooling.md).
+substantial enough to have its own chapter. See [project tooling](./tooling.md). The same
+goes for the repository's GitHub *settings* (merge policy, rulesets, Actions hardening,
+security features): see [GitHub settings](./github.md).
 
 You do not hand-create these files: `limen bootstrap <path>` scaffolds a new repository with
 all of them, and `limen fix` brings an existing repository up to the baseline — writing what
-is missing, resetting the content-pinned files (`.editorconfig`, `Justfile`, and the `.just/*`
-files), and merging the baseline into the subset files (`.gitignore`, `aqua.yaml`) without
+is missing, resetting the content-pinned files (`.editorconfig` and the `.limen/*`
+files), and merging the baseline into the subset files (`.gitignore`, `aqua.yaml`, the
+root `Justfile`’s import line) without
 discarding a repo's own additions. Anything it cannot fix safely — a disallowed `LICENSE`, a
 manifest it cannot parse — is reported for a human to resolve.
 
@@ -124,7 +128,7 @@ byte** — no extra sections, no edited values. The baseline is **comprehensive*
 covers every language we work in, and a section only ever matches files that are present, so the
 full baseline is harmless even for languages a repo does not use. Because it is exhaustive, a
 repo never needs its own additions; `limen fix` overwrites a drifted `.editorconfig` back to the
-canonical. (This is the same exact-match rule as the `Justfile` and the `.just/*` files — unlike
+canonical. (This is the same exact-match rule as the `Justfile` and the `.limen/*` files — unlike
 `.gitignore`, which allows extra patterns.)
 
 The reasoning behind it: **each file type uses the indentation its own tooling treats as
@@ -154,39 +158,39 @@ task runner we standardize on, so "how do I build/test/run this?" has the same a
 (`just …`) in every repo, for humans and agents alike. (This section covers the *files* and
 their pinning; what the shared recipes do and the conventions they obey is
 [its own chapter](./recipes.md).) The task setup lives in a root `Justfile`
-plus a `.just/` directory of modules, split so the shared parts stay identical everywhere while
+plus a `.limen/` directory of modules, split so the shared parts stay identical everywhere while
 each project keeps room of its own:
 
 | File | Role | Checked? |
 |------|------|----------|
-| `Justfile` | The standard shell — **identical in every repo**. Carries the orientation recipes (`default`, `info`), a `mod` line for each shared module, the flat imports (`.just/release.just`), and `import? 'project.just'`. | Content-pinned: must match the canonical exactly. |
-| `.just/*.just` (shared modules) | The **shared recipe baseline**, currently `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe regenerates `aqua-checksums.json` to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), and `fix` (apply fixes in place, where the tool supports it — including `limen fix`). The same in every repo, each loaded as a `mod`. | Content-pinned: **every `*.just` file under `.just/`** must match the canonical exactly. |
-| `project.just` | This project's **own** recipes (its build/test/run), at the repo root for visibility. `bootstrap`/`fix` seed it with a placeholder comment when absent, but never overwrite it. | Not checked — projects own it. |
+| `Justfile` | The standard shell — **identical in every repo**. Carries the orientation recipes (`default`, `info`), a `mod` line for each shared module, the flat imports (`.limen/just/release.just`), and `import? 'the root Justfile'`. | Content-pinned: must match the canonical exactly. |
+| `.limen/just/*.just` (shared modules) | The **shared recipe baseline**, currently `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe regenerates `aqua-checksums.json` to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), and `fix` (apply fixes in place, where the tool supports it — including `limen fix`). The same in every repo, each loaded as a `mod`. | Content-pinned: **every `*.just` file under `.limen/`** must match the canonical exactly. |
+| the root `Justfile` | This project's **own** recipes (its build/test/run), at the repo root for visibility. `bootstrap`/`fix` seed it with a placeholder comment when absent, but never overwrite it. | Not checked — projects own it. |
 
-The `.just/` directory also parks a few non-recipe config files to keep the repo root uncluttered
-(`.just/.shellcheckrc`, `.just/.yamlfmt`, `.just/aqua-registry.yaml`, `.just/lychee.toml`). These
+The `.limen/` directory also parks a few non-recipe config files to keep the repo root uncluttered
+(`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/aqua-registry.yaml`, `.limen/lychee.toml`). These
 are *not* just modules — only `*.just` files are — and they are governed by their own rules
 ([per-language](./per-language.md), [tooling](./tooling.md),
-[link checking](#link-checking--justlycheetoml)), not the Justfile content-pin.
+[link checking](#link-checking--limenlycheetoml)), not the Justfile content-pin.
 
 Orientation and project recipes are flat — `just info`, a project's own `just run` — so the
 universal "where am I? / do the project thing" commands are unprefixed in every repo (a
 project recipe must not reuse a shared module's name — `build`, `tools`, `lint`, `test`,
 `fix` — or the two collide). Shared recipe sets are grouped under modules —
-`just tools add …`, `just lint go`, `just lint links`, `just fix yaml` (see
+`just do tools add …`, `just do lint go`, `just do lint links`, `just do fix yaml` (see
 [project tooling](./tooling.md) for the `tools` module). Invoking a module bare runs its
-**`default` recipe: the curated set that applies safely to every repository** — `just lint`
+**`default` recipe: the curated set that applies safely to every repository** — `just do lint`
 runs `limen` + `just` + `aqua` + `links` + `yaml` + `shell` + `dockerfile` + `commits`, and
-`just fix` runs `limen` + `just` + `yaml`. The rule for what a default may carry: **a recipe
+`just do fix` runs `limen` + `just` + `yaml`. The rule for what a default may carry: **a recipe
 belongs in a default only when it passes vacuously where it does not apply** — `shell` and
 `dockerfile` discover their targets and no-op on a repo that has none, while recipes that
 need a language toolchain to even run (`go`, `rust`) stay out of every default and are named
-explicitly: a Go repo runs `just lint go`, a Rust repo `just lint rust`, and so on. Bare
-`just test` refuses outright — every test is language-bound — so each project declares its
-aggregates in `project.just` (`lint-all`, `test-all`), which is also what CI runs. Note that `just lint aqua`
-(and therefore the bare `just lint`) needs the network, and on drift regenerates
+explicitly: a Go repo runs `just do lint go`, a Rust repo `just do lint rust`, and so on. Bare
+`just do test` refuses outright — every test is language-bound — so each project declares its
+aggregates in the root `Justfile` (`lint`, `test`), which is also what CI runs. Note that `just do lint aqua`
+(and therefore the bare `just do lint`) needs the network, and on drift regenerates
 `aqua-checksums.json` in place — aqua has no read-only validator, so the corrected file is
-left for review and commit. **All customization goes in `project.just`; the `Justfile` and
+left for review and commit. **All customization goes in the root `Justfile`; the `Justfile` and
 every shared module are locked.**
 
 The `Justfile` carries the mandatory **`info` recipe**, which prints meaningful facts so anyone
@@ -194,28 +198,46 @@ The `Justfile` carries the mandatory **`info` recipe**, which prints meaningful 
 **git upstream** (if any), the **closest semver** tag, the current **commit**, and the **date
 of the last commit**.
 
-`limen` content-pins the `Justfile` and **every `*.just` file under `.just/`** against the
+`limen` content-pins the `Justfile` and **every `*.just` file under `.limen/`** against the
 canonical baseline embedded in the binary — the source of truth is this repository's own
-[`Justfile`](../Justfile) and [`.just/`](../.just) modules. So adding a new shared module is just
-a new `.just/NAME.just` plus its `mod` line; it becomes part of the enforced baseline automatically.
+[`Justfile`](../Justfile) and [`.limen/`](../.limen) modules. So adding a new shared module is just
+a new `.limen/just/NAME.just` plus its `mod` line; it becomes part of the enforced baseline automatically.
 A repo whose `Justfile` or any shared module differs from the baseline, or omits one, fails; what
-`project.just` contains is the project's business.
+the root `Justfile` contains is the project's business.
 
-## Link checking — `.just/lychee.toml`
+## CI workflows — `.github/`
 
-Documentation rots at its edges: links die silently. `just lint links` checks every link in
-the repository with [lychee](https://github.com/lycheeverse/lychee), and `.just/lychee.toml`
+The `.github` surface deliberately mixes two regimes, and the split is the point:
+
+| File | Regime | Why |
+|------|--------|-----|
+| `.github/workflows/update-aqua-checksum.yaml` | **Content-pinned** — reset on drift. | Limen machinery, and a *write-capable* workflow: its hardening (no `pull_request_target`, no secrets near branch-controlled code, env-only branch names) must never drift. Drift here is not customization, it is a vulnerability. |
+| `.github/actions/setup-aqua/action.yaml` | **Content-pinned** — reset on drift. | The composite action every canonical workflow bootstraps aqua with; its pins and checksum verification are the supply-chain floor. |
+| `.github/workflows/ci.yaml` | **Seeded once** — never overwritten. | Projects legitimately reshape CI (matrix trims, extra jobs, service containers). The enforceable substance already lives in the content-pinned recipes the workflow calls (`just lint`, `just test`) — the workflow file is the one layer where per-project shape is honest. |
+| `renovate.json5` | **Seeded once** — never overwritten. | Projects tune cooldowns and managers; the seed carries the working defaults (aqua preset, DCO sign-off, bot-author handling). |
+| `.github/workflows/release.yaml` | **Seeded once, conditionally**: only where a `.goreleaser.yaml` exists. | Releasing is opt-in by carrying a goreleaser config (the same gate the `release` recipe enforces); a non-releasing repo gets no dormant workflow that would fail red on a stray tag. |
+
+`limen check` fails a drifted or missing pinned piece, a missing seeded piece
+(content is never judged after the seed), and a missing release workflow in a
+repo that carries goreleaser config. `limen fix` resets the pinned pieces and
+seeds the rest — after which `ci.yaml`, `release.yaml`, and `renovate.json5`
+are the project's own, exactly like the root Justfile.
+
+## Link checking — `.limen/lychee.toml`
+
+Documentation rots at its edges: links die silently. `just do lint links` checks every link in
+the repository with [lychee](https://github.com/lycheeverse/lychee), and `.limen/lychee.toml`
 is its canonical configuration — **content-pinned** like the shared just modules, so the
 checker behaves identically everywhere. The baseline carries only exclusions that apply to
 every repository (hosts that appear in verbatim license texts but cannot be checked
 reliably), each documented in the file itself. The source of truth is this repository's own
-[`.just/lychee.toml`](../.just/lychee.toml), embedded into `limen` and exposed as
+[`.limen/lychee.toml`](../.limen/lychee.toml), embedded into `limen` and exposed as
 `rules.CanonicalLychee`. The rule is unconditional: every repository carries a README, so
 every repository has links worth checking.
 
 **Per-project exclusions go in a root `lychee.toml`.** The `lint links` recipe passes both
 files to lychee, which merges them — the exclude lists concatenate — so a project extends the
-baseline without touching it. Like `project.just`, the root file is the project's own: `limen`
+baseline without touching it. Like the root `Justfile`, the root file is the project's own: `limen`
 neither checks nor overwrites it. (Both configs must be passed explicitly; passing any
 `--config` disables lychee's automatic discovery of `./lychee.toml`, which is why the recipe
 names both.)
@@ -233,8 +255,8 @@ names both.)
 - **README** — the entry point. A repo with no README is undocumented by definition.
 - **Justfile** — a discoverable, uniform set of commands; `just info` is the universal "where
   am I?" that makes any checkout self-describing.
-- **.just/lychee.toml** — dead links are documentation rot; one shared checker configuration
-  keeps `just lint links` meaningful (and identically strict) in every repo.
+- **.limen/lychee.toml** — dead links are documentation rot; one shared checker configuration
+  keeps `just do lint links` meaningful (and identically strict) in every repo.
 
 ## Enforcement
 

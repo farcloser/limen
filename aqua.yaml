@@ -7,13 +7,14 @@ checksum:
     - darwin/arm64
     - linux/amd64
     - linux/arm64
+    - windows/amd64
 
 registries:
   - type: standard
     ref: v4.530.0 # renovate: depName=aquaproj/aqua-registry
   - name: local
     type: local
-    path: .just/aqua-registry.yaml
+    path: .limen/aqua-registry.yaml
 
 packages:
   # --- go install tools (local registry, GOSUMDB-verified) ---

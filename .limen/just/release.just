@@ -1,28 +1,28 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# If you want to add project specific tasks, you can do so in the `project.just` file.
+# Project recipes live in the root Justfile, below the shared-baseline import.
 
 # Imported flat into the canonical Justfile — not a module — so the recipe can
-# take arguments (`just release v1.2.3`; a module invocation would parse the
+# take arguments (`just do release v1.2.3`; a module invocation would parse the
 # tag as a recipe path). Deliberately no settings and no _lib import here: an
 # import's settings would apply to the whole root justfile.
 
 # Release, in two lanes that share every guard (see book/recipes.md):
 #
-#   just release --cut vX.Y.Z   the CI lane's local half: verify a clean tree,
+#   just do release --cut vX.Y.Z   the CI lane's local half: verify a clean tree,
 #                               create the signed tag (your key signs the
 #                               INTENT), push — the release workflow builds,
 #                               signs (keyless cosign), and publishes.
-#   just release --ci           the CI lane's workflow half (GitHub Actions
+#   just do release --ci           the CI lane's workflow half (GitHub Actions
 #                               only): the pushed tag triggered us; run
 #                               goreleaser with keyless signing.
-#   just release vX.Y.Z         the fully local lane: tag + goreleaser +
+#   just do release vX.Y.Z         the fully local lane: tag + goreleaser +
 #                               key-based cosign from this machine. Requires
 #                               GITHUB_TOKEN, COSIGN_KEY, COSIGN_PASSWORD.
 #                               The lane for private repos (nothing touches
 #                               Rekor's public log) — and the escape hatch
 #                               when CI is down.
-#   just release --dry-run      unsigned local snapshot into build/release/:
+#   just do release --dry-run      unsigned local snapshot into build/release/:
 #                               no tag, no token, no publish — and works on a
 #                               dirty tree, by design.
 #
@@ -33,17 +33,17 @@ release *args:
     #!/usr/bin/env bash
     set -euo pipefail
     # Releasing is opt-in, by carrying a goreleaser config (project-owned, like
-    # project.just — limen neither pins nor seeds it). Checked before anything
+    # the root Justfile — limen neither pins nor seeds it). Checked before anything
     # else: past this point the recipe creates tags and pushes.
     if [ ! -f .goreleaser.yaml ] && [ ! -f .goreleaser.yml ]; then
         echo "this project has no .goreleaser.yaml — goreleaser releases are opt-in (see book/recipes.md)." >&2
         exit 1
     fi
     usage() {
-        echo "usage: just release --cut <tag>   # signed tag + push; CI builds, signs (keyless), publishes" >&2
-        echo "       just release <tag>         # fully local release (key-based cosign)" >&2
-        echo "       just release --dry-run     # local unsigned snapshot into build/release/" >&2
-        echo "       just release --ci          # workflow half of --cut (GitHub Actions only)" >&2
+        echo "usage: just do release --cut <tag>   # signed tag + push; CI builds, signs (keyless), publishes" >&2
+        echo "       just do release <tag>         # fully local release (key-based cosign)" >&2
+        echo "       just do release --dry-run     # local unsigned snapshot into build/release/" >&2
+        echo "       just do release --ci          # workflow half of --cut (GitHub Actions only)" >&2
     }
     require_clean() {
         # A dirty tree is the most common failure and goreleaser hard-refuses
@@ -94,7 +94,7 @@ release *args:
             # workflow's GITHUB_TOKEN, and signing is keyless — the OIDC
             # identity replaces any key.
             if [ -z "${GITHUB_ACTIONS:-}" ]; then
-                echo "--ci is the workflow half — locally, use 'just release --cut <tag>' (or a fully local 'just release <tag>')." >&2
+                echo "--ci is the workflow half — locally, use 'just do release --cut <tag>' (or a fully local 'just do release <tag>')." >&2
                 exit 1
             fi
             if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
@@ -131,7 +131,7 @@ release *args:
                 echo "local releases are key-signed (see .goreleaser.yaml). Generate a key pair once" >&2
                 echo "with 'cosign generate-key-pair', commit cosign.pub, keep cosign.key private," >&2
                 echo "then export COSIGN_KEY=/path/to/cosign.key (COSIGN_PASSWORD is prompted or exported)." >&2
-                echo "(Or use the CI lane instead: 'just release --cut $tag' — no key needed.)" >&2
+                echo "(Or use the CI lane instead: 'just do release --cut $tag' — no key needed.)" >&2
                 exit 1
             fi
             tag_and_push "$tag"

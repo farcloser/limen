@@ -10,11 +10,11 @@ The shape of every per-language rule is the same: **if the trigger is present, t
 requirement is mandatory; if it is absent, the rule does not apply** and `limen` reports
 nothing for it.
 
-## Shell — `.just/.shellcheckrc`
+## Shell — `.limen/.shellcheckrc`
 
 | Trigger | Requirement |
 |---------|-------------|
-| The repository contains shell sources. | A `.just/.shellcheckrc` is present and matches the canonical baseline **exactly**. |
+| The repository contains shell sources. | A `.limen/.shellcheckrc` is present and matches the canonical baseline **exactly**. |
 
 Any project that ships shell must lint it, and lint it *the same way everywhere*.
 [ShellCheck](https://www.shellcheck.net) is the linter; `.shellcheckrc` is how its
@@ -34,15 +34,15 @@ counts: the extension claims a dialect, and ShellCheck holds it to that claim.) 
 `.git` and vendored dependency directories (`node_modules`, `vendor`), so a dependency's
 scripts never trigger the rule — only shell that is genuinely *ours* does.
 
-**What `.just/.shellcheckrc` must be.** The file is **content-pinned**: `limen` requires it to
+**What `.limen/.shellcheckrc` must be.** The file is **content-pinned**: `limen` requires it to
 equal the canonical baseline **byte for byte** — the directives that follow sourced files and
 opt into the high-value optional checks ShellCheck ships but does not run by default. The
 baseline is defined once and lives in one place: this repository's own
-[`.just/.shellcheckrc`](../.just/.shellcheckrc), embedded into `limen` and exposed as
+[`.limen/.shellcheckrc`](../.limen/.shellcheckrc), embedded into `limen` and exposed as
 `rules.CanonicalShellcheckrc`. **That file is the source of truth.** A repo may not add, remove,
 or reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to
 the canonical. (This is the same exact-match rule as the `.editorconfig`, the `Justfile`, and
-the `.just/*.just` modules — only `.gitignore` and `aqua.yaml` use the subset,
+the `.limen/just/*.just` modules — only `.gitignore` and `aqua.yaml` use the subset,
 "contains the baseline" model.)
 
 **How to accommodate specific projects**
@@ -51,11 +51,11 @@ Projects that need overrides can use inline `# shellcheck` disable directives.
 Global changes / improvements to the baseline should be submitted to project limen for review,
 as the shared file should never be modified locally in a project.
 
-## YAML — `.just/.yamlfmt`
+## YAML — `.limen/.yamlfmt`
 
 | Trigger | Requirement |
 |---------|-------------|
-| The repository contains YAML files. | A `.just/.yamlfmt` is present and matches the canonical baseline **exactly**. |
+| The repository contains YAML files. | A `.limen/.yamlfmt` is present and matches the canonical baseline **exactly**. |
 
 YAML is whitespace-significant and easy to format inconsistently — indentation, quoting, and
 flow vs block style all drift between authors and editors. Any project that ships YAML must
@@ -75,11 +75,11 @@ In practice the trigger always fires: every compliant repository carries `aqua.y
 per-language rule because the *mechanism* is what limen checks — the trigger, not the mandate
 — and the uniform shape keeps the chapter honest if the trigger set ever changes.
 
-**What `.just/.yamlfmt` must be.** As with `.just/.shellcheckrc`, the file is **content-pinned**:
+**What `.limen/.yamlfmt` must be.** As with `.limen/.shellcheckrc`, the file is **content-pinned**:
 `limen` requires it to equal the canonical baseline **byte for byte** — the yamlfmt settings that
 keep formatting consistent across repos and match our editorconfig indentation. The baseline is
 defined once and lives in one place: this repository's own
-[`.just/.yamlfmt`](../.just/.yamlfmt), embedded into `limen` and exposed as
+[`.limen/.yamlfmt`](../.limen/.yamlfmt), embedded into `limen` and exposed as
 `rules.CanonicalYamlfmt`. **That file is the source of truth.** A repo may not add, remove, or
 reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to the
 canonical.

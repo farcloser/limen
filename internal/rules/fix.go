@@ -86,6 +86,7 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateJustfile(root)...)
 	add(remediateAqua(root, opts.SelfVersion)...)
 	add(remediateLychee(root))
+	add(remediateWorkflows(root)...)
 
 	if o, ok := remediateShellcheck(root); ok {
 		add(o)
@@ -254,60 +255,139 @@ func remediateGitignore(root string, policy Policy) Outcome {
 	}
 }
 
-// projectJustPath is the project's own (non-shared) recipe file, at the repo
-// root for visibility; projectJustSeed is the single-comment placeholder limen
-// writes when a repo has none, marking where per-project recipes go. The seed
-// must end in a newline (just --fmt rejects a file without one — `just lint
-// just` runs that check on every just file, this one included) and its example
-// must parse when uncommented: a dependency names a recipe (lint::go::default),
-// never a bare module path (lint::go).
-const (
-	projectJustPath = "project.just"
-	projectJustSeed = "# Project-specific just recipes go here.\n# For example, you might want to define your own lint-all / test-all tasks\n# (the aggregates CI runs; a dependency names a recipe, never a bare module):\n# lint-all: lint::default lint::go::default\n# test-all: test::go::default\n"
-)
+// justfileSeed is the root Justfile a fresh repository starts from: the
+// canonical import plus guidance — the file is the project's own from then
+// on. The seed must end in a newline (just --fmt rejects a file without one —
+// `just do lint just` runs that check on every just file, this one included)
+// and its examples must parse when uncommented: a dependency names a recipe
+// (do::lint::default), never a bare module path.
+const justfileSeed = "# This file is the project's own — add recipes below. Keep the import: it\n" +
+	"# mounts every shared limen task under `just do ...`.\n" +
+	CanonicalJustfileImport + "\n" +
+	"\n" +
+	"# The FIRST recipe defined here becomes `just`'s default (until then, the\n" +
+	"# shared default lists everything). The aggregates CI runs, for example:\n" +
+	"# lint: do::lint::default do::lint::go::default\n" +
+	"# test: do::test::go::default\n"
 
-// remediateJustfile content-pins the Justfile and every shared just module: a
-// missing file is created, a drifted one is overwritten (safe — limen defines
-// the whole file). project.just is never overwritten — it is only seeded with a
-// comment when absent, so a fresh repo has an obvious home for its own recipes.
+// remediateJustfile handles the task runner's two regimes: the root Justfile
+// is the project's own — seeded when missing, and when present only ever
+// MERGED (the canonical import line is appended if absent; nothing is
+// overwritten) — while every shared just module is content-pinned exactly.
 // It returns one outcome per file so `fix` reports each precisely.
 func remediateJustfile(root string) []Outcome {
 	const rule = "justfile"
 
 	var out []Outcome
 
-	out = append(out, pinExact(root, rule, "Justfile", CanonicalJustfile))
+	out = append(out, remediateRootJustfile(root, rule))
 	for _, mod := range limen.JustModules() {
 		out = append(out, pinExact(root, rule, mod.Path, mod.Content))
 	}
 
-	out = append(out, seedProjectJust(root, rule))
-
 	return out
 }
 
-// seedProjectJust creates project.just with a placeholder comment when it is
-// absent, and never modifies an existing one — the file is the project's own.
-func seedProjectJust(root, rule string) Outcome {
-	if exists(filepath.Join(root, filepath.FromSlash(projectJustPath))) {
+// remediateRootJustfile seeds a missing root Justfile, appends the canonical
+// import to one that lacks it, and otherwise leaves the file alone — it is
+// the project's own.
+func remediateRootJustfile(root, rule string) Outcome {
+	name, found := findFirst(root, justfileName, "justfile", ".justfile")
+	if !found {
+		if err := writeFile(root, justfileName, justfileSeed); err != nil {
+			return failed(rule, justfileName, err)
+		}
+
 		return Outcome{
 			Rule:    rule,
-			Action:  ActionNone,
-			Path:    projectJustPath,
-			Message: projectJustPath + " present (left untouched)",
+			Action:  ActionCreated,
+			Path:    justfileName,
+			Message: "seeded the root Justfile (the content is the project's own from here)",
 		}
 	}
 
-	if e := writeFile(root, projectJustPath, projectJustSeed); e != nil {
-		return failed(rule, projectJustPath, e)
+	data, err := readRepoFile(root, name)
+	if err != nil {
+		return failed(rule, name, err)
+	}
+
+	if containsLine(string(data), CanonicalJustfileImport) {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionNone,
+			Path:    name,
+			Message: name + " carries the shared-baseline import (the rest is the project's own)",
+		}
+	}
+
+	appended := ensureTrailingNewline(string(data)) +
+		"\n# --- added by limen fix: the shared-baseline import ---\n" + CanonicalJustfileImport + "\n"
+	if err := writeFile(root, name, appended); err != nil {
+		return failed(rule, name, err)
+	}
+
+	return Outcome{
+		Rule:    rule,
+		Action:  ActionMerged,
+		Path:    name,
+		Message: "appended the shared-baseline import (" + CanonicalJustfileImport + ")",
+	}
+}
+
+// seedIfMissing writes the canonical content when the file is absent and never
+// touches an existing one: the file is the project's own after the seed.
+func seedIfMissing(root, rule, relPath, content, createdMessage string) Outcome {
+	if exists(filepath.Join(root, filepath.FromSlash(relPath))) {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionNone,
+			Path:    relPath,
+			Message: relPath + " present (left untouched)",
+		}
+	}
+
+	if e := writeFile(root, relPath, content); e != nil {
+		return failed(rule, relPath, e)
 	}
 
 	return Outcome{
 		Rule:    rule,
 		Action:  ActionCreated,
-		Path:    projectJustPath,
-		Message: "seeded " + projectJustPath + " for project recipes",
+		Path:    relPath,
+		Message: createdMessage,
 	}
+}
+
+// remediateWorkflows brings the .github surface up to the baseline in its two
+// regimes (see checkWorkflows): the checksum-update workflow and the
+// setup-aqua action are content-pinned exactly; the CI workflow and renovate
+// config are seeded once and never overwritten; the release workflow is
+// seeded only where a goreleaser config makes it applicable.
+func remediateWorkflows(root string) []Outcome {
+	const rule = "workflows"
+
+	out := []Outcome{
+		pinExact(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum),
+		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
+		seedIfMissing(root, rule, pathWorkflowCI, limen.CanonicalWorkflowCI,
+			"seeded the canonical CI workflow (the content is the project's own from here)"),
+		seedIfMissing(root, rule, pathRenovate, limen.CanonicalRenovate,
+			"seeded the canonical renovate config (the content is the project's own from here)"),
+	}
+
+	if _, hasGoreleaser := findFirst(root, ".goreleaser.yaml", ".goreleaser.yml"); hasGoreleaser {
+		out = append(out, seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
+			"seeded the canonical release workflow (the content is the project's own from here)"))
+	} else {
+		out = append(out, Outcome{
+			Rule:    rule,
+			Action:  ActionNone,
+			Path:    pathWorkflowRelease,
+			Message: "not applicable: no .goreleaser.yaml (releasing is opt-in)",
+		})
+	}
+
+	return out
 }
 
 // pinExact enforces that the file at relPath equals canonical exactly: create it
@@ -446,7 +526,7 @@ func remediateAqua(root, selfVersion string) []Outcome {
 
 	// Canonical everywhere: content-pinned exactly.
 	out = append(out, pinExact(root, rule, "aqua-policy.yaml", limen.CanonicalAquaPolicy))
-	out = append(out, pinExact(root, rule, ".just/aqua-registry.yaml", limen.CanonicalAquaRegistry))
+	out = append(out, pinExact(root, rule, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry))
 
 	if !advised && !pristine && (manifestWrote || !exists(filepath.Join(root, aquaChecksumsFile))) {
 		existed := exists(filepath.Join(root, aquaChecksumsFile))
@@ -522,11 +602,11 @@ func regenerateAquaChecksums(root string) error {
 	return nil
 }
 
-// remediateLychee content-pins .just/lychee.toml exactly: created if missing,
+// remediateLychee content-pins .limen/lychee.toml exactly: created if missing,
 // overwritten if it drifted. A project's own exclusions belong in a root
 // lychee.toml, which is never touched.
 func remediateLychee(root string) Outcome {
-	return pinExact(root, "lychee", ".just/lychee.toml", CanonicalLychee)
+	return pinExact(root, "lychee", ".limen/lychee.toml", CanonicalLychee)
 }
 
 // remediateShellcheck / remediateYamlfmt are per-language rules: when the repo
@@ -536,7 +616,7 @@ func remediateLychee(root string) Outcome {
 func remediateShellcheck(root string) (Outcome, bool) {
 	const (
 		rule = "shellcheck"
-		name = ".just/.shellcheckrc"
+		name = ".limen/.shellcheckrc"
 	)
 
 	if _, found := findShellSource(root); !found {
@@ -549,7 +629,7 @@ func remediateShellcheck(root string) (Outcome, bool) {
 func remediateYamlfmt(root string) (Outcome, bool) {
 	const (
 		rule = "yamlfmt"
-		name = ".just/.yamlfmt"
+		name = ".limen/.yamlfmt"
 	)
 
 	if _, found := findYAMLSource(root); !found {
@@ -568,7 +648,7 @@ const (
 )
 
 // writeFile writes content to relPath under root, creating parent directories as
-// needed (relPath may be slash-separated, e.g. ".just/tools.just"). The raw os
+// needed (relPath may be slash-separated, e.g. ".limen/just/tools.just"). The raw os
 // errors already carry the failing path; callers fold them into Outcomes.
 func writeFile(root, relPath, content string) error {
 	full := filepath.Join(root, filepath.FromSlash(relPath))

@@ -19,9 +19,20 @@ import (
 // Well-known file names the rules act on, shared between check and fix.
 const (
 	gitDirName        = ".git"
+	justfileName      = "Justfile"
+	carriageReturn    = "\r"
 	readmeFileName    = "README.md"
 	licenseFileName   = "LICENSE"
 	aquaChecksumsFile = "aqua-checksums.json"
+
+	// The .github surface (see book/mandatory-files.md): the first two are
+	// content-pinned limen machinery, the rest are seeded once and then the
+	// project's own.
+	pathWorkflowChecksum = ".github/workflows/update-aqua-checksum.yaml"
+	pathActionSetupAqua  = ".github/actions/setup-aqua/action.yaml"
+	pathWorkflowCI       = ".github/workflows/ci.yaml"
+	pathWorkflowRelease  = ".github/workflows/release.yaml"
+	pathRenovate         = "renovate.json5"
 )
 
 // matchesCanonicalMsg suffixes the OK message of every content-pinned rule.
@@ -47,29 +58,30 @@ const shebangReadLimit = 128
 // it uses none of a given language.
 var CanonicalEditorconfig = limen.CanonicalEditorconfig //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
-// CanonicalShellcheckrc is the exact .just/.shellcheckrc a repository must carry
-// verbatim (when the repo ships shell). It is this repo's .just/.shellcheckrc,
+// CanonicalShellcheckrc is the exact .limen/.shellcheckrc a repository must carry
+// verbatim (when the repo ships shell). It is this repo's .limen/.shellcheckrc,
 // embedded — the rule is content-pinned, so extras are not allowed.
 var CanonicalShellcheckrc = limen.CanonicalShellcheckrc //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
-// CanonicalYamlfmt is the exact .just/.yamlfmt a repository must carry verbatim
-// (when the repo ships YAML). It is this repo's .just/.yamlfmt, embedded — the
+// CanonicalYamlfmt is the exact .limen/.yamlfmt a repository must carry verbatim
+// (when the repo ships YAML). It is this repo's .limen/.yamlfmt, embedded — the
 // rule is content-pinned, so extras are not allowed.
 var CanonicalYamlfmt = limen.CanonicalYamlfmt //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
-// CanonicalLychee is the exact .just/lychee.toml a repository must carry
+// CanonicalLychee is the exact .limen/lychee.toml a repository must carry
 // verbatim: the canonical lychee (link checker) configuration. It is this
-// repo's .just/lychee.toml, embedded — the rule is content-pinned, so extras
+// repo's .limen/lychee.toml, embedded — the rule is content-pinned, so extras
 // are not allowed; a project's own exclusions go in a root lychee.toml, which
 // is not checked.
 var CanonicalLychee = limen.CanonicalLycheeToml //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
-// CanonicalJustfile is the standard root Justfile every repository must carry
-// verbatim. It is the repo-root Justfile, embedded.
-var CanonicalJustfile = limen.CanonicalJustfile //nolint:gochecknoglobals // immutable alias of embedded canonical data.
+// CanonicalJustfileImport is the one line every repository's root Justfile
+// must carry: the import that mounts the shared baseline. The rest of the
+// root Justfile is the project's own.
+const CanonicalJustfileImport = "import '.limen/just/main.just'"
 
 // CanonicalAquaPolicy and CanonicalAquaRegistry are the canonical aqua policy
-// (aqua-policy.yaml, root) and local registry (.just/aqua-registry.yaml) every
+// (aqua-policy.yaml, root) and local registry (.limen/aqua-registry.yaml) every
 // repository must carry verbatim — the shared catalog of authorized registries
 // and local tools. Unlike aqua.yaml (a per-project package list) they are
 // content-pinned. They are this repo's own files, embedded.
@@ -91,7 +103,7 @@ func gitignoreLines(text string) []string {
 	var out []string
 
 	for raw := range strings.SplitSeq(text, "\n") {
-		line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
+		line := strings.TrimSpace(strings.TrimSuffix(raw, carriageReturn))
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -164,6 +176,7 @@ func Check(root string, policy Policy) []Finding {
 		checkJustfile(root),
 		checkAqua(root),
 		checkLychee(root),
+		checkWorkflows(root),
 	}
 	if f, ok := checkShellcheck(root); ok {
 		findings = append(findings, f)
@@ -285,7 +298,7 @@ func gitignorePatterns(text string) map[string]bool {
 	set := map[string]bool{}
 
 	for raw := range strings.SplitSeq(text, "\n") {
-		line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
+		line := strings.TrimSpace(strings.TrimSuffix(raw, carriageReturn))
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -309,15 +322,15 @@ func normalizeIgnore(pattern string) string {
 	return pattern
 }
 
-// checkJustfile content-pins the task runner: the root Justfile is the standard
-// shell (identical in every repo, carrying the orientation recipes and a mod line
-// per shared module), and every *.just file under .just/ is a shared module that
-// must match the embedded canonical exactly. A repo's own recipes live in a root
-// project.just, which is not checked.
+// checkJustfile verifies the task runner in its two regimes: the root
+// Justfile is the PROJECT's own — a shim that must carry the canonical
+// import line (mounting the shared baseline) and is otherwise never judged —
+// while every *.just file under .limen/just/ is a shared module that must
+// match the embedded canonical exactly.
 func checkJustfile(root string) Finding {
 	const rule = "justfile"
 
-	name, ok := findFirst(root, "Justfile", "justfile", ".justfile")
+	name, ok := findFirst(root, justfileName, "justfile", ".justfile")
 	if !ok {
 		return fail(rule, "", "no Justfile found")
 	}
@@ -327,11 +340,11 @@ func checkJustfile(root string) Finding {
 		return fail(rule, name, fmt.Sprintf("could not read Justfile: %v", err))
 	}
 
-	if string(data) != CanonicalJustfile {
+	if !containsLine(string(data), CanonicalJustfileImport) {
 		return fail(
 			rule,
 			name,
-			name+" does not match the canonical Justfile (it must be the standard shell; put project recipes in project.just)",
+			name+" must carry the shared-baseline import ("+CanonicalJustfileImport+") — the rest of the file is the project's own (limen fix adds it)",
 		)
 	}
 
@@ -350,8 +363,19 @@ func checkJustfile(root string) Finding {
 		Rule:    rule,
 		Status:  StatusOK,
 		Path:    name,
-		Message: "Justfile and shared just modules match the canonical baseline",
+		Message: "Justfile carries the shared-baseline import; the shared just modules match the canonical baseline",
 	}
+}
+
+// containsLine reports whether any line of text, trimmed, equals want.
+func containsLine(text, want string) bool {
+	for raw := range strings.SplitSeq(text, "\n") {
+		if strings.TrimSpace(strings.TrimSuffix(raw, carriageReturn)) == want {
+			return true
+		}
+	}
+
+	return false
 }
 
 // checkAqua verifies that a repository pins its build/CI tooling through aqua
@@ -396,7 +420,7 @@ func checkAqua(root string) Finding {
 		return *f
 	}
 
-	if f := checkPinned(root, rule, ".just/aqua-registry.yaml", CanonicalAquaRegistry); f != nil {
+	if f := checkPinned(root, rule, ".limen/aqua-registry.yaml", CanonicalAquaRegistry); f != nil {
 		return *f
 	}
 
@@ -408,15 +432,15 @@ func checkAqua(root string) Finding {
 	}
 }
 
-// checkLychee content-pins .just/lychee.toml, the canonical configuration of
-// the lychee link checker behind `just lint links`. It is unconditional: every
+// checkLychee content-pins .limen/lychee.toml, the canonical configuration of
+// the lychee link checker behind `just do lint links`. It is unconditional: every
 // repository carries a README, so every repository has markdown whose links can
 // be checked. A project's own exclusions live in a root lychee.toml (merged by
 // the recipe), which limen does not check.
 func checkLychee(root string) Finding {
 	const (
 		rule = "lychee"
-		name = ".just/lychee.toml"
+		name = ".limen/lychee.toml"
 	)
 	if f := checkPinned(root, rule, name, CanonicalLychee); f != nil {
 		return *f
@@ -425,15 +449,61 @@ func checkLychee(root string) Finding {
 	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: name + matchesCanonicalMsg}
 }
 
+// checkWorkflows verifies the .github surface in its two regimes: the
+// checksum-update workflow and the setup-aqua action are content-pinned
+// (limen machinery — the write-capable workflow's hardening must never
+// drift), while the CI workflow and renovate config need only exist (limen
+// fix seeds the canonical ones; their content is the project's own after
+// that). The release workflow is required exactly when the repository
+// carries a goreleaser config — releasing is opt-in.
+func checkWorkflows(root string) Finding {
+	const rule = "workflows"
+
+	if f := checkPinned(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum); f != nil {
+		return *f
+	}
+
+	if f := checkPinned(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua); f != nil {
+		return *f
+	}
+
+	for _, seeded := range []string{pathWorkflowCI, pathRenovate} {
+		if !exists(filepath.Join(root, filepath.FromSlash(seeded))) {
+			return fail(
+				rule,
+				"",
+				"no "+seeded+" (limen fix seeds the canonical one; the content is the project's afterwards)",
+			)
+		}
+	}
+
+	if _, hasGoreleaser := findFirst(root, ".goreleaser.yaml", ".goreleaser.yml"); hasGoreleaser {
+		if !exists(filepath.Join(root, filepath.FromSlash(pathWorkflowRelease))) {
+			return fail(
+				rule,
+				"",
+				".goreleaser.yaml is present but "+pathWorkflowRelease+" is missing (limen fix seeds it)",
+			)
+		}
+	}
+
+	return Finding{
+		Rule:    rule,
+		Status:  StatusOK,
+		Path:    pathWorkflowCI,
+		Message: "workflows present; the canonical pieces match the baseline",
+	}
+}
+
 // checkShellcheck is a per-language rule: a project that contains shell sources
-// must carry a .just/.shellcheckrc that matches the canonical baseline exactly,
+// must carry a .limen/.shellcheckrc that matches the canonical baseline exactly,
 // so the linter's configuration is identical everywhere. It returns ok=false when
 // the project contains no shell, so the caller omits the finding entirely rather
 // than reporting a rule that does not apply.
 func checkShellcheck(root string) (Finding, bool) {
 	const (
 		rule = "shellcheck"
-		name = ".just/.shellcheckrc"
+		name = ".limen/.shellcheckrc"
 	)
 
 	shell, found := findShellSource(root)
@@ -569,14 +639,14 @@ func hasShellShebang(path string) bool {
 }
 
 // checkYamlfmt is a per-language rule: a project that contains YAML must carry a
-// .just/.yamlfmt that matches the canonical baseline exactly, so YAML formatting
+// .limen/.yamlfmt that matches the canonical baseline exactly, so YAML formatting
 // is identical everywhere. It returns ok=false when the project contains no YAML,
 // so the caller omits the finding entirely rather than reporting a rule that does
 // not apply.
 func checkYamlfmt(root string) (Finding, bool) {
 	const (
 		rule = "yamlfmt"
-		name = ".just/.yamlfmt"
+		name = ".limen/.yamlfmt"
 	)
 
 	yaml, found := findYAMLSource(root)

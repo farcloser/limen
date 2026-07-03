@@ -101,7 +101,7 @@ scaffolder.
 ## Scaffolding a new project
 
 Create these files at the repo root. This repository's own aqua files
-([`aqua.yaml`](../aqua.yaml), [`.just/aqua-registry.yaml`](../.just/aqua-registry.yaml),
+([`aqua.yaml`](../aqua.yaml), [`.limen/aqua-registry.yaml`](../.limen/aqua-registry.yaml),
 [`aqua-policy.yaml`](../aqua-policy.yaml)) are the canonical reference — we dogfood this rule.
 
 ```
@@ -109,7 +109,7 @@ repo/
 ├── aqua.yaml                              # the manifest: pinned tool versions
 ├── aqua-checksums.json                    # GENERATED — commit it
 ├── aqua-policy.yaml                       # authorizes the local registry
-├── .just/aqua-registry.yaml                     # local registry: go_install tools
+├── .limen/aqua-registry.yaml                     # local registry: go_install tools
 ├── renovate.json5                         # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
@@ -129,7 +129,7 @@ What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
   (Renovate bumps them), and extra per-project packages are welcome. A package is never
   listed twice.
 
-> **Content-pinned files.** `aqua-policy.yaml` and `.just/aqua-registry.yaml` are **canonical
+> **Content-pinned files.** `aqua-policy.yaml` and `.limen/aqua-registry.yaml` are **canonical
 > everywhere** — `limen` requires them to match its embedded copies byte for byte (and `limen
 > fix` overwrites drift). `aqua.yaml` is subset-pinned as above; only its package versions,
 > extra packages, and the standard registry ref are project-owned. `aqua-checksums.json` is
@@ -146,7 +146,7 @@ aqua policy allow aqua-policy.yaml   # explicit trust gate (one-time per machine
 aqua update-checksum      # generate aqua-checksums.json for the binary tools
 aqua install --only-link  # link every pinned tool (each downloads lazily on first use)
 
-git add aqua.yaml .just/aqua-registry.yaml aqua-policy.yaml aqua-checksums.json \
+git add aqua.yaml .limen/aqua-registry.yaml aqua-policy.yaml aqua-checksums.json \
         renovate.json5 .github/workflows/update-aqua-checksum.yaml
 git commit --message "tooling: pin project CLIs via aqua"
 ```
@@ -195,7 +195,7 @@ first invocation, so `aqua install --only-link` is optional warm-up rather than 
 
 ---
 
-## Day-to-day changes — the `just tools` recipes
+## Day-to-day changes — the `just do tools` recipes
 
 The everyday operations — add, pin to a version, bump, remove — are wrapped as recipes in the
 `tools` just module so nobody has to remember the exact aqua incantation (or forget the
@@ -203,10 +203,10 @@ checksum step). Each takes the **`owner/repo`** exactly as it appears in `aqua.y
 leaves `aqua.yaml` **and** `aqua-checksums.json` updated together, ready to commit:
 
 ```bash
-just tools add    junegunn/fzf                    # add a tool at its latest version
-just tools set    golangci/golangci-lint <version>  # pin an existing tool to an exact version
-just tools update golangci/golangci-lint          # bump an existing tool to its latest version
-just tools remove junegunn/fzf                    # remove a tool entirely
+just do tools add    junegunn/fzf                    # add a tool at its latest version
+just do tools set    golangci/golangci-lint <version>  # pin an existing tool to an exact version
+just do tools update golangci/golangci-lint          # bump an existing tool to its latest version
+just do tools remove junegunn/fzf                    # remove a tool entirely
 ```
 
 Every recipe ends by refreshing the checksum (`aqua update-checksum`) and installing/verifying
@@ -236,7 +236,7 @@ are the one adding, removing, pinning, or bumping a tool.
 
 ### Manual
 
-The short path is `just tools update owner/repo` (latest) or `just tools set owner/repo <version>`
+The short path is `just do tools update owner/repo` (latest) or `just do tools set owner/repo <version>`
 (exact), as above. Spelled out, that is:
 
 ```bash

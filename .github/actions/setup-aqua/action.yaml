@@ -14,14 +14,39 @@ runs:
         # renovate: depName=aquaproj/aqua
         AQUA_VERSION: v2.60.1
       run: |
+        # Pin the root explicitly: aqua's own Windows build defaults it to
+        # %LOCALAPPDATA% (adrg/xdg), while the shell installer and the
+        # hermetic Justfile PATH compute unix-style ~/.local/share — without
+        # this, the layers disagree on Windows and nothing resolves. Exported
+        # to GITHUB_ENV so the recipes' aqua agrees too.
+        AQUA_ROOT_DIR="${AQUA_ROOT_DIR:-$HOME/.local/share/aquaproj-aqua}"
+        # On windows the pin must be in NATIVE form: git-bash's $HOME is a
+        # POSIX-only path (/c/Users/...) that native binaries (aqua,
+        # aqua-proxy, just) misread as current-drive-relative — aqua would
+        # link tools under D:\c\... while bash's PATH looks in C:\Users\....
+        # cygpath -m yields C:/Users/..., which every layer reads correctly
+        # (git-bash included).
+        if command -v cygpath >/dev/null 2>&1; then
+          AQUA_ROOT_DIR="$(cygpath -m "$AQUA_ROOT_DIR")"
+        fi
+        export AQUA_ROOT_DIR
+        echo "AQUA_ROOT_DIR=${AQUA_ROOT_DIR}" >>"$GITHUB_ENV"
         tmp="$(mktemp -d)"
         curl -fsSL -o "${tmp}/aqua-installer" \
           "https://raw.githubusercontent.com/aquaproj/aqua-installer/${AQUA_INSTALLER_VERSION}/aqua-installer"
-        echo "${AQUA_INSTALLER_SHA256}  ${tmp}/aqua-installer" | shasum -a 256 -c -
+        # No single digest tool exists everywhere: linux and windows git-bash
+        # ship coreutils sha256sum, macOS ships perl shasum. (Nothing
+        # aqua-managed can help here — this checksum guards the aqua
+        # installer itself.)
+        if command -v sha256sum >/dev/null 2>&1; then
+          echo "${AQUA_INSTALLER_SHA256}  ${tmp}/aqua-installer" | sha256sum -c -
+        else
+          echo "${AQUA_INSTALLER_SHA256}  ${tmp}/aqua-installer" | shasum -a 256 -c -
+        fi
         chmod +x "${tmp}/aqua-installer"
         "${tmp}/aqua-installer" -v "${AQUA_VERSION}"
         rm -rf "${tmp}"
-        echo "${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin" >>"$GITHUB_PATH"
+        echo "${AQUA_ROOT_DIR}/bin" >>"$GITHUB_PATH"
     - name: Authorize the committed aqua policy
       # Before aqua will read the repo's local registry, the committed policy
       # must be allowed — every caller needs this, whatever it runs next.

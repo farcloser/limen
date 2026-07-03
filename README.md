@@ -92,13 +92,16 @@ Early. We are bootstrapping from the ground floor:
 - [x] Repository shape and operating principle (this README)
 - [x] **Common / mandatory files** — every repo must be a git repository and carry a
       recognized `LICENSE`, an `.editorconfig` and `.gitignore` matching the shared baselines,
-      a `README`, and the canonical `Justfile` + shared `.just/` modules. See
+      a `README`, and the canonical `Justfile` + shared `.limen/` modules. See
       [`book/mandatory-files.md`](./book/mandatory-files.md) and [`cmd/limen/`](./cmd/limen).
 - [x] **Per-language rules** — conditional checks that fire only when a language is present:
-      shell → `.just/.shellcheckrc`, and YAML → `.just/.yamlfmt`. See [`book/per-language.md`](./book/per-language.md).
+      shell → `.limen/.shellcheckrc`, and YAML → `.limen/.yamlfmt`. See [`book/per-language.md`](./book/per-language.md).
 - [x] **Project tooling** — every repo pins its build/CI tooling through aqua: a committed
       `aqua.yaml` with checksum enforcement on, plus a committed `aqua-checksums.json`. See
       [`book/tooling.md`](./book/tooling.md) and [`cmd/limen/`](./cmd/limen).
+- [x] **GitHub settings** — repository configuration audited and repaired like any other
+      rule: merge doctrine, rulesets, Actions hardening, security features. See
+      [`book/github.md`](./book/github.md) and `limen github check|fix`.
 - [ ] Further rules, one chapter and one check at a time.
 
 ## Layout conventions

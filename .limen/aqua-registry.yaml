@@ -77,3 +77,4 @@ packages:
     supported_envs:
       - darwin
       - linux
+      - windows

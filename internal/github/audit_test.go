@@ -138,11 +138,15 @@ func compliantResponses() map[string]stubResponse {
 			body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
 		"GET repos/test/repo/rulesets/1": {
-			body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"}]}`,
+			body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
 		},
 		"GET repos/test/repo/rulesets/2": {
 			body: `{"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
 		},
+		"GET repos/test/repo/actions/permissions/fork-pr-contributor-approval": {
+			body: `{"approval_policy":"first_time_contributors"}`,
+		},
+		"GET repos/test/repo/collaborators?affiliation=outside&per_page=100": {body: `[]`},
 		"GET repos/test/repo/hooks": {body: `[]`},
 		"GET repos/test/repo/keys":  {body: `[]`},
 		"GET repos/test/repo/pages": {notFound: true},
@@ -249,6 +253,11 @@ func TestAuditUnverifiable(t *testing.T) { //nolint:paralleltest // serial by de
 	}
 
 	for _, finding := range findings {
+		if finding.Check == checkCodeScanning {
+			// Opt-in and not opted in: reported ok without any API call.
+			continue
+		}
+
 		if finding.Status != StatusUnverifiable {
 			t.Errorf("%s: status %v, want unverifiable", finding.Check, finding.Status)
 		}
@@ -413,5 +422,201 @@ func TestInferRepo(t *testing.T) {
 				t.Errorf("InferRepo = %q, want error", slug)
 			}
 		})
+	}
+}
+
+func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/actions/permissions/fork-pr-contributor-approval"] = stubResponse{
+		body: `{"approval_policy":"first_time_contributors_new_to_github"}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, found := findingByCheck(findings, checkForkPRApproval)
+	if !found || finding.Status != StatusFail {
+		t.Errorf("weakest approval policy: %v, want fail", finding.Status)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkForkPRApproval {
+			if err := planned.Apply(testRepo); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(log), "PUT repos/test/repo/actions/permissions/fork-pr-contributor-approval") {
+		t.Error("expected the approval policy to be raised via PUT")
+	}
+
+	if !strings.Contains(string(log), `"approval_policy":"first_time_contributors"`) {
+		t.Error("expected the baseline approval policy in the payload")
+	}
+}
+
+func TestActionsAccessLevel(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+	// Public repository: not applicable, and the endpoint is never queried.
+	stubGH(t, compliantResponses())
+
+	findings, _ := Audit(testRepo, nil)
+	if finding, _ := findingByCheck(findings, checkActionsAccessLevel); finding.Status != StatusOK {
+		t.Errorf("public repository access level: %v, want ok (not applicable)", finding.Status)
+	}
+
+	// Private repository with outside access: fail with a fix down to none.
+	responses := compliantResponses()
+	responses["GET repos/test/repo"] = stubResponse{
+		body: strings.Replace(compliantRepoJSON, `"private": false`, `"private": true`, 1),
+	}
+	responses["GET repos/test/repo/actions/permissions/access"] = stubResponse{body: `{"access_level":"organization"}`}
+	stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+	if finding, _ := findingByCheck(findings, checkActionsAccessLevel); finding.Status != StatusFail {
+		t.Errorf("private repository with organization access: %v, want fail", finding.Status)
+	}
+
+	planned := false
+
+	for _, change := range changes {
+		if change.Check == checkActionsAccessLevel {
+			planned = true
+		}
+	}
+
+	if !planned {
+		t.Error("expected a planned change down to access level none")
+	}
+}
+
+func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+	// Not opted in: ok, and the endpoint is never queried (the stub would
+	// error, which would surface as unverifiable).
+	stubGH(t, compliantResponses())
+
+	findings, _ := Audit(testRepo, nil)
+	if finding, _ := findingByCheck(findings, checkCodeScanning); finding.Status != StatusOK {
+		t.Errorf("not opted in: %v, want ok", finding.Status)
+	}
+
+	// Opted in via the override file, not configured: fail with a fix.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/code-scanning/default-setup"] = stubResponse{body: `{"state":"not-configured"}`}
+	logPath := stubGH(t, responses)
+
+	optIn := map[string]string{checkCodeScanning: "this repo parses untrusted input"}
+
+	findings, changes := Audit(testRepo, optIn)
+	if finding, _ := findingByCheck(findings, checkCodeScanning); finding.Status != StatusFail {
+		t.Errorf("opted in and not configured: %v, want fail (opt-in must not read as exemption)", finding.Status)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkCodeScanning {
+			if err := planned.Apply(testRepo); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), "PATCH repos/test/repo/code-scanning/default-setup") {
+		t.Error("expected default setup to be configured via PATCH")
+	}
+
+	// Opted in and configured: ok.
+	responses["GET repos/test/repo/code-scanning/default-setup"] = stubResponse{body: `{"state":"configured"}`}
+	stubGH(t, responses)
+
+	findings, _ = Audit(testRepo, optIn)
+	if finding, _ := findingByCheck(findings, checkCodeScanning); finding.Status != StatusOK {
+		t.Errorf("opted in and configured: %v, want ok", finding.Status)
+	}
+}
+
+func TestOutsideCollaborators(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/collaborators?affiliation=outside&per_page=100"] = stubResponse{
+		body: `[{"login":"drifter","role_name":"admin","permissions":{"push":true,"maintain":true,"admin":true}},` +
+			`{"login":"reader","role_name":"read","permissions":{"push":false,"maintain":false,"admin":false}}]`,
+	}
+	stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, found := findingByCheck(findings, checkOutsideCollaborators)
+	if !found || finding.Status != StatusAdvisory {
+		t.Errorf("outside collaborator with admin: %v, want advisory", finding.Status)
+	}
+
+	if !strings.Contains(finding.Current, "drifter") || strings.Contains(finding.Current, "reader") {
+		t.Errorf("advisory should name only the elevated collaborator, got %q", finding.Current)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkOutsideCollaborators {
+			t.Error("people are never auto-fixed: no change may be planned")
+		}
+	}
+}
+
+func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	// limen:main is missing required_linear_history but carries the project's
+	// own status-check context: the reconcile payload must preserve it and
+	// must not inject the canonical defaults.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Fatalf("ruleset missing a rule: %v, want fail", finding.Status)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkRulesetDefaultBranch {
+			if err := planned.Apply(testRepo); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	payload := string(log)
+
+	if !strings.Contains(payload, `"context":"my-ci"`) {
+		t.Error("reconcile must preserve the project's own status-check contexts")
+	}
+
+	if strings.Contains(payload, "verify (ubuntu-24.04)") {
+		t.Error("reconcile must not replace project contexts with the canonical defaults")
+	}
+}
+
+func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
+			`{"type":"required_linear_history"},{"type":"required_status_checks","parameters":{"required_status_checks":[]}}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, _ := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Errorf("required status checks with no contexts: %v, want fail", finding.Status)
 	}
 }

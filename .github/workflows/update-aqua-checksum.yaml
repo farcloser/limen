@@ -40,6 +40,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every run step is bash, explicitly: runner-OS shell defaults are a trap
+# (windows defaults to PowerShell), and explicit bash adds `-eo pipefail`.
+# Uniform across all canonical workflows so adding a runner never changes
+# what the steps mean.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   update:
     runs-on: ubuntu-24.04

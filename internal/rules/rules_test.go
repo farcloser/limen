@@ -65,18 +65,24 @@ func compliantFiles() map[string]string {
 		"LICENSE":             mitText,
 		".editorconfig":       CanonicalEditorconfig,
 		".gitignore":          compliantGitignore,
-		"Justfile":            CanonicalJustfile,
+		"Justfile":            CanonicalJustfileImport + "\n",
 		"aqua.yaml":           limen.CanonicalAquaYAML,
 		"aqua-checksums.json": "{}\n",
 		// The aqua policy, local registry, and lychee config are content-pinned exactly.
-		"aqua-policy.yaml":         CanonicalAquaPolicy,
-		".just/aqua-registry.yaml": CanonicalAquaRegistry,
-		".just/lychee.toml":        CanonicalLychee,
+		"aqua-policy.yaml":          CanonicalAquaPolicy,
+		".limen/aqua-registry.yaml": CanonicalAquaRegistry,
+		".limen/lychee.toml":        CanonicalLychee,
 		// aqua.yaml is YAML, so the conditional yamlfmt rule fires; satisfy it
 		// with the canonical baseline.
-		".just/.yamlfmt": CanonicalYamlfmt,
+		".limen/.yamlfmt": CanonicalYamlfmt,
+		// The .github surface: two content-pinned pieces, two seeded ones
+		// (any content satisfies the seeded pair — canonical used here).
+		pathWorkflowChecksum: limen.CanonicalWorkflowUpdateAquaChecksum,
+		pathActionSetupAqua:  limen.CanonicalActionSetupAqua,
+		pathWorkflowCI:       limen.CanonicalWorkflowCI,
+		pathRenovate:         limen.CanonicalRenovate,
 	}
-	// Every shared just module (.just/*.just) must be present.
+	// Every shared just module (.limen/*.just) must be present.
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
 	}
@@ -209,22 +215,22 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 
 	// The exact canonical passes.
 	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "lychee"); !f.OK() {
-		t.Errorf("the exact canonical .just/lychee.toml should pass: %s", f.Message)
+		t.Errorf("the exact canonical .limen/lychee.toml should pass: %s", f.Message)
 	}
 
 	// The rule is unconditional: a repo without the file fails.
 	missing := compliantFiles()
-	delete(missing, ".just/lychee.toml")
+	delete(missing, ".limen/lychee.toml")
 
 	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "lychee"); f.OK() {
-		t.Error("a missing .just/lychee.toml should fail")
+		t.Error("a missing .limen/lychee.toml should fail")
 	}
 
 	// It is content-pinned: even the canonical plus an extra setting fails — a
 	// project's own exclusions belong in a root lychee.toml.
 	extra := compliantFiles()
 
-	extra[".just/lychee.toml"] = CanonicalLychee + "\ncache = true\n"
+	extra[".limen/lychee.toml"] = CanonicalLychee + "\ncache = true\n"
 	if f := findingByRule(Check(writeRepo(t, extra), DefaultPolicy()), "lychee"); f.OK() {
 		t.Error("canonical + an extra setting should fail (content-pinned, no extras)")
 	}
@@ -327,24 +333,25 @@ func TestGitignorePatternSpellingsAccepted(t *testing.T) {
 	}
 }
 
-func TestJustfileMustMatchCanonical(t *testing.T) {
+func TestJustfileRequiresImport(t *testing.T) {
 	t.Parallel()
 
-	// A Justfile that is not the canonical import shell fails.
+	// A Justfile without the shared-baseline import fails.
 	files := compliantFiles()
 	files["Justfile"] = "info:\n\t@echo hand-rolled\n"
 
 	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile")
 	if f.OK() {
-		t.Fatal("a non-canonical Justfile should fail")
+		t.Fatal("a Justfile without the shared-baseline import should fail")
 	}
 
-	// Even the canonical content plus an extra line fails (it must be verbatim).
+	// The import plus any amount of the project's own content passes: the
+	// root Justfile is the project's own.
 	files = compliantFiles()
 
-	files["Justfile"] = CanonicalJustfile + "\nstray:\n\t@echo x\n"
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile"); f.OK() {
-		t.Errorf("a Justfile with extra recipes should fail (use project.just): %s", f.Message)
+	files["Justfile"] = "# mine\n" + CanonicalJustfileImport + "\n\nstray:\n\t@echo x\n"
+	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile"); !f.OK() {
+		t.Errorf("a Justfile with the import and its own recipes should pass: %s", f.Message)
 	}
 }
 
@@ -380,15 +387,15 @@ func TestJustfileRequiresSharedModules(t *testing.T) {
 	}
 }
 
-func TestJustfileProjectFileIsNotChecked(t *testing.T) {
+func TestJustfileOwnRecipesNotJudged(t *testing.T) {
 	t.Parallel()
 
-	// project.just may contain anything (or be absent) without affecting the rule.
+	// Whatever the project puts around the import line is its own business.
 	files := compliantFiles()
+	files["Justfile"] = CanonicalJustfileImport + "\n\nwhatever:\n\t@echo project-specific\n"
 
-	files["project.just"] = "whatever:\n\t@echo project-specific\n"
 	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile"); !f.OK() {
-		t.Errorf("a project-specific project.just must not fail the rule: %s", f.Message)
+		t.Errorf("project recipes in the root Justfile must not be judged: %s", f.Message)
 	}
 }
 
@@ -609,20 +616,20 @@ func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 		t.Error("a drifted aqua-policy.yaml should fail (content-pinned)")
 	}
 
-	// Missing .just/aqua-registry.yaml fails.
+	// Missing .limen/aqua-registry.yaml fails.
 	noReg := compliantFiles()
-	delete(noReg, ".just/aqua-registry.yaml")
+	delete(noReg, ".limen/aqua-registry.yaml")
 
 	if f := findingByRule(Check(writeRepo(t, noReg), DefaultPolicy()), "aqua"); f.OK() {
-		t.Error("a missing .just/aqua-registry.yaml should fail the aqua rule")
+		t.Error("a missing .limen/aqua-registry.yaml should fail the aqua rule")
 	}
 
 	// A drifted registry fails.
 	badReg := compliantFiles()
 
-	badReg[".just/aqua-registry.yaml"] = CanonicalAquaRegistry + "\n# local edit\n"
+	badReg[".limen/aqua-registry.yaml"] = CanonicalAquaRegistry + "\n# local edit\n"
 	if f := findingByRule(Check(writeRepo(t, badReg), DefaultPolicy()), "aqua"); f.OK() {
-		t.Error("a drifted .just/aqua-registry.yaml should fail (content-pinned)")
+		t.Error("a drifted .limen/aqua-registry.yaml should fail (content-pinned)")
 	}
 }
 
@@ -631,7 +638,10 @@ func TestYamlfmtConditional(t *testing.T) {
 
 	// No YAML anywhere: the yamlfmt rule produces no finding.
 	noYAML := compliantFiles()
-	for _, y := range []string{"aqua.yaml", "aqua-policy.yaml", ".just/aqua-registry.yaml"} {
+	for _, y := range []string{
+		"aqua.yaml", "aqua-policy.yaml", ".limen/aqua-registry.yaml",
+		pathWorkflowChecksum, pathActionSetupAqua, pathWorkflowCI,
+	} {
 		delete(noYAML, y) // remove every *.yaml/*.yml in the set
 	}
 
@@ -639,34 +649,34 @@ func TestYamlfmtConditional(t *testing.T) {
 		t.Error("yamlfmt rule should not appear when there is no YAML")
 	}
 
-	// A YAML file without .just/.yamlfmt fails.
+	// A YAML file without .limen/.yamlfmt fails.
 	noConfig := compliantFiles()
-	delete(noConfig, ".just/.yamlfmt")
+	delete(noConfig, ".limen/.yamlfmt")
 
 	if f := findingByRule(Check(writeRepo(t, noConfig), DefaultPolicy()), "yamlfmt"); f.OK() {
-		t.Errorf("YAML present without .just/.yamlfmt should fail, got: %s", f.Message)
+		t.Errorf("YAML present without .limen/.yamlfmt should fail, got: %s", f.Message)
 	}
 
-	// A .just/.yamlfmt that differs from the canonical fails.
+	// A .limen/.yamlfmt that differs from the canonical fails.
 	wrong := compliantFiles()
 
-	wrong[".just/.yamlfmt"] = "formatter:\n  type: basic\n"
+	wrong[".limen/.yamlfmt"] = "formatter:\n  type: basic\n"
 	if f := findingByRule(Check(writeRepo(t, wrong), DefaultPolicy()), "yamlfmt"); f.OK() {
-		t.Errorf("a .just/.yamlfmt that differs from the canonical should fail, got: %s", f.Message)
+		t.Errorf("a .limen/.yamlfmt that differs from the canonical should fail, got: %s", f.Message)
 	}
 
 	// It is content-pinned: even the canonical plus an extra directive fails.
 	extra := compliantFiles()
 
-	extra[".just/.yamlfmt"] = CanonicalYamlfmt + "\nline_ending: lf\n"
+	extra[".limen/.yamlfmt"] = CanonicalYamlfmt + "\nline_ending: lf\n"
 	if f := findingByRule(Check(writeRepo(t, extra), DefaultPolicy()), "yamlfmt"); f.OK() {
-		t.Error("a .just/.yamlfmt with an extra directive should fail (content-pinned, no extras)")
+		t.Error("a .limen/.yamlfmt with an extra directive should fail (content-pinned, no extras)")
 	}
 
 	// The exact canonical passes.
-	exact := compliantFiles() // compliantFiles seeds the canonical .just/.yamlfmt
+	exact := compliantFiles() // compliantFiles seeds the canonical .limen/.yamlfmt
 	if f := findingByRule(Check(writeRepo(t, exact), DefaultPolicy()), "yamlfmt"); !f.OK() {
-		t.Errorf("the exact canonical .just/.yamlfmt should pass: %s", f.Message)
+		t.Errorf("the exact canonical .limen/.yamlfmt should pass: %s", f.Message)
 	}
 }
 
@@ -679,31 +689,31 @@ func TestShellcheckConditional(t *testing.T) {
 		t.Error("shellcheck rule should not appear when there is no shell")
 	}
 
-	// A shell source without .just/.shellcheckrc fails.
+	// A shell source without .limen/.shellcheckrc fails.
 	files := compliantFiles()
 	files["build.sh"] = "#!/bin/sh\necho hi\n"
 
 	withShell := writeRepo(t, files)
 	if f := findingByRule(Check(withShell, DefaultPolicy()), "shellcheck"); f.OK() {
-		t.Errorf("shell present without .just/.shellcheckrc should fail, got: %s", f.Message)
+		t.Errorf("shell present without .limen/.shellcheckrc should fail, got: %s", f.Message)
 	}
 
-	// A .just/.shellcheckrc that differs from the canonical fails.
-	files[".just/.shellcheckrc"] = "disable=SC2034\n"
+	// A .limen/.shellcheckrc that differs from the canonical fails.
+	files[".limen/.shellcheckrc"] = "disable=SC2034\n"
 	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
-		t.Errorf("a .just/.shellcheckrc that differs from the canonical should fail, got: %s", f.Message)
+		t.Errorf("a .limen/.shellcheckrc that differs from the canonical should fail, got: %s", f.Message)
 	}
 
 	// It is content-pinned: even the canonical plus an extra directive fails.
-	files[".just/.shellcheckrc"] = CanonicalShellcheckrc + "\ndisable=SC2034\n"
+	files[".limen/.shellcheckrc"] = CanonicalShellcheckrc + "\ndisable=SC2034\n"
 	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
-		t.Error("a .just/.shellcheckrc with an extra directive should fail (content-pinned, no extras)")
+		t.Error("a .limen/.shellcheckrc with an extra directive should fail (content-pinned, no extras)")
 	}
 
 	// The exact canonical passes.
-	files[".just/.shellcheckrc"] = CanonicalShellcheckrc
+	files[".limen/.shellcheckrc"] = CanonicalShellcheckrc
 	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); !f.OK() {
-		t.Errorf("the exact canonical .just/.shellcheckrc should pass: %s", f.Message)
+		t.Errorf("the exact canonical .limen/.shellcheckrc should pass: %s", f.Message)
 	}
 }
 
@@ -782,5 +792,52 @@ func TestShellShebangDialects(t *testing.T) {
 		if got := hasShellShebang(path); got != tc.want {
 			t.Errorf("hasShellShebang(%q) = %v, want %v", tc.shebang, got, tc.want)
 		}
+	}
+}
+
+func TestWorkflowsRule(t *testing.T) {
+	t.Parallel()
+
+	// The compliant set passes (pinned pieces canonical, seeded pieces present).
+	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "workflows"); !f.OK() {
+		t.Errorf("compliant workflows should pass, got: %s", f.Message)
+	}
+
+	// A drifted pinned piece fails — the write-capable workflow is machinery.
+	drifted := compliantFiles()
+	drifted[pathWorkflowChecksum] = limen.CanonicalWorkflowUpdateAquaChecksum + "\n# local edit\n"
+
+	if f := findingByRule(Check(writeRepo(t, drifted), DefaultPolicy()), "workflows"); f.OK() {
+		t.Error("a drifted update-aqua-checksum workflow should fail (content-pinned)")
+	}
+
+	// Seeded pieces are presence-only: any content satisfies the rule.
+	custom := compliantFiles()
+	custom[pathWorkflowCI] = "name: my-own-ci\n"
+	custom[pathRenovate] = "{}\n"
+
+	if f := findingByRule(Check(writeRepo(t, custom), DefaultPolicy()), "workflows"); !f.OK() {
+		t.Errorf("customized seeded files should pass, got: %s", f.Message)
+	}
+
+	// A missing seeded piece fails.
+	missing := compliantFiles()
+	delete(missing, pathWorkflowCI)
+
+	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "workflows"); f.OK() {
+		t.Error("a missing CI workflow should fail")
+	}
+
+	// The release workflow is required exactly when goreleaser config exists.
+	releasing := compliantFiles()
+	releasing[".goreleaser.yaml"] = "version: 2\n"
+
+	if f := findingByRule(Check(writeRepo(t, releasing), DefaultPolicy()), "workflows"); f.OK() {
+		t.Error(".goreleaser.yaml without a release workflow should fail")
+	}
+
+	releasing[pathWorkflowRelease] = limen.CanonicalWorkflowRelease
+	if f := findingByRule(Check(writeRepo(t, releasing), DefaultPolicy()), "workflows"); !f.OK() {
+		t.Errorf("goreleaser with a release workflow should pass, got: %s", f.Message)
 	}
 }
