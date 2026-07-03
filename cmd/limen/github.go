@@ -88,24 +88,12 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 
 	findings, _ := github.Audit(repo, overrides)
 
+	printer := printGithubFindingsText
 	if *asJSON {
-		encoder := json.NewEncoder(stdout)
-		encoder.SetIndent("", "  ")
-
-		if err := encoder.Encode(findings); err != nil {
-			_, _ = fmt.Fprintf(stderr, errFormat, err)
-
-			return 2
-		}
-	} else {
-		printGithubFindings(stdout, repo, findings)
+		printer = printGithubFindingsJSON
 	}
 
-	if github.AllOK(findings) {
-		return 0
-	}
-
-	return 1
+	return reportGithubOutcome(stdout, stderr, repo, findings, printer)
 }
 
 func runGithubFix(args []string, stdout, stderr io.Writer) int {
@@ -131,11 +119,16 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	printer := printGithubFindingsText
+	if *asJSON {
+		printer = printGithubFindingsJSON
+	}
+
 	findings, changes := github.Audit(repo, overrides)
 	if len(changes) == 0 {
 		_, _ = fmt.Fprintln(stdout, "nothing to fix")
 
-		return reportGithubOutcome(stdout, stderr, repo, findings, *asJSON)
+		return reportGithubOutcome(stdout, stderr, repo, findings, printer)
 	}
 
 	_, _ = fmt.Fprintf(stdout, "limen github fix %s — plan:\n", repo)
@@ -167,7 +160,7 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	// Re-audit: the post-state, not the intent, is what gets reported.
 	final, _ := github.Audit(repo, overrides)
 
-	return reportGithubOutcome(stdout, stderr, repo, final, *asJSON)
+	return reportGithubOutcome(stdout, stderr, repo, final, printer)
 }
 
 // confirm asks for interactive consent on stdin (the plan was just printed).
@@ -186,26 +179,22 @@ func confirm(stdout io.Writer) bool {
 	return answer == "y" || answer == "yes"
 }
 
-// reportGithubOutcome prints the findings and derives the exit code. asJSON is
-// the user's -json flag: an output mode is domain data, and every call site
-// passes the self-describing *asJSON — not opaque-literal control coupling.
-func reportGithubOutcome( //nolint:revive // flag-parameter: see doc comment above.
+// findingsPrinter renders findings to the output stream. The -json flag picks
+// the printer where it is parsed, so no output-mode boolean travels through
+// the call graph (and no linter suppression has to, either).
+type findingsPrinter func(writer io.Writer, repo string, findings []github.Finding) error
+
+// reportGithubOutcome prints the findings and derives the exit code.
+func reportGithubOutcome(
 	stdout, stderr io.Writer,
 	repo string,
 	findings []github.Finding,
-	asJSON bool,
+	printer findingsPrinter,
 ) int {
-	if asJSON {
-		encoder := json.NewEncoder(stdout)
-		encoder.SetIndent("", "  ")
+	if err := printer(stdout, repo, findings); err != nil {
+		_, _ = fmt.Fprintf(stderr, errFormat, err)
 
-		if err := encoder.Encode(findings); err != nil {
-			_, _ = fmt.Fprintf(stderr, errFormat, err)
-
-			return 2
-		}
-	} else {
-		printGithubFindings(stdout, repo, findings)
+		return 2
 	}
 
 	if github.AllOK(findings) {
@@ -215,7 +204,15 @@ func reportGithubOutcome( //nolint:revive // flag-parameter: see doc comment abo
 	return 1
 }
 
-func printGithubFindings(writer io.Writer, repo string, findings []github.Finding) {
+func printGithubFindingsJSON(writer io.Writer, _ string, findings []github.Finding) error {
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+
+	//nolint:wrapcheck // the caller folds this into the uniform "limen: <error>" line.
+	return encoder.Encode(findings)
+}
+
+func printGithubFindingsText(writer io.Writer, repo string, findings []github.Finding) error {
 	_, _ = fmt.Fprintf(writer, "limen github check %s\n", repo)
 
 	counts := map[github.Status]int{}
@@ -244,4 +241,6 @@ func printGithubFindings(writer io.Writer, repo string, findings []github.Findin
 	_, _ = fmt.Fprintf(writer, "\n%d ok · %d fail · %d advisory · %d unverifiable\n",
 		counts[github.StatusOK], counts[github.StatusFail],
 		counts[github.StatusAdvisory], counts[github.StatusUnverifiable])
+
+	return nil
 }
