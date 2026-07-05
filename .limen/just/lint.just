@@ -62,7 +62,7 @@ dockerfile: (_banner "lint" "dockerfile")
     [ ${#files[@]} -eq 0 ] || godolint "${files[@]}"
 
 yaml: (_banner "lint" "yaml")
-    yamlfmt -conf .limen/.yamlfmt -lint .
+    yamlfmt -conf .limen/.yamlfmt -lint
 
 shell: (_banner "lint" "shell")
     #!/usr/bin/env bash
@@ -95,9 +95,16 @@ shell: (_banner "lint" "shell")
     recipes=()
     dump=$(just --dump --dump-format json)
     # Bodies are multi-line: base64 carries each across the one-record-per-line
-    # pipe intact (quotes, tabs and all).
+    # pipe intact (quotes, tabs and all). The trailing tr matters: the native
+    # windows jq writes CRLF, and the stray \r lands in the last TSV field,
+    # corrupting the base64 ("base64: invalid input"). \r cannot legitimately
+    # appear in this stream (recipe names and base64), so a blanket strip is safe.
     while IFS=$'\t' read -r name body; do
-        out="$tmpdir/$name"
+        # ':' is illegal in windows filenames — the msys layer creates
+        # "do::lint" via a private-use encoding that native shellcheck then
+        # cannot open (openBinaryFile: invalid argument). The name is only a
+        # label; flatten module separators.
+        out="$tmpdir/${name//:/_}"
         printf '%s' "$body" | base64 -d > "$out"
         head -n 1 "$out" | grep -qE '^#!.*\b(bash|dash|ksh|sh)\b' || continue
         recipes+=("$out")
@@ -110,7 +117,7 @@ shell: (_banner "lint" "shell")
                     | join("\n") | @base64)]),
             ((.modules // {}) | to_entries[]
                 | .key as $mod | .value | recipes_of(prefix + $mod + "::"));
-        recipes_of("") | @tsv')
+        recipes_of("") | @tsv' | tr -d '\r')
     # SC1010 is excluded for recipe bodies only: `just do <task>` is our shared
     # namespace, and shellcheck misreads the argument "do" as the shell keyword.
     # The constant-word checks (SC2050/SC2078/SC2157/SC2194) are excluded for

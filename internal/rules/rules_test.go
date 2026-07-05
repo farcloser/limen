@@ -65,6 +65,7 @@ func compliantFiles() map[string]string {
 		"LICENSE":             mitText,
 		".editorconfig":       CanonicalEditorconfig,
 		".gitignore":          compliantGitignore,
+		".gitattributes":      CanonicalGitattributes,
 		"Justfile":            CanonicalJustfileImport + "\n",
 		"aqua.yaml":           limen.CanonicalAquaYAML,
 		"aqua-checksums.json": "{}\n",
@@ -129,7 +130,9 @@ func TestCheckMissingEverything(t *testing.T) {
 		t.Fatal("expected failures for an empty repo")
 	}
 
-	for _, rule := range []string{"git", "readme", "license", "editorconfig", "gitignore", "justfile", "aqua", "lychee"} {
+	for _, rule := range []string{
+		"git", "readme", "license", "editorconfig", "gitignore", "gitattributes", "justfile", "aqua", "lychee",
+	} {
 		if findingByRule(findings, rule).OK() {
 			t.Errorf("rule %s unexpectedly passed", rule)
 		}
@@ -207,6 +210,32 @@ func TestEditorconfigMustMatchExactly(t *testing.T) {
 	partial[".editorconfig"] = CanonicalEditorconfig[:cut]
 	if f := findingByRule(Check(writeRepo(t, partial), DefaultPolicy()), "editorconfig"); f.OK() {
 		t.Error("a truncated .editorconfig should fail")
+	}
+}
+
+func TestGitattributesMustMatchExactly(t *testing.T) {
+	t.Parallel()
+
+	// The exact canonical passes.
+	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "gitattributes"); !f.OK() {
+		t.Errorf("the exact canonical .gitattributes should pass: %s", f.Message)
+	}
+
+	// Missing fails.
+	missing := compliantFiles()
+	delete(missing, ".gitattributes")
+
+	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "gitattributes"); f.OK() {
+		t.Error("a missing .gitattributes should fail")
+	}
+
+	// Any drift fails: the file is content-pinned, extras included — an extra
+	// attribute line would reintroduce the line-ending magic the pin removes.
+	extra := compliantFiles()
+	extra[".gitattributes"] = CanonicalGitattributes + "\n*.md text\n"
+
+	if f := findingByRule(Check(writeRepo(t, extra), DefaultPolicy()), "gitattributes"); f.OK() {
+		t.Error("a drifted .gitattributes should fail (content-pinned)")
 	}
 }
 

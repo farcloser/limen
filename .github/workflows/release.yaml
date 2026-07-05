@@ -2,7 +2,7 @@
 # This workflow is generic — no project-specific content — and is destined to
 # become part of the canonical baseline limen distributes.
 #
-# The workflow half of the CI release lane: `just do release --cut vX.Y.Z` on a
+# The workflow half of the CI release lane: `just do release vX.Y.Z` on a
 # laptop verifies the tree, creates the SIGNED tag (a human signs the intent),
 # and pushes it — that push triggers this workflow, which builds, signs the
 # ARTIFACTS with keyless cosign (Fulcio: the workflow's OIDC identity replaces
@@ -64,4 +64,6 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: just release --ci
+        run: |
+          # shellcheck disable=SC1010 # `do` is just's shared-task namespace, not the shell keyword.
+          just do release --ci

@@ -76,7 +76,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add aqua-checksums.json
-          # Signed-off-by: `just lint commits` enforces DCO on the PR range,
+          # Signed-off-by: `just do lint commits` enforces DCO on the PR range,
           # bot commits included.
           git commit -m "chore: update aqua-checksums.json" \
             -m "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"

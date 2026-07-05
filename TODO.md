@@ -39,10 +39,10 @@
      drag the Go toolchain onto every machine to save one goreleaser config).
 
 - **Release hardening: remaining pieces.** The CI lane exists (2026-07-02):
-  `just do release --cut vX.Y.Z` (signed tag by a human) triggers
+  `just do release vX.Y.Z` (signed tag by a human) triggers
   `.github/workflows/release.yaml`, which runs `just do release --ci` — goreleaser +
   **keyless** cosign (Fulcio workflow identity, Rekor-logged). The key-based local lane
-  remains for private repos and as the escape hatch (`just do release vX.Y.Z`). Still to do:
+  remains for private repos and as the escape hatch (`just do release --local <key> vX.Y.Z`). Still to do:
   1. **Repository ruleset** restricting who can create `v*` tags — the tag push is now the
      release button. (Org-side, manual.)
   2. **Commit `cosign.pub`** so the key-based lane's verifiers have the key (the pair

@@ -1,6 +1,7 @@
 // Package rules verifies a repository against Farcloser's mandatory-files
 // policy: every repository must carry a recognized LICENSE, an .editorconfig, a
-// .gitignore, a README, a Justfile, and an aqua manifest pinning its tooling.
+// .gitignore, a .gitattributes, a README, a Justfile, and an aqua manifest
+// pinning its tooling.
 // The policy is documented in book/mandatory-files.md and book/tooling.md.
 package rules
 
@@ -57,6 +58,15 @@ const shebangReadLimit = 128
 // are present, so a repository carries the full baseline harmlessly even when
 // it uses none of a given language.
 var CanonicalEditorconfig = limen.CanonicalEditorconfig //nolint:gochecknoglobals // immutable alias of embedded canonical data.
+
+// CanonicalGitattributes is the exact .gitattributes every repository must
+// carry verbatim: `* -text` turns off git's line-ending conversion entirely,
+// so the working tree is byte-identical on every platform (a Windows checkout
+// with core.autocrlf=true otherwise rewrites text files to CRLF and every
+// format checker fails). LF is enforced by the pinned .editorconfig and the
+// format linters, not by git magic. It is this repo's own .gitattributes,
+// embedded — the rule is content-pinned, so extras are not allowed.
+var CanonicalGitattributes = limen.CanonicalGitattributes //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
 // CanonicalShellcheckrc is the exact .limen/.shellcheckrc a repository must carry
 // verbatim (when the repo ships shell). It is this repo's .limen/.shellcheckrc,
@@ -173,6 +183,7 @@ func Check(root string, policy Policy) []Finding {
 		checkLicense(root, policy),
 		checkEditorconfig(root),
 		checkGitignore(root, policy),
+		checkGitattributes(root),
 		checkJustfile(root),
 		checkAqua(root),
 		checkLychee(root),
@@ -430,6 +441,23 @@ func checkAqua(root string) Finding {
 		Path:    name,
 		Message: "aqua.yaml carries the canonical baseline with checksum enforcement; policy, registry, and checksums committed",
 	}
+}
+
+// checkGitattributes content-pins .gitattributes (see CanonicalGitattributes:
+// `* -text`, no line-ending magic anywhere). It is unconditional: the failure
+// it prevents is a platform property, not a language one — any repository
+// checked out on Windows with core.autocrlf=true drifts to CRLF and fails
+// its format checkers.
+func checkGitattributes(root string) Finding {
+	const (
+		rule = "gitattributes"
+		name = ".gitattributes"
+	)
+	if f := checkPinned(root, rule, name, CanonicalGitattributes); f != nil {
+		return *f
+	}
+
+	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: name + matchesCanonicalMsg}
 }
 
 // checkLychee content-pins .limen/lychee.toml, the canonical configuration of

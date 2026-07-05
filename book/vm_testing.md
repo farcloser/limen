@@ -140,6 +140,15 @@ write each revision under a fresh filename (or wait out the cache).
   `git version --build-options` → `cpu: aarch64`) but an x64-emulated MSYS2
   userland — `uname -m` in git-bash says `x86_64`. That is upstream
   packaging, not a wrong install.
+- The share is a UNC path to git (`//localhost@9843/DavWWWRoot/...`), so
+  git's dubious-ownership protection fails every recipe that touches git.
+  Set `safe.directory = *` in the guest account's global gitconfig (this is
+  a test VM's driver account; the blanket wildcard is acceptable there).
+- Argument boundaries between host, PowerShell, bash, and native binaries
+  mangle content: MSYS glob-expands a bare `*` argument headed to a native
+  binary, and PowerShell's native-argument re-quoting eats backslash escapes.
+  Do not thread shell code through those layers — write a bash script FILE
+  on the share and invoke bash with only the script path.
 
 ## Verifying the loop end to end
 

@@ -10,6 +10,7 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | `LICENSE` | Present, and its content must be one of the **allowed licenses** below. |
 | `.editorconfig` | Present, and **content-pinned**: equals the [canonical baseline](#canonical-editorconfig) byte for byte — no extra sections, no edited values. |
 | `.gitignore` | Present, and covers the shared [gitignore baseline](#required-gitignore-patterns). |
+| `.gitattributes` | Present, and **content-pinned**: the [canonical file](#canonical-gitattributes) disabling git line-ending conversion. |
 | `README` | Present, as `README.md`. |
 | `Justfile` | Present, carrying the shared-baseline import — the rest of the file is the project’s own. The [`.limen/` modules](#justfile) it mounts are canonical. |
 | `.limen/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--limenlycheetoml). |
@@ -27,8 +28,8 @@ security features): see [GitHub settings](./github.md).
 
 You do not hand-create these files: `limen bootstrap <path>` scaffolds a new repository with
 all of them, and `limen fix` brings an existing repository up to the baseline — writing what
-is missing, resetting the content-pinned files (`.editorconfig` and the `.limen/*`
-files), and merging the baseline into the subset files (`.gitignore`, `aqua.yaml`, the
+is missing, resetting the content-pinned files (`.editorconfig`, `.gitattributes`, and the
+`.limen/*` files), and merging the baseline into the subset files (`.gitignore`, `aqua.yaml`, the
 root `Justfile`’s import line) without
 discarding a repo's own additions. Anything it cannot fix safely — a disallowed `LICENSE`, a
 manifest it cannot parse — is reported for a human to resolve.
@@ -150,6 +151,25 @@ files that exist, so carrying patterns for unused languages is harmless.
 normalizing spelling first so anchored or directory forms count — `.idea`, `.idea/`, `/.idea`,
 and `**/.idea` are all equivalent. A repo may ignore more — its own binary name, a `dist/`, its
 test artifacts — as ordinary extras; it may not omit a baseline pattern.
+
+## Canonical .gitattributes
+
+One rule: `* -text` — no git line-ending magic, for any file, in either direction. What is
+on disk is what is committed is what every checkout gets, byte for byte, on every platform.
+
+The failure it prevents is concrete: Windows machines (GitHub's runners included) default
+git to `core.autocrlf=true`, which rewrites every text file to CRLF at checkout. Every
+format checker then fails against its canonical LF output — `just --fmt --check` was the
+first to hit it, and any formatter-backed lint (`gofmt`, `yamlfmt`) fails the same way.
+
+Two deliberate consequences, both inherited from the Go project's identical file:
+
+- **LF is enforced by editors and linters, not by git.** The pinned `.editorconfig` says
+  `end_of_line = lf`; the format linters fail loudly on CRLF that sneaks through. A
+  Windows contributor needs an editor that writes LF — the same bar Go sets.
+- **No local additions.** The file is content-pinned: an extra attribute line (an `eol=`
+  override, an LFS filter) would reintroduce content transformation between the working
+  tree and the object store, which is exactly what the pin removes.
 
 ## Justfile
 

@@ -5,7 +5,7 @@
 # Go tests live in their own submodule: `just do test go` runs the unit tests,
 # `just do test go <recipe>` (e.g. `just do test go race`) runs one task.
 #
-# Bare `just test` deliberately refuses: tests are always language-bound, so
+# Bare `just do test` deliberately refuses: tests are always language-bound, so
 # there is nothing a universal default could run that would not fail (or lie)
 # on some repo. Which suites apply is each project's call — name one
 # explicitly, and define the project-wide aggregate as `test-all` in

@@ -4,6 +4,7 @@
 package rules //nolint:testpackage // white-box (see above)
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,6 +232,41 @@ func TestFixOverwritesDriftedShellcheck(t *testing.T) {
 	}
 }
 
+func TestFixGitattributes(t *testing.T) {
+	t.Parallel()
+
+	// Missing .gitattributes -> created from the canonical (unconditional rule).
+	dir := writeRepo(t, nil)
+
+	o := outcomeFor(Fix(dir, bootstrapOpts()), "gitattributes")
+	if o.Action != ActionCreated {
+		t.Fatalf("gitattributes action = %s, want created", o.Action)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, ".gitattributes"))
+	if string(data) != CanonicalGitattributes {
+		t.Error("created .gitattributes does not equal the canonical")
+	}
+
+	// Drifted -> overwritten to the canonical exactly (content-pinned: a local
+	// addition would reintroduce git's line-ending conversion).
+	drifted := writeRepo(t, map[string]string{
+		".gitattributes": CanonicalGitattributes + "\n*.md text\n",
+	})
+	if o := outcomeFor(Fix(drifted, bootstrapOpts()), "gitattributes"); o.Action != ActionOverwrote {
+		t.Fatalf("gitattributes action = %s, want overwrote", o.Action)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(drifted, ".gitattributes"))
+	if string(data) != CanonicalGitattributes {
+		t.Errorf(".gitattributes was not reset to the canonical exactly:\n%s", data)
+	}
+
+	if f := checkGitattributes(drifted); !f.OK() {
+		t.Errorf("gitattributes should pass after overwrite: %s", f.Message)
+	}
+}
+
 func TestFixLychee(t *testing.T) {
 	t.Parallel()
 
@@ -299,20 +335,58 @@ func TestFixCreatesMissingShellcheck(t *testing.T) {
 // which is the whole point: regenerated, never copied.
 const stubChecksums = `{"stub":true}` + "\n"
 
+// aquaStubEnv flips the re-executed test binary into fake-aqua mode (see
+// TestMain). Helper-process pattern rather than a generated script: Windows
+// cannot exec a shebang script (CreateProcess knows no shebangs, LookPath
+// only recognizes PATHEXT extensions).
+const aquaStubEnv = "LIMEN_TEST_AQUA_STUB"
+
 func stubAqua(t *testing.T) {
 	t.Helper()
 
-	script := "#!/bin/sh\ncase \"$*\" in *update-checksum*) printf '%s' '" + stubChecksums + "' > aqua-checksums.json ;; esac\nexit 0\n"
-
-	path := filepath.Join(t.TempDir(), "aqua")
-	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatalf("locating the test binary: %v", err)
 	}
 
+	// Inherited by the children remediation spawns (it sets only cmd.Dir).
+	// Setenv also forbids t.Parallel — these tests are serial by design
+	// already (they mutate aquaBin).
+	t.Setenv(aquaStubEnv, "1")
+
 	prev := aquaBin
-	aquaBin = path
+	aquaBin = self
 
 	t.Cleanup(func() { aquaBin = prev })
+}
+
+// TestMain lets the binary double as the fake aqua (see stubAqua).
+func TestMain(m *testing.M) {
+	if os.Getenv(aquaStubEnv) != "" {
+		// The stub's exit status IS its contract; this branch never reaches
+		// the test runner's own exit handling.
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(runAquaStub())
+	}
+
+	m.Run()
+}
+
+// runAquaStub mimics the two invocations remediation makes: `policy allow`
+// (silent success) and `update-checksum`, which writes the stub checksums
+// into the working directory (remediation sets cmd.Dir to the repo root).
+func runAquaStub() int {
+	for _, arg := range os.Args[1:] {
+		if arg == "update-checksum" {
+			if err := os.WriteFile(aquaChecksumsFile, []byte(stubChecksums), 0o600); err != nil {
+				fmt.Fprintf(os.Stderr, "aqua stub: %v\n", err)
+
+				return 1
+			}
+		}
+	}
+
+	return 0
 }
 
 // TestFixMergesAquaManifest: an existing manifest keeps its own packages and

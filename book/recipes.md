@@ -108,14 +108,15 @@ Two roles deserve emphasis because they close the enforcement loop:
   imported *flat* into the canonical Justfile (a module invocation could not take the tag
   argument), and refuses before touching anything unless the repo carries a
   `.goreleaser.yaml` — which stays project-owned, like the root Justfile. Two lanes share
-  every guard. The **CI lane** (public repos, the default): `just do release --cut vX.Y.Z`
+  every guard. The **CI lane** (public repos, the default): `just do release vX.Y.Z`
   verifies a clean tree, creates the *signed* tag — a human signs the intent — and pushes
   it; the tag push triggers the release workflow, which runs `just do release --ci`:
   goreleaser plus **keyless** cosign, the artifacts signed by the workflow's short-lived
   Fulcio identity (no key exists anywhere) and logged in Rekor. The **local lane**
   (private repos — nothing touches the public transparency log — and the escape hatch
-  when CI is down): `just do release vX.Y.Z` does the same tag work, then runs goreleaser
-  with key-based cosign from the machine. `just do release --dry-run` builds an unsigned
+  when CI is down): `just do release --local <cosign-key> vX.Y.Z` does the same tag work,
+  then runs goreleaser with key-based cosign — the key path is a mandatory argument, and
+  the passphrase is prompted (or passed with `--cosign-password`). `just do release --local --dry-run` builds an unsigned
   snapshot into `build/release/` in either lane. The recipe is the interface: the
   workflow contains no release logic of its own.
 

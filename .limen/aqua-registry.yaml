@@ -20,7 +20,7 @@ packages:
   # Graphviz `dot` as a single static Go binary: the real graphviz C code
   # compiled to WASM, executed via wazero — no C toolchain, no shared
   # libraries, which is why this can live in aqua while system graphviz
-  # cannot. Renders the PNGs of `just test go profile`. The cmd/dot module is
+  # cannot. Renders the PNGs of `just do test go profile`. The cmd/dot module is
   # nested and untagged upstream, hence the explicit repo and the
   # pseudo-version pin in aqua.yaml.
   - type: go_install

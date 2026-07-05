@@ -24,6 +24,7 @@ func compliantRepo(t *testing.T) string {
 		"LICENSE":                   "Permission is hereby granted, free of charge.\nTHE SOFTWARE IS PROVIDED \"AS IS\".",
 		".editorconfig":             rules.CanonicalEditorconfig,
 		".gitignore":                strings.Join(rules.DefaultRequiredGitignore, "\n") + "\n",
+		".gitattributes":            rules.CanonicalGitattributes,
 		"Justfile":                  rules.CanonicalJustfileImport + "\n",
 		"aqua.yaml":                 limen.CanonicalAquaYAML,
 		"aqua-checksums.json":       "{}\n",

@@ -83,6 +83,7 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateLicense(root, opts))
 	add(remediateEditorconfig(root))
 	add(remediateGitignore(root, opts.Policy))
+	add(remediateGitattributes(root))
 	add(remediateJustfile(root)...)
 	add(remediateAqua(root, opts.SelfVersion)...)
 	add(remediateLychee(root))
@@ -600,6 +601,13 @@ func regenerateAquaChecksums(root string) error {
 	}
 
 	return nil
+}
+
+// remediateGitattributes content-pins .gitattributes exactly: created if
+// missing, overwritten if drifted (safe: the whole file is defined by limen —
+// see checkGitattributes for why no local additions are allowed).
+func remediateGitattributes(root string) Outcome {
+	return pinExact(root, "gitattributes", ".gitattributes", CanonicalGitattributes)
 }
 
 // remediateLychee content-pins .limen/lychee.toml exactly: created if missing,

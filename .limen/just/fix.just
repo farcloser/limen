@@ -28,7 +28,7 @@ just: (_banner "fix" "just")
       | xargs -0 -I{} just --fmt --justfile {}
 
 yaml: (_banner "fix" "yaml")
-    yamlfmt -conf .limen/.yamlfmt .
+    yamlfmt -conf .limen/.yamlfmt
 
 # Go fixers live in their own submodule: `just do fix go` runs them all,
 # `just do fix go <recipe>` (e.g. `just do fix go mod`) runs one.

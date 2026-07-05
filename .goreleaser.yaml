@@ -1,5 +1,5 @@
 # goreleaser — https://goreleaser.com — release automation for the limen CLI.
-# Local dry-run: `just do release --dry-run` (no tag, no publish, artifacts under
+# Local dry-run: `just do release --local --dry-run` (no tag, no publish, artifacts under
 # build/). Real release: `just do release vX.Y.Z` (see the root Justfile).
 version: 2
 
@@ -57,7 +57,7 @@ checksum:
 # one file transitively covers every artifact it lists. Two lanes, switched by
 # whether COSIGN_KEY is set (the `just do release` recipe controls that):
 #
-#   Key-based (local: `just do release vX.Y.Z`) — COSIGN_KEY + COSIGN_PASSWORD in
+#   Key-based (local: `just do release --local <key> vX.Y.Z`) — COSIGN_KEY + COSIGN_PASSWORD in
 #   the environment; --use-signing-config=false means no signing services are
 #   contacted (nothing lands in Rekor's public log — the lane for private
 #   repos) and signing works fully offline. Verify with the published

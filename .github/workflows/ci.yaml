@@ -62,7 +62,7 @@ jobs:
           # The token is not left behind in .git/config: nothing in this
           # workflow talks to GitHub after checkout.
           persist-credentials: false
-          # Full history and refs: `just lint commits` validates the commit
+          # Full history and refs: `just do lint commits` validates the commit
           # range against the PR's base branch, which a shallow clone lacks.
           fetch-depth: 0
 

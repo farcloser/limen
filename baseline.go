@@ -24,6 +24,15 @@ var CanonicalEditorconfig string
 //go:embed .gitignore
 var CanonicalGitignore string
 
+// CanonicalGitattributes is the repository's .gitattributes — content-pinned
+// in every repo: `* -text` disables git's line-ending conversion entirely, so
+// a checkout is byte-identical on every platform (Windows runners default
+// core.autocrlf=true, which otherwise rewrites the tree to CRLF and fails
+// every format checker). See book/mandatory-files.md.
+//
+//go:embed .gitattributes
+var CanonicalGitattributes string
+
 // CanonicalShellcheckrc is the repository's .shellcheckrc — the baseline every
 // repository that ships shell must carry. See book/per-language.md.
 //
