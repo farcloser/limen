@@ -15,7 +15,7 @@ default:
     @just --list
 
 lint: do::lint::default do::lint::go::default
-
+fix: do::fix::default do::fix::go::default
 test: do::test::go::default
 
 # Host-side helpers specific to this machine's setup — NOT part of the

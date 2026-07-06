@@ -19,7 +19,7 @@
   policy next to the global aqua config, allows the policy, pins release checksums
   (`aqua update-checksum` from goreleaser's `checksums.txt`), installs, and exports
   `AQUA_POLICY_CONFIG` in the shell rc **append-preserving**. Verified end-to-end
-  2026-07-01 against the public v0.0.0-test.1 release, anonymously. Remaining:
+  2026-07-01 against the public v0.0.0-test.8 release, anonymously. Remaining:
   1. Cut the real `v0.0.1` release. The embedded global config already moved (it pins
      `v0.0.0-test.3` as of 2026-07-05); limen's canonical `aqua.yaml` still pins the
      disposable `v0.0.0-test.1` — Renovate bumps it once PRs flow, and released binaries
