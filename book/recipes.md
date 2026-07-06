@@ -88,14 +88,16 @@ What each shared module is *for* — mechanics live in the module files themselv
   first thing the default runs, since every other linter trusts the canonical files it
   verifies), `just`, `aqua`, `links`, `yaml`, `shell`, `dockerfile` in the default, plus
   the explicit `go` submodule (code, mod, vuln, licenses, and the informational
-  bce/escape/deadcode reports), `rust`, and `commits` (DCO and commit hygiene over a
-  range).
+  bce/escape/deadcode reports), `rust`, `homebrew` (formula style and audit through
+  brew's own vendored tooling — see [per-language rules](./per-language.md#homebrew-formulas)),
+  and `commits` (DCO and commit hygiene over a range).
 - **`test`** — the suites, per language (`just do test go`: `unit`, `race`, `bench`, `cover`
   with an optional minimum gate, `profile` with rendered call graphs). No default — see
   above: bare `just do test` refuses, `just test` is the project's aggregate.
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
-  (rewrite drifted canonical files), `just`, `yaml` in the default, plus the `go`
-  submodule. What `lint` reports, `fix` repairs — nothing mutates under a lint name.
+  (rewrite drifted canonical files), `just`, `yaml` in the default, plus the `go`,
+  `rust`, and `homebrew` submodules. What `lint` reports, `fix` repairs — nothing
+  mutates under a lint name.
 
 Two roles deserve emphasis because they close the enforcement loop:
 

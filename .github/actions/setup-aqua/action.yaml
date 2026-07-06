@@ -32,7 +32,7 @@ runs:
         export AQUA_ROOT_DIR
         echo "AQUA_ROOT_DIR=${AQUA_ROOT_DIR}" >>"$GITHUB_ENV"
         tmp="$(mktemp -d)"
-        curl -fsSL -o "${tmp}/aqua-installer" \
+        curl --proto '=https' --tlsv1.2 -fsSL -o "${tmp}/aqua-installer" \
           "https://raw.githubusercontent.com/aquaproj/aqua-installer/${AQUA_INSTALLER_VERSION}/aqua-installer"
         # No single digest tool exists everywhere: linux and windows git-bash
         # ship coreutils sha256sum, macOS ships perl shasum. (Nothing

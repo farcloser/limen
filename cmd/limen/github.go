@@ -37,14 +37,54 @@ func runGithub(args []string, stdout, stderr io.Writer) int {
 
 func githubUsage(writer io.Writer) {
 	_, _ = fmt.Fprint(writer, `Usage:
-  limen github check [-repo owner/name] [-json]         Audit GitHub repository settings
-  limen github fix   [-repo owner/name] [-yes] [-json]  Repair what is safe to repair
+  limen github check [-repo owner/name] [-org name] [-json]         Audit GitHub settings
+  limen github fix   [-repo owner/name] [-org name] [-yes] [-json]  Repair what is safe to repair
+
+Without -org, the target is a repository (-repo, or inferred from the origin
+remote). With -org, the organization's own settings are audited instead
+(membership floor, org-wide Actions policy, security configuration, standing
+inventories, and the org .github community-health repository).
 
 The baseline is a floor: stricter than it passes, looser fails. Exceptions are
-declared, with reasons, in `+github.OverridePath+`.
+declared, with reasons, in `+github.OverridePath+` (org runs read it from the
+working directory — canonically the org's .github repository).
 Verdicts: ok · fail (auto-fixable) · advisory (never auto-fixed) · unverifiable
 (the token cannot answer — which does not count as passing).
 `)
+}
+
+// auditRunner is the audit a command run performs, bound to its target.
+type auditRunner func(overrides map[string]string) ([]github.Finding, []github.Change)
+
+// githubAudit resolves the audit target from the mutually exclusive -repo and
+// -org flags: the named organization when -org is given, a repository (named
+// or inferred from origin) otherwise. It returns the audit to run and the
+// label findings are reported under.
+func githubAudit(repoFlag, orgFlag string, stderr io.Writer) (auditRunner, string, bool) {
+	if orgFlag != "" && repoFlag != "" {
+		_, _ = fmt.Fprintln(stderr, "limen: -repo and -org are mutually exclusive — audit one target per run")
+
+		return nil, "", false
+	}
+
+	if orgFlag != "" {
+		runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
+			return github.AuditOrg(orgFlag, overrides)
+		}
+
+		return runner, "org " + orgFlag, true
+	}
+
+	repo, resolved := githubTarget(repoFlag, stderr)
+	if !resolved {
+		return nil, "", false
+	}
+
+	runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
+		return github.Audit(repo, overrides)
+	}
+
+	return runner, repo, true
 }
 
 // githubTarget resolves the repository slug: the -repo flag when given, the
@@ -68,13 +108,14 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdGithub+" "+cmdCheck, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	repoFlag := flagSet.String("repo", "", "repository slug (owner/name); default: inferred from origin")
+	orgFlag := flagSet.String("org", "", "organization name; audits the org's own settings instead of a repository")
 	asJSON := flagSet.Bool(flagJSON, false, "emit findings as JSON")
 
 	if err := flagSet.Parse(args); err != nil {
 		return 2
 	}
 
-	repo, resolved := githubTarget(*repoFlag, stderr)
+	audit, label, resolved := githubAudit(*repoFlag, *orgFlag, stderr)
 	if !resolved {
 		return 2
 	}
@@ -86,20 +127,21 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	findings, _ := github.Audit(repo, overrides)
+	findings, _ := audit(overrides)
 
 	printer := printGithubFindingsText
 	if *asJSON {
 		printer = printGithubFindingsJSON
 	}
 
-	return reportGithubOutcome(stdout, stderr, repo, findings, printer)
+	return reportGithubOutcome(stdout, stderr, label, findings, printer)
 }
 
 func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdGithub+" "+cmdFix, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	repoFlag := flagSet.String("repo", "", "repository slug (owner/name); default: inferred from origin")
+	orgFlag := flagSet.String("org", "", "organization name; repairs the org's own settings instead of a repository")
 	asJSON := flagSet.Bool(flagJSON, false, "emit the post-fix findings as JSON")
 	yes := flagSet.Bool("yes", false, "apply the plan without prompting")
 
@@ -107,7 +149,7 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	repo, resolved := githubTarget(*repoFlag, stderr)
+	audit, label, resolved := githubAudit(*repoFlag, *orgFlag, stderr)
 	if !resolved {
 		return 2
 	}
@@ -124,14 +166,14 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 		printer = printGithubFindingsJSON
 	}
 
-	findings, changes := github.Audit(repo, overrides)
+	findings, changes := audit(overrides)
 	if len(changes) == 0 {
 		_, _ = fmt.Fprintln(stdout, "nothing to fix")
 
-		return reportGithubOutcome(stdout, stderr, repo, findings, printer)
+		return reportGithubOutcome(stdout, stderr, label, findings, printer)
 	}
 
-	_, _ = fmt.Fprintf(stdout, "limen github fix %s — plan:\n", repo)
+	_, _ = fmt.Fprintf(stdout, "limen github fix %s — plan:\n", label)
 
 	for _, planned := range changes {
 		_, _ = fmt.Fprintf(stdout, "  ✎  %-32s %s\n", planned.Check, planned.Summary)
@@ -146,7 +188,7 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	failed := 0
 
 	for _, planned := range changes {
-		if applyErr := planned.Apply(repo); applyErr != nil {
+		if applyErr := planned.Apply(); applyErr != nil {
 			failed++
 
 			_, _ = fmt.Fprintf(stderr, "limen: %s: %v\n", planned.Check, applyErr)
@@ -158,9 +200,9 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Re-audit: the post-state, not the intent, is what gets reported.
-	final, _ := github.Audit(repo, overrides)
+	final, _ := audit(overrides)
 
-	return reportGithubOutcome(stdout, stderr, repo, final, printer)
+	return reportGithubOutcome(stdout, stderr, label, final, printer)
 }
 
 // confirm asks for interactive consent on stdin (the plan was just printed).

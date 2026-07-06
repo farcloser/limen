@@ -84,6 +84,39 @@ defined once and lives in one place: this repository's own
 reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to the
 canonical.
 
+## Homebrew formulas
+
+A repository that is a Homebrew tap — formulas under `Formula/` (sharded subdirectories
+included), casks under `Casks/`; the **modern layout only**, by decision: brew still reads
+the legacy locations (`HomebrewFormula/`, bare `*.rb` at the repository root), the recipes
+deliberately do not — lints them with brew's **own** tooling — `just do lint homebrew` runs `brew style`
+(Homebrew's vendored RuboCop with the formula cops) and `brew audit --strict`;
+`just do fix homebrew` is `brew style --fix`. No Ruby toolchain is ever installed for
+this: brew vendors its own Ruby and RuboCop, and plain RuboCop would not know the
+formula rules anyway. Both recipes pass vacuously when the repository carries no
+formulas.
+
+Two deliberate exceptions, named because they cut against doctrine:
+
+- **brew is not on the hermetic PATH and never will be.** It is a machine-layer package
+  manager that aqua cannot pin, and the PATH exclusion exists to stop machine tools
+  substituting for pinned ones — but brew substitutes for nothing here; it *is* the
+  subject under test. The canonical `Justfile` captures its location from the **ambient**
+  PATH at startup, before the hermetic PATH locks down (`BREW_BIN`, overridable by
+  exporting it) — the invoking shell knows where brew lives, whatever the prefix — and
+  the recipes fail with guidance when the capture came up empty; the hermetic PATH
+  itself is untouched.
+- **`brew audit` needs a tap identity.** brew addresses formulas by tap name, never by
+  path, so the project declares which tap it is (`export LINT_HOMEBREW_TAP :=
+  'user/name'` in the root `Justfile`) and the audit recipe registers the working tree
+  under that name for the duration of the run — a symlink, so the audit judges the
+  working tree, not a stale clone. Audit flags that only make sense on CI (`--online`
+  does network calls) go through `LINT_HOMEBREW_AUDIT_FLAGS`.
+
+The proof beyond linting — `brew install --build-from-source` plus `brew test` — mutates
+the machine's live brew and therefore belongs to disposable CI runners, not to a shared
+recipe; a tap wires that in its own workflow.
+
 ## Enforcement
 
 `limen check [path]` evaluates the applicable per-language rules alongside the mandatory

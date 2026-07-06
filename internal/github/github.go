@@ -61,11 +61,19 @@ func AllOK(findings []Finding) bool {
 	return true
 }
 
-// client calls the GitHub API for one repository through the gh CLI.
+// client calls the GitHub API for one target — a repository or an
+// organization — through the gh CLI.
 type client struct {
-	// repo is the "owner/name" slug every API path is built from.
-	repo string
+	// base is the API root every path is built from: "repos/owner/name" for a
+	// repository, "orgs/owner" for an organization.
+	base string
 }
+
+// repoClient targets one repository ("owner/name" slug).
+func repoClient(slug string) client { return client{base: "repos/" + slug} }
+
+// orgClient targets one organization.
+func orgClient(org string) client { return client{base: "orgs/" + org} }
 
 // apiOutcome classifies one gh api invocation. notFound distinguishes the
 // endpoints that answer through their status code (HTTP 404 = feature off)
@@ -82,7 +90,7 @@ const httpNotFoundMarker = "(HTTP 404)"
 // api runs `gh api` with the given method, repo-relative path, and optional
 // JSON payload (sent via --input -), and classifies the outcome.
 func (c client) api(method, path string, payload []byte) apiOutcome {
-	fullPath := "repos/" + c.repo + path
+	fullPath := c.base + path
 
 	args := []string{"api", "--method", method, fullPath}
 	if payload != nil {

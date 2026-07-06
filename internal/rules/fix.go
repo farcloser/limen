@@ -263,14 +263,14 @@ func remediateGitignore(root string, policy Policy) Outcome {
 // `just do lint just` runs that check on every just file, this one included)
 // and its examples must parse when uncommented: a dependency names a recipe
 // (do::lint::default), never a bare module path.
-const justfileSeed = "# This file is the project's own — add recipes below. Keep the import: it\n" +
-	"# mounts every shared limen task under `just do ...`.\n" +
+const justfileSeed = "# This file is the project's own.\n" +
+	"# Add recipes leveraging provided `do` ready-made recipes, or create your own.\n" +
+	"# The import must be kept: it mounts every shared limen task under `just do ...`.\n" +
 	CanonicalJustfileImport + "\n" +
 	"\n" +
-	"# The FIRST recipe defined here becomes `just`'s default (until then, the\n" +
-	"# shared default lists everything). The aggregates CI runs, for example:\n" +
-	"# lint: do::lint::default do::lint::go::default\n" +
-	"# test: do::test::go::default\n"
+	"# The FIRST recipe defined here becomes `just`'s default.\n" +
+	"lint: do::lint::default\n" +
+	"test:\n"
 
 // remediateJustfile handles the task runner's two regimes: the root Justfile
 // is the project's own — seeded when missing, and when present only ever

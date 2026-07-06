@@ -11,6 +11,14 @@ set allow-duplicate-recipes
 # Project name, derived from the directory the root Justfile lives in.
 project := file_name(justfile_directory())
 
+# brew — the one machine-layer tool a shared recipe may call (the homebrew
+# modules) — is captured from the AMBIENT PATH here, above the hermetic PATH
+# so the lookup still sees the invoking shell's environment: brew is not
+# aqua-pinnable and installs at machine-chosen prefixes, so that shell knows
+# best where it lives. Empty when absent (the homebrew recipes then fail with
+# guidance); override by exporting BREW_BIN.
+export BREW_BIN := env_var_or_default('BREW_BIN', `command -v brew || true`)
+
 # Hermetic PATH: aqua-pinned tools + base system only (no homebrew), so any tool that
 # isn't pinned fails loudly instead of silently resolving to an unpinned copy.
 # Windows (git-bash) is the sanctioned exception to that hermeticity: there is no
