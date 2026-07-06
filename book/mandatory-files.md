@@ -255,7 +255,7 @@ reliably), each documented in the file itself. The source of truth is this repos
 `rules.CanonicalLychee`. The rule is unconditional: every repository carries a README, so
 every repository has links worth checking.
 
-**Per-project exclusions go in a root `lychee.toml`.** The `lint links` recipe passes both
+**Per-project exclusions go in a root `.lychee.toml`.** The `lint links` recipe passes both
 files to lychee, which merges them — the exclude lists concatenate — so a project extends the
 baseline without touching it. Like the root `Justfile`, the root file is the project's own: `limen`
 neither checks nor overwrites it. (Both configs must be passed explicitly; passing any

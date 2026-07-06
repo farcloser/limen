@@ -100,41 +100,22 @@ build scripts at an audited commit pin — one build lineage for every platform,
 archive GitHub-attested (aqua verifies attestations natively). The platform findings
 that shaped this:
 
-- **Windows**: rung 2. The curl project itself operates
+- **Windows**: rung 2 exists. The curl project itself operates
   [curl-for-win](https://github.com/curl/curl-for-win): reproducible static builds, signed
   four ways (sigstore bundle, minisign, SSH, PGP), distributed at
   `https://curl.se/windows/dl-<version>_<rev>/curl-<version>_<rev>-{win64,win64a}-mingw.tar.xz`
   (`win64` = amd64, `win64a` = arm64; a `.txt` sidecar carries the artifact's SHA256; the
-  archive root is `curl-<version>_<rev>-<cpu>-mingw/` with `bin/curl.exe`). Ready-to-paste
-  local-registry entry:
-
-  ```yaml
-  - type: http
-    name: curl/curl-for-win
-    description: Reproducible, signed curl binaries from the curl project (windows ONLY)
-    url: https://curl.se/windows/dl-{{.Version}}/curl-{{.Version}}-{{.Arch}}-mingw.{{.Format}}
-    format: tar.xz
-    replacements:
-      amd64: win64
-      arm64: win64a
-    files:
-      - name: curl
-        src: curl-{{.Version}}-{{.Arch}}-mingw/bin/curl.exe
-    supported_envs:
-      - windows
-  ```
-
-  The bump ritual (rung 2's price): fetch the new artifact and its `.sigstore` bundle, then
-  `cosign verify-blob --key cosign.pub.asc --bundle <pkg>.sigstore <pkg>` (key in the
-  curl-for-win repo) **before** `aqua update-checksum` commits the new pin.
-- **Linux / macOS**: curl-for-win *builds* these but does not distribute them (its deploy
-  lane is windows-only — verified, not assumed), so there is no rung-2 channel: staying on
-  the base-system prerequisite is the strongest available position (distro / Apple supply
-  chains). If pinning ever becomes mandatory, that is rung 3 — and the linux leg of a
-  `build-curl` may legitimately use Nix's static-build machinery (`pkgsStatic`), which
-  pins the entire build toolchain; the same is NOT true for the windows/macOS legs
-  (mingw-arm64 absent, `/nix/store`-referencing mac binaries), which is one more reason
-  rung 2 exists.
+  archive root is `curl-<version>_<rev>-<cpu>-mingw/` with `bin/curl.exe`). Consuming it
+  *directly* — an `http`-type local-registry entry with a manual verified-bump ritual —
+  was the design until the other platforms forced rung 3; `build-curl` imports these same
+  artifacts instead (sigstore-verified in CI), which is strictly stronger: the
+  verification is a workflow step, not a human ritual, and Renovate watches the curl.se
+  index for bumps.
+- **Linux / macOS**: no rung-2 channel — curl-for-win *builds* these but does not
+  distribute them (its deploy lane is windows-only; verified, not assumed). Hence rung 3:
+  `build-curl` runs curl-for-win's own build scripts at an audited commit pin for the
+  linux (static musl) and macOS (universal) legs — the same lineage as the imported
+  windows binaries, one build system across every platform.
 
 ---
 

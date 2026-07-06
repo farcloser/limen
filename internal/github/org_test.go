@@ -90,6 +90,20 @@ func TestAuditOrgCompliant(t *testing.T) {
 	if !AllOK(findings) {
 		t.Error("a compliant organization with a declared roster must pass entirely")
 	}
+
+	// The declaration is load-bearing: an owner the declaration does not name
+	// brings the advisory back — a blanket exemption would hide a new owner.
+	findings, _ = AuditOrg(testOrg, map[string]string{checkOrgAdmins: "bob is the org"})
+	if finding, found := findingByCheck(findings, checkOrgAdmins); !found || finding.Status != StatusAdvisory {
+		t.Errorf("an undeclared owner must surface as an advisory, got %v", finding.Status)
+	}
+
+	// Whole-token matching: a login that appears only as a SUBSTRING of the
+	// declaration ("li" inside "alice") is not declared.
+	findings, _ = AuditOrg(testOrg, map[string]string{checkOrgAdmins: "malice is the org"})
+	if finding, found := findingByCheck(findings, checkOrgAdmins); !found || finding.Status != StatusAdvisory {
+		t.Errorf("a substring-only match must not count as declared, got %v", finding.Status)
+	}
 }
 
 // TestAuditOrgNonCompliant: every floor violation is flagged with the right

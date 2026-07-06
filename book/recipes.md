@@ -90,14 +90,16 @@ What each shared module is *for* — mechanics live in the module files themselv
   the explicit `go` submodule (code, mod, vuln, licenses, and the informational
   bce/escape/deadcode reports), `rust`, `homebrew` (formula style and audit through
   brew's own vendored tooling — see [per-language rules](./per-language.md#homebrew-formulas)),
-  and `commits` (DCO and commit hygiene over a range).
+  `github` (the live GitHub settings audit — `limen github check`, needing network and
+  an authed `gh`; see [the github chapter](./github.md)), and `commits` (DCO and commit
+  hygiene over a range).
 - **`test`** — the suites, per language (`just do test go`: `unit`, `race`, `bench`, `cover`
   with an optional minimum gate, `profile` with rendered call graphs). No default — see
   above: bare `just do test` refuses, `just test` is the project's aggregate.
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
   (rewrite drifted canonical files), `just`, `yaml` in the default, plus the `go`,
-  `rust`, and `homebrew` submodules. What `lint` reports, `fix` repairs — nothing
-  mutates under a lint name.
+  `rust`, and `homebrew` submodules and `github` (plan shown, applied on consent).
+  What `lint` reports, `fix` repairs — nothing mutates under a lint name.
 
 Two roles deserve emphasis because they close the enforcement loop:
 

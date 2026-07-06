@@ -21,9 +21,9 @@ add pkg: (_banner "tools" "add")
         echo "{{ pkg }} is already in aqua.yaml — use 'just do tools update {{ pkg }}' or 'just do tools set {{ pkg }} <version>'." >&2
         exit 1
     fi
-    aqua generate -i "{{ pkg }}"   # append the latest version to aqua.yaml
-    aqua update-checksum           # record its verified checksum
-    aqua install --only-link       # install and verify
+    aqua generate -i "{{ pkg }}"      # append the latest version to aqua.yaml
+    aqua update-checksum --prune      # record its checksum (and drop stale ones)
+    aqua install --only-link          # install and verify
 
 # Set an existing tool to an exact version, e.g. `just do tools set golangci/golangci-lint v1.55.3`.
 set pkg version: (_banner "tools" "set")
@@ -40,8 +40,8 @@ set pkg version: (_banner "tools" "set")
     trap 'rm -f "$tmp"' EXIT
     sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*{{ pkg }})@[^[:space:]]*#\1@{{ version }}#" aqua.yaml > "$tmp"
     mv "$tmp" aqua.yaml
-    aqua update-checksum       # refresh the checksum for the new version
-    aqua install --only-link   # install and verify
+    aqua update-checksum --prune      # new checksum in, replaced version's out
+    aqua install --only-link          # install and verify
 
 # Update an existing tool to its latest version, e.g. `just do tools update golangci/golangci-lint`.
 update pkg: (_banner "tools" "update")

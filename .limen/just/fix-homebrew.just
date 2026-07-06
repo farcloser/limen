@@ -22,6 +22,7 @@ default: style
 style: (_banner "fix homebrew" "style")
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ _skip_unless_macos }}
     # --cached --others --exclude-standard: tracked *and* new untracked files,
     # still honoring .gitignore (same as `fix just`). Modern tap layout ONLY —
     # Formula/ and Casks/; the legacy locations are deliberately unsupported
@@ -39,6 +40,17 @@ style: (_banner "fix homebrew" "style")
     {{ _require_brew }}
     # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical Justfile (main.just).
     "$BREW_BIN" style --fix "${files[@]}"
+
+# Homebrew exists on macOS only: everywhere else this recipe degrades to a
+# LOUD no-op — the twin of the variable in lint-homebrew.just; a change here
+# must land there too.
+[private]
+_skip_unless_macos := '''
+    if [ "$(uname -s)" != 'Darwin' ]; then
+        echo "homebrew is macOS-only — nothing to do on this platform (skipped, not failed)."
+        exit 0
+    fi
+'''
 
 # BREW_BIN comes from main.just (ambient-PATH capture) — the twin of the
 # variable in lint-homebrew.just; a change here must land there too.

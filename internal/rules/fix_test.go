@@ -303,12 +303,12 @@ func TestFixLychee(t *testing.T) {
 
 	// A project's own root lychee.toml is never touched.
 	own := "exclude = ['https://example\\.internal/']\n"
-	withOwn := writeRepo(t, map[string]string{"lychee.toml": own})
+	withOwn := writeRepo(t, map[string]string{".lychee.toml": own})
 	Fix(withOwn, bootstrapOpts())
 
-	data, _ = os.ReadFile(filepath.Join(withOwn, "lychee.toml"))
+	data, _ = os.ReadFile(filepath.Join(withOwn, ".lychee.toml"))
 	if string(data) != own {
-		t.Error("fix modified the project's own root lychee.toml")
+		t.Error("fix modified the project's own root .lychee.toml")
 	}
 }
 

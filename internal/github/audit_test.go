@@ -397,9 +397,6 @@ func TestLoadOverrides(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".github"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	path := filepath.Join(dir, filepath.FromSlash(OverridePath))
 
@@ -415,7 +412,7 @@ func TestLoadOverrides(t *testing.T) {
 		t.Errorf("missing file: overrides %v, err %v", missing, err)
 	}
 
-	write("# comment\n\nwiki: hosts the runbook\npages: marketing site\n")
+	write("# comment\n\ngithub:\n  wiki: hosts the runbook\n  pages: marketing site\n")
 
 	overrides, err := LoadOverrides(dir)
 	if err != nil {
@@ -426,16 +423,46 @@ func TestLoadOverrides(t *testing.T) {
 		t.Errorf("parsed overrides: %v", overrides)
 	}
 
-	write("nonsense-check: because\n")
+	write("github:\n  nonsense-check: because\n")
 
 	if _, err := LoadOverrides(dir); err == nil {
 		t.Error("unknown check identifier must fail the file")
 	}
 
-	write("wiki:\n")
+	write("github:\n  wiki:\n")
 
 	if _, err := LoadOverrides(dir); err == nil {
 		t.Error("an exception without a reason must fail the file")
+	}
+
+	// Inline comments are YAML-legal and editors highlight them as such: the
+	// parser must treat them as commentary, on headers and entries alike —
+	// and a comment-only reason is still no reason.
+	write("github:  # settings-audit exceptions\n  wiki: hosts the runbook  # revisit\n")
+
+	overrides, err = LoadOverrides(dir)
+	if err != nil || overrides[checkWiki] != "hosts the runbook" {
+		t.Errorf("inline comments: overrides %v, err %v", overrides, err)
+	}
+
+	write("github:\n  wiki: # todo write a reason\n")
+
+	if _, err := LoadOverrides(dir); err == nil {
+		t.Error("a comment-only reason must fail the file")
+	}
+
+	// Entries need a section: the pre-consolidation flat format must fail
+	// loudly, not silently exempt nothing.
+	write("wiki: hosts the runbook\n")
+
+	if _, err := LoadOverrides(dir); err == nil {
+		t.Error("a sectionless entry must fail the file")
+	}
+
+	write("gitlab:\n  wiki: hosts the runbook\n")
+
+	if _, err := LoadOverrides(dir); err == nil {
+		t.Error("an unknown section must fail the file")
 	}
 }
 
