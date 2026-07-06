@@ -1,0 +1,80 @@
+# limen-example.yaml — reference for the project-owned declarations file.
+#
+# To use: copy (or rename) to `limen.yaml` at the repository root and uncomment
+# what you need. The file is a DELTA — exceptions only, never a settings copy —
+# and every entry requires a reason: the escape hatch lives in review, never in
+# a UI click. An exempted check reports ok, visibly carrying the reason; an
+# unknown section, an unknown identifier, or a missing reason fails the file.
+#
+# Comments (full-line and inline `# …`) and blank lines are fine. Seeded by
+# `limen bootstrap` for reference; `limen fix` never touches it, and no check
+# requires it — delete it freely.
+
+# The `github` section: exceptions for `limen github check` (and, run with
+# -org, the organization audit — org runs read this file from the working
+# directory, canonically the org's .github repository checkout).
+github:
+# --- Repository: security posture ---
+#   secret-scanning: <reason>
+#   secret-scanning-push-protection: <reason>
+#   dependabot-alerts: <reason>
+#   dependabot-security-updates: <reason>
+#   private-vulnerability-reporting: <reason>
+#   code-scanning: <reason>  # OPT-IN: listing this REQUIRES CodeQL default setup (a stricter floor), never exempts
+# --- Repository: Actions hardening ---
+#   actions-workflow-permissions: <reason>
+#   actions-approve-pull-requests: <reason>
+#   actions-allowed: <reason>
+#   actions-fork-pr-approval: <reason>
+#   actions-access-level: <reason>
+# --- Repository: merge & branch workflow ---
+#   merge-methods: <reason>
+#   squash-commit-defaults: <reason>
+#   delete-branch-on-merge: <reason>
+#   auto-merge: <reason>
+#   update-branch-suggestions: <reason>
+#   default-branch: <reason>
+#   web-commit-signoff: <reason>
+# --- Repository: rulesets ---
+#   ruleset-default-branch: <reason>
+#   ruleset-version-tags: <reason>
+# --- Repository: hygiene & surface ---
+#   description: <reason>
+#   topics: <reason>
+#   wiki: hosts the operations runbook  # (example of a real entry)
+#   projects: <reason>
+#   discussions: <reason>
+#   forking: <reason>
+#   pages: <reason>
+#   outside-collaborators: <reason>
+#   webhooks: <reason>
+#   deploy-keys: <reason>
+# --- Organization (only read by `limen github … -org <name>`) ---
+#   org-two-factor-requirement: <reason>
+#   org-default-repository-permission: <reason>
+#   org-members-create-public-repositories: <reason>
+#   org-members-fork-private-repositories: <reason>
+#   org-members-change-repository-visibility: <reason>
+#   org-members-delete-repositories: <reason>
+#   org-members-create-public-pages: <reason>
+#   org-web-commit-signoff: <reason>
+#   org-admins: apostasie is the sole owner  # the roster declaration: every actual owner login must appear here
+#   org-actions-enabled-repositories: <reason>
+#   org-actions-allowed: <reason>
+#   org-actions-sha-pinning: <reason>
+#   org-actions-workflow-permissions: <reason>
+#   org-actions-approve-pull-requests: <reason>
+#   org-actions-fork-pr-approval: <reason>
+#   org-actions-self-hosted-runners: <reason>
+#   org-code-security-configuration: <reason>
+#   org-installed-apps: <reason>
+#   org-webhooks: <reason>
+#   org-actions-secrets: <reason>
+#   org-teams: <reason>
+#   org-personal-access-tokens: <reason>
+#   org-profile-description: <reason>
+#   org-community-health-repo: <reason>
+#   org-community-health-content: <reason>
+
+# Future limen judgments get their own sections here (e.g. `rules:` for the
+# tree checks) — never their own files.

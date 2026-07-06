@@ -855,3 +855,49 @@ func TestFixWorkflows(t *testing.T) {
 		}
 	}
 }
+
+// TestBootstrapSeedsOverrideExample: the reference declarations file is
+// bootstrap-only documentation — bootstrap writes it once (and never
+// overwrites an existing one), while fix (no License) must not seed it, and
+// no check requires it (a project that deleted it meant it).
+func TestBootstrapSeedsOverrideExample(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	Fix(dir, bootstrapOpts())
+
+	data, err := os.ReadFile(filepath.Join(dir, "limen-example.yaml"))
+	if err != nil {
+		t.Fatalf("bootstrap did not seed limen-example.yaml: %v", err)
+	}
+
+	if string(data) != limen.CanonicalOverrideExample {
+		t.Error("the seeded example does not match the embedded canonical")
+	}
+
+	// Re-running with the file replaced must leave it alone: seeded once.
+	if err := os.WriteFile(filepath.Join(dir, "limen-example.yaml"), []byte("mine\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	Fix(dir, bootstrapOpts())
+
+	data, _ = os.ReadFile(filepath.Join(dir, "limen-example.yaml"))
+	if string(data) != "mine\n" {
+		t.Error("bootstrap overwrote an existing limen-example.yaml")
+	}
+}
+
+// TestFixDoesNotSeedOverrideExample: fix is not bootstrap — no example file.
+func TestFixDoesNotSeedOverrideExample(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	Fix(dir, FixOptions{Policy: DefaultPolicy()})
+
+	if _, err := os.Stat(filepath.Join(dir, "limen-example.yaml")); err == nil {
+		t.Error("fix must not seed limen-example.yaml")
+	}
+}

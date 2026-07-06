@@ -119,6 +119,13 @@ var CanonicalWorkflowRelease string
 //go:embed renovate.json5
 var CanonicalRenovate string
 
+// CanonicalOverrideExample is the reference limen.yaml — every configurable
+// declaration key, commented. Seeded by bootstrap only, for documentation:
+// fix never touches it and no check requires it. See book/github.md.
+//
+//go:embed limen-example.yaml
+var CanonicalOverrideExample string
+
 // justFS embeds the whole .limen/ directory. Its *.just files are the shared,
 // content-pinned modules (see JustModules); a project's own recipes live in a
 // root project.just, which is neither embedded nor pinned. The directory also

@@ -98,6 +98,14 @@ func Fix(root string, opts FixOptions) []Outcome {
 		add(o)
 	}
 
+	// Bootstrap-only (License set): the reference declarations file —
+	// documentation, not a rule. fix never seeds it (a project that deleted
+	// it meant it), and no check requires it.
+	if opts.License != "" {
+		add(seedIfMissing(root, "example", "limen-example.yaml", limen.CanonicalOverrideExample,
+			"wrote limen-example.yaml (reference for the limen.yaml declarations file)"))
+	}
+
 	return outcomes
 }
 

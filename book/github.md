@@ -55,6 +55,11 @@ files. Each entry is `check-identifier: reason`. An exempted check reports ok,
 visibly carrying the reason; an unknown section, an unknown identifier, or a
 missing reason fails the file itself.
 
+Every declarable identifier, grouped and commented, lives in
+[`limen-example.yaml`](../limen-example.yaml) — seeded by `bootstrap` for
+reference (never by `fix`, and no check requires it); a test pins it to the
+live check catalog so it cannot drift.
+
 A small set of checks works in the opposite direction — **opt-in**: listing
 them declares a *stricter* floor for this repository, never an exemption.
 Today that is `code-scanning` (the baseline does not require CodeQL — the SAST
