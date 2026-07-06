@@ -59,10 +59,11 @@ type FixOptions struct {
 	Year    int // copyright year for a generated LICENSE
 	// SelfVersion is the exact release version (vX.Y.Z[-pre]) of the running
 	// limen, or empty for dev builds. When set, any farcloser/limen pin this
-	// remediation seeds or inserts uses it instead of the embedded manifest's
-	// pin: the embedded pin necessarily lags one release (its checksums cannot
-	// exist before the release is cut), and seeding it verbatim would leave the
-	// repo checked by an older limen than the one that wrote its files.
+	// remediation seeds, inserts, or finds already in the manifest is set to
+	// it: the embedded pin necessarily lags one release (its checksums cannot
+	// exist before the release is cut), and a repo is coherent only when the
+	// limen that wrote its canonical files is the limen it pins — see
+	// mergeAquaManifest for the full argument.
 	SelfVersion string
 }
 
@@ -443,7 +444,9 @@ var aquaBin = "aqua" //nolint:gochecknoglobals // test seam: tests substitute a 
 // canonical (a valid exact standard-registry ref of the project's survives),
 // missing canonical packages are appended by name — farcloser/limen at
 // selfVersion when set — without ever duplicating one the project already
-// pins, and the project's own packages and versions are left alone. Checksums
+// pins, and the project's own packages and versions are left alone, with one
+// exception: an existing farcloser/limen pin moves to selfVersion when set,
+// because that version is baseline-owned (see mergeAquaManifest). Checksums
 // are then regenerated with the real tool (`aqua policy allow` + `aqua
 // update-checksum --prune`, in that order — the policy must be allowed before
 // aqua can read the local registry) whenever the manifest changed or the

@@ -564,6 +564,126 @@ func TestFixInsertsSelfPinAtRunningVersion(t *testing.T) {
 	}
 }
 
+// TestFixMovesExistingSelfPin: an existing farcloser/limen pin is the one
+// version in the manifest fix does rewrite — a release build moves it to the
+// running version, so the limen that wrote the repo's canonical files is the
+// limen the repo pins (leaving it would hand the tree to an older limen that
+// flags the fresh files as drift and "repairs" them backwards). The renovate
+// comment survives the move, and checksums are regenerated in the same fix.
+//
+//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
+func TestFixMovesExistingSelfPin(t *testing.T) {
+	stubAqua(t)
+
+	opts := bootstrapOpts()
+	opts.SelfVersion = "v9.9.9"
+
+	// The canonical manifest with the limen pin at an older release — the only
+	// drift is the pin itself, exercising the standalone one-line rewrite.
+	dir := writeRepo(t, map[string]string{
+		"aqua.yaml": strings.Join(rewriteSelfPin(strings.Split(limen.CanonicalAquaYAML, "\n"), "v0.0.1"), "\n"),
+	})
+
+	outcomes := Fix(dir, opts)
+	if !AllResolved(outcomes) {
+		t.Error("fix should resolve a manifest whose only drift is the limen pin")
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := string(data)
+	if !strings.Contains(manifest, "farcloser/limen@v9.9.9 # renovate: depName=farcloser/limen") {
+		t.Error("the existing limen pin was not moved to the running version with the renovate comment intact")
+	}
+
+	if strings.Contains(manifest, "farcloser/limen@v0.0.1") {
+		t.Error("the old limen pin survived the move")
+	}
+
+	if n := strings.Count(manifest, "- name: farcloser/limen@"); n != 1 {
+		t.Errorf("farcloser/limen appears %d times, want exactly 1", n)
+	}
+
+	sums, err := os.ReadFile(filepath.Join(dir, aquaChecksumsFile))
+	if err != nil {
+		t.Fatalf("aqua-checksums.json not generated: %v", err)
+	}
+
+	if string(sums) != stubChecksums {
+		t.Errorf("checksums must be regenerated after the pin move:\n%s", sums)
+	}
+	// A second fix must find nothing left to move.
+	for _, o := range Fix(dir, opts) {
+		if o.Rule == "aqua" && o.Action != ActionNone {
+			t.Errorf("second fix touched aqua again: %s (%s)", o.Action, o.Message)
+		}
+	}
+}
+
+// TestFixMovesExistingSelfPinInReplacedPackages: the pin move folds into the
+// wholesale packages-section replacement when canonical packages are also
+// missing — the two edits must not produce overlapping replacements.
+//
+//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
+func TestFixMovesExistingSelfPinInReplacedPackages(t *testing.T) {
+	stubAqua(t)
+
+	opts := bootstrapOpts()
+	opts.SelfVersion = "v9.9.9"
+
+	dir := writeRepo(t, map[string]string{
+		"aqua.yaml": "packages:\n" +
+			"  - name: farcloser/limen@v0.0.1 # renovate: depName=farcloser/limen\n" +
+			"  - name: casey/just@v99.99.99\n",
+	})
+
+	Fix(dir, opts)
+
+	data, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := string(data)
+	if !strings.Contains(manifest, "farcloser/limen@v9.9.9 # renovate: depName=farcloser/limen") {
+		t.Error("the existing limen pin was not moved during the packages-section replacement")
+	}
+
+	if n := strings.Count(manifest, "- name: farcloser/limen@"); n != 1 {
+		t.Errorf("farcloser/limen appears %d times, want exactly 1", n)
+	}
+
+	if !strings.Contains(manifest, "casey/just@v99.99.99") {
+		t.Error("a project-owned version was rewritten")
+	}
+}
+
+// TestFixKeepsExistingSelfPinDev: a dev build has no version to stamp — an
+// existing limen pin, however stale, stays exactly where the project put it.
+//
+//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
+func TestFixKeepsExistingSelfPinDev(t *testing.T) {
+	stubAqua(t)
+
+	dir := writeRepo(t, map[string]string{
+		"aqua.yaml": strings.Join(rewriteSelfPin(strings.Split(limen.CanonicalAquaYAML, "\n"), "v0.0.1"), "\n"),
+	})
+
+	Fix(dir, bootstrapOpts())
+
+	data, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(data), "farcloser/limen@v0.0.1") {
+		t.Error("a dev build must never move an existing limen pin")
+	}
+}
+
 // TestFixGeneratesChecksumsForExistingManifest: a pre-existing manifest with no
 // checksums file gets a generated one — limen's canonical checksums describe a
 // different package set and must never be copied in (audit finding A1).
