@@ -260,7 +260,7 @@ leaves `aqua.yaml` **and** `aqua-checksums.json` updated together, ready to comm
 ```bash
 just do tools add    junegunn/fzf                    # add a tool at its latest version
 just do tools set    golangci/golangci-lint <version>  # pin an existing tool to an exact version
-just do tools update golangci/golangci-lint          # bump an existing tool to its latest version
+just do tools update golangci-lint                   # bump an existing tool (by COMMAND name) to its latest version
 just do tools remove junegunn/fzf                    # remove a tool entirely
 ```
 
@@ -291,7 +291,9 @@ are the one adding, removing, pinning, or bumping a tool.
 
 ### Manual
 
-The short path is `just do tools update owner/repo` (latest) or `just do tools set owner/repo <version>`
+The short path is `just do tools update <command>` (latest — the executable name, e.g.
+`golangci-lint`, because it delegates to `aqua update`, which resolves commands) or
+`just do tools set owner/repo <version>`
 (exact), as above. Spelled out, that is:
 
 ```bash

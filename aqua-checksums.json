@@ -51,28 +51,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_darwin_amd64.tar.gz",
-      "checksum": "0A5DA0EFE10DF07B77C0979955FEE7A2943CEE5D2581D53C965CD88BD317101E",
+      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_darwin_amd64.tar.gz",
+      "checksum": "5B6AB77BB7A5FA1B87114D66BD55CFD49AB39DC45CC5275CB7F8E04F665B8E21",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_darwin_arm64.tar.gz",
-      "checksum": "0B07BA3FC6E89D58A3F230F0A2513B6B2E55FF50B94D83DC3F7708E865F2A7B5",
+      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_darwin_arm64.tar.gz",
+      "checksum": "0E6918BA030F9758917F0A1A5512DC8BA420C5F6126EB2111A7E0AD6817FE445",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_linux_amd64.tar.gz",
-      "checksum": "1D6CA0E666E3647E422669369FAB575F1F8686B92A8E92A5D514BAB1301CA55F",
+      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_linux_amd64.tar.gz",
+      "checksum": "37025CAE09B7014055CB3FDE4DC30C5740E7187EC03B3449016FE0B92F818D22",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_linux_arm64.tar.gz",
-      "checksum": "B1494FEA72A056F4483B2D45454F1129194E2330070564E12594A6436DC9015D",
+      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_linux_arm64.tar.gz",
+      "checksum": "A294BE1C4A8C34F5E45A763BFFBFF4D0456FC5E64F65FF12D968DCE58E7A90CA",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_windows_amd64.tar.gz",
-      "checksum": "D241EDBF7140238A03977FF7B55324A760F4CE84E1B9CE980194015FEB19B58B",
+      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_windows_amd64.tar.gz",
+      "checksum": "BCBB9FA04D7D0F36FDFE3B0AA270EE886C6C566A78B46E8FC69D8DCA1485AC74",
       "algorithm": "sha256"
     },
     {
