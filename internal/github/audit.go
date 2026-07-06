@@ -204,7 +204,7 @@ func (a *auditor) flag(check string, status Status, current, desired, message st
 				Check:   check,
 				Status:  StatusOK,
 				Current: current,
-				Message: "exempted by .github/limen-github.yaml: " + reason,
+				Message: "exempted by limen.yaml: " + reason,
 			})
 
 			return

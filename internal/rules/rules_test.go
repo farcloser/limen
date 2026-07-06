@@ -256,7 +256,7 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 	}
 
 	// It is content-pinned: even the canonical plus an extra setting fails — a
-	// project's own exclusions belong in a root lychee.toml.
+	// project's own exclusions belong in a root .lychee.toml.
 	extra := compliantFiles()
 
 	extra[".limen/lychee.toml"] = CanonicalLychee + "\ncache = true\n"
@@ -267,9 +267,9 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 	// A root lychee.toml is the project's own: its presence changes nothing.
 	own := compliantFiles()
 
-	own["lychee.toml"] = "exclude = ['https://example\\.internal/']\n"
+	own[".lychee.toml"] = "exclude = ['https://example\\.internal/']\n"
 	if f := findingByRule(Check(writeRepo(t, own), DefaultPolicy()), "lychee"); !f.OK() {
-		t.Errorf("a project's own root lychee.toml should not affect the rule: %s", f.Message)
+		t.Errorf("a project's own root .lychee.toml should not affect the rule: %s", f.Message)
 	}
 }
 

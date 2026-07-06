@@ -32,6 +32,7 @@ default: style audit
 style: (_banner "lint homebrew" "style")
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ _skip_unless_macos }}
     # --cached --others --exclude-standard: tracked *and* new untracked files,
     # still honoring .gitignore (same as `lint just`). The patterns are the
     # modern tap layout ONLY: Formula/ (sharded subdirectories included) and
@@ -63,6 +64,7 @@ style: (_banner "lint homebrew" "style")
 audit: (_banner "lint homebrew" "audit")
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ _skip_unless_macos }}
     # Same vacuous pass as `style`: no formulas, nothing to audit, no brew
     # (and no tap declaration) required.
     if [ -z "$(git ls-files --cached --others --exclude-standard \
@@ -106,6 +108,19 @@ audit: (_banner "lint homebrew" "audit")
     trap cleanup EXIT
     # shellcheck disable=SC2086 # deliberate word-split of the flags knob.
     "$BREW_BIN" audit --strict --tap "$tap" ${LINT_HOMEBREW_AUDIT_FLAGS:-}
+
+# Homebrew exists on macOS only: everywhere else these recipes degrade to a
+# LOUD no-op, so a repository can keep homebrew in its lint/fix aggregates
+# and still run the full suite on the linux/windows legs of the matrix.
+# Injected into recipe bodies as a just variable (same mechanism as
+# _require_brew below); the twin lives in fix-homebrew.just.
+[private]
+_skip_unless_macos := '''
+    if [ "$(uname -s)" != 'Darwin' ]; then
+        echo "homebrew is macOS-only — nothing to do on this platform (skipped, not failed)."
+        exit 0
+    fi
+'''
 
 # BREW_BIN is captured from the ambient PATH in main.just (see the module
 # comment); this only refuses when that capture came up empty. Injected into

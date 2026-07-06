@@ -1,6 +1,6 @@
 # DO NOT EDIT MANUALLY.
 # Canonical lychee (link checker) configuration, identical in every repository.
-# A repository can add its own exclusions in a root lychee.toml — the `lint links`
+# A repository can add its own exclusions in a root .lychee.toml — the `lint links`
 # recipe passes both files and lychee merges them, concatenating the exclude
 # lists — so this baseline only carries exclusions that apply everywhere.
 

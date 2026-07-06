@@ -19,6 +19,12 @@ default: limen just yaml
 limen: (_banner "fix" "limen")
     ${LIMEN_BIN:-limen} fix .
 
+# Repair what `just do lint github` reports — plans first, applies on consent
+# (pass -yes for unattended use, -org <name> for the organization). Never in
+# the default set, same reasoning as the lint twin.
+github *args: (_banner "fix" "github")
+    ${LIMEN_BIN:-limen} github fix {{ args }}
+
 just: (_banner "fix" "just")
     #!/usr/bin/env bash
     set -euo pipefail

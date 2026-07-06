@@ -47,7 +47,7 @@ var CanonicalYamlfmt string
 
 // CanonicalLycheeToml is the repository's .limen/lychee.toml — the canonical
 // lychee (link checker) configuration every repository must carry. Per-project
-// exclusions go in a root lychee.toml, which limen neither pins nor checks.
+// exclusions go in a root .lychee.toml, which limen neither pins nor checks.
 // See book/mandatory-files.md.
 //
 //go:embed .limen/lychee.toml

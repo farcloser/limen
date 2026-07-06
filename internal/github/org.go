@@ -316,9 +316,13 @@ func (a *auditor) auditOrgProfile(settings orgSettings) {
 		"the organization has no description — one line of what it is, for people who land on the profile", nil)
 }
 
-// auditOrgAdmins inventories the owner roster (O1) — advisory by design: the
-// roster is declared by exempting this check in the override file with the
-// expected names as the reason (peribolos-lite), which review then guards.
+// auditOrgAdmins inventories the owner roster (O1) — advisory by design:
+// membership is people, never auto-fixed. The roster is declared in the
+// override file (peribolos-lite), and the declaration is LOAD-BEARING, not a
+// blanket exemption: every actual owner login must appear in the declared
+// reason, so an owner nobody declared turns the audit red again. Handled
+// here rather than through flag()'s generic exemption, which cannot compare
+// the declaration against reality.
 func (a *auditor) auditOrgAdmins() {
 	var admins []struct {
 		Login string `json:"login"`
@@ -336,9 +340,49 @@ func (a *auditor) auditOrgAdmins() {
 		logins = append(logins, admin.Login)
 	}
 
-	a.flag(checkOrgAdmins, StatusAdvisory, strings.Join(logins, listSeparator), "a declared roster",
-		"organization owners: "+strings.Join(logins, listSeparator)+
-			" — declare the expected roster by exempting this check in the override file", nil)
+	roster := strings.Join(logins, listSeparator)
+
+	declaration, declared := a.overrides[checkOrgAdmins]
+	if !declared {
+		a.findings = append(a.findings, Finding{
+			Check:   checkOrgAdmins,
+			Status:  StatusAdvisory,
+			Current: roster,
+			Desired: "a declared roster",
+			Message: "organization owners: " + roster +
+				" — declare the expected roster by exempting this check in the override file",
+		})
+
+		return
+	}
+
+	var undeclared []string
+
+	for _, login := range logins {
+		if !declarationNamesLogin(declaration, login) {
+			undeclared = append(undeclared, login)
+		}
+	}
+
+	if len(undeclared) > 0 {
+		a.findings = append(a.findings, Finding{
+			Check:   checkOrgAdmins,
+			Status:  StatusAdvisory,
+			Current: roster,
+			Desired: "declared: " + declaration,
+			Message: "owner(s) not in the declared roster: " + strings.Join(undeclared, listSeparator) +
+				" — an owner was added since the declaration; update it or investigate",
+		})
+
+		return
+	}
+
+	a.findings = append(a.findings, Finding{
+		Check:   checkOrgAdmins,
+		Status:  StatusOK,
+		Current: roster,
+		Message: "owners match the declared roster: " + declaration,
+	})
 }
 
 // auditOrgActions is O2: the org-wide Actions policy — the org twin of the
@@ -763,6 +807,35 @@ func (a *auditor) auditOrgPATGrants() {
 
 	a.flag(checkOrgPATGrants, StatusOK, "", "",
 		"fine-grained personal-access-token grants by: "+strings.Join(owners, listSeparator), nil)
+}
+
+// declarationNamesLogin reports whether the roster declaration names the
+// login as a whole token. Token-wise, never substring containment: a login
+// that merely appears INSIDE the prose ("post" inside "apostasie") must not
+// count as declared — this check exists to catch surprise owners. Tokens are
+// runs of GitHub's login alphabet (alphanumerics and hyphens), compared
+// case-insensitively (logins are case-insensitive). Residual limit, accepted:
+// an owner whose login equals an English word used in the prose ("owner")
+// still matches — write declarations with the logins verbatim.
+func declarationNamesLogin(declaration, login string) bool {
+	notLoginChar := func(char rune) bool {
+		switch {
+		case char >= 'a' && char <= 'z', char >= 'A' && char <= 'Z':
+			return false
+		case char >= '0' && char <= '9', char == '-':
+			return false
+		default:
+			return true
+		}
+	}
+
+	for _, token := range strings.FieldsFunc(declaration, notLoginChar) {
+		if strings.EqualFold(token, login) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // communityHealthFiles is the canonical fallback set the org .github

@@ -81,7 +81,7 @@ var CanonicalYamlfmt = limen.CanonicalYamlfmt //nolint:gochecknoglobals // immut
 // CanonicalLychee is the exact .limen/lychee.toml a repository must carry
 // verbatim: the canonical lychee (link checker) configuration. It is this
 // repo's .limen/lychee.toml, embedded — the rule is content-pinned, so extras
-// are not allowed; a project's own exclusions go in a root lychee.toml, which
+// are not allowed; a project's own exclusions go in a root .lychee.toml, which
 // is not checked.
 var CanonicalLychee = limen.CanonicalLycheeToml //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
@@ -463,7 +463,7 @@ func checkGitattributes(root string) Finding {
 // checkLychee content-pins .limen/lychee.toml, the canonical configuration of
 // the lychee link checker behind `just do lint links`. It is unconditional: every
 // repository carries a README, so every repository has markdown whose links can
-// be checked. A project's own exclusions live in a root lychee.toml (merged by
+// be checked. A project's own exclusions live in a root .lychee.toml (merged by
 // the recipe), which limen does not check.
 func checkLychee(root string) Finding {
 	const (
@@ -560,12 +560,33 @@ func checkShellcheck(root string) (Finding, bool) {
 	}, true
 }
 
+// skippedDirs is every directory name the per-language source walkers prune:
+// .git, vendored dependencies, and the generated/build output the canonical
+// .gitignore excludes — a generated file must not be what triggers a
+// per-language rule. Name-based (any depth): a superset of the gitignore's
+// root-anchored entries, deliberately.
+func skippedDirs() map[string]bool {
+	return map[string]bool{
+		gitDirName:     true,
+		"node_modules": true,
+		"vendor":       true,
+		"build":        true,
+		"tmp":          true,
+		"target":       true,
+		".svelte-kit":  true,
+		".vite":        true,
+		"_scratch":     true,
+		".idea":        true,
+		".vscode":      true,
+	}
+}
+
 // findShellSource walks the tree below root and returns the path (relative to
-// root) of the first shell source it finds, skipping .git and common vendored
-// dependency directories. A shell source is a *.sh or *.bash file, or an
-// extensionless file whose first line is a shell shebang.
+// root) of the first shell source it finds, skipping .git, vendored, and
+// generated directories (skippedDirs). A shell source is a *.sh or *.bash
+// file, or an extensionless file whose first line is a shell shebang.
 func findShellSource(root string) (string, bool) {
-	skip := map[string]bool{gitDirName: true, "node_modules": true, "vendor": true}
+	skip := skippedDirs()
 
 	var found string
 
@@ -704,10 +725,10 @@ func checkYamlfmt(root string) (Finding, bool) {
 }
 
 // findYAMLSource walks the tree below root and returns the path (relative to
-// root) of the first YAML file it finds, skipping .git and common vendored
-// dependency directories. A YAML file is any *.yaml or *.yml.
+// root) of the first YAML file it finds, skipping .git, vendored, and
+// generated directories (skippedDirs). A YAML file is any *.yaml or *.yml.
 func findYAMLSource(root string) (string, bool) {
-	skip := map[string]bool{gitDirName: true, "node_modules": true, "vendor": true}
+	skip := skippedDirs()
 
 	var found string
 

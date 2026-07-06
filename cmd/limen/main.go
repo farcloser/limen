@@ -118,23 +118,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func runCheck(args []string, stdout, stderr io.Writer) int {
-	flagSet := flag.NewFlagSet(cmdCheck, flag.ContinueOnError)
-	flagSet.SetOutput(stderr)
-	asJSON := flagSet.Bool(flagJSON, false, "emit findings as JSON")
-	flagSet.Usage = func() {
-		_, _ = fmt.Fprintln(stderr, "Usage: limen check [-json] [path]")
-
-		flagSet.PrintDefaults()
-	}
-
-	// Accept the path before or after flags: split the single optional
-	// positional (the path) from flag tokens. Flags are boolean or use the
-	// -flag=value form, so a flag never consumes a following positional. A "--"
-	// token ends flag parsing, so a path that begins with "-" can still be
-	// passed (limen check -- -weird-dir); a lone "-" is treated as a path.
-	var flags, positional []string
-
+// splitPathFromFlags separates the single optional positional (the path) from
+// flag tokens, so the path may come before or after flags (`limen fix . -json`
+// and `limen fix -json .` both work). Only safe for subcommands whose flags
+// are boolean (or given as -flag=value): a flag never consumes the following
+// token — which is why bootstrap, whose -license and -holder take a value,
+// keeps standard flags-then-path parsing. A "--" token ends flag parsing, so
+// a path that begins with "-" can still be passed; a lone "-" is a path.
+func splitPathFromFlags(args []string) (flags, positional []string) {
 	endOfFlags := false
 
 	for _, arg := range args {
@@ -149,6 +140,21 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 			positional = append(positional, arg)
 		}
 	}
+
+	return flags, positional
+}
+
+func runCheck(args []string, stdout, stderr io.Writer) int {
+	flagSet := flag.NewFlagSet(cmdCheck, flag.ContinueOnError)
+	flagSet.SetOutput(stderr)
+	asJSON := flagSet.Bool(flagJSON, false, "emit findings as JSON")
+	flagSet.Usage = func() {
+		_, _ = fmt.Fprintln(stderr, "Usage: limen check [-json] [path]")
+
+		flagSet.PrintDefaults()
+	}
+
+	flags, positional := splitPathFromFlags(args)
 
 	if err := flagSet.Parse(flags); err != nil {
 		return 2
@@ -166,7 +172,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// The user-designated path IS the program input — checking it is the point.
-	if info, err := os.Stat(root); err != nil || !info.IsDir() { //nolint:gosec // G703: see above.
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
 		_, _ = fmt.Fprintf(stderr, "limen: %s is not a directory\n", root)
 
 		return 2
@@ -204,19 +210,22 @@ func runFix(args []string, stdout, stderr io.Writer) int {
 
 		flagSet.PrintDefaults()
 	}
-	if err := flagSet.Parse(args); err != nil {
+
+	flags, positional := splitPathFromFlags(args)
+
+	if err := flagSet.Parse(flags); err != nil {
 		return 2
 	}
 
-	if flagSet.NArg() > 1 {
-		_, _ = fmt.Fprintf(stderr, "limen: too many paths (got %d)\n", flagSet.NArg())
+	if len(positional) > 1 {
+		_, _ = fmt.Fprintf(stderr, "limen: too many paths (got %d)\n", len(positional))
 
 		return 2
 	}
 
 	root := "."
-	if flagSet.NArg() == 1 {
-		root = flagSet.Arg(0)
+	if len(positional) == 1 {
+		root = positional[0]
 	}
 
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {

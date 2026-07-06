@@ -51,5 +51,6 @@ exclude:
   - "**/testdata/**"        # don't reformat fixtures — tests may assert exact bytes
   - "**/*.gen.{yaml,yml}"   # leave generated YAML alone
 
-# Continue formatting other files if one fails to parse, and report all errors.
-continue_on_error: false   # in CI you want a hard fail on malformed YAML
+# Stop at a file that fails to parse — malformed YAML must fail hard, in CI
+# and everywhere else.
+continue_on_error: false

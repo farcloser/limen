@@ -24,6 +24,13 @@
 
 ## Scope
 
+- **Never reconverge the sibling repositories (mumbrew, limen-install, godolint,
+  homebrew-brews, …) after changing limen's canonical baseline.** They catch up through
+  limen *releases* (Renovate bumps the pin; the checksum-update workflow runs the newly
+  pinned `limen fix` on the branch) — running a dev-build fix in them plants files their
+  pinned limen flags as drift, failing their CI. The one exception: when canonical files
+  are MOVED or renamed, the fixer seeds the new path but never deletes the old one, so
+  the strays need a manual sweep.
 - **When asked for thing A, deliver thing A.** Not thing B, not B + A. Do not
   touch files, fix breakage, or "complete" edits outside the asked scope — other work
   may be in flight in the same tree, and unrequested changes interfere with it. When

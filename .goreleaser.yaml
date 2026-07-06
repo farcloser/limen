@@ -61,7 +61,7 @@ checksum:
 #   the environment; --use-signing-config=false means no signing services are
 #   contacted (nothing lands in Rekor's public log — the lane for private
 #   repos) and signing works fully offline. Verify with the published
-#   cosign.pub (committing it is tracked in TODO.md; --insecure-ignore-tlog
+#   cosign.pub (committing it is a tracked follow-up; --insecure-ignore-tlog
 #   only means "no transparency log entry to check", by design here):
 #     cosign verify-blob --key cosign.pub --bundle checksums.txt.sigstore.json \
 #       --insecure-ignore-tlog checksums.txt

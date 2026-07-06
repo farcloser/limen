@@ -34,19 +34,26 @@ The authoritative catalog of checks is the tool itself — run
 `limen github check` and read the findings; each names its check identifier.
 The book carries the reasoning, not a copy of the list.
 
-## Exceptions — `.github/limen-github.yaml`
+## Exceptions — `limen.yaml`
 
-A repository that genuinely needs to deviate declares it, in a committed file,
-with a reason — the escape hatch lives in review, never in a UI click:
+A repository that genuinely needs to deviate declares it, in a committed file
+at the repository root, with a reason — the escape hatch lives in review,
+never in a UI click:
 
 ```yaml
-# Exceptions to the limen github baseline: delta only, one reason each.
-wiki: hosts the operations runbook
+# limen.yaml — project-owned declarations: where and why this repository
+# deviates from what limen enforces. Delta only, one reason each.
+github:
+  wiki: hosts the operations runbook
+  org-admins: apostasie is the sole owner
 ```
 
-The file is a **delta**: exceptions only, never a full settings copy. Each line
-is `check-identifier: reason`. An exempted check reports ok, visibly carrying
-the reason; an unknown identifier or a missing reason fails the file itself.
+The file is a **delta**: exceptions only, never a full settings copy — and it
+is sectioned by concern: `github:` carries the settings-audit entries, and
+future limen judgments get their own sections here rather than their own
+files. Each entry is `check-identifier: reason`. An exempted check reports ok,
+visibly carrying the reason; an unknown section, an unknown identifier, or a
+missing reason fails the file itself.
 
 A small set of checks works in the opposite direction — **opt-in**: listing
 them declares a *stricter* floor for this repository, never an exemption.
@@ -141,8 +148,10 @@ canonically the org's `.github` repository). The catalog:
   without 2FA, a human decision.
 - **The owner roster** is a deliberate standing advisory: declare the expected
   roster by exempting `org-admins` in the override file with the names as the
-  reason — the declaration then lives in review, and any roster change shows
-  up as the audit going red.
+  reason. The declaration is load-bearing, not a blanket exemption — every
+  actual owner must appear in it, so an owner added since the declaration
+  turns the audit red again (removals only leave a stale name in the
+  declaration, which review catches on the next edit).
 - **Org-wide Actions policy** — the org twin of the per-repository hardening,
   so new repositories are born hardened: Actions restricted to GitHub-owned
   (never "all"), SHA-pinned `uses:` required org-wide, read-only default
@@ -173,8 +182,9 @@ classifies as `unverifiable`, never as passing.
 
 ## Enforcement
 
-`limen github check [-repo owner/name]` / `check -org <name>` verifies all of
-the above against the live target and exits non-zero on any failure, advisory, or unverifiable
+`limen github check [-repo owner/name]` / `check -org <name>` — or, through
+the recipe surface, `just do lint github [args]` and `just do fix github
+[args]` — verifies all of the above against the live target and exits non-zero on any failure, advisory, or unverifiable
 finding. It is the same command on a laptop and in CI. Settings drift *back*
 when humans click, so the end state (also in the design plan) is a scheduled
 audit. See [`../cmd/limen/`](../cmd/limen).
