@@ -256,7 +256,11 @@ git commit --message "tooling: bump golangci-lint"
 
 1. Renovate detects the new release and opens a **per-tool** PR bumping the version in
    `aqua.yaml` (e.g. "update golangci/golangci-lint to a newer version").
-2. The `update-aqua-checksum` workflow regenerates `aqua-checksums.json` **in the same PR**.
+2. The `update-aqua-checksum` workflow does the repo-specific follow-up **in the same PR**:
+   it regenerates `aqua-checksums.json`, and — when the bumped tool is `limen` itself — runs
+   the newly pinned `limen fix` so the canonical files move with the pin (a repo is coherent
+   only when the limen that wrote its files is the limen it pins; either half alone leaves
+   the repo red).
 3. You review the changelog and merge — or don't. Each tool is bumped independently.
 
 > **Critical:** Renovate can update versions but **cannot** update `aqua-checksums.json` on
@@ -283,7 +287,11 @@ then may the matching canonical `aqua-checksums.json` be seeded with it, so a fr
 `bootstrap` is compliant offline); an existing manifest is **merged** — the canonical
 sections are reset (keeping a valid project `ref`), missing canonical packages are appended
 by name without ever duplicating one the project already pins, and the project's own
-packages and versions are untouched. Whenever the manifest changed or the checksums file is
+packages and versions are untouched. The one version `fix` does move is an existing
+`farcloser/limen` pin: a **released** limen sets it to its own version, because that version
+is baseline-owned, not project-owned — the enforcer that wrote the repo's canonical files
+must be the enforcer the repo pins, or the repo goes red in one direction or the other (a
+dev build has no version to stamp and moves nothing). Whenever the manifest changed or the checksums file is
 missing, `fix` regenerates the checksums with the real tool — `aqua policy allow
 aqua-policy.yaml` then `aqua update-checksum --prune` — rather than guessing; if aqua is
 unavailable it says so and leaves the commands for you. Duplicate package entries are

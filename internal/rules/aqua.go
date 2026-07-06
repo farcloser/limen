@@ -58,11 +58,12 @@ var (
 )
 
 // rewriteSelfPin returns lines with any farcloser/limen pin set to version —
-// see FixOptions.SelfVersion for why. It only ever runs on canonical-sourced
-// lines (a seeded manifest, or the canonical entries a merge appends), never
-// on a project's own entries, whose versions are project-owned. A copy is
-// returned; the input is never mutated. No-op when version is empty (dev
-// builds keep the embedded pin).
+// see FixOptions.SelfVersion for why. It runs on canonical-sourced lines (a
+// seeded manifest, or the canonical entries a merge appends) and on a
+// project's existing limen pin: unlike every other version in a manifest, the
+// limen version is baseline-owned, not project-owned (see mergeAquaManifest).
+// A copy is returned; the input is never mutated. No-op when version is empty
+// (dev builds keep the embedded pin and never touch an existing one).
 func rewriteSelfPin(lines []string, version string) []string {
 	if version == "" {
 		return lines
@@ -308,9 +309,17 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 // at its canonical version — except farcloser/limen, which is inserted at
 // selfVersion when set (see FixOptions.SelfVersion) — while a package the
 // project already pins, at whatever version, is left alone, so no duplicate
-// entries are ever created and no project-owned version is ever rewritten. It
-// returns the new content and a summary of the edits; the summary is empty
-// when the manifest already carries the baseline.
+// entries are ever created and no project-owned version is ever rewritten.
+// The one exception is an existing farcloser/limen pin, moved to selfVersion
+// when set: the limen version is baseline-owned, not project-owned — the
+// limen that wrote a repo's canonical files must be the limen the repo pins,
+// or the repo goes red in one direction or the other (an old pinned limen
+// flags the new files as drift and would "repair" them backwards; a bumped
+// pin without a fix flags the old files as drift). Moving it here carries the
+// pin, the files, and the checksums (the caller regenerates them on any
+// manifest edit) in the same fix; Renovate still proposes the day-to-day
+// bumps. It returns the new content and a summary of the edits; the summary
+// is empty when the manifest already carries the baseline.
 func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []string) {
 	var reps []aquaReplacement
 
@@ -379,6 +388,25 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		// pin — nothing to do.
 	}
 
+	// Does an existing limen pin move to selfVersion (the baseline-owned
+	// exception in the doc above)? Detected up front: when the packages
+	// section is replaced wholesale below, the move must fold into that
+	// replacement — a second, one-line replacement over the same range would
+	// overlap it.
+	selfPinMoves := false
+
+	if selfVersion != "" && manifest.packages.present {
+		for line := manifest.packages.start; line < manifest.packages.end; line++ {
+			if rewriteSelfPin(manifest.lines[line:line+1], selfVersion)[0] != manifest.lines[line] {
+				selfPinMoves = true
+
+				break
+			}
+		}
+	}
+
+	packagesReplaced := false
+
 	if missing := manifest.missingCanonicalPkgs(); len(missing) > 0 {
 		switch {
 		case !manifest.packages.present:
@@ -399,7 +427,7 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		default:
 			shift := manifest.pkgEntryIndent() - canonicalAqua.pkgs[0].indent
 			lines := append(
-				copyLines(trimBlankTail(manifest.section(manifest.packages))),
+				rewriteSelfPin(trimBlankTail(manifest.section(manifest.packages)), selfVersion),
 				rewriteSelfPin(canonicalEntryLines(missing, shift), selfVersion)...)
 			reps = append(
 				reps,
@@ -409,9 +437,28 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 					lines: withBlankTail(lines),
 				},
 			)
+
+			packagesReplaced = true
 		}
 
 		summary = append(summary, "added canonical package(s): "+strings.Join(missing, ", "))
+	}
+
+	if selfPinMoves {
+		if !packagesReplaced {
+			for line := manifest.packages.start; line < manifest.packages.end; line++ {
+				rewritten := rewriteSelfPin(manifest.lines[line:line+1], selfVersion)[0]
+				if rewritten == manifest.lines[line] {
+					continue
+				}
+
+				reps = append(reps, aquaReplacement{start: line, end: line + 1, lines: []string{rewritten}})
+
+				break
+			}
+		}
+
+		summary = append(summary, "moved the farcloser/limen pin to "+selfVersion+" (the running limen's version)")
 	}
 
 	if len(summary) == 0 {
