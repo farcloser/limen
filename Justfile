@@ -1,46 +1,79 @@
-# DO NOT EDIT MANUALLY.
-# This file provides shared tasks common to all projects and managed by limen.
-# If you want to add project specific tasks, you can do so in the `project.just` file.
+# This file is the project's own — add recipes below. Keep the import: it
+# mounts every shared limen task under `just do ...`.
+import '.limen/just/main.just'
 
-# Project name, derived from the directory the root Justfile lives in.
-project := file_name(justfile_directory())
+export LINT_GO_LICENSES_FLAGS := "--ignore gotest.tools"
 
-# Hermetic PATH: aqua-pinned tools + base system only (no homebrew), so any tool that
-# isn't pinned fails loudly instead of silently resolving to an unpinned copy.
-aqua_bin := env_var_or_default('AQUA_ROOT_DIR', env_var_or_default('XDG_DATA_HOME', home_directory() / '.local/share') / 'aquaproj-aqua') / 'bin'
-export PATH := aqua_bin + ":/usr/bin:/bin:/usr/sbin:/sbin"
+# The canonical `lint limen` / `fix limen` recipes must judge this repository
+# by its own working tree, not by the (always older) released pin: `go run`
+# compiles the current tree on every invocation, so there is nothing to build
+# first and nothing stale to trust.
+export LIMEN_BIN := 'go run ./cmd/limen'
 
-# Hermetic Go env: ambient variables tunnel straight through the hermetic PATH.
-# An inherited GOROOT (IDEs inject one, often pointing into the module cache,
-# which `go clean -modcache` deletes) overrides where the pinned go finds its
-# stdlib — with modern Go it should never be set: go derives it from its own
-# location. Emptied rather than unexported: go treats '' as unset, and unlike
-# `unexport`, an `export` propagates into module recipes. GOTOOLCHAIN=local
-# forbids silent toolchain switching: when go.mod outpaces the pin, recipes
-# fail loudly asking for a pin bump instead of downloading an unpinned
-# toolchain behind your back.
-export GOROOT := ''
-export GOTOOLCHAIN := 'local'
-
-# Show this list of recipes.
+# Bare `just` lists; `lint` and `test` below are what CI runs.
 default:
     @just --list
 
-# Print meaningful information about this project.
-info:
-    @echo "name:     {{ project }}"
-    @echo "upstream: $(git remote get-url origin 2>/dev/null || echo '(none)')"
-    @echo "semver:   $(git describe --tags --abbrev=0 2>/dev/null || echo '(none)')"
-    @echo "commit:   $(git rev-parse --short HEAD 2>/dev/null || echo '(none)')"
-    @echo "date:     $(git log --max-count=1 --format=%cd --date=short 2>/dev/null || echo '(none)')"
+lint: do::lint::default do::lint::go::default
 
-mod build '.just/build.just'
-mod tools '.just/tools.just'
-mod lint '.just/lint.just'
-mod test '.just/test.just'
-mod fix '.just/fix.just'
+test: do::test::go::default
 
-# Flat (imported, not a module) so it takes arguments: `just release v1.2.3`.
-import '.just/release.just'
+# Host-side helpers specific to this machine's setup — NOT part of the
+# canonical baseline (they presuppose macOS, UTM, and a provisioned Windows
+# VM; see book/vm_testing.md).
 
-import? 'project.just'
+# Run a just task inside the Windows VM, against this same working tree (the
+# VM mounts the parent of this repository over WebDAV as Z:\). Transport is
+# `utmctl exec`, which relays neither output nor exit codes — so the guest
+# command writes a log and an exit marker at the share root and we poll for
+# the marker. The task arguments travel as argv end to end (the bash -c
+# template with "$@" — never re-parsed by any intermediate layer), and no
+# env vars are passed: qemu-ga's exec replaces the guest environment
+# wholesale, which strips APPDATA and breaks aqua.
+# Tunables: VM_NAME (default Windows), VM_TIMEOUT seconds (default 1800).
+vm +args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    vm_name="${VM_NAME:-Windows}"
+    timeout="${VM_TIMEOUT:-1800}"
+    # Absolute path: the hermetic PATH excludes homebrew, and utmctl must be
+    # reachable at /Applications/UTM.app anyway (the binary hardcodes it).
+    utmctl="${UTMCTL:-/Applications/UTM.app/Contents/MacOS/utmctl}"
+    # The VM shares the parent of this repository; the guest sees the repo at
+    # Z:/<its basename>. Markers land at the share root — outside the repo, so
+    # nothing pollutes the working tree.
+    host_repo="{{ justfile_directory() }}"
+    share_root="$(dirname "$host_repo")"
+    guest_dir="Z:/$(basename "$host_repo")"
+    runid="__vm-$(date +%s)-$$"
+    "$utmctl" status "$vm_name" | grep -q started \
+        || { echo "vm '$vm_name' is not running (utmctl status)" >&2; exit 1; }
+    # shellcheck disable=SC2016 # the template expands in the GUEST bash, by design
+    "$utmctl" exec "$vm_name" --cmd "C:/Program Files/Git/bin/bash.exe" -l -c \
+        'cd "$1" && just "${@:3}" > "Z:/$2.log" 2>&1; echo $? > "Z:/$2.exit"' \
+        bash "$guest_dir" "$runid" {{ args }}
+    # Stream the guest log as it grows (line-count bookkeeping — no background
+    # tail to babysit), so a slow run looks slow instead of stuck.
+    log="$share_root/$runid.log"
+    printed=0
+    drain() {
+        [ -f "$log" ] || return 0
+        total="$(wc -l < "$log")"
+        if [ "$total" -gt "$printed" ]; then
+            tail -n "+$((printed + 1))" "$log"
+            printed="$total"
+        fi
+    }
+    deadline=$(( $(date +%s) + timeout ))
+    while [ ! -f "$share_root/$runid.exit" ]; do
+        drain
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+            echo "timed out after ${timeout}s — the guest may still be running ($log left behind)" >&2
+            exit 124
+        fi
+        sleep 2
+    done
+    drain
+    status="$(tr -d '[:space:]' < "$share_root/$runid.exit")"
+    rm -f "$log" "$share_root/$runid.exit"
+    exit "$status"

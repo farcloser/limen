@@ -1,8 +1,8 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# If you want to add project specific tasks, you can do so in the `project.just` file.
+# Project recipes live in the root Justfile, below the shared-baseline import.
 
-set working-directory := '..'
+set working-directory := '../..'
 
 # Silence just's per-line command echo; recipes announce themselves via _banner.
 set quiet
@@ -15,7 +15,7 @@ default: unit
 # `go test` runs funnel through gotestsum: same exit semantics, readable live
 # output (its format is gotestsum's own GOTESTSUM_FORMAT knob). -count=1
 # defeats Go's test result cache — a test task must actually test. The shared
-# timeout is project-overridable from project.just, the home of all project
+# timeout is project-overridable from the root Justfile, the home of all project
 # customization:
 #     export TEST_GO_TIMEOUT := '20m'
 
@@ -34,13 +34,13 @@ race: (_banner "test go" "race")
     CGO_ENABLED=1 gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -ldflags=-linkmode=external -race ./...
 
 # Benchmarks, with allocation stats. -run '^$' deselects unit tests so only
-# benchmarks run — `just test go` already covers the tests themselves.
+# benchmarks run — `just do test go` already covers the tests themselves.
 bench: (_banner "test go" "bench")
     go test -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" -run '^$' -bench . -benchmem ./...
 
 # Coverage: per-function summary, an HTML report under build/coverage/, and an
 # optional minimum gate — export TEST_GO_COVER_MIN := '80' (integer percent)
-# from project.just to enforce a floor; unset or 0 reports without gating.
+# from the root Justfile to enforce a floor; unset or 0 reports without gating.
 cover: (_banner "test go" "cover")
     #!/usr/bin/env bash
     set -euo pipefail

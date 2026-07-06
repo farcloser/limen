@@ -4,6 +4,7 @@
 package rules //nolint:testpackage // white-box (see above)
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,27 +95,60 @@ func TestFixMergesGitignore(t *testing.T) {
 	}
 }
 
-func TestFixOverwritesDriftedJustfile(t *testing.T) {
+// TestFixJustfileRegimes: the root Justfile is the project's own — a missing
+// one is seeded, one lacking the shared-baseline import gets it APPENDED
+// (never overwritten), and one carrying it is untouched.
+func TestFixJustfileRegimes(t *testing.T) {
 	t.Parallel()
 
-	dir := writeRepo(t, map[string]string{"Justfile": "info:\n\t@echo hand-rolled\n"})
+	// Missing -> seeded; the seed carries the import and ends in a newline
+	// (just --fmt rejects a file without one — a fresh repo must not be born
+	// lint-red).
+	seeded := writeRepo(t, nil)
+	if o := justfileOutcome(Fix(seeded, bootstrapOpts())); o.Action != ActionCreated {
+		t.Fatalf("missing Justfile: %s, want created", o.Action)
+	}
 
-	var justfile Outcome
+	data, _ := os.ReadFile(filepath.Join(seeded, "Justfile"))
+	if !strings.Contains(string(data), CanonicalJustfileImport) || !strings.HasSuffix(string(data), "\n") {
+		t.Errorf("seed must carry the import and end in a newline, got: %q", data)
+	}
 
-	for _, o := range Fix(dir, bootstrapOpts()) {
-		if o.Rule == "justfile" && o.Path == "Justfile" {
-			justfile = o
+	// Present without the import -> merged: import appended, content kept.
+	ownRecipes := "greet:\n\t@echo hand-rolled\n"
+
+	merged := writeRepo(t, map[string]string{"Justfile": ownRecipes})
+	if o := justfileOutcome(Fix(merged, bootstrapOpts())); o.Action != ActionMerged {
+		t.Fatalf("Justfile without the import: %s, want merged", o.Action)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(merged, "Justfile"))
+	if !strings.Contains(string(data), "hand-rolled") || !strings.Contains(string(data), CanonicalJustfileImport) {
+		t.Errorf("merge must keep the project's recipes and add the import, got: %q", data)
+	}
+
+	// Present with the import -> the project's own, untouched.
+	own := CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n"
+
+	untouched := writeRepo(t, map[string]string{"Justfile": own})
+	if o := justfileOutcome(Fix(untouched, bootstrapOpts())); o.Action != ActionNone {
+		t.Fatalf("compliant Justfile: %s, want none", o.Action)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(untouched, "Justfile"))
+	if string(data) != own {
+		t.Error("a compliant Justfile must never be modified")
+	}
+}
+
+func justfileOutcome(outcomes []Outcome) Outcome {
+	for _, o := range outcomes {
+		if o.Rule == "justfile" && (o.Path == "Justfile" || o.Path == "justfile" || o.Path == ".justfile") {
+			return o
 		}
 	}
 
-	if justfile.Action != ActionOverwrote {
-		t.Fatalf("Justfile action = %s, want overwrote", justfile.Action)
-	}
-
-	data, _ := os.ReadFile(filepath.Join(dir, "Justfile"))
-	if string(data) != CanonicalJustfile {
-		t.Error("Justfile was not reset to the canonical baseline")
-	}
+	return Outcome{Rule: "justfile", Action: ActionFailed, Message: "no root Justfile outcome"}
 }
 
 func TestFixOverwritesDriftedEditorconfig(t *testing.T) {
@@ -176,11 +210,11 @@ func TestFixLicensePolicy(t *testing.T) {
 func TestFixOverwritesDriftedShellcheck(t *testing.T) {
 	t.Parallel()
 
-	// Shell present, a drifted .just/.shellcheckrc -> overwritten to the canonical
+	// Shell present, a drifted .limen/.shellcheckrc -> overwritten to the canonical
 	// exactly (content-pinned: the repo's own directive is not preserved).
 	dir := writeRepo(t, map[string]string{
-		"build.sh":            "#!/bin/sh\necho hi\n",
-		".just/.shellcheckrc": CanonicalShellcheckrc + "\ndisable=SC2034\n",
+		"build.sh":             "#!/bin/sh\necho hi\n",
+		".limen/.shellcheckrc": CanonicalShellcheckrc + "\ndisable=SC2034\n",
 	})
 
 	o := outcomeFor(Fix(dir, bootstrapOpts()), "shellcheck")
@@ -188,7 +222,7 @@ func TestFixOverwritesDriftedShellcheck(t *testing.T) {
 		t.Fatalf("shellcheck action = %s, want overwrote", o.Action)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".just", ".shellcheckrc"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".limen", ".shellcheckrc"))
 	if string(data) != CanonicalShellcheckrc {
 		t.Errorf("shellcheck was not reset to the canonical exactly:\n%s", data)
 	}
@@ -198,10 +232,45 @@ func TestFixOverwritesDriftedShellcheck(t *testing.T) {
 	}
 }
 
+func TestFixGitattributes(t *testing.T) {
+	t.Parallel()
+
+	// Missing .gitattributes -> created from the canonical (unconditional rule).
+	dir := writeRepo(t, nil)
+
+	o := outcomeFor(Fix(dir, bootstrapOpts()), "gitattributes")
+	if o.Action != ActionCreated {
+		t.Fatalf("gitattributes action = %s, want created", o.Action)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, ".gitattributes"))
+	if string(data) != CanonicalGitattributes {
+		t.Error("created .gitattributes does not equal the canonical")
+	}
+
+	// Drifted -> overwritten to the canonical exactly (content-pinned: a local
+	// addition would reintroduce git's line-ending conversion).
+	drifted := writeRepo(t, map[string]string{
+		".gitattributes": CanonicalGitattributes + "\n*.md text\n",
+	})
+	if o := outcomeFor(Fix(drifted, bootstrapOpts()), "gitattributes"); o.Action != ActionOverwrote {
+		t.Fatalf("gitattributes action = %s, want overwrote", o.Action)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(drifted, ".gitattributes"))
+	if string(data) != CanonicalGitattributes {
+		t.Errorf(".gitattributes was not reset to the canonical exactly:\n%s", data)
+	}
+
+	if f := checkGitattributes(drifted); !f.OK() {
+		t.Errorf("gitattributes should pass after overwrite: %s", f.Message)
+	}
+}
+
 func TestFixLychee(t *testing.T) {
 	t.Parallel()
 
-	// Missing .just/lychee.toml -> created from the canonical (unconditional rule).
+	// Missing .limen/lychee.toml -> created from the canonical (unconditional rule).
 	dir := writeRepo(t, nil)
 
 	o := outcomeFor(Fix(dir, bootstrapOpts()), "lychee")
@@ -209,21 +278,21 @@ func TestFixLychee(t *testing.T) {
 		t.Fatalf("lychee action = %s, want created", o.Action)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".just", "lychee.toml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".limen", "lychee.toml"))
 	if string(data) != CanonicalLychee {
-		t.Error("created .just/lychee.toml does not equal the canonical")
+		t.Error("created .limen/lychee.toml does not equal the canonical")
 	}
 
 	// Drifted -> overwritten to the canonical exactly (content-pinned: a local
 	// addition is not preserved; project exclusions belong in a root lychee.toml).
 	drifted := writeRepo(t, map[string]string{
-		".just/lychee.toml": CanonicalLychee + "\ncache = true\n",
+		".limen/lychee.toml": CanonicalLychee + "\ncache = true\n",
 	})
 	if o := outcomeFor(Fix(drifted, bootstrapOpts()), "lychee"); o.Action != ActionOverwrote {
 		t.Fatalf("lychee action = %s, want overwrote", o.Action)
 	}
 
-	data, _ = os.ReadFile(filepath.Join(drifted, ".just", "lychee.toml"))
+	data, _ = os.ReadFile(filepath.Join(drifted, ".limen", "lychee.toml"))
 	if string(data) != CanonicalLychee {
 		t.Errorf("lychee config was not reset to the canonical exactly:\n%s", data)
 	}
@@ -246,7 +315,7 @@ func TestFixLychee(t *testing.T) {
 func TestFixCreatesMissingShellcheck(t *testing.T) {
 	t.Parallel()
 
-	// Shell present, no .just/.shellcheckrc -> created from the canonical.
+	// Shell present, no .limen/.shellcheckrc -> created from the canonical.
 	dir := writeRepo(t, map[string]string{"build.sh": "#!/bin/sh\necho hi\n"})
 
 	o := outcomeFor(Fix(dir, bootstrapOpts()), "shellcheck")
@@ -254,65 +323,9 @@ func TestFixCreatesMissingShellcheck(t *testing.T) {
 		t.Fatalf("shellcheck action = %s, want created", o.Action)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".just", ".shellcheckrc"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".limen", ".shellcheckrc"))
 	if string(data) != CanonicalShellcheckrc {
-		t.Error("created .just/.shellcheckrc does not equal the canonical")
-	}
-}
-
-// TestFixSeedsProjectJust: a repo with no project.just gets a single-comment
-// placeholder at the root; an existing one is never touched.
-func TestFixSeedsProjectJust(t *testing.T) {
-	t.Parallel()
-
-	// Missing -> created as a single comment.
-	dir := writeRepo(t, nil)
-
-	var seeded Outcome
-
-	for _, o := range Fix(dir, bootstrapOpts()) {
-		if o.Rule == "justfile" && o.Path == projectJustPath {
-			seeded = o
-		}
-	}
-
-	if seeded.Action != ActionCreated {
-		t.Fatalf("%s action = %s, want created", projectJustPath, seeded.Action)
-	}
-
-	data, err := os.ReadFile(filepath.Join(dir, "project.just"))
-	if err != nil {
-		t.Fatalf("project.just not written: %v", err)
-	}
-
-	if !strings.HasPrefix(strings.TrimSpace(string(data)), "#") {
-		t.Errorf("seed should be a comment, got: %q", data)
-	}
-
-	// just --fmt rejects a file without a final newline, and `just lint just`
-	// runs that check on every just file — a fresh repo must not be born red.
-	if !strings.HasSuffix(string(data), "\n") {
-		t.Errorf("seed must end in a newline, got: %q", data)
-	}
-
-	// The example must parse when uncommented: a dependency names a recipe
-	// (module::recipe), never a bare module path.
-	if strings.Contains(string(data), "lint::go\n") {
-		t.Errorf("seed example uses a bare module path as a dependency, got: %q", data)
-	}
-
-	// Present -> never overwritten.
-	custom := "build:\n\tgo build ./...\n"
-
-	dir2 := writeRepo(t, map[string]string{projectJustPath: custom})
-	for _, o := range Fix(dir2, bootstrapOpts()) {
-		if o.Rule == "justfile" && o.Path == projectJustPath && o.Action != ActionNone {
-			t.Errorf("existing project.just was modified: %s", o.Action)
-		}
-	}
-
-	if got, _ := os.ReadFile(filepath.Join(dir2, "project.just")); string(got) != custom {
-		t.Error("existing project.just content changed")
+		t.Error("created .limen/.shellcheckrc does not equal the canonical")
 	}
 }
 
@@ -322,20 +335,58 @@ func TestFixSeedsProjectJust(t *testing.T) {
 // which is the whole point: regenerated, never copied.
 const stubChecksums = `{"stub":true}` + "\n"
 
+// aquaStubEnv flips the re-executed test binary into fake-aqua mode (see
+// TestMain). Helper-process pattern rather than a generated script: Windows
+// cannot exec a shebang script (CreateProcess knows no shebangs, LookPath
+// only recognizes PATHEXT extensions).
+const aquaStubEnv = "LIMEN_TEST_AQUA_STUB"
+
 func stubAqua(t *testing.T) {
 	t.Helper()
 
-	script := "#!/bin/sh\ncase \"$*\" in *update-checksum*) printf '%s' '" + stubChecksums + "' > aqua-checksums.json ;; esac\nexit 0\n"
-
-	path := filepath.Join(t.TempDir(), "aqua")
-	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatalf("locating the test binary: %v", err)
 	}
 
+	// Inherited by the children remediation spawns (it sets only cmd.Dir).
+	// Setenv also forbids t.Parallel — these tests are serial by design
+	// already (they mutate aquaBin).
+	t.Setenv(aquaStubEnv, "1")
+
 	prev := aquaBin
-	aquaBin = path
+	aquaBin = self
 
 	t.Cleanup(func() { aquaBin = prev })
+}
+
+// TestMain lets the binary double as the fake aqua (see stubAqua).
+func TestMain(m *testing.M) {
+	if os.Getenv(aquaStubEnv) != "" {
+		// The stub's exit status IS its contract; this branch never reaches
+		// the test runner's own exit handling.
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(runAquaStub())
+	}
+
+	m.Run()
+}
+
+// runAquaStub mimics the two invocations remediation makes: `policy allow`
+// (silent success) and `update-checksum`, which writes the stub checksums
+// into the working directory (remediation sets cmd.Dir to the repo root).
+func runAquaStub() int {
+	for _, arg := range os.Args[1:] {
+		if arg == "update-checksum" {
+			if err := os.WriteFile(aquaChecksumsFile, []byte(stubChecksums), 0o600); err != nil {
+				fmt.Fprintf(os.Stderr, "aqua stub: %v\n", err)
+
+				return 1
+			}
+		}
+	}
+
+	return 0
 }
 
 // TestFixMergesAquaManifest: an existing manifest keeps its own packages and
@@ -365,7 +416,7 @@ func TestFixMergesAquaManifest(t *testing.T) {
 		t.Error("checksum section was not reset to the canonical")
 	}
 
-	if !strings.Contains(manifest, "type: standard") || !strings.Contains(manifest, "path: .just/aqua-registry.yaml") {
+	if !strings.Contains(manifest, "type: standard") || !strings.Contains(manifest, "path: .limen/aqua-registry.yaml") {
 		t.Error("registries section was not added")
 	}
 
@@ -621,5 +672,66 @@ func TestFixAquaDuplicatesAdvisory(t *testing.T) {
 
 	if !advisory {
 		t.Error("duplicate package entries should yield an advisory")
+	}
+}
+
+// TestFixWorkflows: the two regimes of the .github surface — pinned pieces
+// are overwritten on drift, seeded pieces are created once and never touched,
+// and the release workflow follows the goreleaser opt-in.
+func TestFixWorkflows(t *testing.T) {
+	t.Parallel()
+
+	// Drifted pinned piece -> overwritten to the canonical exactly; existing
+	// customized seeded pieces -> untouched.
+	dir := writeRepo(t, map[string]string{
+		".github/workflows/update-aqua-checksum.yaml": "name: tampered\n",
+		".github/workflows/ci.yaml":                   "name: my-own-ci\n",
+	})
+
+	outcomes := Fix(dir, bootstrapOpts())
+
+	for _, o := range outcomes {
+		if o.Rule != "workflows" {
+			continue
+		}
+
+		switch o.Path {
+		case pathWorkflowChecksum:
+			if o.Action != ActionOverwrote {
+				t.Errorf("tampered checksum workflow: %s, want overwrote", o.Action)
+			}
+		case pathWorkflowCI:
+			if o.Action != ActionNone {
+				t.Errorf("existing ci workflow: %s, want none (left untouched)", o.Action)
+			}
+		case pathActionSetupAqua, pathRenovate:
+			if o.Action != ActionCreated {
+				t.Errorf("%s: %s, want created", o.Path, o.Action)
+			}
+		case pathWorkflowRelease:
+			if o.Action != ActionNone {
+				t.Errorf("release workflow without goreleaser: %s, want none", o.Action)
+			}
+		default:
+			// Other rule-adjacent paths (project.just seeding): not under test.
+		}
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(pathWorkflowChecksum)))
+	if string(data) != limen.CanonicalWorkflowUpdateAquaChecksum {
+		t.Error("checksum workflow was not reset to the canonical")
+	}
+
+	custom, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(pathWorkflowCI)))
+	if string(custom) != "name: my-own-ci\n" {
+		t.Error("the project's own ci workflow was modified")
+	}
+
+	// goreleaser present -> the release workflow is seeded.
+	releasing := writeRepo(t, map[string]string{".goreleaser.yaml": "version: 2\n"})
+	for _, o := range Fix(releasing, bootstrapOpts()) {
+		if o.Rule == "workflows" && o.Path == pathWorkflowRelease && o.Action != ActionCreated {
+			t.Errorf("release workflow with goreleaser: %s, want created", o.Action)
+		}
 	}
 }

@@ -27,6 +27,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every run step is bash on every runner: without this, windows defaults to
+# PowerShell, which never sees the git-bash environment setup-aqua prepares
+# (the whole matrix is designed to run the recipes under git-bash). Explicit
+# bash also means `-eo pipefail` everywhere, which the implicit linux/macos
+# default lacks.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   verify:
     strategy:
@@ -34,10 +43,17 @@ jobs:
       matrix:
         # Pinned images, not -latest: a runner bump is a reviewed change.
         # macOS is not redundant: its /bin/bash is 3.2, the portability floor
-        # the shared recipes target, and half the supported release matrix.
-        os: [ubuntu-24.04, macos-15]
+        # the shared recipes target. arm64 (ubuntu-24.04-arm) and windows
+        # cover the rest of the supported release matrix — windows runs the
+        # recipes under git-bash.
+        # These entries are also the default required-status-check contexts of
+        # the canonical limen:main ruleset (defaultRequiredChecks in
+        # internal/github/audit.go) — change the two together, in one release.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Generous for the windows leg: those runners are markedly slower, and the
+    # per-GOOS lint recipes now run three legs each.
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -46,7 +62,7 @@ jobs:
           # The token is not left behind in .git/config: nothing in this
           # workflow talks to GitHub after checkout.
           persist-credentials: false
-          # Full history and refs: `just lint commits` validates the commit
+          # Full history and refs: `just do lint commits` validates the commit
           # range against the PR's base branch, which a shallow clone lacks.
           fetch-depth: 0
 
@@ -60,7 +76,7 @@ jobs:
         run: aqua install --only-link
 
       - name: Lint
-        run: just lint-all
+        run: just lint
 
       - name: Test
-        run: just test-all
+        run: just test

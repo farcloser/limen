@@ -1,6 +1,6 @@
 # goreleaser — https://goreleaser.com — release automation for the limen CLI.
-# Local dry-run: `just release --dry-run` (no tag, no publish, artifacts under
-# build/). Real release: `just release vX.Y.Z` (see project.just).
+# Local dry-run: `just do release --local --dry-run` (no tag, no publish, artifacts under
+# build/). Real release: `just do release vX.Y.Z` (see the root Justfile).
 version: 2
 
 project_name: limen
@@ -12,7 +12,7 @@ project_name: limen
 # build/ must survive a release run.
 dist: build/release
 
-# Twin of the `release` recipe in .just/build-go.just — the developer-facing
+# Twin of the `release` recipe in .limen/just/build-go.just — the developer-facing
 # builder. A flag change here must land there too (and vice versa); the
 # intended differences are: the version stamp source ({{ .Version }} here,
 # `git describe` there — identical on a release tag), mod_timestamp
@@ -42,6 +42,7 @@ builds:
       - darwin_arm64
       - linux_amd64
       - linux_arm64
+      - windows_amd64
     # Reproducible builds: stamp the commit time, not the build time.
     mod_timestamp: "{{ .CommitTimestamp }}"
 
@@ -54,9 +55,9 @@ checksum:
 
 # cosign (v3, Sigstore bundle format) over the checksums file — signing that
 # one file transitively covers every artifact it lists. Two lanes, switched by
-# whether COSIGN_KEY is set (the `just release` recipe controls that):
+# whether COSIGN_KEY is set (the `just do release` recipe controls that):
 #
-#   Key-based (local: `just release vX.Y.Z`) — COSIGN_KEY + COSIGN_PASSWORD in
+#   Key-based (local: `just do release --local <key> vX.Y.Z`) — COSIGN_KEY + COSIGN_PASSWORD in
 #   the environment; --use-signing-config=false means no signing services are
 #   contacted (nothing lands in Rekor's public log — the lane for private
 #   repos) and signing works fully offline. Verify with the published
@@ -65,7 +66,7 @@ checksum:
 #     cosign verify-blob --key cosign.pub --bundle checksums.txt.sigstore.json \
 #       --insecure-ignore-tlog checksums.txt
 #
-#   Keyless (CI: the release workflow runs `just release --ci`) — no key
+#   Keyless (CI: the release workflow runs `just do release --ci`) — no key
 #   exists at all: cosign exchanges the workflow's OIDC token (id-token:
 #   write) for a short-lived Fulcio certificate whose identity IS the
 #   workflow@tag, and the signature is logged in Rekor. Verify against that

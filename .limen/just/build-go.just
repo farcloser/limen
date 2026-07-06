@@ -1,8 +1,8 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# If you want to add project specific tasks, you can do so in the `project.just` file.
+# Project recipes live in the root Justfile, below the shared-baseline import.
 
-set working-directory := '..'
+set working-directory := '../..'
 
 # Silence just's per-line command echo; recipes announce themselves via _banner.
 set quiet
@@ -24,7 +24,7 @@ import '_lib.just'
 #   - a race build exists.
 # Binaries land in build/ (covered by the canonical .gitignore). Projects
 # declare `var version = "dev"` in each main package for the stamp to land.
-# Extra flags: export BUILD_GO_FLAGS from project.just, the home of all
+# Extra flags: export BUILD_GO_FLAGS from the root Justfile, the home of all
 # project customization (the variable name mirrors the task path), or set it
 # on the invocation for a one-off.
 
@@ -33,7 +33,7 @@ import '_lib.just'
 # out of libc, which is exactly what makes `static` viable on glibc.
 go_tags := 'netgo,osusergo'
 
-# CGO is opt-in per invocation (`CGO_ENABLED=1 just build go`). Defaulted to 0
+# CGO is opt-in per invocation (`CGO_ENABLED=1 just do build go`). Defaulted to 0
 # explicitly for every recipe rather than left unset: go's own default is CGO
 # on for native builds when a C toolchain exists, and unset must mean pure Go
 # here.
@@ -139,7 +139,7 @@ static: (_banner "build go" "static")
         exit 1
     fi
     if [ "${CGO_ENABLED:-0}" != "1" ]; then
-        echo "static needs CGO_ENABLED=1 — a pure-Go build is already static (use \`just build go\`)." >&2
+        echo "static needs CGO_ENABLED=1 — a pure-Go build is already static (use \`just do build go\`)." >&2
         exit 1
     fi
     version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)

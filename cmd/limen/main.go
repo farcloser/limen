@@ -379,12 +379,19 @@ func dirEmpty(root string) bool {
 	return err == nil && len(entries) == 0
 }
 
+// The suppression below is revive's own directive rather than a golangci one,
+// deliberately: nolintlint polices golangci directives, and this finding is
+// environment-nondeterministic across the per-GOOS legs — the policing itself
+// then flakes.
+//
+//revive:disable:flag-parameter
+
 // reportOutcomes prints remediation outcomes and returns the process exit code:
 // 0 when every rule is now compliant, 1 when any advisory or failure remains.
 // asJSON is the user's -json flag: an output mode is domain data, and every
 // call site passes the self-describing *asJSON — not the opaque-literal
-// control coupling the linter guards against.
-func reportOutcomes( //nolint:revive // flag-parameter: see doc comment above.
+// control coupling the rule guards against.
+func reportOutcomes(
 	stdout, stderr io.Writer,
 	verb, root string,
 	outcomes []rules.Outcome,
@@ -409,6 +416,8 @@ func reportOutcomes( //nolint:revive // flag-parameter: see doc comment above.
 
 	return 1
 }
+
+//revive:enable:flag-parameter
 
 func printOutcomes(writer io.Writer, verb, root string, outcomes []rules.Outcome) {
 	_, _ = fmt.Fprintf(writer, "limen %s %s\n", verb, root)

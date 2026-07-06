@@ -1,18 +1,22 @@
 # TODO
 
-- **CI: graduate the workflow to the canonical baseline.** limen now ships
-  `.github/workflows/ci.yaml` (2026-07-02): SHA-pinned checkout only, checksum-verified
-  aqua bootstrap with a pinned aqua version, `permissions: {}`, pinned runner images
-  (ubuntu + macOS — the latter exercises the bash 3.2 floor), and every check running
-  through the same `just` recipes as local. The file is deliberately generic (zero
-  project-specific content) so limen can content-pin and distribute it like the other
-  canonical files. Remaining: teach limen a rule + fix path for `.github/workflows/`
-  (embed the workflow, create/overwrite it), and decide whether the aqua-bootstrap pins
-  (installer version/checksum, aqua version) stay duplicated with limen-install or get a
-  single source. Also still open: Renovate rollout — install the Mend GitHub App on the
-  org, and ship the `update-aqua-checksum` workflow (below) with it.
+- **(Low priority) Local Windows test lane.** aqua cannot manage UTM (a GUI .app on a
+  dmg — outside aqua's archive-and-link model), and the CLI-first alternative (tart)
+  cannot boot Windows guests (Apple's Virtualization.framework has no TPM/Secure Boot
+  emulation — which is why UTM uses QEMU for Windows). If Windows portability becomes a
+  recurring local concern: UTM installs at the machine layer (mumbrew territory), a
+  Windows 11 ARM guest gets provisioned once by hand (CrystalFetch image, Git for
+  Windows, OpenSSH server, snapshot), and a `just do test windows` recipe in the root Justfile
+  drives it via utmctl + ssh. Until then, the windows-2025 CI leg is the test bench.
 
-- **Rust under the hermetic PATH (AUDIT.md A3).** `just lint rust` / `just fix rust`
+- **CI baseline: one residual.** The `workflows` rule landed 2026-07-03 (10th rule:
+  the checksum-update workflow and setup-aqua action content-pinned; ci.yaml and
+  renovate.json5 seeded once; release.yaml seeded where goreleaser config exists — see
+  book/mandatory-files.md). Remaining: decide whether the aqua-bootstrap pins
+  (installer version/checksum, aqua version) stay duplicated between the setup-aqua
+  action and limen-install or get a single source.
+
+- **Rust under the hermetic PATH (AUDIT.md A3).** `just do lint rust` / `just do fix rust`
   cannot work today: cargo is not aqua-installable (rustup owns the toolchain) and
   `~/.cargo/bin` is deliberately not on the hermetic PATH — the recipes are dead code in
   every repo. Decide: extend the hermetic PATH with `~/.cargo/bin` (one documented
@@ -35,10 +39,10 @@
      drag the Go toolchain onto every machine to save one goreleaser config).
 
 - **Release hardening: remaining pieces.** The CI lane exists (2026-07-02):
-  `just release --cut vX.Y.Z` (signed tag by a human) triggers
-  `.github/workflows/release.yaml`, which runs `just release --ci` — goreleaser +
+  `just do release vX.Y.Z` (signed tag by a human) triggers
+  `.github/workflows/release.yaml`, which runs `just do release --ci` — goreleaser +
   **keyless** cosign (Fulcio workflow identity, Rekor-logged). The key-based local lane
-  remains for private repos and as the escape hatch (`just release vX.Y.Z`). Still to do:
+  remains for private repos and as the escape hatch (`just do release --local <key> vX.Y.Z`). Still to do:
   1. **Repository ruleset** restricting who can create `v*` tags — the tag push is now the
      release button. (Org-side, manual.)
   2. **Commit `cosign.pub`** so the key-based lane's verifiers have the key (the pair

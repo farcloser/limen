@@ -1,8 +1,8 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# If you want to add project specific tasks, you can do so in the `project.just` file.
+# Project recipes live in the root Justfile, below the shared-baseline import.
 
-set working-directory := '..'
+set working-directory := '../..'
 
 # Silence just's per-line command echo; recipes announce themselves via _banner.
 set quiet
@@ -12,11 +12,16 @@ import '_lib.just'
 
 default: limen just aqua links yaml shell dockerfile commits
 
+# Go linters live in their own submodule: `just do lint go` runs them all,
+# `just do lint go <recipe>` (e.g. `just do lint go mod`) runs one.
+mod go 'lint-go.just'
+mod rust 'lint-rust.just'
+
 # limen itself: verify the repository against the Farcloser engineering rules
 # (mandatory files, canonical baseline, license, aqua pins). First in the
 # default set: the other linters trust the canonical files this one verifies.
 # LIMEN_BIN exists for one consumer — the limen repository itself, whose
-# project.just points it at `go run ./cmd/limen` so the working tree is judged
+# the root Justfile points it at `go run ./cmd/limen` so the working tree is judged
 # by its own enforcer, not by the (always older) released pin. Everyone else
 # runs the aqua-pinned binary.
 limen: (_banner "lint" "limen")
@@ -29,11 +34,6 @@ just: (_banner "lint" "just")
     # still honoring .gitignore — so a not-yet-staged file is linted too.
     git ls-files -z --cached --others --exclude-standard 'justfile' 'Justfile' '*.just' '**/justfile' \
       | xargs -0 -I{} just --fmt --check --justfile {}
-
-# Go linters live in their own submodule: `just lint go` runs them all,
-# `just lint go <recipe>` (e.g. `just lint go mod`) runs one.
-mod go 'lint-go.just'
-mod rust 'lint-rust.just'
 
 # godolint — hadolint as pure Go (https://github.com/farcloser/godolint) —
 # over every Dockerfile in the repository; passes vacuously when there are
@@ -62,7 +62,7 @@ dockerfile: (_banner "lint" "dockerfile")
     [ ${#files[@]} -eq 0 ] || godolint "${files[@]}"
 
 yaml: (_banner "lint" "yaml")
-    yamlfmt -conf .just/.yamlfmt -lint .
+    yamlfmt -conf .limen/.yamlfmt -lint
 
 shell: (_banner "lint" "shell")
     #!/usr/bin/env bash
@@ -80,13 +80,13 @@ shell: (_banner "lint" "shell")
         esac
         head -n 1 "$f" 2>/dev/null | grep -qE '^#!.*\b(bash|dash|ksh|sh)\b' && files+=("$f")
     done < <(git ls-files -z --cached --others --exclude-standard)
-    [ ${#files[@]} -eq 0 ] || shellcheck --rcfile .just/.shellcheckrc "${files[@]}"
+    [ ${#files[@]} -eq 0 ] || shellcheck --rcfile .limen/.shellcheckrc "${files[@]}"
     # Shebang recipes inside justfiles are shell scripts too — extract each
     # body from `just --dump --dump-format json` and shellcheck it standalone.
     # In the dump a body line is a fragment list: text fragments are strings,
     # interpolations (double-brace expressions — just syntax, not shell) are
     # arrays, masked as INTERP. One dump of the root justfile covers the whole
-    # tree: imports (project.just) are flattened into .recipes — they cannot be
+    # tree: imports (the root Justfile) are flattened into .recipes — they cannot be
     # parsed standalone, their dependencies may name root-level module paths —
     # and every `mod` nests recursively under .modules. mktemp gets an explicit
     # template because macOS mktemp ignores $TMPDIR.
@@ -95,9 +95,16 @@ shell: (_banner "lint" "shell")
     recipes=()
     dump=$(just --dump --dump-format json)
     # Bodies are multi-line: base64 carries each across the one-record-per-line
-    # pipe intact (quotes, tabs and all).
+    # pipe intact (quotes, tabs and all). The trailing tr matters: the native
+    # windows jq writes CRLF, and the stray \r lands in the last TSV field,
+    # corrupting the base64 ("base64: invalid input"). \r cannot legitimately
+    # appear in this stream (recipe names and base64), so a blanket strip is safe.
     while IFS=$'\t' read -r name body; do
-        out="$tmpdir/$name"
+        # ':' is illegal in windows filenames — the msys layer creates
+        # "do::lint" via a private-use encoding that native shellcheck then
+        # cannot open (openBinaryFile: invalid argument). The name is only a
+        # label; flatten module separators.
+        out="$tmpdir/${name//:/_}"
         printf '%s' "$body" | base64 -d > "$out"
         head -n 1 "$out" | grep -qE '^#!.*\b(bash|dash|ksh|sh)\b' || continue
         recipes+=("$out")
@@ -110,22 +117,24 @@ shell: (_banner "lint" "shell")
                     | join("\n") | @base64)]),
             ((.modules // {}) | to_entries[]
                 | .key as $mod | .value | recipes_of(prefix + $mod + "::"));
-        recipes_of("") | @tsv')
+        recipes_of("") | @tsv' | tr -d '\r')
+    # SC1010 is excluded for recipe bodies only: `just do <task>` is our shared
+    # namespace, and shellcheck misreads the argument "do" as the shell keyword.
     # The constant-word checks (SC2050/SC2078/SC2157/SC2194) are excluded for
     # recipe bodies only: a masked INTERP is constant to shellcheck but dynamic
     # in reality, so those hits can only be false positives of the masking.
-    [ ${#recipes[@]} -eq 0 ] || shellcheck --rcfile .just/.shellcheckrc --exclude=SC2050,SC2078,SC2157,SC2194 "${recipes[@]}"
+    [ ${#recipes[@]} -eq 0 ] || shellcheck --rcfile .limen/.shellcheckrc --exclude=SC1010,SC2050,SC2078,SC2157,SC2194 "${recipes[@]}"
 
 # Check documentation links with lychee (respects .gitignore, skips hidden files).
 links: (_banner "lint" "links")
     #!/usr/bin/env bash
     set -euo pipefail
     # A directory input (not a glob) is what makes lychee honor .gitignore/hidden.
-    # Canonical exclusions (and their rationale) live in .just/lychee.toml; a
+    # Canonical exclusions (and their rationale) live in .limen/lychee.toml; a
     # repository adds its own in a root lychee.toml. Both must be passed
     # explicitly — any --config disables lychee's ./lychee.toml auto-discovery —
     # and lychee merges them, concatenating the exclude lists.
-    args=(--config .just/lychee.toml)
+    args=(--config .limen/lychee.toml)
     if [ -f lychee.toml ]; then
         args+=(--config lychee.toml)
     fi
@@ -133,7 +142,7 @@ links: (_banner "lint" "links")
 
 # Validate commit hygiene — DCO sign-off, subject length, dangling whitespace —
 # over a commit range (default: everything ahead of the upstream default branch;
-# pass one explicitly otherwise, e.g. `just lint commits v1.0.0..HEAD`).
+# pass one explicitly otherwise, e.g. `just do lint commits v1.0.0..HEAD`).
 commits range="": (_banner "lint" "commits")
     #!/usr/bin/env bash
     set -euo pipefail
@@ -142,9 +151,9 @@ commits range="": (_banner "lint" "commits")
     # below verify signatures — this is convenience wiring, not enforcement.
     # See https://github.com/andyfeller/gh-ssh-allowed-signers for automation
     # to retrieve contributor keys.
-    if [ -f .just/allowed_signers ]; then
+    if [ -f .limen/allowed_signers ]; then
         git config --unset-all gpg.ssh.allowedSignersFile 2>/dev/null || true
-        git config --add gpg.ssh.allowedSignersFile .just/allowed_signers
+        git config --add gpg.ssh.allowedSignersFile .limen/allowed_signers
     fi
     range="{{ range }}"
     if [ -z "$range" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then

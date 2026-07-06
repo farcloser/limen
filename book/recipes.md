@@ -1,7 +1,7 @@
 # The shared recipes
 
 Every repository carries the same task-runner baseline: the canonical `Justfile` plus the
-shared `.just/` modules, content-pinned by `limen` (the pinning rule and file layout are in
+shared `.limen/` modules, content-pinned by `limen` (the pinning rule and file layout are in
 [mandatory files](./mandatory-files.md#justfile)). This chapter documents what that baseline
 *is* — the architecture and the conventions every shared recipe obeys — so the behavior you
 see from `just` is explainable, not folklore.
@@ -31,19 +31,19 @@ explicit, documented decision before their recipes can work.)
 
 ## Conventions every shared recipe follows
 
-- **Defaults pass vacuously.** Invoking a module bare (`just lint`, `just fix`) runs its
+- **Defaults pass vacuously.** Invoking a module bare (`just do lint`, `just do fix`) runs its
   curated `default`. The membership rule is in [mandatory
   files](./mandatory-files.md#justfile): a recipe belongs in a default only when it no-ops
   harmlessly where it does not apply; anything needing a language toolchain is named
-  explicitly (`just lint go`). The `test` module is the honest limit of that rule: *every*
-  test is language-bound, so bare `just test` refuses with guidance instead of guessing —
-  a project declares its suites as a `test-all` aggregate in `project.just` (mirroring
-  `lint-all`), and that pair is what CI runs.
+  explicitly (`just do lint go`). The `test` module is the honest limit of that rule: *every*
+  test is language-bound, so bare `just do test` refuses with guidance instead of guessing —
+  a project declares its suites as a `test` aggregate in the root `Justfile` (mirroring
+  `lint`), and that pair is what CI runs.
 - **Project knobs are exported variables, named after the task path.** A recipe that
   needs per-project configuration reads an environment variable named after its task path
-  — `LINT_GO_LICENSES_FLAGS` for `just lint go licenses`, `TEST_GO_TIMEOUT` and
+  — `LINT_GO_LICENSES_FLAGS` for `just do lint go licenses`, `TEST_GO_TIMEOUT` and
   `TEST_GO_COVER_MIN` for the test module, `BUILD_GO_FLAGS` for the build module. A
-  project sets them once in `project.just` (`export NAME := 'value'` — exports propagate
+  project sets them once in the root `Justfile` (`export NAME := 'value'` — exports propagate
   into every module recipe), or on the invocation for a one-off. The exception that
   proves the rule: `LIMEN_BIN` serves both `lint limen` and `fix limen`, so it carries
   the tool's name instead of one task's.
@@ -55,7 +55,7 @@ explicit, documented decision before their recipes can work.)
   loudly rather than hidden.
 - **Names are spelled out.** Recipes, commands, flags, and variables use explicit,
   qualified names that can be read and understood without a syllabus: `--dry-run`, never
-  `-n`; `just release`, never `just rel`; `limen github`, never `limen gh`. Shorthand
+  `-n`; `just do release`, never `just rel`; `limen github`, never `limen gh`. Shorthand
   flags and abbreviations optimize for the person who already knows — everything here is
   written for the person (or agent) who does not, yet. (Established tool names are not
   respelled: the `gh` binary is called `gh`.)
@@ -64,7 +64,7 @@ explicit, documented decision before their recipes can work.)
   that belongs to the underlying tool.
 - **Recipe bodies are themselves linted.** Multi-line recipes run under
   `#!/usr/bin/env bash` with `set -euo pipefail`, written to bash 3.2 (macOS's system
-  bash). `just lint shell` extracts every shebang recipe body from the parsed justfile
+  bash). `just do lint shell` extracts every shebang recipe body from the parsed justfile
   tree and shellchecks it — the recipes are held to the same standard as any shell the
   repo ships.
 - **Discovery respects git.** Recipes that scan for files (`lint just`, `lint shell`,
@@ -83,47 +83,48 @@ What each shared module is *for* — mechanics live in the module files themselv
   default; CGO is an explicit opt-in that adds the hardening flag set.
 - **`tools`** — the aqua manifest operations (`add`, `set`, `update`, `remove`) that keep
   `aqua.yaml` and `aqua-checksums.json` changing together; see
-  [tooling](./tooling.md#day-to-day-changes--the-just-tools-recipes).
+  [tooling](./tooling.md#day-to-day-changes--the-just-do-tools-recipes).
 - **`lint`** — read-only verifiers: `limen` (this repository against the rules — the
   first thing the default runs, since every other linter trusts the canonical files it
   verifies), `just`, `aqua`, `links`, `yaml`, `shell`, `dockerfile` in the default, plus
   the explicit `go` submodule (code, mod, vuln, licenses, and the informational
   bce/escape/deadcode reports), `rust`, and `commits` (DCO and commit hygiene over a
   range).
-- **`test`** — the suites, per language (`just test go`: `unit`, `race`, `bench`, `cover`
+- **`test`** — the suites, per language (`just do test go`: `unit`, `race`, `bench`, `cover`
   with an optional minimum gate, `profile` with rendered call graphs). No default — see
-  above: bare `just test` refuses, `just test-all` is the project's aggregate.
+  above: bare `just do test` refuses, `just test` is the project's aggregate.
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
   (rewrite drifted canonical files), `just`, `yaml` in the default, plus the `go`
   submodule. What `lint` reports, `fix` repairs — nothing mutates under a lint name.
 
 Two roles deserve emphasis because they close the enforcement loop:
 
-- **`just lint limen` / `just fix limen`** run the pinned `limen` binary against the
+- **`just do lint limen` / `just do fix limen`** run the pinned `limen` binary against the
   repository — the rules in this book, enforced from inside the baseline itself. The
   `LIMEN_BIN` knob exists for exactly one consumer: the limen repository, which points it
   at `go run ./cmd/limen` so its working tree is judged by its own enforcer rather than
   the (always older) released pin.
-- **`just release`** is shared but opt-in. The recipe lives in `.just/release.just`,
+- **`just do release`** is shared but opt-in. The recipe lives in `.limen/just/release.just`,
   imported *flat* into the canonical Justfile (a module invocation could not take the tag
   argument), and refuses before touching anything unless the repo carries a
-  `.goreleaser.yaml` — which stays project-owned, like `project.just`. Two lanes share
-  every guard. The **CI lane** (public repos, the default): `just release --cut vX.Y.Z`
+  `.goreleaser.yaml` — which stays project-owned, like the root Justfile. Two lanes share
+  every guard. The **CI lane** (public repos, the default): `just do release vX.Y.Z`
   verifies a clean tree, creates the *signed* tag — a human signs the intent — and pushes
-  it; the tag push triggers the release workflow, which runs `just release --ci`:
+  it; the tag push triggers the release workflow, which runs `just do release --ci`:
   goreleaser plus **keyless** cosign, the artifacts signed by the workflow's short-lived
   Fulcio identity (no key exists anywhere) and logged in Rekor. The **local lane**
   (private repos — nothing touches the public transparency log — and the escape hatch
-  when CI is down): `just release vX.Y.Z` does the same tag work, then runs goreleaser
-  with key-based cosign from the machine. `just release --dry-run` builds an unsigned
+  when CI is down): `just do release --local <cosign-key> vX.Y.Z` does the same tag work,
+  then runs goreleaser with key-based cosign — the key path is a mandatory argument, and
+  the passphrase is prompted (or passed with `--cosign-password`). `just do release --local --dry-run` builds an unsigned
   snapshot into `build/release/` in either lane. The recipe is the interface: the
   workflow contains no release logic of its own.
 
 ## Extending the baseline
 
-A new shared recipe goes into a module in limen's `.just/` (a new concern gets a new
+A new shared recipe goes into a module in limen's `.limen/` (a new concern gets a new
 module plus its `mod` line in the canonical `Justfile`); the content-pin then carries it
 to every repository on the next `limen fix`. A recipe only one project needs goes in that
-project's `project.just` — and must not shadow a shared module's name. Global changes are
+project's the root `Justfile` — and must not shadow a shared module's name. Global changes are
 proposed against limen itself, never edited locally: the shared files are locked by the
 content-pin, and drift is overwritten.

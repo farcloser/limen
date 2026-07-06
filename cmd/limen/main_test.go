@@ -20,17 +20,22 @@ func compliantRepo(t *testing.T) string {
 	}
 
 	files := map[string]string{
-		"README.md":                "# Thing",
-		"LICENSE":                  "Permission is hereby granted, free of charge.\nTHE SOFTWARE IS PROVIDED \"AS IS\".",
-		".editorconfig":            rules.CanonicalEditorconfig,
-		".gitignore":               strings.Join(rules.DefaultRequiredGitignore, "\n") + "\n",
-		"Justfile":                 rules.CanonicalJustfile,
-		"aqua.yaml":                limen.CanonicalAquaYAML,
-		"aqua-checksums.json":      "{}\n",
-		"aqua-policy.yaml":         rules.CanonicalAquaPolicy,
-		".just/aqua-registry.yaml": rules.CanonicalAquaRegistry,
-		".just/lychee.toml":        rules.CanonicalLychee,
-		".just/.yamlfmt":           rules.CanonicalYamlfmt,
+		"README.md":                 "# Thing",
+		"LICENSE":                   "Permission is hereby granted, free of charge.\nTHE SOFTWARE IS PROVIDED \"AS IS\".",
+		".editorconfig":             rules.CanonicalEditorconfig,
+		".gitignore":                strings.Join(rules.DefaultRequiredGitignore, "\n") + "\n",
+		".gitattributes":            rules.CanonicalGitattributes,
+		"Justfile":                  rules.CanonicalJustfileImport + "\n",
+		"aqua.yaml":                 limen.CanonicalAquaYAML,
+		"aqua-checksums.json":       "{}\n",
+		"aqua-policy.yaml":          rules.CanonicalAquaPolicy,
+		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
+		".limen/lychee.toml":        rules.CanonicalLychee,
+		".limen/.yamlfmt":           rules.CanonicalYamlfmt,
+		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
+		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
+		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
+		"renovate.json5":                              limen.CanonicalRenovate,
 	}
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
