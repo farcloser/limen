@@ -125,15 +125,56 @@ to `unverifiable` — which fails the check rather than faking compliance.
 
 ## Organization level
 
-Not yet implemented. The org-side plan — member privileges, org-wide Actions
-policy, security configurations, app-installation audits, org rulesets, and
-the org `.github` fallback repository — lives in
-[`design/LIMEN-GH.md`](../design/LIMEN-GH.md).
+`limen github check -org <name>` (and `fix -org <name>`) audits the
+organization's own settings — the layer that decides what every *new*
+repository is born with. The same floor semantics, verdict classes, and
+override file apply (org runs read the exceptions from the working directory,
+canonically the org's `.github` repository). The catalog:
+
+- **Membership floor** — members' default repository permission capped at
+  read, no member-created public repositories or public Pages sites, no
+  forking of private repositories, org-wide web-commit sign-off (the DCO
+  switch every repository inherits). All fixable through one consolidated
+  update. Two floors the API can read but not write — members changing
+  repository visibility or deleting repositories — report as advisories, and
+  the 2FA requirement is advisory by nature: enabling it evicts members
+  without 2FA, a human decision.
+- **The owner roster** is a deliberate standing advisory: declare the expected
+  roster by exempting `org-admins` in the override file with the names as the
+  reason — the declaration then lives in review, and any roster change shows
+  up as the audit going red.
+- **Org-wide Actions policy** — the org twin of the per-repository hardening,
+  so new repositories are born hardened: Actions restricted to GitHub-owned
+  (never "all"), SHA-pinned `uses:` required org-wide, read-only default
+  workflow token, no PR approvals from workflows, fork-PR approval for all
+  first-time contributors, and a self-hosted-runner inventory (baseline: none).
+- **Security configuration** — verifies a default code security configuration
+  exists for new repositories (the mechanism GitHub replaced the legacy
+  per-org security fields with). Advisory in v1: creating the canonical
+  configuration is a deliberate human act.
+- **Standing inventories** — installed GitHub Apps, org webhooks (HTTPS +
+  secret + TLS verification), org-level Actions secrets (names only), teams,
+  and fine-grained PAT grants: visible on every audit, so a grant nobody
+  remembers making has nowhere to hide.
+- **The org `.github` repository** — must exist, be public (GitHub silently
+  ignores a private one as a fallback source), and carry the canonical
+  community-health set: `SECURITY.md`, `CONTRIBUTING.md` (the DCO terms,
+  where contributors actually look), and the org profile README. Advisory
+  verdicts: creating repositories and authoring policy is human work, and the
+  repository's own compliance is enforced the way it always is — `limen
+  check` inside it.
+
+One deliberate absence: **org rulesets**. The per-repository `limen:main` /
+`limen:tags` rulesets remain authoritative; migrating them to org-level
+rulesets is phase 4 of [`design/LIMEN-GH.md`](../design/LIMEN-GH.md), together
+with the scheduled drift audit. Org reads need an owner-scoped token: the
+governed fields are simply absent from anonymous responses, and absent
+classifies as `unverifiable`, never as passing.
 
 ## Enforcement
 
-`limen github check [-repo owner/name]` verifies all of the above against the
-live repository and exits non-zero on any failure, advisory, or unverifiable
+`limen github check [-repo owner/name]` / `check -org <name>` verifies all of
+the above against the live target and exits non-zero on any failure, advisory, or unverifiable
 finding. It is the same command on a laptop and in CI. Settings drift *back*
 when humans click, so the end state (also in the design plan) is a scheduled
 audit. See [`../cmd/limen/`](../cmd/limen).

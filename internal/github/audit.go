@@ -15,6 +15,9 @@ var (
 	errVisibilityUnknown = errors.New(
 		"repository visibility could not be determined (the repository object was unreadable)",
 	)
+	errFieldNotVisible = errors.New(
+		"the field is absent from the response (owner-scoped — the token cannot see it)",
+	)
 )
 
 // Check identifiers — one per audited setting, spelled out (the naming
@@ -53,9 +56,11 @@ const (
 	checkDeployKeys           = "deploy-keys"
 )
 
-// knownChecks is every check identifier, for override-file validation.
+// knownChecks is every check identifier — repository and organization level
+// both — for override-file validation.
 func knownChecks() map[string]bool {
-	return map[string]bool{
+	checks := knownOrgChecks()
+	maps.Copy(checks, map[string]bool{
 		checkSecretScanning:       true,
 		checkPushProtection:       true,
 		checkDependabotAlerts:     true,
@@ -86,7 +91,9 @@ func knownChecks() map[string]bool {
 		checkRulesetVersionTags:   true,
 		checkWebhooks:             true,
 		checkDeployKeys:           true,
-	}
+	})
+
+	return checks
 }
 
 // Baseline values (the floor).
@@ -155,11 +162,11 @@ func optInChecks() map[string]bool {
 // auditor accumulates findings and the planned changes that would repair the
 // failing ones.
 type auditor struct {
-	client    client
-	overrides map[string]string
-	repoPatch map[string]any
-	findings  []Finding
-	changes   []Change
+	client        client
+	overrides     map[string]string
+	settingsPatch map[string]any
+	findings      []Finding
+	changes       []Change
 	// private/privateKnown carry the repository's visibility from
 	// auditRepoObject to the checks that only apply to private repositories.
 	private      bool
@@ -171,9 +178,9 @@ type auditor struct {
 // the findings and the changes a fix run would apply.
 func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
 	aud := &auditor{
-		client:    client{repo: repo},
-		overrides: overrides,
-		repoPatch: map[string]any{},
+		client:        repoClient(repo),
+		overrides:     overrides,
+		settingsPatch: map[string]any{},
 	}
 
 	aud.auditRepoObject()
@@ -182,7 +189,7 @@ func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
 	aud.auditCodeScanning()
 	aud.auditRulesets()
 	aud.auditSurface()
-	aud.flushRepoPatch()
+	aud.flushSettingsPatch()
 
 	return aud.findings, aud.changes
 }
@@ -213,6 +220,9 @@ func (a *auditor) flag(check string, status Status, current, desired, message st
 	})
 
 	if status == StatusFail && fix != nil {
+		// The change applies against whatever this audit targets — capture it
+		// here, the single point every planned change passes through.
+		fix.client = a.client
 		a.changes = append(a.changes, *fix)
 	}
 }
@@ -228,24 +238,25 @@ func (a *auditor) unverifiable(err error, checks ...string) {
 	}
 }
 
-// patchRepo stages one field of the consolidated PATCH /repos/{owner}/{repo}
-// call and returns the change entry describing it.
-func (a *auditor) patchRepo(check, summary string, fields map[string]any) *Change {
-	maps.Copy(a.repoPatch, fields)
+// patchSettings stages one field of the consolidated PATCH against the
+// audited target object (the repository or the organization) and returns the
+// change entry describing it.
+func (a *auditor) patchSettings(check, summary string, fields map[string]any) *Change {
+	maps.Copy(a.settingsPatch, fields)
 
-	// The apply is a no-op: flushRepoPatch emits one consolidated change for
+	// The apply is a no-op: flushSettingsPatch emits one consolidated change for
 	// every staged field, so per-field entries only carry the summary.
 	return &Change{Check: check, Summary: summary, apply: nil}
 }
 
-// flushRepoPatch replaces the per-field no-op applies with one consolidated
+// flushSettingsPatch replaces the per-field no-op applies with one consolidated
 // PATCH covering every staged repository field.
-func (a *auditor) flushRepoPatch() {
-	if len(a.repoPatch) == 0 {
+func (a *auditor) flushSettingsPatch() {
+	if len(a.settingsPatch) == 0 {
 		return
 	}
 
-	payload := a.repoPatch
+	payload := a.settingsPatch
 	for i := range a.changes {
 		if a.changes[i].apply == nil {
 			a.changes[i].apply = func(apiClient client) error {
@@ -298,7 +309,7 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 			strconv.FormatBool(settings.AllowRebaseMerge))
 		a.flag(checkMergeMethods, StatusFail, current, "merge=false squash=true rebase=true",
 			"merge commits must be disallowed (linear history); squash and rebase allowed",
-			a.patchRepo(checkMergeMethods, "merge methods: "+current+" → merge=false squash=true rebase=true",
+			a.patchSettings(checkMergeMethods, "merge methods: "+current+" → merge=false squash=true rebase=true",
 				map[string]any{
 					"allow_merge_commit": false,
 					"allow_squash_merge": true,
@@ -313,7 +324,7 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 		current := settings.SquashMergeCommitTitle + "/" + settings.SquashMergeCommitMessage
 		a.flag(checkSquashDefaults, StatusFail, current, baselineSquashTitle+"/"+baselineSquashMessage,
 			"squash commits must default to the pull request title and body",
-			a.patchRepo(checkSquashDefaults, "squash commit defaults: "+current+" → PR title/body",
+			a.patchSettings(checkSquashDefaults, "squash commit defaults: "+current+" → PR title/body",
 				map[string]any{
 					"squash_merge_commit_title":   baselineSquashTitle,
 					"squash_merge_commit_message": baselineSquashMessage,
@@ -403,7 +414,7 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 	if settings.Private && settings.AllowForking {
 		a.flag(checkForking, StatusFail, boolTrue, boolFalse,
 			"private repositories must not allow forking",
-			a.patchRepo(checkForking, "forking: allowed → disallowed",
+			a.patchSettings(checkForking, "forking: allowed → disallowed",
 				map[string]any{"allow_forking": false}))
 	} else {
 		a.flag(checkForking, StatusOK, "", "", "forking policy compliant", nil)
@@ -435,7 +446,7 @@ func (a *auditor) flagToggle(item toggle) {
 	}
 
 	a.flag(item.check, StatusFail, boolFalse, boolTrue, item.failMessage,
-		a.patchRepo(item.check, item.check+": → compliant", item.fields))
+		a.patchSettings(item.check, item.check+": → compliant", item.fields))
 }
 
 func (a *auditor) auditSecretScanning(settings repoSettings) {
@@ -451,7 +462,7 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 	} else {
 		a.flag(checkSecretScanning, StatusFail, disabledValue, enabledValue,
 			"secret scanning must be enabled",
-			a.patchRepo(checkSecretScanning, "secret scanning: disabled → enabled",
+			a.patchSettings(checkSecretScanning, "secret scanning: disabled → enabled",
 				map[string]any{"security_and_analysis": map[string]any{
 					"secret_scanning": map[string]any{"status": enabledValue},
 				}}))

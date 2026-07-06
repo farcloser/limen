@@ -345,7 +345,7 @@ is immediate. Only the *automated checks* of it wait for phase 3.
 |---|---|---|
 | 1 | `limen github check --repo`: R1 + R2 + R3 + R5 (read-only), verdict classes, `gh` transport + fixtures | first |
 | 2 | `limen github fix --repo` (plan/apply) for R1/R2/R3/R5 ✓-items; R4 rulesets check+fix; R6 audits | after 1 settles |
-| 3 | `--org`: O1–O7, incl. the `.github` repo work and community-profile resolution | after the org has >1 active repo under it |
+| 3 | `-org`: O1–O7, incl. the `.github` repo work and community-profile resolution | **shipped 2026-07-06** (O3 advisory-only in v1 — the legacy org security fields are closing down, so the check verifies a default code-security configuration exists; O5 stays in phase 4 per this table; the visibility/deletion member floors are read-only in the REST API and report as advisories) |
 | 4 | Scheduled drift audit (weekly workflow running `limen github check`, failing loudly); org rulesets migration (O5); PR-time dry-run à la safe-settings | last |
 
 ## Auth & scopes

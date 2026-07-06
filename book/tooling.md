@@ -62,6 +62,80 @@ aqua matches every paramount requirement directly:
 instead of a pinned binary checksum). If hermetic rebuild verification of those *specific* Go
 tools ever becomes the paramount axis, revisit Nix for that subset.
 
+## Tools without upstream binaries: the sourcing ladder
+
+aqua consumes prebuilt artifacts; it does not build C (`go_install` and `cargo` are the only
+compiling package types). When a tool's upstream publishes no usable release binaries, work
+down this ladder — each rung is a weaker trust position than the one above, and the rung
+must be chosen deliberately, not by whatever the registry happens to carry:
+
+1. **Upstream binaries on GitHub releases** → the standard registry, done. Beware
+   *lookalikes*: a registry hit is not an endorsement. Case in point: the registry's only
+   curl is a solo-maintained build org whose binaries ship unsigned (trust-on-first-use
+   only) under an organization name that suggests a project it is not affiliated with —
+   for a tool that bundles its own TLS stack, that is below our bar.
+2. **A signed, maintainer-operated channel outside GitHub** → an `http`-type entry in the
+   local registry, with the signature verified at every version bump (aqua pins the
+   checksum after first fetch; the signature check is what makes the *first* fetch
+   trustworthy). Renovate cannot watch arbitrary HTTP indexes well — these entries bump
+   manually, ritual below.
+3. **Nothing trustworthy exists** → a first-party `build-<tool>` repository: fork and audit
+   the best available build scripts once, run them in our CI, attest the artifacts
+   (`actions/attest-build-provenance` — aqua verifies GitHub Artifact Attestations
+   natively), publish through the local registry like limen itself. Naming: the `build-`
+   prefix marks the "we build someone else's project" class; upstream-mirroring tags with
+   a deliberate rebuild-suffix convention (mind semver: `X.Y.Z-1` sorts *before* `X.Y.Z`).
+   Building is the last resort — it is a standing maintenance commitment (toolchain rot,
+   upstream CVE cadence), so a repo on this rung must have Renovate watching the upstream.
+
+### Case study: curl
+
+The baseline needs a curl with dependable TLS 1.3 on every platform, and no single
+trustworthy upstream channel covers them all — so curl is packaged first-party by
+`farcloser/build-curl`, one package for every platform
+(rung 3 carrying a rung-2 import): the windows binaries are curl-for-win's own official
+builds, sigstore-verified against a vendored, cross-checked key and repackaged; the
+linux (static musl) and macOS (universal) legs are built in our CI by curl-for-win's
+build scripts at an audited commit pin — one build lineage for every platform, every
+archive GitHub-attested (aqua verifies attestations natively). The platform findings
+that shaped this:
+
+- **Windows**: rung 2. The curl project itself operates
+  [curl-for-win](https://github.com/curl/curl-for-win): reproducible static builds, signed
+  four ways (sigstore bundle, minisign, SSH, PGP), distributed at
+  `https://curl.se/windows/dl-<version>_<rev>/curl-<version>_<rev>-{win64,win64a}-mingw.tar.xz`
+  (`win64` = amd64, `win64a` = arm64; a `.txt` sidecar carries the artifact's SHA256; the
+  archive root is `curl-<version>_<rev>-<cpu>-mingw/` with `bin/curl.exe`). Ready-to-paste
+  local-registry entry:
+
+  ```yaml
+  - type: http
+    name: curl/curl-for-win
+    description: Reproducible, signed curl binaries from the curl project (windows ONLY)
+    url: https://curl.se/windows/dl-{{.Version}}/curl-{{.Version}}-{{.Arch}}-mingw.{{.Format}}
+    format: tar.xz
+    replacements:
+      amd64: win64
+      arm64: win64a
+    files:
+      - name: curl
+        src: curl-{{.Version}}-{{.Arch}}-mingw/bin/curl.exe
+    supported_envs:
+      - windows
+  ```
+
+  The bump ritual (rung 2's price): fetch the new artifact and its `.sigstore` bundle, then
+  `cosign verify-blob --key cosign.pub.asc --bundle <pkg>.sigstore <pkg>` (key in the
+  curl-for-win repo) **before** `aqua update-checksum` commits the new pin.
+- **Linux / macOS**: curl-for-win *builds* these but does not distribute them (its deploy
+  lane is windows-only — verified, not assumed), so there is no rung-2 channel: staying on
+  the base-system prerequisite is the strongest available position (distro / Apple supply
+  chains). If pinning ever becomes mandatory, that is rung 3 — and the linux leg of a
+  `build-curl` may legitimately use Nix's static-build machinery (`pkgsStatic`), which
+  pins the entire build toolchain; the same is NOT true for the windows/macOS legs
+  (mingw-arm64 absent, `/nix/store`-referencing mac binaries), which is one more reason
+  rung 2 exists.
+
 ---
 
 ## Machine setup: limen-install (one-time, per machine)

@@ -485,8 +485,8 @@ Usage:
   limen check [-json] [path]              Check the repository at path (default ".")
   limen fix [-json] [path]                Remediate the repository at path (default ".")
   limen bootstrap [flags] <path>          Create a new compliant repository at path
-  limen github check [-repo owner/name]   Audit GitHub repository settings (via gh)
-  limen github fix [-repo] [-yes]         Repair the fixable GitHub settings
+  limen github check [-repo owner/name] [-org name]   Audit GitHub repository or organization settings (via gh)
+  limen github fix [-repo] [-org] [-yes]  Repair the fixable GitHub settings
   limen version                           Print the limen version
   limen help                              Show this help
 

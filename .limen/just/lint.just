@@ -10,12 +10,18 @@ set quiet
 # Shared private _banner recipe (see _lib.just).
 import '_lib.just'
 
-default: limen just aqua links yaml shell dockerfile commits
+default: links yaml shell dockerfile commits just aqua limen
 
 # Go linters live in their own submodule: `just do lint go` runs them all,
 # `just do lint go <recipe>` (e.g. `just do lint go mod`) runs one.
 mod go 'lint-go.just'
 mod rust 'lint-rust.just'
+
+# Homebrew formula linting (`just do lint homebrew`): brew's own vendored
+# tooling, resolved by absolute path — the machine-layer exception documented
+# in the module itself. Explicit like the language modules, not in the
+# default set.
+mod homebrew 'lint-homebrew.just'
 
 # limen itself: verify the repository against the Farcloser engineering rules
 # (mandatory files, canonical baseline, license, aqua pins). First in the

@@ -345,7 +345,7 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 	}
 
 	for _, planned := range changes {
-		if err := planned.Apply(testRepo); err != nil {
+		if err := planned.Apply(); err != nil {
 			t.Errorf("%s: %v", planned.Check, err)
 		}
 	}
@@ -505,7 +505,7 @@ func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by desig
 
 	for _, planned := range changes {
 		if planned.Check == checkForkPRApproval {
-			if err := planned.Apply(testRepo); err != nil {
+			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -584,7 +584,7 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 
 	for _, planned := range changes {
 		if planned.Check == checkCodeScanning {
-			if err := planned.Apply(testRepo); err != nil {
+			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -651,7 +651,7 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 
 	for _, planned := range changes {
 		if planned.Check == checkRulesetDefaultBranch {
-			if err := planned.Apply(testRepo); err != nil {
+			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}

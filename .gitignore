@@ -16,6 +16,7 @@ WIP_*
 
 # Build output and Go artifacts (subprojects keep their own .gitignore too)
 /build
+/tmp
 
 # =========================
 #  Rust

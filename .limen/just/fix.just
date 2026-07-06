@@ -34,3 +34,4 @@ yaml: (_banner "fix" "yaml")
 # `just do fix go <recipe>` (e.g. `just do fix go mod`) runs one.
 mod go 'fix-go.just'
 mod rust 'fix-rust.just'
+mod homebrew 'fix-homebrew.just'
