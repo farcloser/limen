@@ -270,6 +270,7 @@ const justfileSeed = "# This file is the project's own.\n" +
 	"\n" +
 	"# The FIRST recipe defined here becomes `just`'s default.\n" +
 	"lint: do::lint::default\n" +
+	"fix: do::fix::default\n" +
 	"test:\n"
 
 // remediateJustfile handles the task runner's two regimes: the root Justfile

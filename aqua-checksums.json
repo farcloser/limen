@@ -51,23 +51,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.1/limen_0.0.0-test.1_darwin_amd64.tar.gz",
-      "checksum": "2B09B245B7F7D3C55561418ED29A885A3F2E00163A34B417901A32DC388060BC",
+      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_darwin_amd64.tar.gz",
+      "checksum": "0A5DA0EFE10DF07B77C0979955FEE7A2943CEE5D2581D53C965CD88BD317101E",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.1/limen_0.0.0-test.1_darwin_arm64.tar.gz",
-      "checksum": "FAA38E03F5F32F2B3240375A5A8A54053FB9E3DDBAAE26A38FDD2F897D49A076",
+      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_darwin_arm64.tar.gz",
+      "checksum": "0B07BA3FC6E89D58A3F230F0A2513B6B2E55FF50B94D83DC3F7708E865F2A7B5",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.1/limen_0.0.0-test.1_linux_amd64.tar.gz",
-      "checksum": "68238D869E1A3E0BEB3E5CF0871499B40EF5BC98BDC87B092B0D6F292F761651",
+      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_linux_amd64.tar.gz",
+      "checksum": "1D6CA0E666E3647E422669369FAB575F1F8686B92A8E92A5D514BAB1301CA55F",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.1/limen_0.0.0-test.1_linux_arm64.tar.gz",
-      "checksum": "B0CDDBFC26EE2159A41DF9B0AF78B5CEB454907873ECD9437539150BBFDCE36C",
+      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_linux_arm64.tar.gz",
+      "checksum": "B1494FEA72A056F4483B2D45454F1129194E2330070564E12594A6436DC9015D",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/farcloser/limen/v0.0.0-test.8/limen_0.0.0-test.8_windows_amd64.tar.gz",
+      "checksum": "D241EDBF7140238A03977FF7B55324A760F4CE84E1B9CE980194015FEB19B58B",
       "algorithm": "sha256"
     },
     {
