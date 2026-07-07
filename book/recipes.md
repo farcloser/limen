@@ -67,9 +67,16 @@ explicit, documented decision before their recipes can work.)
   bash). `just do lint shell` extracts every shebang recipe body from the parsed justfile
   tree and shellchecks it — the recipes are held to the same standard as any shell the
   repo ships.
-- **Discovery respects git.** Recipes that scan for files (`lint just`, `lint shell`,
-  `lint dockerfile`) enumerate via `git ls-files` — tracked and new-untracked files,
-  honoring `.gitignore` — so generated and vendored trees never surprise a lint run.
+- **Discovery respects git; judgment respects the working tree.** Recipes that scan for
+  files (`lint just`, `lint shell`, `lint dockerfile`, the homebrew modules) enumerate via
+  `git ls-files` — tracked and new-untracked files, honoring `.gitignore` — so generated
+  and vendored trees never surprise a lint run. That is git's whole role in a recipe:
+  enumeration, plus the questions that are genuinely about history (`lint commits`). What
+  gets *judged* is always the working tree as it stands: enumerated paths are
+  existence-checked before reaching a tool (a tracked file deleted but not yet staged is
+  a skip, not an error), and `lint aqua` compares the checksums file against a
+  regeneration from the working tree's manifest — never against HEAD or the index.
+  Commit timing must never change a lint verdict.
 
 ## The modules, briefly
 
