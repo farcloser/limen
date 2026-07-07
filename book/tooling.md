@@ -365,6 +365,46 @@ This is the formal, auditable, low-toil update process that replaces the old han
 `Makefile`: every tool change is a reviewed PR with verified checksums, pinned exactly, per
 project.
 
+### The push credential — one-time org setup
+
+The fix-up commit carries a credential subtlety. When the workflow pushes with the default
+`GITHUB_TOKEN`, GitHub deliberately suppresses workflow runs on that commit — the PR's CI
+never re-runs on its final state, and with required checks enabled the PR head has zero
+check runs and is **unmergeable**. The cure is a credential whose pushes do trigger CI.
+The workflow accepts two, in order of preference:
+
+1. **A GitHub App — the recommended route.** Not infrastructure: an App with its webhook
+   disabled is nothing but a registered identity with a private key. The workflow mints a
+   fresh installation token per run — one hour, scoped to that single repository — so no
+   long-lived broad credential ever sits in a secret, and nothing expires on a calendar.
+
+   `limen bootstrap` automates the whole thing (`-org <name>`, or inferred from the origin
+   remote): it registers the App through GitHub's app-manifest flow — one approval click in
+   the browser, one more to install it — and stores the id and key on the org. The step is
+   idempotent (a configured org is verified and left alone), and anything it cannot do or
+   verify under the current gh token — no org admin, no browser, a half-configured org —
+   is a printed warning, never a failed bootstrap. Rerun any time.
+
+   The manual equivalent, one-time setup per org:
+   - Register an App on the org (Settings → Developer settings → GitHub Apps): webhook
+     disabled, repository permission **Contents: read and write**, nothing else.
+   - Generate a private key, and install the App on the org, all repositories.
+   - Set the org **variable** `UPDATE_AQUA_CHECKSUM_APP_ID` and the org **secret**
+     `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`.
+
+   Every org registers **its own** App (farcloser's instance is *LimenReApp*). Apps are
+   not shareable for this purpose: minting tokens requires the private key, and a private
+   key must never leave the org that owns it — installing someone else's App would grant
+   *that org* write access to your repositories while giving your own workflows nothing
+   to mint with.
+2. **A fine-grained PAT** — contents: read and write, stored as the org secret
+   `UPDATE_AQUA_CHECKSUM_TOKEN` — the drop-in fallback. It works identically, but it is
+   bound to a user account and it expires: when it lapses, the workflow silently degrades
+   to the default token and bump PRs go back to being blocked. Prefer the App.
+
+Without either, the workflow still runs and pushes — only the CI re-run is lost:
+tolerable without required checks, blocking with them.
+
 ## Enforcement
 
 `limen check [path]` verifies the aqua rule alongside the [mandatory files](./mandatory-files.md).

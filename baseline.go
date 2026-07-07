@@ -134,7 +134,7 @@ var CanonicalOverrideExample string
 // above and are not just modules, so JustModules ignores them.
 //
 // The all: prefix is required: a plain //go:embed silently drops files whose
-// names begin with "_" or "." (e.g. a shared _lib.just), which would leave them
+// names begin with "_" or "." (e.g. a shared lib.just), which would leave them
 // unpinned and unenforced. all: embeds every file so JustModules catches every
 // *.just under .limen/, whatever it is named.
 //

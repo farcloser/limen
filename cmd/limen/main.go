@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/farcloser/limen/internal/github"
 	"github.com/farcloser/limen/internal/license"
 	"github.com/farcloser/limen/internal/rules"
 )
@@ -247,11 +248,16 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 	force := flagSet.Bool("force", false, "proceed even if the target directory is not empty")
 	licenseID := flagSet.String("license", string(license.Closed), "license for the new repository")
 	holder := flagSet.String("holder", "Farcloser", "copyright holder for a generated LICENSE")
+	org := flagSet.String(
+		"org",
+		"",
+		"GitHub organization to configure the update-App credential for (default: inferred from the origin remote, skipped if neither)",
+	)
 
 	flagSet.Usage = func() {
 		_, _ = fmt.Fprintln(
 			stderr,
-			"Usage: limen bootstrap [-license id] [-holder name] [-force] [-json] <path>",
+			"Usage: limen bootstrap [-license id] [-holder name] [-org name] [-force] [-json] <path>",
 		)
 
 		flagSet.PrintDefaults()
@@ -322,7 +328,42 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	ensureUpdateApp(*org, root, stderr)
+
 	return 0
+}
+
+// ensureUpdateApp converges the org-level push credential of the
+// update-aqua-checksum workflow (book/tooling.md). It is idempotent, and it
+// never moves bootstrap's exit code: whatever cannot be done or verified —
+// no org known, a token without org admin, an abandoned browser flow — is a
+// warning, because the repository itself bootstrapped fine and this step can
+// be rerun any time.
+func ensureUpdateApp(org, root string, stderr io.Writer) {
+	if org == "" {
+		slug, err := github.InferRepo(root)
+		if err == nil {
+			org, _, _ = strings.Cut(slug, "/")
+		}
+	}
+
+	if org == "" {
+		_, _ = fmt.Fprintln(
+			stderr,
+			"limen: warning: update-app: no organization known (no -org, no origin remote) — rerun with -org, or see book/tooling.md",
+		)
+
+		return
+	}
+
+	finding := github.EnsureUpdateAquaChecksumApp(org, stderr)
+	if finding.OK() {
+		_, _ = fmt.Fprintf(stderr, "limen: update-app: %s\n", finding.Message)
+
+		return
+	}
+
+	_, _ = fmt.Fprintf(stderr, "limen: warning: update-app: %s\n", finding.Message)
 }
 
 // installTooling runs aqua to make the repo's pinned tools available: it
@@ -501,11 +542,15 @@ Usage:
 bootstrap flags:
   -license id     License for the new repo (default "Closed-source")
   -holder name    Copyright holder for a generated LICENSE (default "Farcloser")
+  -org name       GitHub organization to configure the update-App credential
+                  for (default: inferred from the origin remote; skipped, with
+                  a warning, when neither is available)
   -force          Proceed even if the target directory is not empty
 
 After writing files, bootstrap runs "aqua policy allow aqua-policy.yaml",
 "aqua update-checksum --prune", and "aqua install --only-link" to install the
-pinned tooling.
+pinned tooling, then converges the org's update-App credential (idempotent;
+anything it cannot do or verify under the current gh token is a warning).
 
 Exit codes:
   0  success (check: all passed; fix/bootstrap: all rules resolved)

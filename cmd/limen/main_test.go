@@ -251,3 +251,19 @@ func TestReleaseVersion(t *testing.T) { //nolint:paralleltest // serial by desig
 		version = prev
 	}
 }
+
+// TestEnsureUpdateAppNoOrg: with no -org and no origin remote — the common
+// case for a freshly bootstrapped directory — the update-App step is a
+// warning that names the way forward, never a failure.
+func TestEnsureUpdateAppNoOrg(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+
+	ensureUpdateApp("", t.TempDir(), &stderr)
+
+	warning := stderr.String()
+	if !strings.Contains(warning, "warning") || !strings.Contains(warning, "-org") {
+		t.Errorf("no-org bootstrap did not warn usably: %q", warning)
+	}
+}
