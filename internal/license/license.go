@@ -152,8 +152,23 @@ func isApache20(n string) bool {
 	return strings.Contains(n, "apache license") && strings.Contains(n, "version 2.0")
 }
 
+// agplTitleWindow bounds how deep into the normalized text the AGPL's name may
+// appear and still count as the document's own title. Other licenses *mention*
+// the AGPL by name deep in their bodies — GPL-3.0 §13 (~28k chars in), MPL-2.0
+// §1.12 (~2.3k chars in), and SPDX's LGPL-3.0 text, which appends the full
+// GPL-3.0 — and every one of them also contains "version 3", so an unanchored
+// substring match passes all three as AGPL-3.0. The genuine text announces
+// itself in its first line; 512 characters leaves room for a prepended
+// copyright or short preamble while staying well clear of MPL's §1.12.
+const agplTitleWindow = 512
+
 func isAGPL30(n string) bool {
-	return strings.Contains(n, "affero general public license") && strings.Contains(n, "version 3")
+	head := n
+	if len(head) > agplTitleWindow {
+		head = head[:agplTitleWindow]
+	}
+
+	return strings.Contains(head, "affero general public license") && strings.Contains(head, "version 3")
 }
 
 // isCC recognizes a Creative Commons 4.0 license. It accepts either the prose
