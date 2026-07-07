@@ -12,6 +12,14 @@ import 'lib.just'
 
 # --- Project tooling via aqua (see book/tooling.md). Each recipe takes the
 #     owner/repo exactly as it appears in aqua.yaml, e.g. golangci/golangci-lint. ---
+#
+# The mutating recipes end with a FULL `aqua install`, never `--only-link`:
+# links verify nothing (lazy pulls are a CI economy — wrong at the moment a
+# pin changes), and for checksum-less package types (go_install) the
+# update-checksum step is silent too, so a broken pin would exit green and
+# detonate at first tool use (e.g. a nested, untagged Go module pinned to a
+# repo tag its module zip does not contain). On a warm machine the full
+# install is incremental — only the touched tool downloads or builds.
 
 # Add a new tool at its latest version, e.g. `just do tools add junegunn/fzf`.
 add pkg: (_banner "tools" "add")
@@ -23,7 +31,7 @@ add pkg: (_banner "tools" "add")
     fi
     aqua generate -i "{{ pkg }}"      # append the latest version to aqua.yaml
     aqua update-checksum --prune      # record its checksum (and drop stale ones)
-    aqua install --only-link          # install and verify
+    aqua install                      # REAL install: a bad pin fails here, not at first use
 
 # Set an existing tool to an exact version, e.g. `just do tools set golangci/golangci-lint v1.55.3`.
 set pkg version: (_banner "tools" "set")
@@ -41,7 +49,7 @@ set pkg version: (_banner "tools" "set")
     sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*{{ pkg }})@[^[:space:]]*#\1@{{ version }}#" aqua.yaml > "$tmp"
     mv "$tmp" aqua.yaml
     aqua update-checksum --prune      # new checksum in, replaced version's out
-    aqua install --only-link          # install and verify
+    aqua install                      # REAL install: a bad pin fails here, not at first use
 
 # Update an existing tool to its latest version, e.g. `just do tools update golangci-lint`.
 # Takes the COMMAND name (the executable you type — `just`, `limen`), not the
@@ -54,7 +62,7 @@ update command: (_banner "tools" "update")
     set -euo pipefail
     aqua update "{{ command }}"       # bump aqua.yaml to the latest release
     aqua update-checksum --prune      # new checksum in, replaced version's out
-    aqua install --only-link          # install and verify
+    aqua install                      # REAL install: a bad pin fails here, not at first use
 
 # Remove a tool entirely, e.g. `just do tools remove junegunn/fzf`.
 remove pkg: (_banner "tools" "remove")
