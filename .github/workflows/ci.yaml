@@ -43,15 +43,17 @@ jobs:
       matrix:
         # Pinned images, not -latest: a runner bump is a reviewed change.
         # macOS is not redundant: its /bin/bash is 3.2, the portability floor
-        # the shared recipes target. arm64 (ubuntu-24.04-arm) and windows
-        # cover the rest of the supported release matrix — windows runs the
-        # recipes under git-bash.
+        # the shared recipes target. arm64 (ubuntu-24.04-arm, windows-11-arm)
+        # and windows cover the rest of the supported release matrix — both
+        # windows legs run the recipes under git-bash (native arm64 tools
+        # where upstream ships them, Prism-emulated amd64 via aqua's
+        # windows_arm_emulation where it does not).
         # These entries are also the default required-status-check contexts of
         # the canonical limen:main ruleset (defaultRequiredChecks in
         # internal/github/audit.go) — change the two together, in one release.
-        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025, windows-11-arm]
     runs-on: ${{ matrix.os }}
-    # Generous for the windows leg: those runners are markedly slower, and the
+    # Generous for the windows legs: those runners are markedly slower, and the
     # per-GOOS lint recipes now run three legs each.
     timeout-minutes: 45
     permissions:
