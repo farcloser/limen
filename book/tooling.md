@@ -259,7 +259,8 @@ cd <repo>
 # Authorize the project's local registry (one-time per machine):
 aqua policy allow aqua-policy.yaml
 
-# Install the exact pinned versions, verified against the committed checksums:
+# Link the pinned tools (each downloads lazily on first use, verified against
+# the committed checksums at that moment):
 aqua install --only-link
 
 # Tools now resolve to the project's pinned versions:
@@ -300,9 +301,13 @@ just do tools update golangci-lint                   # bump an existing tool (by
 just do tools remove junegunn/fzf                    # remove a tool entirely
 ```
 
-Every recipe ends by refreshing the checksum (`aqua update-checksum`) and installing/verifying
-(`aqua install --only-link`), so a green run means the new state is already checksum-verified. Commit both
-files afterward:
+The mutating recipes (`add`, `set`, `update`) end by refreshing the checksum
+(`aqua update-checksum`) and then performing a **full** `aqua install` — deliberately not
+link-only: links verify nothing, and for checksum-less package types (`go_install`) the
+checksum step is silent too, so only a real install proves the new pin resolves, builds,
+and verifies. A green run means exactly that; a bad pin fails inside the recipe instead of
+at first tool use. (`remove` ends at the checksum refresh — nothing is left to install.)
+Commit both files afterward:
 
 ```bash
 git add aqua.yaml aqua-checksums.json
