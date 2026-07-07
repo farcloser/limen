@@ -30,8 +30,12 @@ just: (_banner "fix" "just")
     set -euo pipefail
     # --cached --others --exclude-standard: tracked *and* new untracked files,
     # still honoring .gitignore — so a not-yet-staged file is formatted too.
-    git ls-files -z --cached --others --exclude-standard 'justfile' 'Justfile' '*.just' '**/justfile' \
-      | xargs -0 -I{} just --fmt --justfile {}
+    # Tracked-but-deleted files are skipped (see `lint just` for the rationale:
+    # enumeration is git's, truth is the working tree's).
+    while IFS= read -r -d '' f; do
+        [ -f "$f" ] || continue
+        just --fmt --justfile "$f"
+    done < <(git ls-files -z --cached --others --exclude-standard 'justfile' 'Justfile' '*.just' '**/justfile')
 
 yaml: (_banner "fix" "yaml")
     yamlfmt -conf .limen/.yamlfmt
