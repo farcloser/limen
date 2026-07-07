@@ -71,8 +71,8 @@ limen github fix              # repair the fixable settings, plan-then-apply
 aqua rule that includes regenerating `aqua-checksums.json` with aqua itself (`aqua policy
 allow` + `aqua update-checksum --prune`) whenever it changed the manifest or the file is
 missing. `bootstrap` is `fix` on an empty directory, and finishes by installing the pinned
-tooling (`aqua policy allow` + `aqua update-checksum --prune` + `aqua install --only-link`;
-skip with `-skip-install`). Add `-json` to any of them. `bootstrap` writes a `Closed-source`
+tooling (`aqua policy allow` + `aqua update-checksum --prune` + `aqua install --only-link`).
+Add `-json` to any of them. `bootstrap` writes a `Closed-source`
 `LICENSE` by default (`-license <id>`, `-holder <name>`).
 
 Exit codes: `0` success (all passed / all resolved) · `1` a rule failed or needs manual

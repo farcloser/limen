@@ -4,6 +4,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -117,18 +119,57 @@ func TestRunFixAndBootstrap(t *testing.T) {
 
 // TestBootstrapProducesCompliantRepo bootstraps a fresh directory and checks that
 // the result passes `limen check`. It shells out to `git init`; if git is absent
-// or the environment forbids it, the test is skipped rather than failed. Tool
-// install is skipped so the test does not require aqua or a network.
-func TestBootstrapProducesCompliantRepo(t *testing.T) {
-	t.Parallel()
+// or the environment forbids it, the test is skipped rather than failed. A stub
+// `aqua` on PATH keeps the install step hermetic (no real aqua, no network) and
+// records the calls bootstrap makes, so the exact install sequence is asserted
+// instead of suppressed.
+func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
+	stubDir := t.TempDir()
+	stub := filepath.Join(stubDir, "aqua")
+	script := "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/log\"\n"
+
+	if runtime.GOOS == "windows" {
+		stub += ".bat"
+		script = "@echo off\r\n>> \"%~dp0log\" echo %*\r\n"
+	}
+
+	// 0o700, not 0o600: the stub must be executable.
+	if err := os.WriteFile(stub, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	dir := filepath.Join(t.TempDir(), "newrepo")
-	if code := run([]string{"bootstrap", "-skip-install", dir}, io.Discard, io.Discard); code != 0 {
+	if code := run([]string{"bootstrap", dir}, io.Discard, io.Discard); code != 0 {
 		t.Skipf("bootstrap returned %d (likely git init unavailable in this environment)", code)
 	}
 
 	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
 		t.Errorf("check on a bootstrapped repo = %d, want 0", code)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(stubDir, "log"))
+	if err != nil {
+		t.Fatalf("the aqua stub was never invoked: %v", err)
+	}
+
+	want := []string{
+		"--log-level warn policy allow aqua-policy.yaml",
+		"--log-level warn update-checksum --prune",
+		"--log-level warn install --only-link",
+	}
+
+	var got []string
+
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			got = append(got, line)
+		}
+	}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("aqua invocations = %q, want %q", got, want)
 	}
 }
 
@@ -151,6 +192,29 @@ func TestRunFlagPositionIndependent(t *testing.T) {
 
 		if !strings.HasPrefix(strings.TrimSpace(out.String()), "[") {
 			t.Errorf("run(%v) did not emit JSON, got:\n%s", args, out.String())
+		}
+	}
+}
+
+// TestGithubRejectsPositionalArgs: the github subcommands take their target
+// via -repo/-org only. A stray positional was once silently dropped (with
+// every flag after it), so `limen github check owner/name` audited whatever
+// the current directory's origin pointed at — reporting for the wrong target
+// as if the request had been honored.
+func TestGithubRejectsPositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"github", "check", "owner/name"},
+		{"github", "fix", "owner/name", "-json"},
+	} {
+		var errOut strings.Builder
+		if code := run(args, io.Discard, &errOut); code != 2 {
+			t.Errorf("run(%v) = %d, want 2", args, code)
+		}
+
+		if !strings.Contains(errOut.String(), "-repo") {
+			t.Errorf("run(%v) stderr should point at -repo/-org, got: %s", args, errOut.String())
 		}
 	}
 }

@@ -53,8 +53,11 @@ var (
 	// "latest" are moving targets and fail the rule.
 	aquaExactRefRE = regexp.MustCompile(`^(v\d+\.\d+\.\d+|[0-9a-f]{40})$`)
 	// The canonical farcloser/limen package pin, version excluded — trailing
-	// content (the renovate comment) survives a rewrite.
-	aquaSelfPinRE = regexp.MustCompile(`^(\s*-\s+name:\s*farcloser/limen@)[^\s#]+`)
+	// content (a closing quote, the renovate comment) survives a rewrite. The
+	// optional quote mirrors parsePackages, which strips quotes when extracting
+	// names: a quoted pin that satisfies the presence check must also be the
+	// pin the baseline-owned version move finds.
+	aquaSelfPinRE = regexp.MustCompile(`^(\s*-\s+name:\s*["']?farcloser/limen@)[^\s#"']+`)
 )
 
 // rewriteSelfPin returns lines with any farcloser/limen pin set to version —
@@ -93,8 +96,10 @@ func mustParseCanonicalAqua() aquaManifest {
 
 // parseAquaManifest reads an aqua.yaml into its governed sections and package
 // names. ok is false when the file does not have the prescribed shape (a
-// governed section in flow style — except the empty "packages: []" — or a
-// duplicated top-level key); callers must then fail or advise, never guess.
+// governed section in flow style — except the empty "packages: []", and only
+// with nothing but comments in its body — a duplicated top-level key, or any
+// top-level line that is not a bare-word key, a comment, or blank); callers
+// must then fail or advise, never guess.
 func parseAquaManifest(text string) (aquaManifest, bool) {
 	manifest := aquaManifest{lines: strings.Split(text, "\n")}
 	sections := map[string]*aquaSection{
@@ -108,6 +113,17 @@ func parseAquaManifest(text string) (aquaManifest, bool) {
 	for lineIndex, line := range manifest.lines {
 		match := aquaTopKeyRE.FindStringSubmatch(line)
 		if match == nil {
+			// Only shapes the line parser can bound may sit at the top level:
+			// a bare-word key (matched above), a comment, a blank line, or an
+			// indented continuation. Anything else — a quoted or dotted key,
+			// a document marker, a root-level list — is YAML this parser does
+			// not understand as a section boundary; absorbed into the open
+			// section's range, it would be relocated, rewritten, or deleted by
+			// a merge that believes it owns those lines. Refuse instead.
+			if !aquaInertLine(line) && lineIndent(line) == 0 {
+				return manifest, false
+			}
+
 			continue
 		}
 
@@ -139,6 +155,19 @@ func parseAquaManifest(text string) (aquaManifest, bool) {
 		open = sec
 	}
 
+	if manifest.packagesEmpty {
+		// "packages: []" already IS the whole section; an indented body after
+		// it is YAML aqua rejects, and the merge would replace the section
+		// wholesale while the self-pin scan still sees the body — the two
+		// edits overlap. Refuse the shape outright (comments and blanks are
+		// no body).
+		for i := manifest.packages.start + 1; i < manifest.packages.end; i++ {
+			if !aquaInertLine(manifest.lines[i]) {
+				return manifest, false
+			}
+		}
+	}
+
 	if manifest.packages.present && !manifest.packagesEmpty {
 		if !manifest.parsePackages() {
 			return manifest, false
@@ -150,7 +179,10 @@ func parseAquaManifest(text string) (aquaManifest, bool) {
 
 // parsePackages extracts the "- name:" entries of the packages section. Only
 // entries at the indent of the first one count — a deeper "- name:" belongs to
-// some entry's own attributes, not to the package list.
+// some entry's own attributes, not to the package list. A SHALLOWER one is no
+// legal sibling of anything (the section key sits at column 0, the list at one
+// indent): skipping it would blind the duplicate and missing-package checks to
+// an entry aqua may still see, so the shape is refused instead.
 func (m *aquaManifest) parsePackages() bool {
 	entryIndent := -1
 
@@ -163,6 +195,10 @@ func (m *aquaManifest) parsePackages() bool {
 		indent := len(match[1])
 		if entryIndent == -1 {
 			entryIndent = indent
+		}
+
+		if indent < entryIndent {
+			return false
 		}
 
 		if indent != entryIndent {
@@ -424,6 +460,14 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 					lines: withBlankTail(lines),
 				},
 			)
+
+			// The whole section range is replaced here too: the self-pin move
+			// below must fold into this replacement, never add a second,
+			// overlapping one (the stitch loop would panic on it). Unreachable
+			// today — parse refuses a "packages: []" with a body, so no
+			// self-pin line can sit inside this range — but the invariant
+			// belongs to this branch, not to the parser.
+			packagesReplaced = true
 		default:
 			shift := manifest.pkgEntryIndent() - canonicalAqua.pkgs[0].indent
 			lines := append(
@@ -597,6 +641,14 @@ func stripAquaComment(value string) string {
 	}
 
 	return value
+}
+
+// aquaInertLine reports whether a line carries no YAML content — blank or a
+// comment — and so can sit anywhere without affecting the parse.
+func aquaInertLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+
+	return trimmed == "" || strings.HasPrefix(trimmed, "#")
 }
 
 func lineIndent(s string) int { return len(s) - len(strings.TrimLeft(s, " ")) }

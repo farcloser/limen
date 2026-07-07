@@ -328,7 +328,9 @@ func (a *auditor) auditOrgAdmins() {
 		Login string `json:"login"`
 	}
 
-	outcome := a.client.getJSON("/members?role=admin", &admins)
+	// One page of 100 is beyond any realistic owner roster; per_page still
+	// beats the API's default page of 30.
+	outcome := a.client.getJSON("/members?role=admin&per_page=100", &admins)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAdmins)
 
@@ -403,7 +405,12 @@ type orgActionsPermissions struct {
 
 // auditOrgActionsPermissions covers the enabled-repositories policy, the
 // allowed-actions policy, and org-wide SHA pinning. The PUT replaces the
-// whole object, so every fix sends the full compliant target state.
+// whole object, so a fix must send every field — but the target is built from
+// the CURRENT state with only the FAILING fields moved to the baseline: a
+// compliant policy (a "selected" allowlist someone curated, or "local_only")
+// must survive a fix that only tightens another field. Sending the canonical
+// target for passing fields once wiped an org's pattern allowlist when only
+// SHA pinning was being fixed.
 func (a *auditor) auditOrgActionsPermissions() {
 	var permissions orgActionsPermissions
 
@@ -415,21 +422,48 @@ func (a *auditor) auditOrgActionsPermissions() {
 		return
 	}
 
-	// The full compliant object: keep the enabled-repositories scope unless
-	// it is "none" (which would disable CI org-wide), restrict actions to
-	// GitHub-owned, require SHA pinning.
-	compliantScope := permissions.EnabledRepositories
-	if compliantScope == enabledReposNone {
-		compliantScope = enabledReposAll
+	// A field moves to the baseline only when its own check both fails AND is
+	// not exempted — flag() below suppresses an exempted check's plan, so its
+	// field keeping the current value here is what keeps plan and PUT equal.
+	enabledFixes := permissions.EnabledRepositories == enabledReposNone &&
+		!a.exempted(checkOrgActionsEnabledRepos)
+	allowedFixes := permissions.AllowedActions == allowedActionsAll &&
+		!a.exempted(checkOrgActionsAllowed)
+	shaFixes := permissions.ShaPinningRequired != nil && !*permissions.ShaPinningRequired &&
+		!a.exempted(checkOrgActionsShaPinning)
+
+	targetScope := permissions.EnabledRepositories
+	if enabledFixes {
+		// "none" would keep CI dead org-wide; the floor is "all".
+		targetScope = enabledReposAll
+	}
+
+	targetAllowed := permissions.AllowedActions
+	if allowedFixes {
+		targetAllowed = "selected"
 	}
 
 	fixPermissions := func(apiClient client) error {
-		if err := apiClient.writeJSON(methodPut, "/actions/permissions", map[string]any{
-			"enabled_repositories": compliantScope,
-			"allowed_actions":      "selected",
-			"sha_pinning_required": true,
-		}); err != nil {
+		payload := map[string]any{
+			"enabled_repositories": targetScope,
+			"allowed_actions":      targetAllowed,
+		}
+		// Written back only when the token could read it (nil means the field
+		// was invisible and its check went unverifiable — never guess a value
+		// into a whole-object PUT).
+		if permissions.ShaPinningRequired != nil {
+			payload["sha_pinning_required"] = shaFixes || *permissions.ShaPinningRequired
+		}
+
+		if err := apiClient.writeJSON(methodPut, "/actions/permissions", payload); err != nil {
 			return err
+		}
+
+		// The selected-actions allowlist is defined only when THIS fix is the
+		// one restricting the policy to "selected": an already-restricted
+		// policy keeps whatever allowlist (or local_only semantics) it has.
+		if !allowedFixes {
+			return nil
 		}
 
 		return apiClient.writeJSON(methodPut, "/actions/permissions/selected-actions", map[string]any{
@@ -507,10 +541,20 @@ func (a *auditor) auditOrgActionsWorkflowDefaults() {
 		return
 	}
 
+	// The PUT replaces both fields, so the target starts from the current
+	// state and moves only the fields whose checks fail unexempted — same
+	// doctrine as auditOrgActionsPermissions.
+	targetPerms := workflow.DefaultWorkflowPermissions
+	if targetPerms != baselineWorkflowPerms && !a.exempted(checkOrgActionsWorkflow) {
+		targetPerms = baselineWorkflowPerms
+	}
+
+	targetApprove := workflow.CanApprovePullRequestReviews && a.exempted(checkOrgActionsApprovePRs)
+
 	fixWorkflow := func(apiClient client) error {
 		return apiClient.writeJSON(methodPut, "/actions/permissions/workflow", map[string]any{
-			"default_workflow_permissions":     baselineWorkflowPerms,
-			"can_approve_pull_request_reviews": false,
+			"default_workflow_permissions":     targetPerms,
+			"can_approve_pull_request_reviews": targetApprove,
 		})
 	}
 
@@ -680,7 +724,7 @@ func (a *auditor) auditOrgInstalledApps() {
 func (a *auditor) auditOrgWebhooks() {
 	var hooks []webhook
 
-	outcome := a.client.getJSON("/hooks", &hooks)
+	outcome := a.client.getJSON("/hooks?per_page=100", &hooks)
 	if outcome.err != nil || outcome.notFound {
 		// Org webhooks live behind their own classic scope, which admin:org
 		// does not cover — and GitHub answers 404, not 403, without it.
@@ -707,12 +751,14 @@ func (a *auditor) auditOrgWebhooks() {
 	if len(offenders) > 0 {
 		a.flag(checkOrgWebhooks, StatusAdvisory,
 			strings.Join(offenders, listSeparator), "https + secret + TLS verification",
-			"org webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand", nil)
+			"org webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand"+
+				pageFullCaveat(len(hooks)), nil)
 
 		return
 	}
 
-	a.flag(checkOrgWebhooks, StatusOK, "", "", "org webhooks are compliant (or none exist)", nil)
+	a.flag(checkOrgWebhooks, StatusOK, "", "",
+		"org webhooks are compliant (or none exist)"+pageFullCaveat(len(hooks)), nil)
 }
 
 // auditOrgActionsSecrets inventories org-level Actions secrets (names only —
@@ -752,7 +798,7 @@ func (a *auditor) auditOrgTeams() {
 		Slug string `json:"slug"`
 	}
 
-	outcome := a.client.getJSON("/teams", &teams)
+	outcome := a.client.getJSON("/teams?per_page=100", &teams)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgTeams)
 
@@ -770,7 +816,8 @@ func (a *auditor) auditOrgTeams() {
 		slugs = append(slugs, team.Slug)
 	}
 
-	a.flag(checkOrgTeams, StatusOK, "", "", "teams: "+strings.Join(slugs, listSeparator), nil)
+	a.flag(checkOrgTeams, StatusOK, "", "",
+		"teams: "+strings.Join(slugs, listSeparator)+pageFullCaveat(len(teams)), nil)
 }
 
 // auditOrgPATGrants inventories fine-grained personal-access-token grants

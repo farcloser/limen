@@ -198,7 +198,7 @@ func compliantResponses() map[string]stubResponse {
 			Body: `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`,
 		},
 		"GET repos/test/repo/actions/permissions": {Body: `{"enabled":true,"allowed_actions":"selected"}`},
-		"GET repos/test/repo/rulesets": {
+		"GET repos/test/repo/rulesets?per_page=100": {
 			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
 		"GET repos/test/repo/rulesets/1": {
@@ -211,9 +211,9 @@ func compliantResponses() map[string]stubResponse {
 			Body: `{"approval_policy":"first_time_contributors"}`,
 		},
 		"GET repos/test/repo/collaborators?affiliation=outside&per_page=100": {Body: `[]`},
-		"GET repos/test/repo/hooks": {Body: `[]`},
-		"GET repos/test/repo/keys":  {Body: `[]`},
-		"GET repos/test/repo/pages": {NotFound: true},
+		"GET repos/test/repo/hooks?per_page=100":                             {Body: `[]`},
+		"GET repos/test/repo/keys?per_page=100":                              {Body: `[]`},
+		"GET repos/test/repo/pages":                                          {NotFound: true},
 	}
 }
 
@@ -271,7 +271,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	  }
 	}`}
 	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
-	responses["GET repos/test/repo/rulesets"] = stubResponse{Body: `[]`}
+	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{Body: `[]`}
 	stubGH(t, responses)
 
 	findings, changes := Audit(testRepo, nil)
@@ -389,6 +389,111 @@ func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by desi
 	for _, planned := range changes {
 		if planned.Check == checkWiki {
 			t.Error("an exempted check must not plan a change")
+		}
+	}
+}
+
+// TestOverrideExemptsKeepsPatchClean: an exempted check's field must not ride
+// along inside the consolidated PATCH another failing check triggers — fields
+// are staged when a change is PLANNED, not when the check is evaluated.
+// (TestOverrideExempts alone cannot catch this: its exempted check is the
+// only failing toggle, so no other change carries the payload.)
+func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	body := strings.Replace(compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1)
+	body = strings.Replace(body, `"delete_branch_on_merge": true`, `"delete_branch_on_merge": false`, 1)
+	responses["GET repos/test/repo"] = stubResponse{Body: body}
+	logPath := stubGH(t, responses)
+
+	_, changes := Audit(testRepo, map[string]string{checkWiki: "hosts the operations runbook"})
+
+	for _, planned := range changes {
+		if planned.Check == checkWiki {
+			t.Fatal("an exempted check must not plan a change")
+		}
+
+		if err := planned.Apply(); err != nil {
+			t.Fatalf("%s: %v", planned.Check, err)
+		}
+	}
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	calls := string(log)
+	if !strings.Contains(calls, `"delete_branch_on_merge":true`) {
+		t.Error("the planned toggle must be in the consolidated PATCH")
+	}
+
+	if strings.Contains(calls, "has_wiki") {
+		t.Error("the exempted check's field must not appear in any applied payload")
+	}
+}
+
+// TestWorkflowFixPreservesExemptedField: the workflow-permissions PUT
+// replaces both fields, so a fix triggered by one check must write the
+// exempted other field back at its CURRENT value, not at the baseline.
+func TestWorkflowFixPreservesExemptedField(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/actions/permissions/workflow"] = stubResponse{
+		Body: `{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}`,
+	}
+	logPath := stubGH(t, responses)
+
+	_, changes := Audit(testRepo, map[string]string{checkActionsWorkflowPerms: "release automation pushes tags"})
+
+	for _, planned := range changes {
+		if planned.Check == checkActionsWorkflowPerms {
+			t.Fatal("an exempted check must not plan a change")
+		}
+
+		if planned.Check == checkActionsApprovePRs {
+			if err := planned.Apply(); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	calls := string(log)
+
+	if !strings.Contains(calls, `"can_approve_pull_request_reviews":false`) {
+		t.Error("the failing field must move to the baseline")
+	}
+
+	if !strings.Contains(calls, `"default_workflow_permissions":"write"`) {
+		t.Error("the exempted field must keep its current value in the PUT")
+	}
+}
+
+// TestRulesetsFullPageUnverifiable: a full page of 100 rulesets cannot prove
+// absence — the canonical ruleset may sit on a later page, and creating it
+// blind would duplicate it. Absence goes unverifiable; nothing is planned.
+func TestRulesetsFullPageUnverifiable(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	entries := make([]string, 100)
+	for i := range entries {
+		entries[i] = fmt.Sprintf(`{"id":%d,"name":"other-%d","target":"branch","enforcement":"active"}`, i+10, i)
+	}
+
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
+		Body: "[" + strings.Join(entries, ",") + "]",
+	}
+	stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	for _, check := range []string{checkRulesetDefaultBranch, checkRulesetVersionTags} {
+		if finding, found := findingByCheck(findings, check); !found || finding.Status != StatusUnverifiable {
+			t.Errorf("%s on a full page: %v, want unverifiable", check, finding.Status)
+		}
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkRulesetDefaultBranch || planned.Check == checkRulesetVersionTags {
+			t.Errorf("%s: a create was planned on unprovable absence", planned.Check)
 		}
 	}
 }

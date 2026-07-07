@@ -626,6 +626,45 @@ func TestAquaRejectsUnparseableManifest(t *testing.T) {
 	}
 }
 
+// TestAquaParserRefusesUnboundedShapes: every YAML-legal line the parser cannot
+// bound as a section boundary must refuse to parse. Absorbed into the open
+// section's range instead, such lines get relocated, rewritten, or deleted by
+// a merge that believes it owns them — a quoted key after packages: once had
+// canonical pins appended INSIDE its block, where aqua never saw them, while
+// check kept reporting green — and a "packages: []" with a body panicked the
+// stitch loop on overlapping replacements when a self-pin move was due.
+func TestAquaParserRefusesUnboundedShapes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		text string
+	}{
+		{"quoted top-level key", "checksum:\n  enabled: true\n\"my-user-key\":\n  - user data\n"},
+		{"dotted top-level key", "checksum:\n  enabled: true\nmy.key:\n  - user data\n"},
+		{"spaced top-level key", "checksum:\n  enabled: true\nmy key:\n  - user data\n"},
+		{"document marker", "---\nchecksum:\n  enabled: true\n"},
+		{"root-level list item", "packages:\n  - name: aaa/bbb@v1.0.0\n- stray\n"},
+		{"packages: [] with a body", "packages: []\n  - name: farcloser/limen@v1.0.0\n"},
+		{"shallower package entry", "packages:\n    - name: aaa/bbb@v1.0.0\n  - name: aaa/bbb@v2.0.0\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, ok := parseAquaManifest(tc.text); ok {
+				t.Error("parseAquaManifest accepted a shape it cannot bound")
+			}
+		})
+	}
+
+	// The tolerated neighbors of those shapes stay parseable: comments and
+	// blanks at any level, and a flow-empty packages followed by only those.
+	if _, ok := parseAquaManifest("# c\n\npackages: []\n  # commented-out pins\n"); !ok {
+		t.Error("comments and blank lines must not fail the parse")
+	}
+}
+
 func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 	t.Parallel()
 

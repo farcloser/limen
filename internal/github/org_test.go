@@ -29,8 +29,8 @@ const compliantOrgJSON = `{
 // baseline-compliant state.
 func compliantOrgResponses() map[string]stubResponse {
 	return map[string]stubResponse{
-		"GET orgs/test-org":                    {Body: compliantOrgJSON},
-		"GET orgs/test-org/members?role=admin": {Body: `[{"login": "alice"}]`},
+		"GET orgs/test-org": {Body: compliantOrgJSON},
+		"GET orgs/test-org/members?role=admin&per_page=100": {Body: `[{"login": "alice"}]`},
 		"GET orgs/test-org/actions/permissions": {
 			Body: `{"enabled_repositories": "all", "allowed_actions": "selected", "sha_pinning_required": true}`,
 		},
@@ -45,9 +45,9 @@ func compliantOrgResponses() map[string]stubResponse {
 			Body: `[{"default_for_new_repos": "all", "configuration": {"name": "canonical"}}]`,
 		},
 		"GET orgs/test-org/installations":                       {Body: `{"total_count": 0, "installations": []}`},
-		"GET orgs/test-org/hooks":                               {Body: `[]`},
+		"GET orgs/test-org/hooks?per_page=100":                  {Body: `[]`},
 		"GET orgs/test-org/actions/secrets":                     {Body: `{"total_count": 0, "secrets": []}`},
-		"GET orgs/test-org/teams":                               {Body: `[]`},
+		"GET orgs/test-org/teams?per_page=100":                  {Body: `[]`},
 		"GET orgs/test-org/personal-access-tokens":              {Body: `[]`},
 		"GET repos/test-org/.github":                            {Body: `{"private": false}`},
 		"GET repos/test-org/.github/contents/SECURITY.md":       {Body: `{}`},
@@ -279,5 +279,62 @@ func TestOrgOverridesValidate(t *testing.T) {
 
 	if !knownChecks()[checkOrgAdmins] || !knownChecks()[checkOrgActionsShaPinning] {
 		t.Error("org check identifiers must be valid override-file keys")
+	}
+}
+
+// TestOrgActionsFixPreservesCompliantPolicy: the actions-permissions PUT
+// replaces the whole object, so a fix that only tightens SHA pinning must
+// write the compliant allowed-actions policy back unchanged — and must not
+// touch the selected-actions allowlist, which belongs to whoever curated it.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/actions/permissions"] = stubResponse{
+		Body: `{"enabled_repositories": "selected", "allowed_actions": "local_only", "sha_pinning_required": false}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := AuditOrg(testOrg, nil)
+
+	if finding, found := findingByCheck(findings, checkOrgActionsAllowed); !found || finding.Status != StatusOK {
+		t.Fatalf("local_only policy: %v, want ok", finding.Status)
+	}
+
+	applied := false
+
+	for _, planned := range changes {
+		if planned.Check == checkOrgActionsShaPinning {
+			applied = true
+
+			if err := planned.Apply(); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+
+		if planned.Check == checkOrgActionsAllowed || planned.Check == checkOrgActionsEnabledRepos {
+			t.Errorf("%s: compliant state planned a change", planned.Check)
+		}
+	}
+
+	if !applied {
+		t.Fatal("expected a SHA-pinning change to be planned")
+	}
+
+	log, _ := os.ReadFile(logPath)
+	calls := string(log)
+
+	for _, want := range []string{
+		`"allowed_actions":"local_only"`,
+		`"enabled_repositories":"selected"`,
+		`"sha_pinning_required":true`,
+	} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("the PUT payload must carry %s", want)
+		}
+	}
+
+	if strings.Contains(calls, "selected-actions") {
+		t.Error("an already-restricted policy must keep its allowlist — no selected-actions PUT")
 	}
 }

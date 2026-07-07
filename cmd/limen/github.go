@@ -87,6 +87,24 @@ func githubAudit(repoFlag, orgFlag string, stderr io.Writer) (auditRunner, strin
 	return runner, repo, true
 }
 
+// githubNoPositional rejects positional arguments: the github subcommands
+// name their target through -repo/-org only. Silently dropping them once had
+// `limen github check owner/name` audit whatever repository the current
+// directory's origin pointed at — reporting for the wrong target as if the
+// request had been honored (and stdlib flag parsing stops at the first
+// non-flag token, so flags after the stray argument were dropped with it).
+func githubNoPositional(flagSet *flag.FlagSet, stderr io.Writer) bool {
+	if flagSet.NArg() == 0 {
+		return true
+	}
+
+	_, _ = fmt.Fprintf(stderr,
+		"limen: unexpected argument %q — name the target with -repo owner/name or -org name\n",
+		flagSet.Arg(0))
+
+	return false
+}
+
 // githubTarget resolves the repository slug: the -repo flag when given, the
 // origin remote of the current directory otherwise.
 func githubTarget(repoFlag string, stderr io.Writer) (string, bool) {
@@ -112,6 +130,10 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 	asJSON := flagSet.Bool(flagJSON, false, "emit findings as JSON")
 
 	if err := flagSet.Parse(args); err != nil {
+		return 2
+	}
+
+	if !githubNoPositional(flagSet, stderr) {
 		return 2
 	}
 
@@ -149,6 +171,10 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	if !githubNoPositional(flagSet, stderr) {
+		return 2
+	}
+
 	audit, label, resolved := githubAudit(*repoFlag, *orgFlag, stderr)
 	if !resolved {
 		return 2
@@ -162,24 +188,31 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	}
 
 	printer := printGithubFindingsText
+
+	// With -json, stdout carries the findings document and nothing else —
+	// the plan, the prompt, and "nothing to fix" are progress, and progress
+	// goes to stderr (the same split bootstrap makes).
+	progress := stdout
+
 	if *asJSON {
 		printer = printGithubFindingsJSON
+		progress = stderr
 	}
 
 	findings, changes := audit(overrides)
 	if len(changes) == 0 {
-		_, _ = fmt.Fprintln(stdout, "nothing to fix")
+		_, _ = fmt.Fprintln(progress, "nothing to fix")
 
 		return reportGithubOutcome(stdout, stderr, label, findings, printer)
 	}
 
-	_, _ = fmt.Fprintf(stdout, "limen github fix %s — plan:\n", label)
+	_, _ = fmt.Fprintf(progress, "limen github fix %s — plan:\n", label)
 
 	for _, planned := range changes {
-		_, _ = fmt.Fprintf(stdout, "  ✎  %-32s %s\n", planned.Check, planned.Summary)
+		_, _ = fmt.Fprintf(progress, "  ✎  %-32s %s\n", planned.Check, planned.Summary)
 	}
 
-	if !*yes && !confirm(stdout) {
+	if !*yes && !confirm(progress) {
 		_, _ = fmt.Fprintln(stderr, "not applied (confirm with y, or pass -yes)")
 
 		return 1
@@ -205,9 +238,10 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	return reportGithubOutcome(stdout, stderr, label, final, printer)
 }
 
-// confirm asks for interactive consent on stdin (the plan was just printed).
-func confirm(stdout io.Writer) bool {
-	_, _ = fmt.Fprint(stdout, "apply? [y/N] ")
+// confirm asks for interactive consent on stdin (the plan was just printed
+// to the same writer — stdout normally, stderr under -json).
+func confirm(writer io.Writer) bool {
+	_, _ = fmt.Fprint(writer, "apply? [y/N] ")
 
 	reader := bufio.NewReader(os.Stdin)
 
