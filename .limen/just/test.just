@@ -8,10 +8,10 @@
 # Bare `just do test` deliberately refuses: tests are always language-bound, so
 # there is nothing a universal default could run that would not fail (or lie)
 # on some repo. Which suites apply is each project's call — name one
-# explicitly, and define the project-wide aggregate as `test-all` in
-# the root Justfile (the CI workflow's entry point, mirroring lint-all).
+# explicitly, and define the project-wide aggregate as `test` in
+# the root Justfile (the CI workflow's entry point, mirroring `lint`).
 default:
-    @echo 'just test has no default — name a suite (e.g. `just do test go`), or run the project'"'"'s `just test-all`.' >&2
+    @echo 'just test has no default — name a suite (e.g. `just do test go`), or run the project'"'"'s `just test`.' >&2
     @exit 1
 
 mod go 'test-go.just'

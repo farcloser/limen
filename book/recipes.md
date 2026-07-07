@@ -1,7 +1,8 @@
 # The shared recipes
 
-Every repository carries the same task-runner baseline: the canonical `Justfile` plus the
-shared `.limen/` modules, content-pinned by `limen` (the pinning rule and file layout are in
+Every repository carries the same task-runner baseline: a root `Justfile` that mounts the
+shared `.limen/just/` modules, which `limen` content-pins (the root `Justfile` itself is the
+project's own — only its import line is required; the pinning rule and file layout are in
 [mandatory files](./mandatory-files.md#justfile)). This chapter documents what that baseline
 *is* — the architecture and the conventions every shared recipe obeys — so the behavior you
 see from `just` is explainable, not folklore.
@@ -17,7 +18,10 @@ Recipes do not run in your shell's environment; they run in one the `Justfile` c
 
 - **Hermetic `PATH`** — the aqua tool directory plus base system paths, nothing else (no
   Homebrew). Every tool a recipe invokes resolves to the aqua-pinned version or fails
-  loudly; a machine-installed copy can never be silently substituted.
+  loudly; a machine-installed copy can never be silently substituted. (Windows/git-bash is
+  the one sanctioned exception: with no knowable base-system directory list, the pinned
+  tools are *prepended* to the ambient `PATH` — pins still shadow everything, and the POSIX
+  legs of the CI matrix keep full hermeticity enforced.)
 - **Hermetic Go environment** — Go reads its behavior from a dozen `GO*` variables that
   tunnel through the pinned `PATH`, so each is emptied or pinned: `GOROOT` (IDEs inject
   one) so the pinned toolchain finds its own stdlib; `GOTOOLCHAIN=local` to forbid Go's
@@ -101,20 +105,20 @@ What each shared module is *for* — mechanics live in the module files themselv
   [tooling](./tooling.md#day-to-day-changes--the-just-do-tools-recipes).
 - **`lint`** — read-only verifiers: `limen` (this repository against the rules — the
   first thing the default runs, since every other linter trusts the canonical files it
-  verifies), `just`, `aqua`, `links`, `yaml`, `shell`, `dockerfile` in the default, plus
-  the explicit `go` submodule (code, mod, vuln, licenses, and the informational
-  bce/escape/deadcode reports), `rust`, `homebrew` (formula style and audit through
-  brew's own vendored tooling — see [per-language rules](./per-language.md#homebrew-formulas)),
-  `github` (the live GitHub settings audit — `limen github check`, needing network and
-  an authed `gh`; see [the github chapter](./github.md)), and `commits` (DCO and commit
-  hygiene over a range).
+  verifies), `just`, `aqua`, `links`, `yaml`, `shell`, `dockerfile`, and `commits` (DCO and
+  commit hygiene over a range) in the default, plus the explicit `go` submodule (code, mod,
+  vuln, licenses, and the informational bce/escape/deadcode reports), `rust`, `homebrew`
+  (formula style and audit through brew's own vendored tooling — see
+  [per-language rules](./per-language.md#homebrew-formulas)), and `github` (the live GitHub
+  settings audit — `limen github check`, needing network and an authed `gh`; see
+  [the github chapter](./github.md)).
 - **`test`** — the suites, per language (`just do test go`: `unit`, `race`, `bench`, `cover`
   with an optional minimum gate, `profile` with rendered call graphs). No default — see
   above: bare `just do test` refuses, `just test` is the project's aggregate.
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
-  (rewrite drifted canonical files), `just`, `yaml` in the default, plus the `go`,
-  `rust`, and `homebrew` submodules and `github` (plan shown, applied on consent).
-  What `lint` reports, `fix` repairs — nothing mutates under a lint name.
+  (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate `aqua-checksums.json`)
+  in the default, plus the `go`, `rust`, and `homebrew` submodules and `github` (plan shown,
+  applied on consent). What `lint` reports, `fix` repairs — nothing mutates under a lint name.
 
 Two roles deserve emphasis because they close the enforcement loop:
 
@@ -124,8 +128,8 @@ Two roles deserve emphasis because they close the enforcement loop:
   at `go run ./cmd/limen` so its working tree is judged by its own enforcer rather than
   the (always older) released pin.
 - **`just do release`** is shared but opt-in. The recipe lives in `.limen/just/release.just`,
-  imported *flat* into the canonical Justfile (a module invocation could not take the tag
-  argument), and refuses before touching anything unless the repo carries a
+  imported *flat* into the `do` namespace (`do.just`, hence `just do release vX.Y.Z` — a
+  module invocation could not take the tag argument), and refuses before touching anything unless the repo carries a
   `.goreleaser.yaml` — which stays project-owned, like the root Justfile. Two lanes share
   every guard. The **CI lane** (public repos, the default): `just do release vX.Y.Z`
   verifies a clean tree, creates the *signed* tag — a human signs the intent — and pushes
@@ -141,9 +145,10 @@ Two roles deserve emphasis because they close the enforcement loop:
 
 ## Extending the baseline
 
-A new shared recipe goes into a module in limen's `.limen/` (a new concern gets a new
-module plus its `mod` line in the canonical `Justfile`); the content-pin then carries it
+A new shared recipe goes into a module in limen's `.limen/just/` (a new concern gets a new
+module plus its `mod` line in `do.just`); the content-pin then carries it
 to every repository on the next `limen fix`. A recipe only one project needs goes in that
-project's the root `Justfile` — and must not shadow a shared module's name. Global changes are
+project's root `Justfile` — the `do` namespace keeps the shared names off the top level, so a
+project is free to define its own `lint`/`test`/`build` there. Global changes are
 proposed against limen itself, never edited locally: the shared files are locked by the
 content-pin, and drift is overwritten.

@@ -200,7 +200,7 @@ repo/
 ├── aqua.yaml                              # the manifest: pinned tool versions
 ├── aqua-checksums.json                    # GENERATED — commit it
 ├── aqua-policy.yaml                       # authorizes the local registry
-├── .limen/aqua-registry.yaml                     # local registry: go_install tools
+├── .limen/aqua-registry.yaml                     # local registry: go_install tools + farcloser/limen
 ├── renovate.json5                         # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
@@ -291,8 +291,10 @@ first invocation, so `aqua install --only-link` is optional warm-up rather than 
 
 The everyday operations — add, pin to a version, bump, remove — are wrapped as recipes in the
 `tools` just module so nobody has to remember the exact aqua incantation (or forget the
-checksum step). Each takes the **`owner/repo`** exactly as it appears in `aqua.yaml`, and each
-leaves `aqua.yaml` **and** `aqua-checksums.json` updated together, ready to commit:
+checksum step). `add`, `set`, and `remove` take the **`owner/repo`** exactly as it appears in
+`aqua.yaml`; `update` takes the **command name** (the executable, e.g. `golangci-lint`, since
+it delegates to `aqua update`, which resolves commands). Each leaves `aqua.yaml` **and**
+`aqua-checksums.json` updated together, ready to commit:
 
 ```bash
 just do tools add    junegunn/fzf                    # add a tool at its latest version

@@ -126,17 +126,20 @@ var CanonicalRenovate string
 //go:embed limen-example.yaml
 var CanonicalOverrideExample string
 
-// justFS embeds the whole .limen/ directory. Its *.just files are the shared,
-// content-pinned modules (see JustModules); a project's own recipes live in a
-// root project.just, which is neither embedded nor pinned. The directory also
-// holds non-module config that lives here to declutter the repo root
-// (.shellcheckrc, .yamlfmt, aqua-registry.yaml) — those are embedded by name
-// above and are not just modules, so JustModules ignores them.
+// justFS embeds the whole .limen/ directory. The *.just files directly under
+// .limen/just/ are the shared, content-pinned modules (see JustModules); a
+// project's own recipes live in the root Justfile, which is neither embedded
+// nor pinned. The directory also holds non-module config that lives here to
+// declutter the repo root (.shellcheckrc, .yamlfmt, aqua-registry.yaml) —
+// those are embedded by name above and are not just modules, so JustModules
+// ignores them.
 //
 // The all: prefix is required: a plain //go:embed silently drops files whose
-// names begin with "_" or "." (e.g. a shared lib.just), which would leave them
-// unpinned and unenforced. all: embeds every file so JustModules catches every
-// *.just under .limen/, whatever it is named.
+// names begin with "_" or "." (e.g. the shared lib.just), which would leave
+// them unpinned and unenforced. all: embeds every file so JustModules catches
+// every *.just directly under .limen/just/, whatever it is named. (Note: the
+// embed is recursive over .limen/, but JustModules only pins the .limen/just/
+// level — a *.just placed elsewhere under .limen/ would embed but not pin.)
 //
 //go:embed all:.limen
 var justFS embed.FS
@@ -162,7 +165,7 @@ func loadJustModules() []JustModule {
 
 	for _, entry := range entries {
 		// Only *.just files are shared modules; other files here (config parked to
-		// declutter the root) are not. A project's own recipes live in root project.just.
+		// declutter the root) are not. A project's own recipes live in the root Justfile.
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".just") {
 			continue
 		}
@@ -181,6 +184,6 @@ func loadJustModules() []JustModule {
 }
 
 // JustModules returns the canonical shared just modules — every *.just file
-// directly under .limen/ — that limen content-pins, sorted by path. See
+// directly under .limen/just/ — that limen content-pins, sorted by path. See
 // book/mandatory-files.md.
 func JustModules() []JustModule { return justModules }
