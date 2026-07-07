@@ -119,6 +119,42 @@ that shaped this:
 
 ---
 
+## Signatures: verify whenever published
+
+Checksum pinning is the floor, never the ceiling. A checksum pins *the bytes we saw
+first*; a signature binds those bytes to the **publisher's identity**, which is what
+actually survives a compromised release — an attacker who can swap an asset can swap the
+checksum file sitting next to it, but cannot sign as the publisher. So the doctrine is
+unconditional: **whenever an upstream publishes signature material — a cosign signature
+or Sigstore bundle, SLSA provenance, GitHub artifact attestations, an
+Authenticode-signed binary — the consuming side verifies it.** "Present but unchecked"
+fails review.
+
+Where the verification lives depends on who does the downloading:
+
+- **aqua-managed tools**: verification is declared in the *registry entry*, not in the
+  repo — aqua runs cosign / slsa-verifier / attestation checks itself when the entry
+  carries the stanza. When adding a tool, check what upstream publishes (release assets
+  for `.sig` / `.sigstore.json` / `.intoto.jsonl`; the GitHub attestations API for the
+  pinned artifact digests). If the standard registry entry lacks a stanza for material
+  that exists, contribute it upstream — or carry the entry in the local registry until
+  it lands.
+- **Our own releases**: sign *and* verify. Releases sign `checksums.txt` keyless from CI
+  (the goreleaser cosign lane), and every consumption point verifies the bundle against
+  the release workflow's identity at the exact tag — the local registry's `limen` entry
+  carries the stanza, so `aqua` enforces it in every repo and on every machine
+  bootstrap.
+- **Hand-rolled downloads** (bootstrap scripts and installers that run before aqua
+  exists): the script verifies inline — pinned sha256 at minimum, plus whatever the
+  publisher signs (`limen-install.ps1` verifies the Git for Windows installer's
+  Authenticode signature and pins the signer's verified identity, on top of the hash).
+
+One blind spot to police deliberately: for standard-registry tools, *whether* a
+signature gets verified is the registry entry's decision, and nothing on our side fails
+when an upstream **starts** publishing signatures it didn't before. That gap is closed
+by sweep, not by machinery: when touching a tool's pin, glance at what its release now
+publishes; periodically, check the pinned digests against the attestations API.
+
 ## Machine setup: limen-install (one-time, per machine)
 
 Works the same on **macOS** and **Linux**. Machine setup is one bootstrap — the
