@@ -51,6 +51,11 @@
       "algorithm": "sha256"
     },
     {
+      "id": "github_release/github.com/cli/cli/v2.96.0/gh_2.96.0_windows_arm64.zip",
+      "checksum": "C517E0B32C98A4BA90AC95AF8D12CC3AC55781AB4AB72F9A91CE3DE0541D2B09",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_darwin_amd64.tar.gz",
       "checksum": "5B6AB77BB7A5FA1B87114D66BD55CFD49AB39DC45CC5275CB7F8E04F665B8E21",
       "algorithm": "sha256"
@@ -101,6 +106,11 @@
       "algorithm": "sha256"
     },
     {
+      "id": "github_release/github.com/golangci/golangci-lint/v2.12.2/golangci-lint-2.12.2-windows-arm64.zip",
+      "checksum": "947B9A5BF762D465710B376C156F0184ABB2168378B0826AF1899E0EE7183742",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/google/yamlfmt/v0.21.0/yamlfmt_0.21.0_Darwin_arm64.tar.gz",
       "checksum": "4B417ECB94339D57E4C122ECC948C1A00FE328B5853266DE9806E652A92858FA",
       "algorithm": "sha256"
@@ -121,6 +131,11 @@
       "algorithm": "sha256"
     },
     {
+      "id": "github_release/github.com/google/yamlfmt/v0.21.0/yamlfmt_0.21.0_Windows_arm64.tar.gz",
+      "checksum": "C1E64D1C72CA8986BC5B8C8EDD4EC89F0627804E7E08F8DE9F4B484CB5CAD897",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/google/yamlfmt/v0.21.0/yamlfmt_0.21.0_Windows_x86_64.tar.gz",
       "checksum": "07F80CE5D741EB4B0A9380AC78A19C7CB5BD44E2A9A47A5A04839E3BA54DD463",
       "algorithm": "sha256"
@@ -138,6 +153,11 @@
     {
       "id": "github_release/github.com/goreleaser/goreleaser/v2.16.0/goreleaser_Linux_x86_64.tar.gz",
       "checksum": "EAAE05B5EBA07533BD0F06846B68C808399504784DF00C62EB219541FC04E5E2",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/goreleaser/goreleaser/v2.16.0/goreleaser_Windows_arm64.zip",
+      "checksum": "1183C81863044CE9BAA89C1393C258949390B8DF683DF7CA959E9C718D7723C9",
       "algorithm": "sha256"
     },
     {
@@ -168,6 +188,11 @@
     {
       "id": "github_release/github.com/gotestyourself/gotestsum/v1.13.0/gotestsum_1.13.0_windows_amd64.tar.gz",
       "checksum": "FD5A6DC69E46A0970593E70D85A7E75F16714E9C61D6D72CCC324EB82DF5BB8A",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/gotestyourself/gotestsum/v1.13.0/gotestsum_1.13.0_windows_arm64.tar.gz",
+      "checksum": "72A59200F83B3204CD59FD417E384DB0543C5511D7A9E38957E74A4035950943",
       "algorithm": "sha256"
     },
     {
@@ -293,6 +318,11 @@
     {
       "id": "http/golang.org/dl/go1.26.4.windows-amd64.zip",
       "checksum": "3CA8FB4630B07C419CBDD51F754E31363CFCFB83B3A5354D9E895C90BE2CC345",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "http/golang.org/dl/go1.26.4.windows-arm64.zip",
+      "checksum": "62247F56FB7D7B827D237152C4E3FCD69A24D0FA9430DC73DBDA7593AE82BC8D",
       "algorithm": "sha256"
     },
     {

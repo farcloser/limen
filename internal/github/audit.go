@@ -927,6 +927,7 @@ func defaultRequiredChecks() []string {
 		"verify (ubuntu-24.04-arm)",
 		"verify (macos-15)",
 		"verify (windows-2025)",
+		"verify (windows-11-arm)",
 	}
 }
 
