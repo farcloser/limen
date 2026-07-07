@@ -1,6 +1,8 @@
 package license_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -84,6 +86,7 @@ func TestIdentify(t *testing.T) {
 		{"photography all rights reserved", photographyText, license.Closed},
 		{"empty", "", license.Unknown},
 		{"gpl not affero", "GNU GENERAL PUBLIC LICENSE Version 3", license.Unknown},
+		{"agpl behind a short preamble", "Copyright (c) 2026 Farcloser\n\n" + agplText, license.AGPL30},
 		{"bsd not closed", bsdText, license.Unknown},
 		{"isc not closed", iscText, license.Unknown},
 		{"cc-by-nc not allowed", "Creative Commons Attribution-NonCommercial 4.0", license.Unknown},
@@ -95,6 +98,41 @@ func TestIdentify(t *testing.T) {
 
 			if got := license.Identify(tc.text); got != tc.want {
 				t.Errorf("Identify() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestIdentifyRejectsFullTexts pins the full official texts (SPDX
+// license-list-data) of the rejected set to Unknown. Synthetic snippets are not
+// enough here: the real texts carry other licenses' names in their bodies —
+// GPL-3.0 §13 names the AGPL, SPDX's LGPL-3.0 appends the entire GPL-3.0, and
+// MPL-2.0 §1.12 names the AGPL among its Secondary Licenses — and substring
+// matching once passed all three as the allowed AGPL-3.0 while the header-only
+// fixture above kept the suite green.
+func TestIdentifyRejectsFullTexts(t *testing.T) {
+	t.Parallel()
+
+	files, err := filepath.Glob(filepath.Join("testdata", "rejected", "*.txt"))
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+
+	if len(files) == 0 {
+		t.Fatal("no fixtures under testdata/rejected — the rejected set must stay pinned")
+	}
+
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("read %s: %v", file, err)
+			}
+
+			if got := license.Identify(string(data)); got != license.Unknown {
+				t.Errorf("Identify(%s) = %q, want %q", filepath.Base(file), got, license.Unknown)
 			}
 		})
 	}
