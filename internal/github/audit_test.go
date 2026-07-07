@@ -180,7 +180,7 @@ func runGHStub(dir string) int {
 
 		return 1
 	default:
-		fmt.Print(response.Body)
+		fmt.Fprint(os.Stdout, response.Body)
 
 		return 0
 	}
