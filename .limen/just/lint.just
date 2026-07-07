@@ -52,10 +52,15 @@ just: (_banner "lint" "just")
     # is git's (ignore semantics), truth is the working tree's. Deleted files
     # are vacuously well-formatted; guarding required files is `limen check`'s
     # job, not a formatter's.
+    # Literal names need their '**/' twins — git pathspec literals do not
+    # match across directories (only wildcard patterns like '*.just' do) and
+    # are case-sensitive. All three spellings just honors are covered:
+    # justfile, Justfile, and the hidden .justfile.
     while IFS= read -r -d '' f; do
         [ -f "$f" ] || continue
         just --fmt --check --justfile "$f"
-    done < <(git ls-files -z --cached --others --exclude-standard 'justfile' 'Justfile' '*.just' '**/justfile')
+    done < <(git ls-files -z --cached --others --exclude-standard \
+        'justfile' '**/justfile' 'Justfile' '**/Justfile' '.justfile' '**/.justfile' '*.just')
 
 # godolint — hadolint as pure Go (https://github.com/farcloser/godolint) —
 # over every Dockerfile in the repository; passes vacuously when there are

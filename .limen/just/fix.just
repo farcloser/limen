@@ -32,10 +32,14 @@ just: (_banner "fix" "just")
     # still honoring .gitignore — so a not-yet-staged file is formatted too.
     # Tracked-but-deleted files are skipped (see `lint just` for the rationale:
     # enumeration is git's, truth is the working tree's).
+    # Same pathspecs as `lint just`: literals carry their '**/' twins (git
+    # pathspec literals are case-sensitive and do not match across
+    # directories), and the hidden .justfile spelling is covered.
     while IFS= read -r -d '' f; do
         [ -f "$f" ] || continue
         just --fmt --justfile "$f"
-    done < <(git ls-files -z --cached --others --exclude-standard 'justfile' 'Justfile' '*.just' '**/justfile')
+    done < <(git ls-files -z --cached --others --exclude-standard \
+        'justfile' '**/justfile' 'Justfile' '**/Justfile' '.justfile' '**/.justfile' '*.just')
 
 yaml: (_banner "fix" "yaml")
     yamlfmt -conf .limen/.yamlfmt
