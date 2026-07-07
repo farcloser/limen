@@ -89,6 +89,6 @@ packages:
           - --certificate-oidc-issuer
           - https://token.actions.githubusercontent.com
     supported_envs:
-      - darwin
+      - darwin/arm64
       - linux
       - windows

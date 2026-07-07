@@ -180,7 +180,7 @@ canonically the org's `.github` repository). The catalog:
 
 One deliberate absence: **org rulesets**. The per-repository `limen:main` /
 `limen:tags` rulesets remain authoritative; migrating them to org-level
-rulesets is phase 4 of [`design/LIMEN-GH.md`](../design/LIMEN-GH.md), together
+rulesets is phase 4 of [`design/LIMEN-GITHUB.md`](../design/LIMEN-GITHUB.md), together
 with the scheduled drift audit. Org reads need an owner-scoped token: the
 governed fields are simply absent from anonymous responses, and absent
 classifies as `unverifiable`, never as passing.

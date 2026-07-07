@@ -3,7 +3,6 @@ checksum:
   enabled: true
   require_checksum: true
   supported_envs:
-    - darwin/amd64
     - darwin/arm64
     - linux/amd64
     - linux/arm64
