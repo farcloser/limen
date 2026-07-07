@@ -18,10 +18,18 @@ Recipes do not run in your shell's environment; they run in one the `Justfile` c
 - **Hermetic `PATH`** — the aqua tool directory plus base system paths, nothing else (no
   Homebrew). Every tool a recipe invokes resolves to the aqua-pinned version or fails
   loudly; a machine-installed copy can never be silently substituted.
-- **Hermetic Go environment** — an ambient `GOROOT` (IDEs inject one) is emptied so the
-  pinned toolchain finds its own stdlib, and `GOTOOLCHAIN=local` forbids Go's silent
-  toolchain downloads: when `go.mod` outpaces the pin, recipes fail asking for a pin bump
-  instead of fetching an unpinned compiler behind your back.
+- **Hermetic Go environment** — Go reads its behavior from a dozen `GO*` variables that
+  tunnel through the pinned `PATH`, so each is emptied or pinned: `GOROOT` (IDEs inject
+  one) so the pinned toolchain finds its own stdlib; `GOTOOLCHAIN=local` to forbid Go's
+  silent toolchain downloads (when `go.mod` outpaces the pin, recipes fail asking for a
+  pin bump instead of fetching an unpinned compiler); `GOFLAGS`, `GOPRIVATE`, `GOOS`/`GOARCH`
+  neutralized so ambient flags or a cross-compile target can't rewrite a build; and
+  `GOSUMDB`/`GOPROXY` pinned to their real defaults so an ambient `GOSUMDB=off` cannot
+  defeat the checksum verification the `go_install` pins rely on. Each stays overridable
+  by a project's own `Justfile` — explicit and tracked, never ambient. **The one
+  exception is `GOWORK`:** a `go.work` in the tree (or a parent) deliberately puts recipes
+  into workspace mode — Go workspaces are a supported way to work here, at the eyes-open
+  cost that a build under an active workspace can differ from CI.
 
 The consequence, and the point: a recipe behaves identically on every machine that ran
 [machine setup](./tooling.md#machine-setup-limen-install-one-time-per-machine), and
