@@ -384,6 +384,22 @@ already pending for `UPDATE_AQUA_CHECKSUM_TOKEN`; solve once, reuse.
    folded into the existing file-rule engine — they are tree checks, not API checks.
 7. **`farcloser/.github`**: created opportunistically now; automated org-side checks of
    it remain phase 3.
+8. **Bump-PR push credential** (added 2026-07-07): GitHub App over fine-grained PAT for
+   the `update-aqua-checksum` push — per-run one-hour repo-scoped tokens, org-owned,
+   nothing expires on a calendar. Workflow token preference: App
+   (`UPDATE_AQUA_CHECKSUM_APP_ID` variable + `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`
+   secret) → PAT (`UPDATE_AQUA_CHECKSUM_TOKEN`) → default token. Each org registers its
+   own App — private keys don't travel, so a shared App is structurally impossible;
+   farcloser's instance is **LimenReApp**. This resolves the "solve once, reuse" note
+   above: when the scheduled audit workflow lands, extend the same App with the
+   admin-read permissions instead of minting a second identity. Adopter setup is four
+   UI steps (documented in book/tooling.md). Amended 2026-07-07: automated in
+   `limen bootstrap` (`-org`, or inferred from origin) via the app-manifest flow —
+   pre-filled manifest form on localhost, one browser approval, then
+   `POST /app-manifests/{code}/conversions` yields id + private key, stored as the org
+   variable/secret; installation is the one remaining click, polled for. Idempotent;
+   every state it cannot create or verify (no org admin, headless, half-configured)
+   degrades to a warning, never a failed bootstrap (internal/github/app.go).
 
 ## Open questions (decide at review)
 
