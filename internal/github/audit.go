@@ -18,6 +18,9 @@ var (
 	errFieldNotVisible = errors.New(
 		"the field is absent from the response (owner-scoped — the token cannot see it)",
 	)
+	errRulesetPageFull = errors.New(
+		"the ruleset listing filled a whole page — absence cannot be proven, and creating the canonical ruleset blind could duplicate one on a later page",
+	)
 )
 
 // Check identifiers — one per audited setting, spelled out (the naming
@@ -115,6 +118,7 @@ const (
 	decimalBase           = 10
 	jsonTypeKey           = "type"
 	ruleRequiredChecks    = "required_status_checks"
+	ruleDeletion          = "deletion"
 	listSeparator         = ", "
 	repositoryAdminRoleID = 5 // GitHub's fixed id for the repository "admin" role, used in ruleset bypass lists.
 )
@@ -198,17 +202,15 @@ func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
 // override file becomes ok (with the reason in the message) and plans no
 // change; otherwise a failing check with a non-nil fix plans it.
 func (a *auditor) flag(check string, status Status, current, desired, message string, fix *Change) {
-	if (status == StatusFail || status == StatusAdvisory) && !optInChecks()[check] {
-		if reason, exempted := a.overrides[check]; exempted {
-			a.findings = append(a.findings, Finding{
-				Check:   check,
-				Status:  StatusOK,
-				Current: current,
-				Message: "exempted by limen.yaml: " + reason,
-			})
+	if (status == StatusFail || status == StatusAdvisory) && a.exempted(check) {
+		a.findings = append(a.findings, Finding{
+			Check:   check,
+			Status:  StatusOK,
+			Current: current,
+			Message: "exempted by limen.yaml: " + a.overrides[check],
+		})
 
-			return
-		}
+		return
 	}
 
 	a.findings = append(a.findings, Finding{
@@ -221,10 +223,29 @@ func (a *auditor) flag(check string, status Status, current, desired, message st
 
 	if status == StatusFail && fix != nil {
 		// The change applies against whatever this audit targets — capture it
-		// here, the single point every planned change passes through.
+		// here, the single point every planned change passes through. The
+		// consolidated-PATCH fields are staged here too, and only here: an
+		// exempted check returned above without planning, so its fields never
+		// reach the payload another change carries.
 		fix.client = a.client
+		maps.Copy(a.settingsPatch, fix.fields)
 		a.changes = append(a.changes, *fix)
 	}
+}
+
+// exempted reports whether the override file exempts this check. Opt-in
+// identifiers are opt-ins, not exemptions (their presence turns a check ON).
+// Fixes that PUT a whole multi-field object must consult this when building
+// their target: an exempted check plans no change, so its field must keep the
+// CURRENT value — not ride to the baseline inside another check's fix.
+func (a *auditor) exempted(check string) bool {
+	if optInChecks()[check] {
+		return false
+	}
+
+	_, found := a.overrides[check]
+
+	return found
 }
 
 // unverifiable records every given check as unanswerable under this token.
@@ -238,15 +259,17 @@ func (a *auditor) unverifiable(err error, checks ...string) {
 	}
 }
 
-// patchSettings stages one field of the consolidated PATCH against the
+// patchSettings describes one field of the consolidated PATCH against the
 // audited target object (the repository or the organization) and returns the
-// change entry describing it.
-func (a *auditor) patchSettings(check, summary string, fields map[string]any) *Change {
-	maps.Copy(a.settingsPatch, fields)
-
+// change entry carrying it. The fields ride ON the change and are staged into
+// the payload by flag(), only when the change is actually planned: staging
+// them here — at argument-evaluation time, before flag() has ruled on
+// exemption — once let an override-exempted setting apply anyway, unshown,
+// inside the consolidated PATCH some other failing check triggered.
+func (*auditor) patchSettings(check, summary string, fields map[string]any) *Change {
 	// The apply is a no-op: flushSettingsPatch emits one consolidated change for
 	// every staged field, so per-field entries only carry the summary.
-	return &Change{Check: check, Summary: summary, apply: nil}
+	return &Change{Check: check, Summary: summary, apply: nil, fields: fields}
 }
 
 // flushSettingsPatch replaces the per-field no-op applies with one consolidated
@@ -569,10 +592,21 @@ func (a *auditor) auditActions() {
 	if workflowOutcome.err != nil || workflowOutcome.notFound {
 		a.unverifiable(orNotFound(workflowOutcome), checkActionsWorkflowPerms, checkActionsApprovePRs)
 	} else {
+		// The PUT replaces both fields, so the target starts from the current
+		// state and moves only the fields whose checks fail unexempted — an
+		// exempted check plans no change, and its field must not ride to the
+		// baseline inside the other check's fix.
+		targetPerms := workflow.DefaultWorkflowPermissions
+		if targetPerms != baselineWorkflowPerms && !a.exempted(checkActionsWorkflowPerms) {
+			targetPerms = baselineWorkflowPerms
+		}
+
+		targetApprove := workflow.CanApprovePullRequestReviews && a.exempted(checkActionsApprovePRs)
+
 		fixWorkflow := func(c client) error {
 			return c.writeJSON("PUT", "/actions/permissions/workflow", map[string]any{
-				"default_workflow_permissions":     baselineWorkflowPerms,
-				"can_approve_pull_request_reviews": false,
+				"default_workflow_permissions":     targetPerms,
+				"can_approve_pull_request_reviews": targetApprove,
 			})
 		}
 
@@ -808,27 +842,56 @@ func (d rulesetDetail) statusCheckContexts() []string {
 }
 
 // auditRulesets covers R4: the canonical default-branch and version-tag
-// rulesets, created if missing and reconciled if drifted.
+// rulesets, created if missing and reconciled if drifted. One page of 100 (the
+// API maximum): when the page comes back full, a ruleset not on it may still
+// exist on a later page, so absence is unverifiable — never a create.
 func (a *auditor) auditRulesets() {
 	var summaries []rulesetSummary
 
-	outcome := a.client.getJSON("/rulesets", &summaries)
+	const pageSize = 100
+
+	outcome := a.client.getJSON("/rulesets?per_page=100", &summaries)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkRulesetDefaultBranch, checkRulesetVersionTags)
 
 		return
 	}
 
+	pageFull := len(summaries) == pageSize
+
 	byName := map[string]rulesetSummary{}
 	for _, summary := range summaries {
 		byName[summary.Name] = summary
 	}
 
-	a.auditRuleset(checkRulesetDefaultBranch, byName, rulesetMainName, canonicalMainRuleset,
-		[]string{"pull_request", "deletion", "non_fast_forward", "required_linear_history", ruleRequiredChecks})
-	a.auditRuleset(checkRulesetVersionTags, byName, rulesetTagsName,
-		func([]string) map[string]any { return canonicalTagsRuleset() },
-		[]string{"creation", "update", "deletion"})
+	targets := []struct {
+		check string
+		name  string
+		build func(existingContexts []string) map[string]any
+		rules []string
+	}{
+		{
+			checkRulesetDefaultBranch, rulesetMainName, canonicalMainRuleset,
+			[]string{"pull_request", ruleDeletion, "non_fast_forward", "required_linear_history", ruleRequiredChecks},
+		},
+		{
+			checkRulesetVersionTags, rulesetTagsName,
+			func([]string) map[string]any { return canonicalTagsRuleset() },
+			[]string{"creation", "update", ruleDeletion},
+		},
+	}
+
+	for _, target := range targets {
+		// Guarded here, so auditRuleset only ever judges provable states: a
+		// ruleset missing from a full page may exist on the next one.
+		if _, present := byName[target.name]; !present && pageFull {
+			a.unverifiable(errRulesetPageFull, target.check)
+
+			continue
+		}
+
+		a.auditRuleset(target.check, byName, target.name, target.build, target.rules)
+	}
 }
 
 func (a *auditor) auditRuleset(
@@ -956,7 +1019,7 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 			"ref_name": map[string]any{"include": []string{"~DEFAULT_BRANCH"}, "exclude": []string{}},
 		},
 		"rules": []map[string]any{
-			ruleOf("deletion"),
+			ruleOf(ruleDeletion),
 			ruleOf("non_fast_forward"),
 			ruleOf("required_linear_history"),
 			{jsonTypeKey: "pull_request", "parameters": map[string]any{
@@ -994,7 +1057,7 @@ func canonicalTagsRuleset() map[string]any {
 		"rules": []map[string]any{
 			ruleOf("creation"),
 			ruleOf("update"),
-			ruleOf("deletion"),
+			ruleOf(ruleDeletion),
 		},
 	}
 }
@@ -1039,8 +1102,6 @@ type collaboratorPermissions struct {
 func (a *auditor) auditOutsideCollaborators() {
 	var collaborators []outsideCollaborator
 
-	const pageSize = 100
-
 	outcome := a.client.getJSON("/collaborators?affiliation=outside&per_page=100", &collaborators)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOutsideCollaborators)
@@ -1062,22 +1123,34 @@ func (a *auditor) auditOutsideCollaborators() {
 		return
 	}
 
-	message := "outside collaborator(s) with elevated access — people are never auto-fixed, review by hand"
-	if len(collaborators) == pageSize {
-		message += " (first " + strconv.Itoa(pageSize) + " inspected)"
-	}
+	message := "outside collaborator(s) with elevated access — people are never auto-fixed, review by hand" +
+		pageFullCaveat(len(collaborators))
 
 	a.flag(checkOutsideCollaborators, StatusAdvisory,
 		strings.Join(elevated, listSeparator), "read-only or organization members", message, nil)
 }
 
+// pageFullCaveat annotates an inventory finding whose single page of 100 (the
+// API maximum) came back full: what lies beyond the page was not inspected.
+func pageFullCaveat(count int) string {
+	const pageSize = 100
+
+	if count < pageSize {
+		return ""
+	}
+
+	return " (first " + strconv.Itoa(pageSize) + " inspected)"
+}
+
 // auditSurface covers the advisory-only credential surface of R6 (webhooks,
 // deploy keys) and the pages check of R5. All of it is inventory: nothing
-// here is ever auto-fixed.
+// here is ever auto-fixed. Inventories read one page of 100 (the API
+// maximum), stated in the finding when the page comes back full — same
+// doctrine as auditOutsideCollaborators.
 func (a *auditor) auditSurface() {
 	var hooks []webhook
 
-	hooksOutcome := a.client.getJSON("/hooks", &hooks)
+	hooksOutcome := a.client.getJSON("/hooks?per_page=100", &hooks)
 
 	switch {
 	case hooksOutcome.err != nil || hooksOutcome.notFound:
@@ -1098,17 +1171,19 @@ func (a *auditor) auditSurface() {
 				StatusAdvisory,
 				strings.Join(offenders, listSeparator),
 				"https + secret + TLS verification",
-				"webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand",
+				"webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand"+
+					pageFullCaveat(len(hooks)),
 				nil,
 			)
 		} else {
-			a.flag(checkWebhooks, StatusOK, "", "", "webhooks are compliant (or none exist)", nil)
+			a.flag(checkWebhooks, StatusOK, "", "",
+				"webhooks are compliant (or none exist)"+pageFullCaveat(len(hooks)), nil)
 		}
 	}
 
 	var keys []deployKey
 
-	keysOutcome := a.client.getJSON("/keys", &keys)
+	keysOutcome := a.client.getJSON("/keys?per_page=100", &keys)
 
 	switch {
 	case keysOutcome.err != nil || keysOutcome.notFound:
@@ -1126,7 +1201,8 @@ func (a *auditor) auditSurface() {
 			StatusAdvisory,
 			strings.Join(titles, listSeparator),
 			"(none, or named in the override file)",
-			"deploy key(s) present — credentials are never auto-fixed, review by hand",
+			"deploy key(s) present — credentials are never auto-fixed, review by hand"+
+				pageFullCaveat(len(keys)),
 			nil,
 		)
 	}

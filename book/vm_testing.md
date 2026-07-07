@@ -109,6 +109,21 @@ cat "$REPO/out.txt"
 
 `utmctl file pull` is the alternative when the share is not involved.
 
+Prefer that alternative for anything chatty. The redirect pattern above is safe
+as one stream written by cmd, but a guest process that repeatedly opens and
+appends a file on the share (PowerShell `Add-Content`-style progress logging)
+can stall after the first write — and afterwards even *reading* a script off
+the share hangs, with no error surfaced anywhere; in the session where we hit
+it, the share never came back. The robust loop is fully share-free, both
+`file` verbs being plain stdin/stdout streams:
+
+```sh
+utmctl file push Windows 'C:\Windows\Temp\script.ps1' < script.ps1
+utmctl exec Windows --cmd cmd.exe /c \
+  "powershell.exe -ExecutionPolicy Bypass -NoProfile -File C:\Windows\Temp\script.ps1 > C:\Windows\Temp\out.txt 2>&1"
+utmctl file pull Windows 'C:\Windows\Temp\out.txt'
+```
+
 ## The `.spice-clipboard` phantom
 
 The SPICE WebDAV server injects a virtual `.spice-clipboard` directory into the

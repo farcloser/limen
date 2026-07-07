@@ -7,8 +7,13 @@ package github
 // organization) is captured when the change is planned, so applying needs no
 // re-derivation of what the audit was looking at.
 type Change struct {
-	apply   func(c client) error
-	client  client
+	apply  func(c client) error
+	client client
+	// fields is this change's contribution to the consolidated settings
+	// PATCH (see patchSettings). It rides on the change and is staged into
+	// the payload by flag() only when the change is actually planned — an
+	// exempted check's fields must never reach a PATCH another check carries.
+	fields  map[string]any
 	Check   string
 	Summary string
 }

@@ -247,12 +247,11 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 	force := flagSet.Bool("force", false, "proceed even if the target directory is not empty")
 	licenseID := flagSet.String("license", string(license.Closed), "license for the new repository")
 	holder := flagSet.String("holder", "Farcloser", "copyright holder for a generated LICENSE")
-	skipInstall := flagSet.Bool("skip-install", false, "do not run aqua to install tooling after writing files")
 
 	flagSet.Usage = func() {
 		_, _ = fmt.Fprintln(
 			stderr,
-			"Usage: limen bootstrap [-license id] [-holder name] [-force] [-skip-install] [-json] <path>",
+			"Usage: limen bootstrap [-license id] [-holder name] [-force] [-json] <path>",
 		)
 
 		flagSet.PrintDefaults()
@@ -306,7 +305,7 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 	})
 
 	code := reportOutcomes(stdout, stderr, cmdBootstrap, root, outcomes, *asJSON)
-	if code != 0 || *skipInstall {
+	if code != 0 {
 		return code
 	}
 	// Install the pinned tooling: authorize the local registry, then link the
@@ -503,11 +502,10 @@ bootstrap flags:
   -license id     License for the new repo (default "Closed-source")
   -holder name    Copyright holder for a generated LICENSE (default "Farcloser")
   -force          Proceed even if the target directory is not empty
-  -skip-install   Do not run aqua to install tooling after writing files
 
 After writing files, bootstrap runs "aqua policy allow aqua-policy.yaml",
 "aqua update-checksum --prune", and "aqua install --only-link" to install the
-pinned tooling (unless -skip-install).
+pinned tooling.
 
 Exit codes:
   0  success (check: all passed; fix/bootstrap: all rules resolved)

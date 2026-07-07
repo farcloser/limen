@@ -769,6 +769,57 @@ func TestFixLeavesUnparseableAquaAlone(t *testing.T) {
 	}
 }
 
+// TestFixLeavesQuotedKeyAquaAlone: a YAML-legal top-level key the line parser
+// cannot bound (quoted here), sitting after packages: in a manifest missing a
+// canonical pin — the exact shape that once had fix append the missing pin
+// inside the user's block (aqua never saw it; check stayed green). The shape
+// now refuses to parse: advisory only, file byte-identical.
+func TestFixLeavesQuotedKeyAquaAlone(t *testing.T) {
+	t.Parallel()
+
+	manifest := strings.Replace(limen.CanonicalAquaYAML, canonicalAquaLine(t, "koalaman/shellcheck@")+"\n", "", 1) +
+		"\"my-user-key\":\n  - my precious user data\n"
+	dir := writeRepo(t, map[string]string{"aqua.yaml": manifest, "aqua-checksums.json": "{}\n"})
+
+	var advisory bool
+
+	for _, o := range Fix(dir, bootstrapOpts()) {
+		if o.Rule == "aqua" && o.Action == ActionAdvisory {
+			advisory = true
+		}
+	}
+
+	if !advisory {
+		t.Error("a manifest with an unbounded top-level key should yield an advisory")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	if string(data) != manifest {
+		t.Error("a manifest with an unbounded top-level key must not be modified")
+	}
+}
+
+// TestAquaMergeMovesQuotedSelfPin: a quoted farcloser/limen pin satisfies the
+// package-presence check (parsePackages strips quotes), so the baseline-owned
+// version move must find it too — and keep the quotes it came with.
+func TestAquaMergeMovesQuotedSelfPin(t *testing.T) {
+	t.Parallel()
+
+	manifest, ok := parseAquaManifest("packages:\n  - name: \"farcloser/limen@v0.0.1\"\n")
+	if !ok {
+		t.Fatal("the quoted-pin fixture did not parse")
+	}
+
+	out, summary := mergeAquaManifest(manifest, "v9.9.9")
+	if !strings.Contains(out, `- name: "farcloser/limen@v9.9.9"`) {
+		t.Errorf("the quoted self-pin was not moved:\n%s", out)
+	}
+
+	if len(summary) == 0 {
+		t.Error("expected the merge to report its edits")
+	}
+}
+
 // TestFixAquaDuplicatesAdvisory: duplicate package entries cannot be resolved
 // automatically (which version would win?) — fix reports them instead.
 func TestFixAquaDuplicatesAdvisory(t *testing.T) {
