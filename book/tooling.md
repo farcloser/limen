@@ -95,7 +95,7 @@ trustworthy upstream channel covers them all — so curl is packaged first-party
 `farcloser/build-curl`, one package for every platform
 (rung 3 carrying a rung-2 import): the windows binaries are curl-for-win's own official
 builds, sigstore-verified against a vendored, cross-checked key and repackaged; the
-linux (static musl) and macOS (universal) legs are built in our CI by curl-for-win's
+linux (static musl) and macOS (arm64) legs are built in our CI by curl-for-win's
 build scripts at an audited commit pin — one build lineage for every platform, every
 archive GitHub-attested (aqua verifies attestations natively). The platform findings
 that shaped this:
@@ -114,7 +114,7 @@ that shaped this:
 - **Linux / macOS**: no rung-2 channel — curl-for-win *builds* these but does not
   distribute them (its deploy lane is windows-only; verified, not assumed). Hence rung 3:
   `build-curl` runs curl-for-win's own build scripts at an audited commit pin for the
-  linux (static musl) and macOS (universal) legs — the same lineage as the imported
+  linux (static musl) and macOS (arm64) legs — the same lineage as the imported
   windows binaries, one build system across every platform.
 
 ---
@@ -399,11 +399,12 @@ The workflow accepts two, in order of preference:
    - Set the org **variable** `UPDATE_AQUA_CHECKSUM_APP_ID` and the org **secret**
      `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`.
 
-   Every org registers **its own** App (farcloser's instance is *LimenReApp*). Apps are
-   not shareable for this purpose: minting tokens requires the private key, and a private
-   key must never leave the org that owns it — installing someone else's App would grant
-   *that org* write access to your repositories while giving your own workflows nothing
-   to mint with.
+   Every org registers **its own** App, named `limen-ci-<org>` (so farcloser's is
+   `limen-ci-farcloser`) — GitHub App names are globally unique, so the org suffix keeps
+   each one available. Apps are not shareable for this purpose: minting tokens requires
+   the private key, and a private key must never leave the org that owns it — installing
+   someone else's App would grant *that org* write access to your repositories while
+   giving your own workflows nothing to mint with.
 2. **A fine-grained PAT** — contents: read and write, stored as the org secret
    `UPDATE_AQUA_CHECKSUM_TOKEN` — the drop-in fallback. It works identically, but it is
    bound to a user account and it expires: when it lapses, the workflow silently degrades

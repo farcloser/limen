@@ -1,5 +1,5 @@
 // app.go — automates the update-aqua-checksum push credential (decision 8 of
-// design/LIMEN-GH.md, documented for humans in book/tooling.md).
+// design/LIMEN-GITHUB.md, documented for humans in book/tooling.md).
 //
 // The update-aqua-checksum workflow needs a push whose commits trigger CI; the
 // canonical credential is a per-org GitHub App whose one-hour tokens the
@@ -393,19 +393,22 @@ var manifestPage = template.Must(template.New("manifest").Parse(`<!doctype html>
 // manifestFormHandler renders the manifest form for org, with GitHub sent
 // back to redirectURL after the user approves.
 func manifestFormHandler(org, redirectURL string) http.HandlerFunc {
+	// hook_attributes is deliberately OMITTED, not set to {active:false}:
+	// GitHub's manifest requires hook_attributes.url whenever the object is
+	// present, so sending it without a url fails with "'url' wasn't supplied".
+	// Omitting it creates the App with no webhook configured — the disabled
+	// state we want (no deliveries, no url to supply).
 	manifest := struct {
 		Name               string            `json:"name"`
 		URL                string            `json:"url"`
 		RedirectURL        string            `json:"redirect_url"`
 		Public             bool              `json:"public"`
-		HookAttributes     map[string]bool   `json:"hook_attributes"`
 		DefaultPermissions map[string]string `json:"default_permissions"`
 	}{
 		Name:               updateAppName(org),
 		URL:                updateAppHomepage,
 		RedirectURL:        redirectURL,
 		Public:             false,
-		HookAttributes:     map[string]bool{"active": false},
 		DefaultPermissions: map[string]string{"contents": "write"},
 	}
 
@@ -425,11 +428,13 @@ func manifestFormHandler(org, redirectURL string) http.HandlerFunc {
 	}
 }
 
-// updateAppName is the proposed App name — GitHub App names are globally
-// unique, so the org is baked in; the manifest page lets the user edit it if
-// the name is nonetheless taken.
+// updateAppName is the proposed App name. GitHub App names are globally unique
+// across all of GitHub, so the org is baked in — a fixed name could be claimed
+// by only one org platform-wide, and every other org's registration would then
+// collide. "ci" states the App's purpose (it exists for the checksum/converge
+// CI push). The manifest page lets the user edit it if the name is taken.
 func updateAppName(org string) string {
-	name := "limen-" + org
+	name := "limen-ci-" + org
 	if len(name) > appNameLimit {
 		name = name[:appNameLimit]
 	}

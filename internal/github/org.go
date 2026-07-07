@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Org-level check identifiers (design/LIMEN-GH.md, O1–O7). Same naming
+// Org-level check identifiers (design/LIMEN-GITHUB.md, O1–O7). Same naming
 // doctrine as the repository checks: explicit, org-prefixed, readable without
 // a syllabus. They are also override-file keys.
 const (
@@ -127,7 +127,7 @@ type orgSecurityDefault struct {
 }
 
 // AuditOrg checks the organization's settings against the baseline (O1–O7 of
-// design/LIMEN-GH.md). overrides maps exempted check identifiers to reasons,
+// design/LIMEN-GITHUB.md). overrides maps exempted check identifiers to reasons,
 // exactly as for Audit — org runs read the same override file, from wherever
 // the command runs (canonically the org's .github repository). It returns
 // the findings and the changes a fix run would apply.

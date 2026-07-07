@@ -12,7 +12,7 @@ import (
 	"github.com/farcloser/limen/internal/github"
 )
 
-// cmdGithub is the settings-audit subcommand family (design/LIMEN-GH.md).
+// cmdGithub is the settings-audit subcommand family (design/LIMEN-GITHUB.md).
 const cmdGithub = "github"
 
 func runGithub(args []string, stdout, stderr io.Writer) int {

@@ -1,5 +1,5 @@
 // Package github audits a repository's GitHub settings against the canonical
-// baseline of design/LIMEN-GH.md and remediates what is safe to remediate.
+// baseline of design/LIMEN-GITHUB.md and remediates what is safe to remediate.
 //
 // The baseline is a floor: a repository may be stricter than it, never looser.
 // Every check yields one of four verdicts: ok, fail (below the floor and

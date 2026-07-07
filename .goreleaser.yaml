@@ -38,7 +38,6 @@ builds:
       - -s -w -X main.version={{ .Version }}
     # Exactly the platforms aqua.yaml lists under checksum.supported_envs.
     targets:
-      - darwin_amd64
       - darwin_arm64
       - linux_amd64
       - linux_arm64

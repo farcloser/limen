@@ -390,7 +390,8 @@ already pending for `UPDATE_AQUA_CHECKSUM_TOKEN`; solve once, reuse.
    (`UPDATE_AQUA_CHECKSUM_APP_ID` variable + `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`
    secret) → PAT (`UPDATE_AQUA_CHECKSUM_TOKEN`) → default token. Each org registers its
    own App — private keys don't travel, so a shared App is structurally impossible;
-   farcloser's instance is **LimenReApp**. This resolves the "solve once, reuse" note
+   the App is named `limen-ci-<org>` (globally-unique App names force the org suffix),
+   so farcloser's is `limen-ci-farcloser`. This resolves the "solve once, reuse" note
    above: when the scheduled audit workflow lands, extend the same App with the
    admin-read permissions instead of minting a second identity. Adopter setup is four
    UI steps (documented in book/tooling.md). Amended 2026-07-07: automated in
