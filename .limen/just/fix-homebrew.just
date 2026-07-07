@@ -30,6 +30,8 @@ style: (_banner "fix homebrew" "style")
     # repo without formulas passes vacuously even brew-less.
     files=()
     while IFS= read -r -d '' f; do
+        # Tracked-but-deleted files are skipped (see lint.just's `just` recipe).
+        [ -f "$f" ] || continue
         files+=("$f")
     done < <(git ls-files -z --cached --others --exclude-standard \
         'Formula/*.rb' 'Formula/**/*.rb' 'Casks/*.rb' 'Casks/**/*.rb')

@@ -43,6 +43,8 @@ style: (_banner "lint homebrew" "style")
     # brew-less.
     files=()
     while IFS= read -r -d '' f; do
+        # Tracked-but-deleted files are skipped (see lint.just's `just` recipe).
+        [ -f "$f" ] || continue
         files+=("$f")
     done < <(git ls-files -z --cached --others --exclude-standard \
         'Formula/*.rb' 'Formula/**/*.rb' 'Casks/*.rb' 'Casks/**/*.rb')
@@ -66,9 +68,15 @@ audit: (_banner "lint homebrew" "audit")
     set -euo pipefail
     {{ _skip_unless_macos }}
     # Same vacuous pass as `style`: no formulas, nothing to audit, no brew
-    # (and no tap declaration) required.
-    if [ -z "$(git ls-files --cached --others --exclude-standard \
-        'Formula/*.rb' 'Formula/**/*.rb' 'Casks/*.rb' 'Casks/**/*.rb')" ]; then
+    # (and no tap declaration) required. Tracked-but-deleted files are skipped
+    # (see lint.just's `just` recipe), so a tree whose only formulas are
+    # unstaged deletions passes vacuously too.
+    present=""
+    while IFS= read -r -d '' f; do
+        [ -f "$f" ] && present=1 && break
+    done < <(git ls-files -z --cached --others --exclude-standard \
+        'Formula/*.rb' 'Formula/**/*.rb' 'Casks/*.rb' 'Casks/**/*.rb')
+    if [ -z "$present" ]; then
         echo "no formulas or casks (Formula/, Casks/) — nothing to audit."
         exit 0
     fi

@@ -45,9 +45,17 @@ just: (_banner "lint" "just")
     #!/usr/bin/env bash
     set -euo pipefail
     # --cached --others --exclude-standard: tracked *and* new untracked files,
-    # still honoring .gitignore — so a not-yet-staged file is linted too.
-    git ls-files -z --cached --others --exclude-standard 'justfile' 'Justfile' '*.just' '**/justfile' \
-      | xargs -0 -I{} just --fmt --check --justfile {}
+    # still honoring .gitignore — so a not-yet-staged file is linted too. The
+    # index half of that union also lists files deleted from the worktree but
+    # not yet staged (a mid-migration tree, e.g. a renamed canonical module),
+    # so every path is existence-checked before it reaches a tool: enumeration
+    # is git's (ignore semantics), truth is the working tree's. Deleted files
+    # are vacuously well-formatted; guarding required files is `limen check`'s
+    # job, not a formatter's.
+    while IFS= read -r -d '' f; do
+        [ -f "$f" ] || continue
+        just --fmt --check --justfile "$f"
+    done < <(git ls-files -z --cached --others --exclude-standard 'justfile' 'Justfile' '*.just' '**/justfile')
 
 # godolint — hadolint as pure Go (https://github.com/farcloser/godolint) —
 # over every Dockerfile in the repository; passes vacuously when there are
@@ -66,6 +74,8 @@ dockerfile: (_banner "lint" "dockerfile")
     # already matches across directories; a literal like 'Dockerfile' does not.
     files=()
     while IFS= read -r -d '' f; do
+        # Tracked-but-deleted files are skipped (see `lint just`).
+        [ -f "$f" ] || continue
         files+=("$f")
     done < <(git ls-files -z --cached --others --exclude-standard \
         'Dockerfile' '**/Dockerfile' 'Dockerfile.*' '**/Dockerfile.*' '*.Dockerfile' \
@@ -89,6 +99,8 @@ shell: (_banner "lint" "shell")
     # No mapfile (bash 4+): build the array with a read loop, portable to bash 3.2.
     files=()
     while IFS= read -r -d '' f; do
+        # Tracked-but-deleted files are skipped (see `lint just`).
+        [ -f "$f" ] || continue
         case "$f" in
             *.sh|*.bash) files+=("$f"); continue ;;
         esac
