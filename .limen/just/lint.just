@@ -209,17 +209,35 @@ commits range="": (_banner "lint" "commits")
         git-validation -run DCO,short-subject,dangling-whitespace
     fi
 
-# Verify aqua-checksums.json is complete and in sync with aqua.yaml.
+# Verify aqua-checksums.json is in sync with aqua.yaml — the working tree's
+# pair, exactly as it stands: git state (staged, committed, neither) is
+# irrelevant to coherence. Recipes judge the working tree; git answers
+# enumeration and history questions only.
 aqua: (_banner "lint" "aqua")
     #!/usr/bin/env bash
     set -euo pipefail
-    # aqua has no read-only validator, so regenerate and compare against the
-    # committed file (needs network). `git diff HEAD` is staging-independent — it
-    # compares the working tree to the last commit, not the index. On drift the
-    # corrected file is left in place — review and commit it.
+    # aqua has no read-only validator, so regenerate, compare against a
+    # snapshot, and restore (needs network): the lint observes, never mutates —
+    # `just do fix aqua` is the mutating twin. mktemp gets an explicit template
+    # because macOS mktemp ignores $TMPDIR.
+    tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lint-aqua.XXXXXX")
+    trap 'rm -rf "$tmpdir"' EXIT
+    had=""
+    if [ -f aqua-checksums.json ]; then
+        cp aqua-checksums.json "$tmpdir/snapshot"
+        had=1
+    fi
     # --log-level warn: the per-package INFO lines are noise when nothing is wrong.
     aqua --log-level warn update-checksum --prune
-    if ! git diff --quiet HEAD -- aqua-checksums.json; then
-        echo "aqua-checksums.json was out of sync with aqua.yaml (regenerated above) — review and commit it." >&2
-        exit 1
+    if [ -n "$had" ] && cmp -s aqua-checksums.json "$tmpdir/snapshot"; then
+        exit 0
     fi
+    # Drift (or no checksums file at all): restore the tree exactly as it was
+    # before pointing at the fixer.
+    if [ -n "$had" ]; then
+        cp "$tmpdir/snapshot" aqua-checksums.json
+    else
+        rm -f aqua-checksums.json
+    fi
+    echo "aqua-checksums.json is out of sync with aqua.yaml — run 'just do fix aqua'." >&2
+    exit 1

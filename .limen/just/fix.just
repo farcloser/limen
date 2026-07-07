@@ -10,7 +10,7 @@ set quiet
 # Shared private _banner recipe (see lib.just).
 import 'lib.just'
 
-default: limen just yaml
+default: limen just yaml aqua
 
 # limen itself: repair what `just do lint limen` reports — rewrite drifted
 # canonical files, create missing mandatory ones, restore aqua pins and
@@ -39,6 +39,12 @@ just: (_banner "fix" "just")
 
 yaml: (_banner "fix" "yaml")
     yamlfmt -conf .limen/.yamlfmt
+
+# Regenerate aqua-checksums.json from aqua.yaml — the mutating twin of
+# `just do lint aqua` (needs network). In the default set so a plain
+# `just do fix` heals the drift the lint default flags.
+aqua: (_banner "fix" "aqua")
+    aqua --log-level warn update-checksum --prune
 
 # Go fixers live in their own submodule: `just do fix go` runs them all,
 # `just do fix go <recipe>` (e.g. `just do fix go mod`) runs one.
