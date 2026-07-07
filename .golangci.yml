@@ -24,7 +24,7 @@ linters:
     # Generic bugs catching
     - asasalint # prevents variadic any
     - containedctx # avoid embedding context into structs
-    # - depguard # allows to explicitly allow or disallow third party modules
+    - depguard # allows to explicitly allow or disallow third party modules
     - err113 # encourage static errors
     - gochecknoglobals # globals should be avoided as much as possible
     - gosec # various security checks
@@ -59,7 +59,7 @@ linters:
     - wsl_v5 # general formatting
 
     # Additional to be reviewed
-    # - forbidigo # might be convenient to forbid certain patterns
+    - forbidigo # might be convenient to forbid certain patterns
     - gocritic
     - misspell
     - unconvert
@@ -154,9 +154,6 @@ linters:
     - nakedret # provided by revive
     - predeclared # provided by revive
     - unparam # provided by revive
-
-    - depguard
-    - forbidigo
   exclusions:
     rules:
       # Structs in internal/github mirror the GitHub REST API, whose wire
@@ -185,13 +182,6 @@ linters:
         text: "add-constant|cognitive-complexity|confusing-results|nested-structs|use-waitgroup-go|unchecked-type-assertion|unhandled-error|unused-receiver"
         linters:
           - revive
-      # xos and dirs ARE the wrappers around os.* — they must call the raw functions.
-      - path: filesystem/xos/
-        linters:
-          - forbidigo
-      - path: filesystem/dirs/
-        linters:
-          - forbidigo
 
   settings:
     govet:
@@ -251,28 +241,6 @@ linters:
       forbid:
         - pattern: '^fmt\.Print(ln|f)?$'
           msg: "use structured logging instead"
-        - pattern: '^os\.ReadFile$'
-          msg: "use xos.ReadFile instead"
-        - pattern: '^os\.ReadDir$'
-          msg: "use xos.ReadDir instead"
-        - pattern: '^os\.WriteFile$'
-          msg: "use filesystem.WriteFile instead"
-        - pattern: '^os\.Stat$'
-          msg: "use xos.Stat instead"
-        - pattern: '^os\.Open$'
-          msg: "use xos.Open instead"
-        - pattern: '^os\.OpenFile$'
-          msg: "use xos.OpenFile instead"
-        - pattern: '^os\.Create$'
-          msg: "use xos.OpenFile instead"
-        - pattern: '^os\.CreateTemp$'
-          msg: "use xos.CreateTemp instead"
-        - pattern: '^os\.MkdirTemp$'
-          msg: "use xos.MkdirTemp instead"
-        - pattern: '^os\.Truncate$'
-          msg: "use xos.Truncate instead"
-        - pattern: '^os\.UserHomeDir$'
-          msg: "use filesystem.HomeDir instead"
 
       exclude-godoc-examples: true
       analyze-types: true
@@ -314,30 +282,7 @@ linters:
             - $all
           allow:
             - $gostd
-            - github.com/mycophonic/primordium
-            # Database
-            - modernc.org/sqlite
-            # Logging
-            - github.com/rs/zerolog
-            - github.com/samber/slog-zerolog/v2
-            # Crypto
-            - golang.org/x/crypto/blake2b
-            - golang.org/x/crypto/ssh
-            # Platform specifics
-            - golang.org/x/sys/windows
-            - golang.org/x/sys/unix
-            # CPU detection
-            - github.com/klauspost/cpuid
-            # Compression
-            - github.com/andybalholm/brotli
-            - github.com/klauspost/compress
-            - github.com/klauspost/pgzip
-            - github.com/pierrec/lz4
-            - github.com/ulikunitz/xz
-            # Vendors
-            - github.com/aws/smithy-go
-            - github.com/getsentry/sentry-go
-            - github.com/aws/aws-sdk-go-v2
+            - github.com/farcloser/limen
 
     staticcheck:
       checks:
@@ -349,7 +294,7 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.com/mycophonic)
+        - prefix(github.com/farcloser)
         - localmodule
       no-inline-comments: true
       no-prefix-comments: true
