@@ -161,10 +161,6 @@ linters:
       - path: internal/github/
         linters:
           - tagliatelle
-      # gosec is not delivering value on tests, regularly flagging cmd.Exec calls
-      - path: testutil/
-        linters:
-          - gosec
       - path: _test.go
         linters:
           - varnamelen
