@@ -183,9 +183,8 @@ each project keeps room of its own:
 
 | File | Role | Checked? |
 |------|------|----------|
-| `Justfile` | The standard shell — **identical in every repo**. Carries the orientation recipes (`default`, `info`), a `mod` line for each shared module, the flat imports (`.limen/just/release.just`), and `import? 'the root Justfile'`. | Content-pinned: must match the canonical exactly. |
-| `.limen/just/*.just` (shared modules) | The **shared recipe baseline**, currently `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe regenerates `aqua-checksums.json` to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), and `fix` (apply fixes in place, where the tool supports it — including `limen fix`). The same in every repo, each loaded as a `mod`. | Content-pinned: **every `*.just` file under `.limen/`** must match the canonical exactly. |
-| the root `Justfile` | This project's **own** recipes (its build/test/run), at the repo root for visibility. `bootstrap`/`fix` seed it with a placeholder comment when absent, but never overwrite it. | Not checked — projects own it. |
+| the root `Justfile` | Carries the shared-baseline import (`import '.limen/just/main.just'`) and this project's **own** recipes — its `lint`/`test` aggregates (what CI runs), `build`/`run`, anything else — at the repo root for visibility. `bootstrap`/`fix` add the import when absent, but never overwrite the project's recipes. | Only the **import line** is required; the rest is the project's own. |
+| `.limen/just/*.just` (shared modules) | The **shared recipe baseline**. `main.just` mounts the `do` tree, sets the hermetic environment, and carries the orientation recipes (`default`, `info`); under the `do` namespace sit `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe compares `aqua-checksums.json` against a fresh regeneration to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), `fix` (apply fixes in place, where the tool supports it — including `limen fix`), each loaded as a `mod`, plus `release` imported flat so it can take a tag argument. The same in every repo. | Content-pinned: **every `*.just` file under `.limen/just/`** must match the canonical exactly. |
 
 The `.limen/` directory also parks a few non-recipe config files to keep the repo root uncluttered
 (`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/aqua-registry.yaml`, `.limen/lychee.toml`). These
@@ -193,37 +192,38 @@ are *not* just modules — only `*.just` files are — and they are governed by 
 ([per-language](./per-language.md), [tooling](./tooling.md),
 [link checking](#link-checking--limenlycheetoml)), not the Justfile content-pin.
 
-Orientation and project recipes are flat — `just info`, a project's own `just run` — so the
-universal "where am I? / do the project thing" commands are unprefixed in every repo (a
-project recipe must not reuse a shared module's name — `build`, `tools`, `lint`, `test`,
-`fix` — or the two collide). Shared recipe sets are grouped under modules —
-`just do tools add …`, `just do lint go`, `just do lint links`, `just do fix yaml` (see
-[project tooling](./tooling.md) for the `tools` module). Invoking a module bare runs its
+Orientation recipes are flat — `just info`, a project's own `just run` — so the universal
+"where am I? / do the project thing" commands are unprefixed in every repo. Every *shared*
+recipe set lives under the `do` namespace instead — `just do tools add …`, `just do lint go`,
+`just do lint links`, `just do fix yaml` (see [project tooling](./tooling.md) for the `tools`
+module). That namespace is exactly what frees the top level for a project's own recipes: a
+project may define its own `just lint` or `just test` (this repository does — they aggregate the
+`do::` recipes CI runs) with no collision. Invoking a module bare runs its
 **`default` recipe: the curated set that applies safely to every repository** — `just do lint`
 runs `limen` + `just` + `aqua` + `links` + `yaml` + `shell` + `dockerfile` + `commits`, and
-`just do fix` runs `limen` + `just` + `yaml`. The rule for what a default may carry: **a recipe
+`just do fix` runs `limen` + `just` + `yaml` + `aqua`. The rule for what a default may carry: **a recipe
 belongs in a default only when it passes vacuously where it does not apply** — `shell` and
 `dockerfile` discover their targets and no-op on a repo that has none, while recipes that
 need a language toolchain to even run (`go`, `rust`) stay out of every default and are named
 explicitly: a Go repo runs `just do lint go`, a Rust repo `just do lint rust`, and so on. Bare
 `just do test` refuses outright — every test is language-bound — so each project declares its
 aggregates in the root `Justfile` (`lint`, `test`), which is also what CI runs. Note that `just do lint aqua`
-(and therefore the bare `just do lint`) needs the network, and on drift regenerates
-`aqua-checksums.json` in place — aqua has no read-only validator, so the corrected file is
-left for review and commit. **All customization goes in the root `Justfile`; the `Justfile` and
-every shared module are locked.**
+(and therefore the bare `just do lint`) needs the network; on drift it reports and restores the
+file untouched, and `just do fix aqua` is the mutating twin that regenerates it. **All
+customization goes in the root `Justfile`; the shared `.limen/just/` modules are locked.**
 
-The `Justfile` carries the mandatory **`info` recipe**, which prints meaningful facts so anyone
-— or any agent — landing in a checkout can orient with one command: the **project name**, the
-**git upstream** (if any), the **closest semver** tag, the current **commit**, and the **date
-of the last commit**.
+The shared `main.just` carries the **`info` recipe**, available as `just info` in every repo,
+which prints meaningful facts so anyone — or any agent — landing in a checkout can orient with
+one command: the **project name**, the **git upstream** (if any), the **closest semver** tag,
+the current **commit**, and the **date of the last commit**.
 
-`limen` content-pins the `Justfile` and **every `*.just` file under `.limen/`** against the
-canonical baseline embedded in the binary — the source of truth is this repository's own
-[`Justfile`](../Justfile) and [`.limen/`](../.limen) modules. So adding a new shared module is just
-a new `.limen/just/NAME.just` plus its `mod` line; it becomes part of the enforced baseline automatically.
-A repo whose `Justfile` or any shared module differs from the baseline, or omits one, fails; what
-the root `Justfile` contains is the project's business.
+`limen` content-pins **every `*.just` file under `.limen/just/`** against the canonical
+baseline embedded in the binary — the source of truth is this repository's own
+[`.limen/just/`](../.limen/just) modules. So adding a new shared module is just a new
+`.limen/just/NAME.just` plus its `mod` line; it becomes part of the enforced baseline
+automatically. A repo whose shared modules differ from the baseline, or omit one, fails; the
+root `Justfile` is required only to carry the import line — what else it contains is the
+project's business.
 
 ## CI workflows — `.github/`
 

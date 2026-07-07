@@ -36,7 +36,7 @@ vuln: (_banner "lint go" "vuln") (_per-goos "govulncheck ./...")
 # lib.just: each GOOS pulls its own dependencies). A project that needs extra
 # flags — typically --ignore=<module> for the module-layout false positives of
 # https://github.com/google/go-licenses/issues/186 — exports them from its
-# the root Justfile, the home of all project customization (the variable name
+# root Justfile, the home of all project customization (the variable name
 # mirrors the task path `lint go licenses`):
 #     export LINT_GO_LICENSES_FLAGS := '--ignore=gotest.tools/v3'
 # For a one-off, set it on the invocation instead:

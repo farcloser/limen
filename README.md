@@ -92,7 +92,8 @@ Early. We are bootstrapping from the ground floor:
 - [x] Repository shape and operating principle (this README)
 - [x] **Common / mandatory files** — every repo must be a git repository and carry a
       recognized `LICENSE`, an `.editorconfig` and `.gitignore` matching the shared baselines,
-      a `README`, and the canonical `Justfile` + shared `.limen/` modules. See
+      a `README`, and a root `Justfile` carrying the shared-baseline import plus the canonical
+      `.limen/just/` modules. See
       [`book/mandatory-files.md`](./book/mandatory-files.md) and [`cmd/limen/`](./cmd/limen).
 - [x] **Per-language rules** — conditional checks that fire only when a language is present:
       shell → `.limen/.shellcheckrc`, and YAML → `.limen/.yamlfmt`. See [`book/per-language.md`](./book/per-language.md).

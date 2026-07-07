@@ -27,10 +27,12 @@ EFI variables Windows 11 requires). Two settings matter to us:
 - **Network**: `Shared` mode. The guest lands on UTM's vmnet subnet and is
   reachable from the host; the guest's MAC is visible in `arp -a`, which is
   how you correlate the VM with an IP before the guest agent is available.
-- **Directory sharing**: `WebDAV` mode, read-write, pointing at the repository.
-  WebDAV is served by UTM itself over SPICE — nothing to configure on the host,
-  but it needs a client *inside* the guest (next section), and until that
-  client exists the share is configured yet mounted nowhere.
+- **Directory sharing**: `WebDAV` mode, read-write, pointing at the **parent** of the
+  repository — the guest then sees the repo at `Z:\<basename>`, and log/marker files can
+  land at the share root (`Z:\`), outside the working tree. This is what `just vm` (below)
+  expects. WebDAV is served by UTM itself over SPICE — nothing to configure on the host,
+  but it needs a client *inside* the guest (next section), and until that client exists the
+  share is configured yet mounted nowhere.
 
 ## Guest: the support tools are not optional
 
@@ -103,8 +105,10 @@ output, never on exit codes). To observe a guest command, write its output to
 a file and read it back — the shared directory makes this trivial:
 
 ```sh
+# The share root Z:\ is the repo's PARENT on the host (see directory sharing
+# above), so a marker written there stays out of the working tree.
 utmctl exec Windows --cmd cmd.exe /c "some-command > Z:\out.txt 2>&1"
-cat "$REPO/out.txt"
+cat "$(dirname "$REPO")/out.txt"
 ```
 
 `utmctl file pull` is the alternative when the share is not involved.
@@ -168,14 +172,39 @@ write each revision under a fresh filename (or wait out the cache).
 ## Verifying the loop end to end
 
 One round trip proves the whole chain (agent alive, share mounted, read-write,
-and *which* directory is shared):
+and *which* directory is shared). The marker lands at the share root — the
+repo's parent on the host, `$(dirname "$REPO")` — not inside the working tree:
 
 ```sh
 utmctl exec Windows --cmd cmd.exe /c "echo proof > Z:\proof.txt"
-cat "$REPO/proof.txt"   # appears in the shared repository on the host
-rm "$REPO/proof.txt"
+cat "$(dirname "$REPO")/proof.txt"   # appears at the share root on the host
+rm "$(dirname "$REPO")/proof.txt"
 ```
 
 From here, the guest can run the repository's own workflows (`just …`) against
 the live working tree under git-bash, giving the windows CI leg a local
 reproduction path.
+
+## Driving it: `just vm`
+
+The root `Justfile` wraps this whole loop in one recipe — `just vm <task>` runs
+any just task inside the VM against this same working tree, and streams the
+guest log back:
+
+```sh
+just vm lint          # run `just lint` in the guest
+just vm do lint go    # any task path works: `just do lint go` in the guest
+```
+
+It requires the parent-of-repo WebDAV share described above (the guest sees the
+repo at `Z:\<basename>`; the log and exit-marker land at the share root, outside
+the tree). Transport is `utmctl exec`, which relays neither stdout nor exit
+codes — so the guest writes a log and an exit marker at the share root and the
+recipe polls for the marker, then exits with the guest's own status. Task
+arguments travel as argv end to end (never re-parsed by an intermediate shell),
+and no env vars are passed: qemu-ga's exec replaces the guest environment
+wholesale, which would strip `APPDATA` and break aqua. Two knobs, both
+environment variables: **`VM_NAME`** (default `Windows`) and **`VM_TIMEOUT`**
+seconds (default `1800`). This recipe is host-specific — macOS, UTM, a
+provisioned Windows VM — so it lives in the root `Justfile`, deliberately *not*
+in the canonical baseline.

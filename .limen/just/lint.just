@@ -27,7 +27,7 @@ mod homebrew 'lint-homebrew.just'
 # (mandatory files, canonical baseline, license, aqua pins). First in the
 # default set: the other linters trust the canonical files this one verifies.
 # LIMEN_BIN exists for one consumer — the limen repository itself, whose
-# the root Justfile points it at `go run ./cmd/limen` so the working tree is judged
+# root Justfile points it at `go run ./cmd/limen` so the working tree is judged
 # by its own enforcer, not by the (always older) released pin. Everyone else
 # runs the aqua-pinned binary.
 limen: (_banner "lint" "limen")

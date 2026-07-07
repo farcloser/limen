@@ -101,7 +101,7 @@ Two deliberate exceptions, named because they cut against doctrine:
 - **brew is not on the hermetic PATH and never will be.** It is a machine-layer package
   manager that aqua cannot pin, and the PATH exclusion exists to stop machine tools
   substituting for pinned ones — but brew substitutes for nothing here; it *is* the
-  subject under test. The canonical `Justfile` captures its location from the **ambient**
+  subject under test. The shared `main.just` captures its location from the **ambient**
   PATH at startup, before the hermetic PATH locks down (`BREW_BIN`, overridable by
   exporting it) — the invoking shell knows where brew lives, whatever the prefix — and
   the recipes fail with guidance when the capture came up empty; the hermetic PATH
