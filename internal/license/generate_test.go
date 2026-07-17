@@ -18,6 +18,7 @@ func TestNoticeRoundTrips(t *testing.T) {
 	allowed := []license.ID{
 		license.MIT,
 		license.Apache20,
+		license.GPL20,
 		license.AGPL30,
 		license.Closed,
 		license.CCBYSA40,

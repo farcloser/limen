@@ -15,9 +15,9 @@ import (
 // generate, verified against each license's authority (apache.org, gnu.org,
 // and the SPDX license list). Only MIT carries {{year}} and {{holder}}
 // placeholders: its copyright line is part of the license body and must be
-// filled. Apache-2.0 and AGPL-3.0 keep "[yyyy] [name of copyright owner]" and
-// "<year>  <name of author>" untouched — that is how the ASF and the FSF
-// themselves publish the files; those appendices are instructions for
+// filled. Apache-2.0, GPL-2.0, and AGPL-3.0 keep "[yyyy] [name of copyright
+// owner]" and "<year>  <name of author>" untouched — that is how the ASF and the
+// FSF themselves publish the files; those appendices are instructions for
 // source-file headers, not part of the LICENSE, and the FSF forbids altering
 // its license text. The CC licenses have no notice line at all. See
 // generate_test.go, which asserts each text round-trips through Identify and
@@ -36,6 +36,7 @@ func generatableFile(licenseID ID) (string, bool) {
 	name, found := map[ID]string{
 		MIT:      "MIT.txt",
 		Apache20: "Apache-2.0.txt",
+		GPL20:    "GPL-2.0.txt",
 		AGPL30:   "AGPL-3.0.txt",
 		CCBYSA40: "CC-BY-SA-4.0.txt",
 		CCBYND40: "CC-BY-ND-4.0.txt",
@@ -105,8 +106,14 @@ const (
 
 	MIT      ID = "MIT"
 	Apache20 ID = "Apache-2.0"
-	AGPL30   ID = "AGPL-3.0"
-	Closed   ID = "Closed-source"
+	// GPL20 is GPL-2.0-only — the license the Linux kernel is under, for repos
+	// that are kernel-derivative works (modules, patches, derived tooling) and so
+	// must be GPL-2.0. Not the "WITH Linux-syscall-note" variant: that exception
+	// is a per-file grant for exported UAPI headers, not a derivative work's
+	// whole-repo license.
+	GPL20  ID = "GPL-2.0"
+	AGPL30 ID = "AGPL-3.0"
+	Closed ID = "Closed-source"
 
 	// Content.
 
@@ -132,6 +139,8 @@ func Identify(text string) ID {
 		return Apache20
 	case isAGPL30(normalized):
 		return AGPL30
+	case isGPL20(normalized):
+		return GPL20
 	case isCC(normalized, "sharealike", "by-sa"):
 		return CCBYSA40
 	case isCC(normalized, "noderivatives", "by-nd") || isCC(normalized, "noderivs", "by-nd"):
@@ -152,23 +161,39 @@ func isApache20(n string) bool {
 	return strings.Contains(n, "apache license") && strings.Contains(n, "version 2.0")
 }
 
-// agplTitleWindow bounds how deep into the normalized text the AGPL's name may
-// appear and still count as the document's own title. Other licenses *mention*
-// the AGPL by name deep in their bodies — GPL-3.0 §13 (~28k chars in), MPL-2.0
-// §1.12 (~2.3k chars in), and SPDX's LGPL-3.0 text, which appends the full
-// GPL-3.0 — and every one of them also contains "version 3", so an unanchored
-// substring match passes all three as AGPL-3.0. The genuine text announces
-// itself in its first line; 512 characters leaves room for a prepended
-// copyright or short preamble while staying well clear of MPL's §1.12.
-const agplTitleWindow = 512
+// titleWindow bounds how deep into the normalized text a GPL-family license's
+// name may appear and still count as the document's own title. Other licenses
+// *mention* these families by name deep in their bodies — GPL-3.0 §13 (~28k
+// chars in) names the AGPL, MPL-2.0 §1.12 (~2.3k chars in) does too, and SPDX's
+// LGPL-3.0 text appends the full GPL-3.0 — so an unanchored substring match
+// misclassifies them. The genuine text announces itself in its first line; 512
+// characters leaves room for a prepended copyright or short preamble while
+// staying well clear of MPL's §1.12. Shared by isAGPL30 and isGPL20.
+const titleWindow = 512
 
 func isAGPL30(n string) bool {
 	head := n
-	if len(head) > agplTitleWindow {
-		head = head[:agplTitleWindow]
+	if len(head) > titleWindow {
+		head = head[:titleWindow]
 	}
 
 	return strings.Contains(head, "affero general public license") && strings.Contains(head, "version 3")
+}
+
+// isGPL20 recognizes GPL-2.0-only. The anchor is the title's date, "version 2,
+// june 1991": it is GPLv2's own heading and appears in none of the v3 family
+// (GPL/LGPL/AGPL-3.0 all say "version 3"), so it cleanly separates the one GPL
+// we allow from the ones we reject — which TestIdentifyRejectsFullTexts pins on
+// the real GPL-3.0 and LGPL-3.0 texts. Title-windowed for the same reason as
+// isAGPL30: other licenses name the GPL in their bodies, but only GPLv2
+// announces this date in its heading.
+func isGPL20(n string) bool {
+	head := n
+	if len(head) > titleWindow {
+		head = head[:titleWindow]
+	}
+
+	return strings.Contains(head, "general public license") && strings.Contains(head, "version 2, june 1991")
 }
 
 // isCC recognizes a Creative Commons 4.0 license. It accepts either the prose

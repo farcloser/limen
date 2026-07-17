@@ -9,7 +9,7 @@
   // Supply-chain cooldown: wait before proposing a bump. Doubles as protection
   // against the race where a release tag exists but its assets aren't uploaded yet.
   minimumReleaseAge: "3 days",
-  // `just lint commits` enforces DCO on every PR range, bot commits included.
+  // `just do lint commits` enforces DCO on every PR range, bot commits included.
   commitBody: "Signed-off-by: renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>",
   // The update-aqua-checksum workflow pushes a fix-up commit onto Renovate's
   // branches; without this, Renovate treats the branch as human-modified and

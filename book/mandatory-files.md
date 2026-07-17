@@ -51,6 +51,7 @@ with us.
 |------------|-------------|----------------------|
 | `MIT` | **Small libraries** and utilities. | MIT grant (*"Permission is hereby granted, free of charge…"*) plus the *"AS IS"* disclaimer. |
 | `Apache-2.0` | **Larger projects and anything enterprise-facing.** | Declares *"Apache License"* and *"Version 2.0"*. |
+| `GPL-2.0` | **Kernel-derivative works** — Linux modules, patches, and tooling that must be GPL-2.0-compatible with the kernel. | Declares *"GNU General Public License"* and *"Version 2, June 1991"*. |
 | `AGPL-3.0` | **SaaS / network services**, when we want the copyleft to reach hosted use. | Declares *"Affero General Public License"* and *"Version 3"*. |
 | `Closed-source` | **Proprietary** — anything not released publicly. | Explicit reservation of rights, no open grant. See the canonical text below. |
 
@@ -66,6 +67,12 @@ with us.
   assurance enterprise legal teams look for before depending on us. The explicit `NOTICE`
   and contribution terms also scale better across many contributors than MIT's single
   paragraph.
+- **GPL-2.0 for kernel-derivative works.** A Linux kernel module, a patch, or tooling that
+  links or derives from GPL-2.0 code inherits GPL-2.0 — it is not a choice so much as an
+  obligation the kernel imposes. We allow it for exactly that case. This is `GPL-2.0-only`
+  (the license the kernel is under), not the `WITH Linux-syscall-note` variant: that exception
+  is a per-file grant for exported UAPI headers, not a derivative work's whole-repo license.
+  For new code that is *not* forced onto GPL, prefer Apache-2.0 or AGPL-3.0.
 - **AGPL-3.0 for SaaS, as an option.** Plain GPL's copyleft is defeated by the "we only run
   it on our servers, we never distribute it" loophole. AGPL closes it: providing the software
   *over a network* triggers the obligation to share source. We reach for it when we want a
@@ -98,8 +105,9 @@ with us.
 
 ### Anything else is a failure
 
-GPL, LGPL, BSD, MPL, an unrecognized or hand-edited license, a CC variant we don't list
-(e.g. `BY-NC`), or any `LICENSE` file `limen` cannot classify is a **failure**. If we
+GPL-3.0, LGPL, BSD, MPL, an unrecognized or hand-edited license, a CC variant we don't list
+(e.g. `BY-NC`), or any `LICENSE` file `limen` cannot classify is a **failure** (`GPL-2.0-only`
+is allowed — see Software above — but no other GPL/LGPL version is). If we
 genuinely need another license, it is added to this list and to `limen`'s policy first; the
 tool is the enforcement, the book is the decision.
 
