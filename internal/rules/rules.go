@@ -154,8 +154,8 @@ type Policy struct {
 }
 
 // DefaultPolicy returns the policy described in book/mandatory-files.md: the
-// allowed software licenses (MIT, Apache-2.0, AGPL-3.0, Closed-source) and
-// content licenses (CC-BY-SA-4.0, CC-BY-ND-4.0). limen enforces membership in
+// allowed software licenses (MIT, Apache-2.0, GPL-2.0, AGPL-3.0, Closed-source)
+// and content licenses (CC-BY-SA-4.0, CC-BY-ND-4.0). limen enforces membership in
 // this set; which license to choose for a given repository is guidance in the
 // book, not a machine-checkable rule.
 func DefaultPolicy() Policy {
@@ -163,6 +163,7 @@ func DefaultPolicy() Policy {
 		AllowedLicenses: []license.ID{
 			license.MIT,
 			license.Apache20,
+			license.GPL20,
 			license.AGPL30,
 			license.Closed,
 			license.CCBYSA40,

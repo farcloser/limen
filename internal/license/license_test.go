@@ -34,6 +34,11 @@ const agplText = `                    GNU AFFERO GENERAL PUBLIC LICENSE
 
  Copyright (C) 2007 Free Software Foundation, Inc.`
 
+const gpl2Text = `                    GNU GENERAL PUBLIC LICENSE
+                       Version 2, June 1991
+
+ Copyright (C) 1989, 1991 Free Software Foundation, Inc.`
+
 const ccBySaText = `Creative Commons Attribution-ShareAlike 4.0 International Public License
 
 By exercising the Licensed Rights, You accept and agree to be bound...`
@@ -79,6 +84,8 @@ func TestIdentify(t *testing.T) {
 		{"mit", mitText, license.MIT},
 		{"apache", apacheText, license.Apache20},
 		{"agpl", agplText, license.AGPL30},
+		{"gpl-2.0", gpl2Text, license.GPL20},
+		{"gpl-2.0 behind a short preamble", "Copyright (c) 2026 Farcloser\n\n" + gpl2Text, license.GPL20},
 		{"cc-by-sa prose", ccBySaText, license.CCBYSA40},
 		{"cc-by-nd prose", ccByNdText, license.CCBYND40},
 		{"cc-by-sa url deed", ccBySaDeed, license.CCBYSA40},
