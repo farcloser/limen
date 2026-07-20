@@ -42,8 +42,8 @@ baseline is defined once and lives in one place: this repository's own
 `rules.CanonicalShellcheckrc`. **That file is the source of truth.** A repo may not add, remove,
 or reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to
 the canonical. (This is the same exact-match rule as the `.editorconfig`, the `Justfile`, and
-the `.limen/just/*.just` modules — only `.gitignore` and `aqua.yaml` use the subset,
-"contains the baseline" model.)
+the `.limen/just/*.just` modules — only `aqua.yaml` uses the subset, "contains the baseline"
+model, and `.gitignore` is merely seeded once when absent.)
 
 **How to accommodate specific projects**
 

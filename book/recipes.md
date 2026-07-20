@@ -139,7 +139,8 @@ Two roles deserve emphasis because they close the enforcement loop:
   (private repos — nothing touches the public transparency log — and the escape hatch
   when CI is down): `just do release --local <cosign-key> vX.Y.Z` does the same tag work,
   then runs goreleaser with key-based cosign — the key path is a mandatory argument, and
-  the passphrase is prompted (or passed with `--cosign-password`). `just do release --local --dry-run` builds an unsigned
+  the passphrase is prompted (or piped in with `--cosign-password-stdin`, keeping it out of
+  argv and shell history). `just do release --local --dry-run` builds an unsigned
   snapshot into `build/release/` in either lane. The recipe is the interface: the
   workflow contains no release logic of its own.
 

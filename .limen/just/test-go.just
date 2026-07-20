@@ -51,7 +51,17 @@ cover: (_banner "test go" "cover")
     go tool cover -html="$dir/coverage.out" -o "$dir/coverage.html"
     echo "HTML report: $dir/coverage.html"
     min="${TEST_GO_COVER_MIN:-0}"
-    if [ "$min" -gt 0 ] 2>/dev/null; then
+    # Fail CLOSED on a malformed threshold. `[ "$min" -gt 0 ]` errors on a
+    # non-integer (a float like 80.0, a typo like 8O), and swallowing that error
+    # would silently skip the whole gate — a mistyped minimum must not disable
+    # enforcement. Reject anything that is not a whole number, loudly.
+    case "$min" in
+        ''|*[!0-9]*)
+            echo "TEST_GO_COVER_MIN must be a whole-number percentage (got '$min')." >&2
+            exit 2
+            ;;
+    esac
+    if [ "$min" -gt 0 ]; then
         total=$(go tool cover -func="$dir/coverage.out" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
         if [ "${total%%.*}" -lt "$min" ]; then
             echo "coverage ${total}% is below the ${min}% minimum" >&2

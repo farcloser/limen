@@ -1,9 +1,9 @@
 // Package limen embeds this repository's own canonical configuration files so
 // that the limen tool enforces other repositories against the exact files it
-// dogfoods. These are the single source of truth for the editorconfig and
-// gitignore rules; editing the repo-root .editorconfig or .gitignore updates
-// the rule. The directives must live in this root-directory file because
-// //go:embed cannot reference parent directories.
+// dogfoods. Editing the repo-root .editorconfig updates the content-pinned rule;
+// editing the repo-root .gitignore updates the file new repositories are seeded
+// with (it is never enforced after seeding). The directives must live in this
+// root-directory file because //go:embed cannot reference parent directories.
 package limen
 
 import (
@@ -18,8 +18,9 @@ import (
 //go:embed .editorconfig
 var CanonicalEditorconfig string
 
-// CanonicalGitignore is the repository's .gitignore — the baseline every
-// repository's .gitignore must cover. See book/mandatory-files.md.
+// CanonicalGitignore is the repository's .gitignore — seeded verbatim into a
+// repository that has none. limen never enforces or updates it afterward; an
+// existing .gitignore is the project's own. See book/mandatory-files.md.
 //
 //go:embed .gitignore
 var CanonicalGitignore string

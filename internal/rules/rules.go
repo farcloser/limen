@@ -100,30 +100,6 @@ var (
 	CanonicalAquaRegistry = limen.CanonicalAquaRegistry //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 )
 
-// DefaultRequiredGitignore is the set of patterns every repository's .gitignore
-// must ignore: every non-comment, non-blank line of the repo-root .gitignore
-// (which limen embeds), in declaration order. A repository may ignore more; it
-// may not omit any of these. book/mandatory-files.md mirrors this baseline in
-// prose.
-var DefaultRequiredGitignore = gitignoreLines(limen.CanonicalGitignore) //nolint:gochecknoglobals // from embedded data.
-
-// gitignoreLines returns the meaningful patterns of a .gitignore — every line
-// that is neither blank nor a comment — preserving declaration order.
-func gitignoreLines(text string) []string {
-	var out []string
-
-	for raw := range strings.SplitSeq(text, "\n") {
-		line := strings.TrimSpace(strings.TrimSuffix(raw, carriageReturn))
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		out = append(out, line)
-	}
-
-	return out
-}
-
 // Status is the outcome of evaluating a single rule.
 type Status string
 
@@ -148,9 +124,6 @@ func (f Finding) OK() bool { return f.Status == StatusOK }
 type Policy struct {
 	// AllowedLicenses is the set of license IDs a repository's LICENSE may be.
 	AllowedLicenses []license.ID
-	// RequiredGitignore is the set of patterns a repository's .gitignore must
-	// ignore, each written as it would appear in the file (e.g. "_*").
-	RequiredGitignore []string
 }
 
 // DefaultPolicy returns the policy described in book/mandatory-files.md: the
@@ -169,7 +142,6 @@ func DefaultPolicy() Policy {
 			license.CCBYSA40,
 			license.CCBYND40,
 		},
-		RequiredGitignore: DefaultRequiredGitignore,
 	}
 }
 
@@ -183,7 +155,7 @@ func Check(root string, policy Policy) []Finding {
 		checkReadme(root),
 		checkLicense(root, policy),
 		checkEditorconfig(root),
-		checkGitignore(root, policy),
+		checkGitignore(root),
 		checkGitattributes(root),
 		checkJustfile(root),
 		checkAqua(root),
@@ -276,62 +248,20 @@ func checkPinned(root, rule, relPath, canonical string) *Finding {
 	return nil
 }
 
-func checkGitignore(root string, policy Policy) Finding {
+// checkGitignore requires only that a .gitignore exists. Its contents are the
+// repository's own: limen seeds a canonical file when none is present (see
+// remediateGitignore) but never enforces or updates the patterns afterward.
+func checkGitignore(root string) Finding {
 	const (
 		rule = "gitignore"
 		name = ".gitignore"
 	)
 
-	data, err := readRepoFile(root, name)
-	if err != nil {
+	if _, err := readRepoFile(root, name); err != nil {
 		return fail(rule, "", "no .gitignore found")
 	}
 
-	have := gitignorePatterns(string(data))
-
-	var missing []string
-
-	for _, want := range policy.RequiredGitignore {
-		if !have[normalizeIgnore(want)] {
-			missing = append(missing, want)
-		}
-	}
-
-	if len(missing) > 0 {
-		return fail(rule, name, "missing required pattern(s): "+strings.Join(missing, ", "))
-	}
-
-	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: ".gitignore present with required patterns"}
-}
-
-// gitignorePatterns returns the set of normalized patterns declared in a
-// .gitignore, skipping blank lines and comments.
-func gitignorePatterns(text string) map[string]bool {
-	set := map[string]bool{}
-
-	for raw := range strings.SplitSeq(text, "\n") {
-		line := strings.TrimSpace(strings.TrimSuffix(raw, carriageReturn))
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		set[normalizeIgnore(line)] = true
-	}
-
-	return set
-}
-
-// normalizeIgnore reduces a .gitignore pattern to a canonical form so that
-// equivalent spellings of the same ignore compare equal: a leading "/" or
-// "**/" anchor and a trailing "/" directory marker are stripped, so ".idea/",
-// "/.idea", and "**/.idea" all normalize to ".idea".
-func normalizeIgnore(pattern string) string {
-	pattern = strings.TrimSpace(pattern)
-	pattern = strings.TrimSuffix(pattern, "/")
-	pattern = strings.TrimPrefix(pattern, "/")
-	pattern = strings.TrimPrefix(pattern, "**/")
-
-	return pattern
+	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: ".gitignore present"}
 }
 
 // checkJustfile verifies the task runner in its two regimes: the root

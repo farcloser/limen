@@ -57,14 +57,11 @@ func writeRepo(t *testing.T, files map[string]string) string {
 // compliantFiles returns the file set of a fully compliant repository, which
 // individual tests can mutate to exercise a single failing rule.
 func compliantFiles() map[string]string {
-	// Every pattern DefaultPolicy requires, plus an extra of the repo's own.
-	compliantGitignore := strings.Join(DefaultRequiredGitignore, "\n") + "\n*.log\n"
-
 	files := map[string]string{
 		"README.md":           "# Thing",
 		"LICENSE":             mitText,
 		".editorconfig":       CanonicalEditorconfig,
-		".gitignore":          compliantGitignore,
+		".gitignore":          "*.log\n", // any present .gitignore satisfies the rule
 		".gitattributes":      CanonicalGitattributes,
 		"Justfile":            CanonicalJustfileImport + "\n",
 		"aqua.yaml":           limen.CanonicalAquaYAML,
@@ -314,51 +311,29 @@ func TestGitRepoAcceptsGitFile(t *testing.T) {
 	}
 }
 
-func TestGitignoreRequiresPatterns(t *testing.T) {
+func TestGitignoreAnyContentPasses(t *testing.T) {
 	t.Parallel()
 
+	// limen only requires that a .gitignore exists; its patterns are the repo's
+	// own. A file sharing nothing with the canonical baseline still passes.
 	files := compliantFiles()
-	// Drop one required pattern; the rule must fail and name it.
-	missing := DefaultRequiredGitignore[len(DefaultRequiredGitignore)-1]
-	kept := DefaultRequiredGitignore[:len(DefaultRequiredGitignore)-1]
-	files[".gitignore"] = strings.Join(kept, "\n") + "\n"
-
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "gitignore")
-	if f.OK() {
-		t.Fatalf("a .gitignore missing %q should fail", missing)
-	}
-
-	if !strings.Contains(f.Message, missing) {
-		t.Errorf("message did not name the missing pattern %q: %s", missing, f.Message)
-	}
-}
-
-func TestGitignorePatternSpellingsAccepted(t *testing.T) {
-	t.Parallel()
-
-	files := compliantFiles()
-	// Every required pattern is present, but a couple are written in anchored,
-	// directory-suffixed, and **/-prefixed spellings that must normalize equal.
-	var lines []string
-
-	for _, p := range DefaultRequiredGitignore {
-		switch p {
-		case ".DS_Store":
-			p = "/.DS_Store"
-		case ".idea/":
-			p = "**/.idea/"
-		default:
-			// Every other pattern keeps its canonical spelling.
-		}
-
-		lines = append(lines, p)
-	}
-
-	files[".gitignore"] = "# junk\n" + strings.Join(lines, "\n") + "\n"
+	files[".gitignore"] = "# the project's own\nbin/\n"
 
 	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "gitignore")
 	if !f.OK() {
-		t.Errorf("equivalent pattern spellings should pass, got: %s", f.Message)
+		t.Errorf("any present .gitignore should pass, got: %s", f.Message)
+	}
+}
+
+func TestGitignoreAbsentFails(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	delete(files, ".gitignore")
+
+	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "gitignore")
+	if f.OK() {
+		t.Error("a repository with no .gitignore should fail")
 	}
 }
 
