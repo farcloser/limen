@@ -22,9 +22,16 @@ on:
 
 permissions: {}
 
-# One release at a time, never cancelled mid-publish.
+# One release at a time PER TAG, never cancelled mid-publish. The group MUST be
+# keyed by the ref, not a constant: a constant group puts every tag's release in
+# one queue, and GitHub keeps only the newest *pending* run per group — so pushing
+# several tags at once ("Canceling since a higher priority waiting request …")
+# silently cancels the queued releases for the older tags. Keying by ref makes each
+# tag its own group: different tags never cancel each other, and a re-push of the
+# SAME tag serializes behind an in-flight run rather than cancelling it
+# (cancel-in-progress stays unset, so a publish in progress is never interrupted).
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
 
 # Every run step is bash, explicitly: runner-OS shell defaults are a trap
 # (windows defaults to PowerShell), and explicit bash adds `-eo pipefail`.
