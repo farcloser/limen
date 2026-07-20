@@ -22,9 +22,9 @@ packages:
     registry: local
   - name: github.com/vbatts/git-validation@v1.2.2
     registry: local
-  - name: golang.org/x/vuln/cmd/govulncheck@v1.5.0
+  - name: golang.org/x/vuln/cmd/govulncheck@v1.6.0
     registry: local
-  - name: golang.org/x/tools/cmd/deadcode@v0.47.0
+  - name: golang.org/x/tools/cmd/deadcode@v0.48.0
     registry: local
   # Pseudo-version: the nested cmd/dot module carries no tags upstream.
   - name: github.com/goccy/go-graphviz/cmd/dot@v0.0.0-20251129032125-76e04975df88
