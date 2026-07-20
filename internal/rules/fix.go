@@ -83,7 +83,7 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateReadme(root))
 	add(remediateLicense(root, opts))
 	add(remediateEditorconfig(root))
-	add(remediateGitignore(root, opts.Policy))
+	add(remediateGitignore(root))
 	add(remediateGitattributes(root))
 	add(remediateJustfile(root)...)
 	add(remediateAqua(root, opts.SelfVersion)...)
@@ -218,51 +218,24 @@ func remediateEditorconfig(root string) Outcome {
 	return pinExact(root, "editorconfig", ".editorconfig", CanonicalEditorconfig)
 }
 
-func remediateGitignore(root string, policy Policy) Outcome {
+// remediateGitignore seeds the canonical .gitignore only when a repository has
+// none. An existing file is the project's own and is left untouched — limen
+// neither enforces nor updates its patterns.
+func remediateGitignore(root string) Outcome {
 	const (
 		rule = "gitignore"
 		name = ".gitignore"
 	)
 
-	data, err := readRepoFile(root, name)
-	if err != nil {
-		if e := writeFile(root, name, limen.CanonicalGitignore); e != nil {
-			return failed(rule, name, e)
-		}
-
-		return Outcome{Rule: rule, Action: ActionCreated, Path: name, Message: "wrote canonical .gitignore"}
+	if _, err := readRepoFile(root, name); err == nil {
+		return Outcome{Rule: rule, Action: ActionNone, Path: name, Message: ".gitignore present; left as-is"}
 	}
 
-	have := gitignorePatterns(string(data))
-
-	var missing []string
-
-	for _, want := range policy.RequiredGitignore {
-		if !have[normalizeIgnore(want)] {
-			missing = append(missing, want)
-		}
-	}
-
-	if len(missing) == 0 {
-		return Outcome{Rule: rule, Action: ActionNone, Path: name, Message: ".gitignore covers the baseline"}
-	}
-
-	appended := ensureTrailingNewline(
-		string(data),
-	) + "\n# --- added by limen fix: baseline patterns ---\n" + strings.Join(
-		missing,
-		"\n",
-	) + "\n"
-	if err := writeFile(root, name, appended); err != nil {
+	if err := writeFile(root, name, limen.CanonicalGitignore); err != nil {
 		return failed(rule, name, err)
 	}
 
-	return Outcome{
-		Rule:    rule,
-		Action:  ActionMerged,
-		Path:    name,
-		Message: "appended missing baseline pattern(s): " + strings.Join(missing, ", "),
-	}
+	return Outcome{Rule: rule, Action: ActionCreated, Path: name, Message: "wrote canonical .gitignore"}
 }
 
 // justfileSeed is the root Justfile a fresh repository starts from: the

@@ -9,7 +9,7 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | **Git repository** | The project root is a git repository — a `.git` directory (normal clone) or a `.git` file (worktree/submodule) is present. |
 | `LICENSE` | Present, and its content must be one of the **allowed licenses** below. |
 | `.editorconfig` | Present, and **content-pinned**: equals the [canonical baseline](#canonical-editorconfig) byte for byte — no extra sections, no edited values. |
-| `.gitignore` | Present, and covers the shared [gitignore baseline](#required-gitignore-patterns). |
+| `.gitignore` | Present. Seeded from the [canonical file](#gitignore) when absent; an existing one is the project's own. |
 | `.gitattributes` | Present, and **content-pinned**: the [canonical file](#canonical-gitattributes) disabling git line-ending conversion. |
 | `README` | Present, as `README.md`. |
 | `Justfile` | Present, carrying the shared-baseline import — the rest of the file is the project’s own. The [`.limen/` modules](#justfile) it mounts are canonical. |
@@ -29,8 +29,8 @@ security features): see [GitHub settings](./github.md).
 You do not hand-create these files: `limen bootstrap <path>` scaffolds a new repository with
 all of them, and `limen fix` brings an existing repository up to the baseline — writing what
 is missing, resetting the content-pinned files (`.editorconfig`, `.gitattributes`, and the
-`.limen/*` files), and merging the baseline into the subset files (`.gitignore`, `aqua.yaml`, the
-root `Justfile`’s import line) without
+`.limen/*` files), seeding a `.gitignore` when none exists, and merging the baseline into the
+subset files (`aqua.yaml` and the root `Justfile`’s import line) without
 discarding a repo's own additions. Anything it cannot fix safely — a disallowed `LICENSE`, a
 manifest it cannot parse — is reported for a human to resolve.
 
@@ -138,7 +138,7 @@ covers every language we work in, and a section only ever matches files that are
 full baseline is harmless even for languages a repo does not use. Because it is exhaustive, a
 repo never needs its own additions; `limen fix` overwrites a drifted `.editorconfig` back to the
 canonical. (This is the same exact-match rule as the `Justfile` and the `.limen/*` files — unlike
-`.gitignore`, which allows extra patterns.)
+`.gitignore`, which limen only seeds and never checks.)
 
 The reasoning behind it: **each file type uses the indentation its own tooling treats as
 canonical**, so the config never fights the formatter — tabs where `gofmt` and `make` require
@@ -147,18 +147,16 @@ web-language families that `jq`, `yamllint`, Prettier, and Biome emit. A two-spa
 covers anything without tooling of its own, and each family is pinned explicitly so a format
 never drifts if that fallback changes.
 
-## Required .gitignore patterns
+## .gitignore
 
-The baseline is defined once and lives in exactly one place: this repository's own
-[`.gitignore`](../.gitignore), which `limen` embeds and enforces. **That file is the source of
-truth** — read it for the exact patterns. Like the editorconfig baseline it is
-**comprehensive**, spanning every language and tool we work in; a pattern only ever matches
-files that exist, so carrying patterns for unused languages is harmless.
+`limen` requires only that a `.gitignore` **exists**. Its contents are the repository's own —
+`limen` neither enforces nor updates them.
 
-`limen` checks that every pattern in the baseline appears in a repository's `.gitignore`,
-normalizing spelling first so anchored or directory forms count — `.idea`, `.idea/`, `/.idea`,
-and `**/.idea` are all equivalent. A repo may ignore more — its own binary name, a `dist/`, its
-test artifacts — as ordinary extras; it may not omit a baseline pattern.
+When a repository has none, `limen fix`/`bootstrap` seeds this repository's own
+[`.gitignore`](../.gitignore) — which `limen` embeds — as a starting point. Once the file
+exists, `limen` never rewrites it or checks its patterns: edit it freely, or delete the seeded
+lines that do not apply. Editing the embedded file changes only what future seeds contain, not
+any existing repository.
 
 ## Canonical .gitattributes
 

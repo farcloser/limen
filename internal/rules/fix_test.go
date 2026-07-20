@@ -75,23 +75,25 @@ func TestFixIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestFixMergesGitignore(t *testing.T) {
+func TestFixLeavesExistingGitignore(t *testing.T) {
 	t.Parallel()
 
-	dir := writeRepo(t, map[string]string{".gitignore": ".DS_Store\n"})
+	const own = "# the project's own\nbin/\n"
+
+	dir := writeRepo(t, map[string]string{".gitignore": own})
 
 	o := outcomeFor(Fix(dir, bootstrapOpts()), "gitignore")
-	if o.Action != ActionMerged {
-		t.Fatalf("gitignore action = %s, want merged", o.Action)
+	if o.Action != ActionNone {
+		t.Fatalf("gitignore action = %s, want none (an existing file is left as-is)", o.Action)
 	}
-	// The repo's own entry is preserved and the baseline is now covered.
+	// The existing file is untouched — not overwritten with the canonical.
 	data, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if !strings.Contains(string(data), ".DS_Store") {
-		t.Error("merge dropped the repo's own pattern")
+	if string(data) != own {
+		t.Errorf("fix modified an existing .gitignore: %q", string(data))
 	}
 
-	if f := checkGitignore(dir, DefaultPolicy()); !f.OK() {
-		t.Errorf("gitignore should pass after merge: %s", f.Message)
+	if f := checkGitignore(dir); !f.OK() {
+		t.Errorf("an existing .gitignore should pass: %s", f.Message)
 	}
 }
 
