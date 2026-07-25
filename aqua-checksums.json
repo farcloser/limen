@@ -1,23 +1,23 @@
 {
   "checksums": [
     {
-      "id": "github_release/github.com/casey/just/1.55.1/just-1.55.1-aarch64-apple-darwin.tar.gz",
-      "checksum": "0225E3899B1B555BC3F4122D0402BA931A6EE697D188C68E4D971468064C78F4",
+      "id": "github_release/github.com/casey/just/1.57.0/just-1.57.0-aarch64-apple-darwin.tar.gz",
+      "checksum": "0381DB216C2F97CE31D838A1562C1064DFBFA73F5A8A81581338A2CD9217DF47",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/casey/just/1.55.1/just-1.55.1-aarch64-unknown-linux-musl.tar.gz",
-      "checksum": "B0EE814C9656427408E339893541E30D9027828686839499B2A2A34DD61AD173",
+      "id": "github_release/github.com/casey/just/1.57.0/just-1.57.0-aarch64-unknown-linux-musl.tar.gz",
+      "checksum": "F225044A81ADEA6E0B3A8B9370AAF374E6AF76C8735AE263AC993DF55FD137EC",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/casey/just/1.55.1/just-1.55.1-x86_64-pc-windows-msvc.zip",
-      "checksum": "8106E6C036AEA52DD1D5109BDF9357C37BA87A0E0EF1013D7327103942550C79",
+      "id": "github_release/github.com/casey/just/1.57.0/just-1.57.0-x86_64-pc-windows-msvc.zip",
+      "checksum": "4C7391D17CB1D17B758B52004EE6411372B8A13FF37C3C9B9031625CB6026E09",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/casey/just/1.55.1/just-1.55.1-x86_64-unknown-linux-musl.tar.gz",
-      "checksum": "B0EF600F0DF20D5AE91AE931627C499FC52B477FFE5F5EA7B7B3EC616B16C778",
+      "id": "github_release/github.com/casey/just/1.57.0/just-1.57.0-x86_64-unknown-linux-musl.tar.gz",
+      "checksum": "45B548094283CB9739AF8F13273B8CDDEEE869F5B4EF2BB631B1F311CB566155",
       "algorithm": "sha256"
     },
     {
