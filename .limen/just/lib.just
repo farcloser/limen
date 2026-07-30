@@ -16,12 +16,14 @@ _banner mod name:
 # differs per GOOS, so a single native run misses the other platforms' files
 # and dependencies. CGO prevents exactly that — loading packages for a foreign
 # GOOS needs that platform's C toolchain — so a project that genuinely needs
-# cgo must export CGO_ENABLED=1 and gets one native run only: reduced
-# coverage, announced loudly.
+# cgo declares it (`export GO_CGO := '1'`, or CGO_ENABLED=1 for one invocation)
+# and gets one native run only: reduced coverage, announced loudly.
+# The same resolution as the build module, so ONE project knob governs every Go
+# task — analysis and build agree on whether this project is a cgo project.
 _per-goos +cmd:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ "${CGO_ENABLED:-0}" = "1" ]; then
+    if [ "${CGO_ENABLED:-${GO_CGO:-0}}" = "1" ]; then
         echo "CGO_ENABLED=1: cross-platform runs are impossible (foreign-GOOS package" >&2
         echo "loading needs that platform's C toolchain) — native platform only." >&2
         {{ cmd }}

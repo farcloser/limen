@@ -57,9 +57,19 @@ explicit, documented decision before their recipes can work.)
   `TEST_GO_COVER_MIN` for the test module, `BUILD_GO_FLAGS` and `BUILD_GO_LDFLAGS` for the
   build module. A
   project sets them once in the root `Justfile` (`export NAME := 'value'` — exports propagate
-  into every module recipe), or on the invocation for a one-off. The exception that
-  proves the rule: `LIMEN_BIN` serves both `lint limen` and `fix limen`, so it carries
-  the tool's name instead of one task's.
+  into every module recipe), or on the invocation for a one-off. The exceptions that
+  prove the rule carry the name of what they configure rather than one task's:
+  `LIMEN_BIN` serves both `lint limen` and `fix limen`; `GO_CGO` declares that a project's
+  product cannot link without cgo, which the build recipes and the per-platform analysis
+  legs both have to know.
+- **A knob is read in the recipe, not resolved into a module variable.** A child module
+  cannot see its parent's variables, and `env()` reads `just`'s *process* environment, which
+  never holds one — so `export X := env('X', default)` in a shared module silently discards
+  what the project set and re-exports the default over it. Reading `${X:-default}` in the
+  recipe body works instead, because a parent's exports *are* present in the recipe's
+  environment. `GO_CGO` is the shape to copy: the recipes resolve
+  `${CGO_ENABLED:-${GO_CGO:-0}}`, so the project declares its nature once, a single
+  invocation can still override in either direction, and unset still means pure Go.
 - **A knob composes with the recipe; it does not replace it.** `BUILD_GO_LDFLAGS` is the
   worked example of why that distinction earns a second variable. Linker flags cannot ride
   in on `BUILD_GO_FLAGS`: go honours the *last* occurrence of a repeated flag, and the

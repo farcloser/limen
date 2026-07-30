@@ -43,11 +43,23 @@ import 'lib.just'
 # out of libc, which is exactly what makes `static` viable on glibc.
 go_tags := 'netgo,osusergo'
 
-# CGO is opt-in per invocation (`CGO_ENABLED=1 just do build go`). Defaulted to 0
-# explicitly for every recipe rather than left unset: go's own default is CGO
-# on for native builds when a C toolchain exists, and unset must mean pure Go
-# here.
-export CGO_ENABLED := env('CGO_ENABLED', '0')
+# CGO is off unless asked for, two ways: per invocation with `CGO_ENABLED=1 just
+# do build go`, or for good with `export GO_CGO := '1'` in the root Justfile (a
+# project whose product cannot link without cgo — it binds a system framework —
+# should not have to repeat the prefix on every build). Each recipe resolves
+#     CGO_ENABLED := ${CGO_ENABLED:-${GO_CGO:-0}}
+# so the invocation still wins, including downgrading a GO_CGO project to a
+# one-off pure-Go build. The final `:-0` is why this is resolved at all rather
+# than left unset: go's own default is CGO ON for native builds when a C
+# toolchain exists, and unset must mean pure Go here.
+#
+# Deliberately NOT `export CGO_ENABLED := env('CGO_ENABLED', '0')`, which is how
+# this used to read: a child module cannot see its parent's variables, and env()
+# reads just's PROCESS environment, which never holds one — so that form silently
+# discarded a project's setting and re-exported 0 over it. Resolving in the recipe
+# body instead works because a parent's exports ARE in the recipe's environment.
+# GO_CGO carries the toolchain's name rather than a task path (cf. LIMEN_BIN)
+# because `_per-goos` in lib.just honours it too: one knob, every Go task.
 
 # --- C toolchain hardening — only effective when CGO_ENABLED=1 --------------
 # The canonical hardening set (see the Red Hat compiler-flags guidance),
@@ -74,6 +86,7 @@ default: release
 release: (_banner "build go" "release")
     #!/usr/bin/env bash
     set -euo pipefail
+    export CGO_ENABLED="${CGO_ENABLED:-${GO_CGO:-0}}"
     version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
     ldflags="-s -w -X main.version=${version}"
     if [ "${CGO_ENABLED:-0}" = "1" ]; then
@@ -99,6 +112,7 @@ release: (_banner "build go" "release")
 debug: (_banner "build go" "debug")
     #!/usr/bin/env bash
     set -euo pipefail
+    export CGO_ENABLED="${CGO_ENABLED:-${GO_CGO:-0}}"
     version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
     ldflags="-X main.version=${version}"
     if [ "${CGO_ENABLED:-0}" = "1" ]; then
@@ -147,6 +161,7 @@ race: (_banner "build go" "race")
 static: (_banner "build go" "static")
     #!/usr/bin/env bash
     set -euo pipefail
+    export CGO_ENABLED="${CGO_ENABLED:-${GO_CGO:-0}}"
     if [ "$(uname -s)" != "Linux" ]; then
         echo "static builds require Linux: macOS has no static libc to link against." >&2
         exit 1
