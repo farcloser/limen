@@ -60,8 +60,8 @@ explicit, documented decision before their recipes can work.)
   into every module recipe), or on the invocation for a one-off. The exceptions that
   prove the rule carry the name of what they configure rather than one task's:
   `LIMEN_BIN` serves both `lint limen` and `fix limen`; `GO_CGO` declares that a project's
-  product cannot link without cgo, which the build recipes and the per-platform analysis
-  legs both have to know.
+  product cannot link without cgo, which every Go task — build, test, and the per-platform
+  analysis legs — has to know.
 - **A knob is read in the recipe, not resolved into a module variable.** A child module
   cannot see its parent's variables, and `env()` reads `just`'s *process* environment, which
   never holds one — so `export X := env('X', default)` in a shared module silently discards
