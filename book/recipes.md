@@ -54,11 +54,21 @@ explicit, documented decision before their recipes can work.)
 - **Project knobs are exported variables, named after the task path.** A recipe that
   needs per-project configuration reads an environment variable named after its task path
   — `LINT_GO_LICENSES_FLAGS` for `just do lint go licenses`, `TEST_GO_TIMEOUT` and
-  `TEST_GO_COVER_MIN` for the test module, `BUILD_GO_FLAGS` for the build module. A
+  `TEST_GO_COVER_MIN` for the test module, `BUILD_GO_FLAGS` and `BUILD_GO_LDFLAGS` for the
+  build module. A
   project sets them once in the root `Justfile` (`export NAME := 'value'` — exports propagate
   into every module recipe), or on the invocation for a one-off. The exception that
   proves the rule: `LIMEN_BIN` serves both `lint limen` and `fix limen`, so it carries
   the tool's name instead of one task's.
+- **A knob composes with the recipe; it does not replace it.** `BUILD_GO_LDFLAGS` is the
+  worked example of why that distinction earns a second variable. Linker flags cannot ride
+  in on `BUILD_GO_FLAGS`: go honours the *last* occurrence of a repeated flag, and the
+  project's flags are appended after the `-ldflags` the recipe computed, so a project
+  passing its own would silently drop the version stamp and the CGO linkmode — a build that
+  succeeds while quietly losing what the baseline guarantees. So the knob is spliced inside
+  the recipe's own `-ldflags` string instead, last, where it adds to the baseline and still
+  wins an explicit conflict. Prefer this shape whenever a knob would otherwise let a project
+  overwrite something the baseline is responsible for.
 - **Go analysis runs once per supported platform.** The Go build graph differs per GOOS —
   a file built only on linux is invisible to a darwin-only run — so the Go linters,
   vulnerability scan, and license check iterate over the supported platforms with CGO
