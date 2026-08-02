@@ -105,10 +105,28 @@ The decided merge model, enforced by both the repository settings and the
   shape — so reconciliation preserves them, exactly like the standard-registry
   ref inside the pinned aqua sections; a fresh ruleset starts from the
   canonical CI matrix.
+- **Every commit is signed.** The `limen:main` ruleset requires signatures, so
+  an unsigned commit cannot land on the default branch. This is deliberately
+  *not* the same guarantee as the DCO: `git-validation` checks that a
+  `Signed-off-by` trailer is present, and a trailer is a line of text anyone
+  can type under any name. A signature binds the commit to a key. We require
+  both — the trailer is the legal assertion, the signature is the proof — and
+  we sign with SSH keys backed by hardware tokens (see `.allowed_signers`,
+  which arms local verification but enforces nothing on its own).
 - **Squash commits default to the pull request title and body**, merged
   branches are deleted automatically, auto-merge is allowed (Renovate merges
   green PRs), and web-UI commits require sign-off — DCO holds even for edits
   made in a browser.
+
+Requiring signatures has one sharp edge worth knowing before it bites:
+**GitHub refuses a squash merge of a pull request you did not author** into a
+signature-required branch. GitHub signs the squash commit with its own key on
+the author's behalf, and it will only do that for the author. In practice this
+means a bot-authored pull request has to be merged by that same bot (Renovate
+merges its own PRs through the API, which is why auto-merge keeps working),
+and any workflow that pushes a plain `git commit` must either sign it or
+confine itself to a non-default branch and go through a pull request like
+everyone else.
 
 The `limen:tags` ruleset restricts `v*` tag creation, update, and deletion to
 repository admins: the tag push is the release button (see the release lanes

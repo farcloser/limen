@@ -118,6 +118,7 @@ const (
 	decimalBase           = 10
 	jsonTypeKey           = "type"
 	ruleRequiredChecks    = "required_status_checks"
+	ruleRequiredSigs      = "required_signatures"
 	ruleDeletion          = "deletion"
 	listSeparator         = ", "
 	repositoryAdminRoleID = 5 // GitHub's fixed id for the repository "admin" role, used in ruleset bypass lists.
@@ -872,7 +873,10 @@ func (a *auditor) auditRulesets() {
 	}{
 		{
 			checkRulesetDefaultBranch, rulesetMainName, canonicalMainRuleset,
-			[]string{"pull_request", ruleDeletion, "non_fast_forward", "required_linear_history", ruleRequiredChecks},
+			[]string{
+				"pull_request", ruleDeletion, "non_fast_forward", "required_linear_history",
+				ruleRequiredChecks, ruleRequiredSigs,
+			},
 		},
 		{
 			checkRulesetVersionTags, rulesetTagsName,
@@ -996,10 +1000,20 @@ func defaultRequiredChecks() []string {
 
 // canonicalMainRuleset is the default-branch protection: pull requests always
 // (0 required approvals — the PR is the audit trail and the CI gate), linear
-// history, no force pushes, no deletion, and required status checks so a
-// merge (auto-merge included — Renovate depends on this) waits for green CI.
-// existingContexts preserves a project's own check names on reconcile; empty
-// falls back to the canonical ci.yaml matrix.
+// history, no force pushes, no deletion, required status checks so a merge
+// (auto-merge included — Renovate depends on this) waits for green CI, and
+// required signatures so every commit that lands is bound to a key and not
+// merely to a claimed identity. existingContexts preserves a project's own
+// check names on reconcile; empty falls back to the canonical ci.yaml matrix.
+//
+// required_signatures is enforcement of a rule the book already stated and
+// nothing checked: `git-validation` verifies the DCO trailer, which is a typed
+// assertion of provenance, not proof of authorship. Note the interaction it
+// brings — GitHub refuses a squash merge of someone else's pull request into a
+// signature-required branch (only the PR author may squash it on the web), so
+// bot-authored pull requests must be merged by the bot that opened them, and
+// any workflow that pushes a plain `git commit` must sign it or target a
+// non-default branch. See book/github.md.
 func canonicalMainRuleset(existingContexts []string) map[string]any {
 	contexts := existingContexts
 	if len(contexts) == 0 {
@@ -1022,6 +1036,7 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 			ruleOf(ruleDeletion),
 			ruleOf("non_fast_forward"),
 			ruleOf("required_linear_history"),
+			ruleOf(ruleRequiredSigs),
 			{jsonTypeKey: "pull_request", "parameters": map[string]any{
 				"required_approving_review_count":   0,
 				"dismiss_stale_reviews_on_push":     false,
