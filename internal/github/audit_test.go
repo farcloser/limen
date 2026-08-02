@@ -202,7 +202,7 @@ func compliantResponses() map[string]stubResponse {
 			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
 		"GET repos/test/repo/rulesets/1": {
-			Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
+			Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
 		},
 		"GET repos/test/repo/rulesets/2": {
 			Body: `{"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
@@ -770,6 +770,7 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
+			`{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
 	}
 	logPath := stubGH(t, responses)
@@ -801,11 +802,49 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 	}
 }
 
+func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	// A limen:main that is otherwise canonical but does not require signed
+	// commits is drift: the DCO trailer git-validation checks is a typed
+	// assertion, not proof of authorship. The reconcile must add the rule back.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
+			`{"type":"required_linear_history"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Fatalf("limen:main without required_signatures: %v, want fail", finding.Status)
+	}
+
+	if !strings.Contains(finding.Current, ruleRequiredSigs) {
+		t.Errorf("the finding must name the missing rule, got %q", finding.Current)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkRulesetDefaultBranch {
+			if err := planned.Apply(); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), ruleRequiredSigs) {
+		t.Error("the reconcile payload must carry required_signatures")
+	}
+}
+
 func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
-			`{"type":"required_linear_history"},{"type":"required_status_checks","parameters":{"required_status_checks":[]}}]}`,
+			`{"type":"required_linear_history"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[]}}]}`,
 	}
 	stubGH(t, responses)
 
