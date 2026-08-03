@@ -96,6 +96,21 @@ func TestNoticeRejectsUnknown(t *testing.T) {
 	}
 }
 
+// TestBSD3IsAcceptanceOnly pins the asymmetry BSD-3-Clause exists for: the
+// check recognizes it (inherited forks cannot relicense) but bootstrap never
+// writes one — no embedded text, no Notice, no CanGenerate.
+func TestBSD3IsAcceptanceOnly(t *testing.T) {
+	t.Parallel()
+
+	if license.CanGenerate(license.BSD3) {
+		t.Error("CanGenerate(BSD-3-Clause) = true; it is recognized for inherited code, never offered for new projects")
+	}
+
+	if _, ok := license.Notice(license.BSD3, 2026, "x"); ok {
+		t.Error("Notice(BSD-3-Clause) should not generate")
+	}
+}
+
 func TestClosedSourceNoticeRoundTrips(t *testing.T) {
 	t.Parallel()
 

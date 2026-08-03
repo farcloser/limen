@@ -53,6 +53,7 @@ with us.
 | `Apache-2.0` | **Larger projects and anything enterprise-facing.** | Declares *"Apache License"* and *"Version 2.0"*. |
 | `GPL-2.0` | **Kernel-derivative works** — Linux modules, patches, and tooling that must be GPL-2.0-compatible with the kernel. | Declares *"GNU General Public License"* and *"Version 2, June 1991"*. |
 | `AGPL-3.0` | **SaaS / network services**, when we want the copyleft to reach hosted use. | Declares *"Affero General Public License"* and *"Version 3"*. |
+| `BSD-3-Clause` | **Inherited only** — forks of BSD-licensed upstreams. **Never a choice for new code**; `limen bootstrap` will not generate it. | *"Redistribution and use in source and binary forms"* plus the non-endorsement clause (*"endorse or promote products derived from this software"*), without BSD-4's advertising clause. Tolerant of the personalized clause-3 subjects older projects carry. |
 | `Closed-source` | **Proprietary** — anything not released publicly. | Explicit reservation of rights, no open grant. See the canonical text below. |
 
 **Rationale**
@@ -78,6 +79,12 @@ with us.
   *over a network* triggers the obligation to share source. We reach for it when we want a
   hosted competitor to have to give back what they build on our service — and we treat it as
   a deliberate option, because that same reciprocity can deter commercial adopters.
+- **BSD-3-Clause for inherited code, and nothing else.** A fork of a BSD-licensed upstream
+  cannot shed the upstream's terms — the license travels with the code, personalized
+  clause 3 and all. Refusing to recognize it would fail repositories over a license they are
+  legally unable to change, so `limen check` accepts it. It stops there: MIT already owns the
+  permissive slot for code we author, BSD adds nothing we want on top of it, and so
+  `bootstrap` never offers it — acceptance of the inherited, not endorsement for the new.
 - **Closed-source for proprietary.** When the code is a private advantage or simply not meant
   for release, we say so explicitly. The default in the absence of a license is already "no
   rights granted," but an explicit notice removes all ambiguity for collaborators and tooling.
@@ -105,11 +112,12 @@ with us.
 
 ### Anything else is a failure
 
-GPL-3.0, LGPL, BSD, MPL, an unrecognized or hand-edited license, a CC variant we don't list
-(e.g. `BY-NC`), or any `LICENSE` file `limen` cannot classify is a **failure** (`GPL-2.0-only`
-is allowed — see Software above — but no other GPL/LGPL version is). If we
-genuinely need another license, it is added to this list and to `limen`'s policy first; the
-tool is the enforcement, the book is the decision.
+GPL-3.0, LGPL, BSD-2-Clause, BSD-4-Clause, MPL, an unrecognized or hand-edited license, a CC
+variant we don't list (e.g. `BY-NC`), or any `LICENSE` file `limen` cannot classify is a
+**failure** (`GPL-2.0-only` is allowed — see Software above — but no other GPL/LGPL version
+is, and `BSD-3-Clause` only as inherited — see Software above). If we genuinely need another
+license, it is added to this list and to `limen`'s policy first; the tool is the enforcement,
+the book is the decision.
 
 ### Canonical closed-source notice
 

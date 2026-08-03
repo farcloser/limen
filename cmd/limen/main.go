@@ -400,11 +400,17 @@ func installTooling(root string, progress io.Writer) error {
 }
 
 // allowedLicenses is the comma-separated list of license ids bootstrap accepts,
-// for use in error messages.
+// for use in error messages. It is the generatable subset of the check policy,
+// not the whole of it: acceptance-only licenses (BSD-3-Clause, recognized so
+// that inherited forks pass the check) are deliberately absent — a new project
+// does not get to choose them.
 func allowedLicenses() string {
 	var ids []string
+
 	for _, id := range rules.DefaultPolicy().AllowedLicenses {
-		ids = append(ids, string(id))
+		if license.CanGenerate(id) {
+			ids = append(ids, string(id))
+		}
 	}
 
 	return strings.Join(ids, ", ")

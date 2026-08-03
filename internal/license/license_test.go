@@ -50,13 +50,59 @@ By exercising the Licensed Rights, You accept and agree to be bound...`
 const ccBySaDeed = `This work is licensed under a Creative Commons license.
 See https://creativecommons.org/licenses/by-sa/4.0/ for details.`
 
-// BSD and ISC both reserve rights with "All rights reserved" while granting an
-// open license; neither is allowed, so both must classify as Unknown and not be
-// swept into Closed-source by the reservation phrase.
+// BSD-2-Clause and ISC both reserve rights with "All rights reserved" while
+// granting an open license; neither is allowed (only BSD-3-Clause is, and only
+// as inherited), so both must classify as Unknown and not be swept into
+// Closed-source by the reservation phrase.
 const bsdText = `Copyright (c) 2026, Farcloser. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:`
+
+// The canonical BSD-3-Clause wording, clause 3 as SPDX publishes it.
+const bsd3Text = `Copyright (c) 2026, Farcloser. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice.
+2. Redistributions in binary form must reproduce the above copyright notice.
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS".`
+
+// A personalized clause 3, as older BSD projects wrote it (ulikunitz/xz is the
+// live example). Accepting BSD-3-Clause exists for inherited licenses we
+// cannot edit, so the hand-edited subject must classify the same as the
+// canonical wording.
+const bsd3PersonalizedText = `Copyright (c) 2014-2022  Ulrich Kunitz
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice.
+
+* My name, Ulrich Kunitz, may not be used to endorse or promote products
+  derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS".`
+
+// BSD-4-Clause carries the advertising clause on top of the non-endorsement
+// clause; it must not ride in on the BSD-3-Clause acceptance.
+const bsd4Text = `Copyright (c) 2026, Farcloser. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+3. All advertising materials mentioning features or use of this software must
+   display the following acknowledgement: This product includes software
+   developed by Farcloser.
+4. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.`
 
 const iscText = `Copyright (c) 2026 Farcloser
 
@@ -94,7 +140,11 @@ func TestIdentify(t *testing.T) {
 		{"empty", "", license.Unknown},
 		{"gpl not affero", "GNU GENERAL PUBLIC LICENSE Version 3", license.Unknown},
 		{"agpl behind a short preamble", "Copyright (c) 2026 Farcloser\n\n" + agplText, license.AGPL30},
-		{"bsd not closed", bsdText, license.Unknown},
+		{"bsd-2 not closed, not bsd-3", bsdText, license.Unknown},
+		{"bsd-3 canonical", bsd3Text, license.BSD3},
+		{"bsd-3 personalized clause 3", bsd3PersonalizedText, license.BSD3},
+		{"bsd-3 rewrapped", rewrapped(bsd3Text), license.BSD3},
+		{"bsd-4 not bsd-3", bsd4Text, license.Unknown},
 		{"isc not closed", iscText, license.Unknown},
 		{"cc-by-nc not allowed", "Creative Commons Attribution-NonCommercial 4.0", license.Unknown},
 		{"mit lowercased and rewrapped", rewrapped(mitText), license.MIT},
