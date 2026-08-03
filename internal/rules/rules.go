@@ -39,10 +39,6 @@ const (
 // matchesCanonicalMsg suffixes the OK message of every content-pinned rule.
 const matchesCanonicalMsg = " matches the canonical baseline"
 
-// shebangReadLimit is how much of a file's head is enough to hold any
-// realistic "#!" interpreter line.
-const shebangReadLimit = 128
-
 // CanonicalEditorconfig is the exact .editorconfig every repository must carry,
 // byte for byte — the rule is content-pinned, so extra sections or edited
 // values are not allowed (the canonical is comprehensive; see checkEditorconfig).
@@ -161,9 +157,7 @@ func Check(root string, policy Policy) []Finding {
 		checkAqua(root),
 		checkLychee(root),
 		checkWorkflows(root),
-	}
-	if f, ok := checkShellcheck(root); ok {
-		findings = append(findings, f)
+		checkShellcheck(root),
 	}
 
 	if f, ok := checkYamlfmt(root); ok {
@@ -454,25 +448,26 @@ func checkWorkflows(root string) Finding {
 	}
 }
 
-// checkShellcheck is a per-language rule: a project that contains shell sources
-// must carry a .limen/.shellcheckrc that matches the canonical baseline exactly,
-// so the linter's configuration is identical everywhere. It returns ok=false when
-// the project contains no shell, so the caller omits the finding entirely rather
-// than reporting a rule that does not apply.
-func checkShellcheck(root string) (Finding, bool) {
+// checkShellcheck requires .limen/.shellcheckrc in every repository, matching
+// the canonical baseline exactly, so the linter's configuration is identical
+// everywhere.
+//
+// Deliberately unconditional, unlike the YAML twin below. Gating it on "does
+// this repo currently contain shell" made the file appear the day someone
+// added a first script — by which point `lint shell` had already been warning
+// `unable to read --rcfile .limen/.shellcheckrc`, which reads like a broken
+// setup rather than a rule that does not apply yet. Projects grow shell; a
+// baseline config that is simply always there is one less thing to explain,
+// and an unused config file costs nothing.
+func checkShellcheck(root string) Finding {
 	const (
 		rule = "shellcheck"
 		name = ".limen/.shellcheckrc"
 	)
 
-	shell, found := findShellSource(root)
-	if !found {
-		return Finding{}, false
-	}
-
 	data, err := readRepoFile(root, name)
 	if err != nil {
-		return fail(rule, "", "shell sources present (e.g. "+shell+") but no "+name), true
+		return fail(rule, "", name+" is missing")
 	}
 
 	if string(data) != CanonicalShellcheckrc {
@@ -480,15 +475,15 @@ func checkShellcheck(root string) (Finding, bool) {
 			rule,
 			name,
 			name+" does not match the canonical baseline (it is content-pinned; do not modify it)",
-		), true
+		)
 	}
 
 	return Finding{
 		Rule:    rule,
 		Status:  StatusOK,
 		Path:    name,
-		Message: "shell sources present and " + name + matchesCanonicalMsg,
-	}, true
+		Message: name + matchesCanonicalMsg,
+	}
 }
 
 // skippedDirs is every directory name the per-language source walkers prune:
@@ -510,112 +505,6 @@ func skippedDirs() map[string]bool {
 		".idea":        true,
 		".vscode":      true,
 	}
-}
-
-// findShellSource walks the tree below root and returns the path (relative to
-// root) of the first shell source it finds, skipping .git, vendored, and
-// generated directories (skippedDirs). A shell source is a *.sh or *.bash
-// file, or an extensionless file whose first line is a shell shebang.
-func findShellSource(root string) (string, bool) {
-	skip := skippedDirs()
-
-	var found string
-
-	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // unreadable entries are simply skipped
-		}
-
-		if entry.IsDir() {
-			if path != root && skip[entry.Name()] {
-				return filepath.SkipDir
-			}
-
-			return nil
-		}
-
-		if isShellSource(path, entry.Name()) {
-			if rel, e := filepath.Rel(root, path); e == nil {
-				found = rel
-			} else {
-				found = entry.Name()
-			}
-
-			return filepath.SkipAll
-		}
-
-		return nil
-	})
-
-	return found, found != ""
-}
-
-func isShellSource(path, name string) bool {
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".sh", ".bash":
-		return true
-	case "":
-		return hasShellShebang(path)
-	default:
-		return false
-	}
-}
-
-// hasShellShebang reports whether the file's first line is a shebang for a
-// shell ShellCheck can lint — sh, bash, dash, ksh, its supported dialects.
-// "Counts as shell" deliberately means "the required shellcheck config will
-// actually be used on it": a zsh (or fish) script does not trigger the rule,
-// because ShellCheck has no dialect for it and the config would be dead weight.
-// The interpreter is matched as a whole token (never by substring — "zsh"
-// contains "sh"), resolving through "env" and skipping its flags/assignments.
-func hasShellShebang(path string) bool {
-	// The path comes from walking the repository under check — the tool's contract.
-	file, err := os.Open(path) //nolint:gosec // G304: see above.
-	if err != nil {
-		return false
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	buf := make([]byte, shebangReadLimit)
-	n, _ := file.Read(buf)
-
-	line := string(buf[:n])
-	if i := strings.IndexByte(line, '\n'); i >= 0 {
-		line = line[:i]
-	}
-
-	if !strings.HasPrefix(line, "#!") {
-		return false
-	}
-
-	fields := strings.Fields(strings.TrimPrefix(line, "#!"))
-	if len(fields) == 0 {
-		return false
-	}
-
-	interp := filepath.Base(fields[0])
-	if interp == "env" {
-		interp = ""
-
-		for _, arg := range fields[1:] {
-			if strings.HasPrefix(arg, "-") || strings.Contains(arg, "=") {
-				continue // env flags (-S, -i) and VAR=value assignments
-			}
-
-			interp = filepath.Base(arg)
-
-			break
-		}
-	}
-
-	switch interp {
-	case "sh", "bash", "dash", "ksh":
-		return true
-	}
-
-	return false
 }
 
 // checkYamlfmt is a per-language rule: a project that contains YAML must carry a

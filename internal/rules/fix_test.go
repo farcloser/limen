@@ -229,8 +229,35 @@ func TestFixOverwritesDriftedShellcheck(t *testing.T) {
 		t.Errorf("shellcheck was not reset to the canonical exactly:\n%s", data)
 	}
 
-	if f, _ := checkShellcheck(dir); !f.OK() {
+	if f := checkShellcheck(dir); !f.OK() {
 		t.Errorf("shellcheck should pass after overwrite: %s", f.Message)
+	}
+}
+
+func TestShellcheckrcIsUnconditional(t *testing.T) {
+	t.Parallel()
+
+	// A repository with no shell at all still gets .limen/.shellcheckrc: the
+	// linter passes --rcfile unconditionally, so a repo without the file gets
+	// "unable to read --rcfile" from `lint shell` — a warning that reads like
+	// breakage rather than an inapplicable rule.
+	dir := writeRepo(t, map[string]string{"README.md": "# no shell here\n"})
+
+	if f := checkShellcheck(dir); f.OK() {
+		t.Error("a repository missing .limen/.shellcheckrc must fail, shell or not")
+	}
+
+	if o := outcomeFor(Fix(dir, bootstrapOpts()), "shellcheck"); o.Action != ActionCreated {
+		t.Fatalf("shellcheck action = %s, want created", o.Action)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, ".limen", ".shellcheckrc"))
+	if string(data) != CanonicalShellcheckrc {
+		t.Errorf("seeded .shellcheckrc is not the canonical:\n%s", data)
+	}
+
+	if f := checkShellcheck(dir); !f.OK() {
+		t.Errorf("shellcheck should pass after seeding: %s", f.Message)
 	}
 }
 

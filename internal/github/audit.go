@@ -984,18 +984,25 @@ func ruleOf(kind string) map[string]any {
 	return map[string]any{jsonTypeKey: kind}
 }
 
-// defaultRequiredChecks mirrors the job matrix of the canonical ci.yaml (the
-// "verify" job across its runner matrix — those are the check-run names
-// GitHub produces). Changing the matrix there means changing this list too,
-// in the same release; the two are cross-linked by comments.
+// defaultRequiredChecks is the single aggregate gate of the canonical ci.yaml:
+// a job that `needs` every matrix leg and fails unless all of them succeeded.
+//
+// It used to be the matrix itself — one context per runner — which made this
+// list a copy of one repository's workflow shape, imposed on every repository.
+// A project whose CI legs differed (fewer runners, different images, a
+// reusable workflow) got required checks that nothing ever reports, and the
+// symptom is the worst kind: the pull request waits forever on "Expected —
+// Waiting for status to be reported", with nothing red to fix. One stable
+// name decouples the two: a repository can change its matrix freely and no
+// ruleset has to move.
+//
+// Migration note: ci.yaml is seeded once and is the project's own thereafter,
+// so a repository created before the gate job existed does not have it. The
+// reconcile path preserves a ruleset's existing contexts, so those repositories
+// keep working — but their ci.yaml needs the gate job before their ruleset can
+// be moved onto this name.
 func defaultRequiredChecks() []string {
-	return []string{
-		"verify (ubuntu-24.04)",
-		"verify (ubuntu-24.04-arm)",
-		"verify (macos-15)",
-		"verify (windows-2025)",
-		"verify (windows-11-arm)",
-	}
+	return []string{"gate"}
 }
 
 // canonicalMainRuleset is the default-branch protection: pull requests always

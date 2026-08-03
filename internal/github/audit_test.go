@@ -797,8 +797,46 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 		t.Error("reconcile must preserve the project's own status-check contexts")
 	}
 
-	if strings.Contains(payload, "verify (ubuntu-24.04)") {
-		t.Error("reconcile must not replace project contexts with the canonical defaults")
+	if strings.Contains(payload, `"context":"gate"`) {
+		t.Error("reconcile must not replace project contexts with the canonical default")
+	}
+}
+
+func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	// Creating limen:main from nothing must require exactly one context — the
+	// aggregate gate. Requiring the matrix legs instead bakes one repository's
+	// runner list into every ruleset, and a project whose CI differs then waits
+	// forever on checks nothing reports.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
+		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Fatalf("absent limen:main: %v, want fail", finding.Status)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkRulesetDefaultBranch {
+			if err := planned.Apply(); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+
+	payload := string(log)
+	if !strings.Contains(payload, `"context":"gate"`) {
+		t.Errorf("a created ruleset must require the gate context, got: %s", payload)
+	}
+
+	if strings.Contains(payload, "verify (") {
+		t.Error("a created ruleset must not name the CI matrix legs as contexts")
 	}
 }
 

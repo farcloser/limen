@@ -34,6 +34,7 @@ func compliantRepo(t *testing.T) string {
 		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
 		".limen/lychee.toml":        rules.CanonicalLychee,
 		".limen/.yamlfmt":           rules.CanonicalYamlfmt,
+		".limen/.shellcheckrc":      rules.CanonicalShellcheckrc,
 		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
 		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
