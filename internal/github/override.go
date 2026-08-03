@@ -23,6 +23,12 @@ import (
 // lives in review, never in a UI click. Unknown sections, unknown
 // identifiers, and empty reasons fail the file: a broken escape hatch must
 // not silently exempt nothing — or everything.
+//
+// One entry is not an escape hatch at all: `org-admins` keeps enforcing after
+// it is written. Its reason is parsed for owner logins and compared against
+// the live roster on every run, so an owner the text does not name re-raises
+// the finding (see auditOrgAdmins). A reason that names nobody therefore
+// silences nothing — it reports every owner as undeclared.
 const OverridePath = "limen.yaml"
 
 var (

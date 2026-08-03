@@ -101,10 +101,33 @@ The decided merge model, enforced by both the repository settings and the
   on the default branch are blocked.
 - **Merges wait for green CI.** The `limen:main` ruleset carries required
   status checks, without which auto-merge (and a hasty human) would merge on
-  red. The check *names* are project-owned — they follow the project's CI
-  shape — so reconciliation preserves them, exactly like the standard-registry
-  ref inside the pinned aqua sections; a fresh ruleset starts from the
-  canonical CI matrix.
+  red. A fresh ruleset requires exactly **one** context, `gate` — the job in
+  the canonical `ci.yaml` that `needs` every matrix leg and fails unless all of
+  them succeeded. The check *names* remain project-owned, so reconciliation
+  preserves whatever a repository already declared, exactly like the
+  standard-registry ref inside the pinned aqua sections.
+
+  The single gate is deliberate. Branch protection names contexts as *strings*,
+  so requiring the matrix legs directly (`verify (macos-15)` and friends) would
+  bake one repository's runner list into every repository's ruleset. A project
+  with a different matrix — fewer runners, other images, a reusable workflow —
+  then waits on checks nothing will ever report, and the symptom is the worst
+  kind: the pull request sits on "Expected — Waiting for status to be reported"
+  with nothing red to fix. One stable name decouples them; a project changes
+  its matrix freely and no ruleset moves.
+
+  The gate job is written with `if: always()` and asserts
+  `needs.verify.result == 'success'` explicitly. Both halves matter: without
+  `always()` a failed dependency *skips* the gate rather than failing it, and a
+  skipped required check does not block a merge — branch protection that has
+  quietly stopped protecting.
+
+  **Migration.** `ci.yaml` is seeded once and is the project's own afterwards,
+  so repositories created before the gate job existed do not have it. Their
+  rulesets keep working (reconciliation preserves existing contexts), but the
+  gate job must be added to a repository's `ci.yaml` *before* its ruleset is
+  moved onto the `gate` context — the wrong order reproduces the very failure
+  this design removes.
 - **Every commit is signed.** The `limen:main` ruleset requires signatures, so
   an unsigned commit cannot land on the default branch. This is deliberately
   *not* the same guarantee as the DCO: `git-validation` checks that a
@@ -169,12 +192,22 @@ canonically the org's `.github` repository). The catalog:
   repository visibility or deleting repositories — report as advisories, and
   the 2FA requirement is advisory by nature: enabling it evicts members
   without 2FA, a human decision.
-- **The owner roster** is a deliberate standing advisory: declare the expected
-  roster by exempting `org-admins` in the override file with the names as the
-  reason. The declaration is load-bearing, not a blanket exemption — every
-  actual owner must appear in it, so an owner added since the declaration
-  turns the audit red again (removals only leave a stale name in the
-  declaration, which review catches on the next edit).
+- **The owner roster** is a deliberate standing advisory until you declare who
+  the owners are meant to be, in `limen.yaml`:
+
+  ```yaml
+  github:
+    org-admins: apostasie is the sole owner
+  ```
+
+  Despite living among the exceptions, this one is **not** an escape hatch. The
+  reason is *parsed* — every login-shaped token in it is matched against the
+  live roster on every run — so the declaration keeps enforcing after it is
+  written. An owner who is not named in it re-raises the finding, which is the
+  point: someone becoming an org owner is exactly the event you want to hear
+  about. A reason that names nobody silences nothing; it reports every owner as
+  undeclared. The asymmetry is deliberate: *removals* only leave a stale name
+  behind, which review catches on the next edit.
 - **Org-wide Actions policy** — the org twin of the per-repository hardening,
   so new repositories are born hardened: Actions restricted to GitHub-owned
   (never "all"), SHA-pinned `uses:` required org-wide, read-only default

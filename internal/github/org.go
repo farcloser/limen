@@ -92,9 +92,14 @@ var (
 	errOrgHookScope = errors.New(
 		"the org webhooks API needs the admin:org_hook scope (gh auth refresh -h github.com -s admin:org_hook)",
 	)
+	// Renders after a "cannot verify: " prefix. Says outright that nothing has
+	// to be created: the previous wording ended on the UI path "… → Personal
+	// access tokens" and then said "configure them", which reads as an
+	// instruction to create a token — the opposite of what this check wants.
 	errPATPolicyUnconfigured = errors.New(
-		"the fine-grained PAT API answers 404 until the org's PAT policies are configured" +
-			" (Settings → Third-party Access → Personal access tokens); configure them, then re-audit",
+		"the grant list is not exposed (404) because this organization has not chosen a" +
+			" fine-grained PAT policy. Nothing needs creating — zero grants is the passing state;" +
+			" decide the policy at Settings → Third-party Access → Personal access tokens",
 	)
 )
 
@@ -350,9 +355,16 @@ func (a *auditor) auditOrgAdmins() {
 			Check:   checkOrgAdmins,
 			Status:  StatusAdvisory,
 			Current: roster,
-			Desired: "a declared roster",
+			Desired: "a declared roster in " + OverridePath,
+			// Deliberately spells out the file, the shape, and the fact that
+			// the reason is READ. Calling this "exempting a check" (as it once
+			// did) describes the opposite of what happens: the declaration is
+			// re-verified on every run, and it is the only entry in the
+			// override file that keeps enforcing after it is written.
 			Message: "organization owners: " + roster +
-				" — declare the expected roster by exempting this check in the override file",
+				" — declare them in " + OverridePath + " under `github:` as `" + checkOrgAdmins +
+				": <reason naming every owner login>`. The reason is parsed, not just recorded:" +
+				" an owner it does not name raises this again",
 		})
 
 		return
@@ -821,8 +833,10 @@ func (a *auditor) auditOrgTeams() {
 }
 
 // auditOrgPATGrants inventories fine-grained personal-access-token grants
-// into the org. The API is availability-gated; gated reads report
-// unverifiable, per the design.
+// into the org. An inventory, never a requirement: no grants at all is the
+// passing state, and the desirable one — the check exists so a grant nobody
+// remembers making has nowhere to hide. The API is availability-gated; gated
+// reads report unverifiable, per the design.
 func (a *auditor) auditOrgPATGrants() {
 	var grants []struct {
 		Owner orgLogin `json:"owner"`

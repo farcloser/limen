@@ -90,9 +90,7 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateLychee(root))
 	add(remediateWorkflows(root)...)
 
-	if o, ok := remediateShellcheck(root); ok {
-		add(o)
-	}
+	add(remediateShellcheck(root))
 
 	if o, ok := remediateYamlfmt(root); ok {
 		add(o)
@@ -602,22 +600,16 @@ func remediateLychee(root string) Outcome {
 	return pinExact(root, "lychee", ".limen/lychee.toml", CanonicalLychee)
 }
 
-// remediateShellcheck / remediateYamlfmt are per-language rules: when the repo
-// ships shell / YAML, the config is content-pinned exactly to the canonical (like
-// the just modules) — created if missing, overwritten if it drifted. A local
-// modification is not preserved; the file is entirely limen's.
-func remediateShellcheck(root string) (Outcome, bool) {
-	const (
-		rule = "shellcheck"
-		name = ".limen/.shellcheckrc"
-	)
-
-	if _, found := findShellSource(root); !found {
-		return Outcome{}, false
-	}
-
-	return pinExact(root, rule, name, CanonicalShellcheckrc), true
+// remediateShellcheck content-pins .limen/.shellcheckrc in every repository —
+// created if missing, overwritten if it drifted, exactly like the just modules.
+// A local modification is not preserved; the file is entirely limen's.
+// Unconditional by design: see checkShellcheck.
+func remediateShellcheck(root string) Outcome {
+	return pinExact(root, "shellcheck", ".limen/.shellcheckrc", CanonicalShellcheckrc)
 }
+
+// remediateYamlfmt is the per-language twin: when the repo ships YAML, the
+// config is content-pinned exactly to the canonical.
 
 func remediateYamlfmt(root string) (Outcome, bool) {
 	const (

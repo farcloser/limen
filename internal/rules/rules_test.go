@@ -71,8 +71,9 @@ func compliantFiles() map[string]string {
 		".limen/aqua-registry.yaml": CanonicalAquaRegistry,
 		".limen/lychee.toml":        CanonicalLychee,
 		// aqua.yaml is YAML, so the conditional yamlfmt rule fires; satisfy it
-		// with the canonical baseline.
-		".limen/.yamlfmt": CanonicalYamlfmt,
+		// with the canonical baseline. The shellcheck config is unconditional.
+		".limen/.yamlfmt":      CanonicalYamlfmt,
+		".limen/.shellcheckrc": CanonicalShellcheckrc,
 		// The .github surface: two content-pinned pieces, two seeded ones
 		// (any content satisfies the seeded pair — canonical used here).
 		pathWorkflowChecksum: limen.CanonicalWorkflowUpdateAquaChecksum,
@@ -723,21 +724,22 @@ func TestYamlfmtConditional(t *testing.T) {
 	}
 }
 
-func TestShellcheckConditional(t *testing.T) {
+func TestShellcheckContentPinned(t *testing.T) {
 	t.Parallel()
 
-	// No shell anywhere: the shellcheck rule produces no finding.
-	noShell := writeRepo(t, compliantFiles())
-	if findingByRule(Check(noShell, DefaultPolicy()), "shellcheck").Message != "rule not evaluated" {
-		t.Error("shellcheck rule should not appear when there is no shell")
+	// The rule is unconditional: a repository with no shell at all still needs
+	// the config, because `lint shell` passes --rcfile unconditionally and warns
+	// when it cannot read it.
+	files := compliantFiles()
+	delete(files, ".limen/.shellcheckrc")
+
+	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
+		t.Errorf("a missing .limen/.shellcheckrc must fail even with no shell, got: %s", f.Message)
 	}
 
-	// A shell source without .limen/.shellcheckrc fails.
-	files := compliantFiles()
+	// Shell present and still missing: same failure.
 	files["build.sh"] = "#!/bin/sh\necho hi\n"
-
-	withShell := writeRepo(t, files)
-	if f := findingByRule(Check(withShell, DefaultPolicy()), "shellcheck"); f.OK() {
+	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
 		t.Errorf("shell present without .limen/.shellcheckrc should fail, got: %s", f.Message)
 	}
 
@@ -760,34 +762,30 @@ func TestShellcheckConditional(t *testing.T) {
 	}
 }
 
-func TestShellcheckDetectsShebangAndIgnoresGit(t *testing.T) {
+// The source walk must not look inside .git: a repository's object store and
+// hooks samples are not the project's content. Exercised through the yamlfmt
+// rule, the remaining conditional one (shellcheck became unconditional, so it
+// no longer walks the tree at all).
+func TestSourceWalkIgnoresGit(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files["scripts-hook"] = "#!/usr/bin/env bash\necho hi\n" // extensionless, shebang
+	for name := range files {
+		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+			delete(files, name)
+		}
+	}
+
+	delete(files, ".limen/.yamlfmt")
+
+	// The only YAML lives under .git: the rule must not fire.
 	dir := writeRepo(t, files)
-	// A shell file inside .git must not trigger the rule on its own; here the
-	// real trigger is scripts-hook, so the rule should appear and fail.
-	if err := os.WriteFile(filepath.Join(dir, ".git", "hooks-sample.sh"), []byte("#!/bin/sh\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".git", "config.yaml"), []byte("a: 1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if f := findingByRule(Check(dir, DefaultPolicy()), "shellcheck"); f.OK() {
-		t.Errorf("extensionless shell shebang should be detected: %s", f.Message)
-	}
-}
-
-func TestShellcheckIgnoresGitOnly(t *testing.T) {
-	t.Parallel()
-
-	// The only shell lives under .git: the rule must not fire.
-	dir := writeRepo(t, compliantFiles())
-	if err := os.WriteFile(filepath.Join(dir, ".git", "x.sh"), []byte("#!/bin/sh\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if findingByRule(Check(dir, DefaultPolicy()), "shellcheck").Message != "rule not evaluated" {
-		t.Error("shell under .git must not trigger the shellcheck rule")
+	if findingByRule(Check(dir, DefaultPolicy()), "yamlfmt").Message != "rule not evaluated" {
+		t.Error("YAML under .git must not trigger the yamlfmt rule")
 	}
 }
 
@@ -802,39 +800,6 @@ func TestDirectoryNamedLikeFileIsNotAccepted(t *testing.T) {
 	f := findingByRule(Check(dir, DefaultPolicy()), "license")
 	if f.OK() {
 		t.Error("a directory named LICENSE should not satisfy the license rule")
-	}
-}
-
-// "Counts as shell" equals "ShellCheck can lint it": sh/bash/dash/ksh shebangs
-// trigger the shellcheck rule; zsh and fish must not — ShellCheck has no dialect
-// for them, so the config would be dead weight — and neither may sneak in via
-// their "sh" substring.
-func TestShellShebangDialects(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		shebang string
-		want    bool
-	}{
-		{"#!/bin/sh", true},
-		{"#!/usr/bin/env bash", true},
-		{"#!/bin/dash", true},
-		{"#!/usr/bin/ksh", true},
-		{"#!/usr/bin/env -S bash -eu", true},
-		{"#!/bin/zsh", false},
-		{"#!/usr/bin/env zsh", false},
-		{"#!/usr/bin/fish", false},
-		{"#!/usr/bin/python3", false},
-	}
-	for _, tc := range cases {
-		path := filepath.Join(t.TempDir(), "script")
-		if err := os.WriteFile(path, []byte(tc.shebang+"\necho hi\n"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-
-		if got := hasShellShebang(path); got != tc.want {
-			t.Errorf("hasShellShebang(%q) = %v, want %v", tc.shebang, got, tc.want)
-		}
 	}
 }
 

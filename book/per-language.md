@@ -14,25 +14,24 @@ nothing for it.
 
 | Trigger | Requirement |
 |---------|-------------|
-| The repository contains shell sources. | A `.limen/.shellcheckrc` is present and matches the canonical baseline **exactly**. |
+| Always — every repository. | A `.limen/.shellcheckrc` is present and matches the canonical baseline **exactly**. |
 
 Any project that ships shell must lint it, and lint it *the same way everywhere*.
 [ShellCheck](https://www.shellcheck.net) is the linter; `.shellcheckrc` is how its
 configuration — which checks are disabled, which shell dialect is assumed — travels with the
 code.
 
-**What counts as shell.** `limen` treats a file as a shell source when it is:
+**Why unconditional**, despite living in the per-language chapter. This rule used to fire
+only once a repository actually contained shell, which read as the tidier design and was the
+wrong call in practice. `just do lint shell` passes `--rcfile .limen/.shellcheckrc`
+unconditionally, so a repository without the file gets `Warning: unable to read --rcfile
+.limen/.shellcheckrc` on every run — a message that reads like a broken setup, not like a
+rule that does not apply yet. And projects grow shell: the config would appear the day
+someone adds a first script, as a surprise edit in an unrelated pull request. A config file
+that is simply always there is one less thing to explain, and an unused one costs nothing.
 
-- a `*.sh` or `*.bash` file, or
-- an **extensionless** file whose first line is a shebang for a dialect ShellCheck lints
-  (`#!/bin/sh`, `#!/usr/bin/env bash`, and the like — `sh`, `bash`, `dash`, `ksh`).
-
-"Counts as shell" deliberately equals "ShellCheck can lint it": the trigger exists to require
-the linter's config, so a `zsh` (or `fish`) script does not fire it — ShellCheck has no
-dialect for those, and the config would be dead weight. (A zsh script *named* `*.sh` still
-counts: the extension claims a dialect, and ShellCheck holds it to that claim.) The scan skips
-`.git` and vendored dependency directories (`node_modules`, `vendor`), so a dependency's
-scripts never trigger the rule — only shell that is genuinely *ours* does.
+The YAML twin below is still conditional, but only nominally: every repository carries YAML
+(the workflows alone guarantee it), so the trigger fires everywhere in practice.
 
 **What `.limen/.shellcheckrc` must be.** The file is **content-pinned**: `limen` requires it to
 equal the canonical baseline **byte for byte** — the directives that follow sourced files and
