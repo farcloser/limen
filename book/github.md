@@ -86,15 +86,45 @@ setup).
   declares the exception.
 - **The merge doctrine and the rulesets** — below.
 
-## Mainline doctrine: linear history, pull requests always
+## Mainline doctrine: pull requests always
 
 The decided merge model, enforced by both the repository settings and the
 `limen:main` ruleset:
 
-- **Merge commits are disallowed; squash and rebase are allowed.** Every commit
-  on the default branch is buildable, bisectable, and revertable as a unit;
-  DCO sign-offs survive rebase; history reads as a sequence of reviewed
-  changes, not a braid.
+- **Merge commits are allowed, and linear history is not required.** This
+  reverses the original rule — "merge commits are disallowed, history reads as
+  a sequence of reviewed changes, not a braid" — which lost the argument to a
+  GitHub constraint it could not survive.
+
+  The constraint: GitHub's rebase merge does not replay commits, it *recreates*
+  them, rewriting committer and SHA. Rewriting invalidates a signature, so a
+  rebase merge always produces unsigned commits, and GitHub therefore disables
+  that button on a branch requiring signatures. Linear history in turn forbids
+  merge commits. Squash was all that remained, and it collapses every
+  multi-commit pull request to a single commit.
+
+  So of the three methods, exactly one preserves a pull request's history:
+
+  | Method | Commits | Signatures |
+  |---|---|---|
+  | Squash | destroyed | one new commit, GitHub-signed |
+  | Rebase | preserved | **destroyed** — rewritten, unsigned |
+  | Merge | **preserved verbatim** | **preserved** — nothing is rewritten |
+
+  A merge rewrites nothing: the branch's commits land with their own SHAs and
+  their author's signature, under a merge commit GitHub signs itself. Braided
+  history is the price. It is the cheaper one — bisect still works, and the
+  claim that every mainline commit was individually CI-tested was never quite
+  true anyway, since rebase merges also landed intermediate commits that only
+  the branch tip had been tested at.
+
+  `rebase` remains in the allowed list. It is inert while signatures are
+  required, and becomes available again if that rule is ever dropped.
+
+  If the bubbles become unreadable, the mitigation is
+  `strict_required_status_checks_policy` — branches must be up to date before
+  merging, which yields semi-linear history at the cost of serializing every
+  merge behind a rebase. It is off by default for exactly that reason.
 - **Pull requests, always — no exceptions.** Zero required approvals is
   acceptable while a project is solo: the pull request is the audit trail and
   the CI gate, not (only) the review venue. Force pushes and branch deletion

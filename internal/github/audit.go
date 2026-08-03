@@ -325,22 +325,27 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 	a.private = settings.Private
 	a.privateKnown = true
 
-	// R3 — merge & branch workflow. The doctrine: rebase + squash, merge
-	// commits disallowed (linear history), squash messages from the PR.
-	if settings.AllowMergeCommit || (!settings.AllowSquashMerge && !settings.AllowRebaseMerge) {
+	// R3 — merge & branch workflow: all three methods enabled, squash messages
+	// from the PR. The repository setting is a second gate in front of the
+	// ruleset's allowed_merge_methods — disabling merge commits here would hide
+	// the button no matter what the ruleset permits, and a merge commit is the
+	// only method that lands a pull request's commits AND their signatures
+	// intact (see canonicalMainRuleset). Enabled, not mandated: which method
+	// suits a given pull request is the merger's call.
+	if !settings.AllowMergeCommit || !settings.AllowSquashMerge || !settings.AllowRebaseMerge {
 		current := fmt.Sprintf("merge=%s squash=%s rebase=%s",
 			strconv.FormatBool(settings.AllowMergeCommit), strconv.FormatBool(settings.AllowSquashMerge),
 			strconv.FormatBool(settings.AllowRebaseMerge))
-		a.flag(checkMergeMethods, StatusFail, current, "merge=false squash=true rebase=true",
-			"merge commits must be disallowed (linear history); squash and rebase allowed",
-			a.patchSettings(checkMergeMethods, "merge methods: "+current+" → merge=false squash=true rebase=true",
+		a.flag(checkMergeMethods, StatusFail, current, "merge=true squash=true rebase=true",
+			"all merge methods must be enabled; merge commits are the only ones that preserve signatures",
+			a.patchSettings(checkMergeMethods, "merge methods: "+current+" → merge=true squash=true rebase=true",
 				map[string]any{
-					"allow_merge_commit": false,
+					"allow_merge_commit": true,
 					"allow_squash_merge": true,
 					"allow_rebase_merge": true,
 				}))
 	} else {
-		a.flag(checkMergeMethods, StatusOK, "", "", "merge commits disallowed; linear history", nil)
+		a.flag(checkMergeMethods, StatusOK, "", "", "all merge methods enabled", nil)
 	}
 
 	if settings.SquashMergeCommitTitle != baselineSquashTitle ||
@@ -873,10 +878,7 @@ func (a *auditor) auditRulesets() {
 	}{
 		{
 			checkRulesetDefaultBranch, rulesetMainName, canonicalMainRuleset,
-			[]string{
-				"pull_request", ruleDeletion, "non_fast_forward", "required_linear_history",
-				ruleRequiredChecks, ruleRequiredSigs,
-			},
+			[]string{"pull_request", ruleDeletion, "non_fast_forward", ruleRequiredChecks, ruleRequiredSigs},
 		},
 		{
 			checkRulesetVersionTags, rulesetTagsName,
@@ -1006,21 +1008,31 @@ func defaultRequiredChecks() []string {
 }
 
 // canonicalMainRuleset is the default-branch protection: pull requests always
-// (0 required approvals — the PR is the audit trail and the CI gate), linear
-// history, no force pushes, no deletion, required status checks so a merge
-// (auto-merge included — Renovate depends on this) waits for green CI, and
-// required signatures so every commit that lands is bound to a key and not
-// merely to a claimed identity. existingContexts preserves a project's own
-// check names on reconcile; empty falls back to the canonical ci.yaml matrix.
+// (0 required approvals — the PR is the audit trail and the CI gate), no force
+// pushes, no deletion, required status checks so a merge (auto-merge included —
+// Renovate depends on this) waits for green CI, and required signatures so every
+// commit that lands is bound to a key and not merely to a claimed identity.
+// existingContexts preserves a project's own check names on reconcile; empty
+// falls back to the canonical ci.yaml gate.
 //
 // required_signatures is enforcement of a rule the book already stated and
 // nothing checked: `git-validation` verifies the DCO trailer, which is a typed
-// assertion of provenance, not proof of authorship. Note the interaction it
-// brings — GitHub refuses a squash merge of someone else's pull request into a
-// signature-required branch (only the PR author may squash it on the web), so
-// bot-authored pull requests must be merged by the bot that opened them, and
-// any workflow that pushes a plain `git commit` must sign it or target a
-// non-default branch. See book/github.md.
+// assertion of provenance, not proof of authorship.
+//
+// required_linear_history is deliberately ABSENT, and merge commits are
+// deliberately allowed — reversing what this ruleset enforced before, because
+// the combination was unmergeable. GitHub cannot sign the commits a rebase
+// merge creates (it rewrites committer and SHA, so it always produces unsigned
+// commits) and therefore disables that button on a signature-required branch.
+// Linear history in turn forbids merge commits. What remained was squash alone:
+// every multi-commit pull request collapsed to one commit, with no way to land
+// it intact.
+//
+// Of the three methods, only a merge commit preserves both: squash destroys the
+// commits, rebase preserves them but strips their signatures, and a merge
+// rewrites nothing — the branch's commits land with their own SHAs and their
+// author's signature, under a merge commit GitHub signs itself. Braided history
+// is the price, and it is the cheaper one. See book/github.md.
 func canonicalMainRuleset(existingContexts []string) map[string]any {
 	contexts := existingContexts
 	if len(contexts) == 0 {
@@ -1042,7 +1054,6 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 		"rules": []map[string]any{
 			ruleOf(ruleDeletion),
 			ruleOf("non_fast_forward"),
-			ruleOf("required_linear_history"),
 			ruleOf(ruleRequiredSigs),
 			{jsonTypeKey: "pull_request", "parameters": map[string]any{
 				"required_approving_review_count":   0,
@@ -1050,12 +1061,18 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 				"require_code_owner_review":         false,
 				"require_last_push_approval":        false,
 				"required_review_thread_resolution": false,
-				"allowed_merge_methods":             []string{"squash", "rebase"},
+				// A merge commit is the ONLY method that preserves both a pull
+				// request's commits and their signatures — see the type comment.
+				// `rebase` stays listed but GitHub disables it while signatures
+				// are required; it becomes available again only if that rule goes.
+				"allowed_merge_methods": []string{"merge", "squash", "rebase"},
 			}},
 			{jsonTypeKey: ruleRequiredChecks, "parameters": map[string]any{
 				// Not strict (branches need not be up to date before merge):
-				// linear history plus update-branch suggestions cover it
-				// without serializing every merge behind a rebase.
+				// update-branch suggestions cover it without serializing every
+				// merge behind a rebase. Turning this on is the mitigation if
+				// the merge bubbles ever become unreadable — it buys
+				// semi-linear history at the cost of that serialization.
 				"strict_required_status_checks_policy": false,
 				"required_status_checks":               checkEntries,
 			}},
