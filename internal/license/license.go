@@ -113,6 +113,14 @@ const (
 	// whole-repo license.
 	GPL20  ID = "GPL-2.0"
 	AGPL30 ID = "AGPL-3.0"
+	// BSD3 is BSD-3-Clause, accepted for inherited code only: a fork of a
+	// BSD-licensed upstream cannot shed the upstream's terms, so the check
+	// recognizes the license — including the personalized clause-3 variants
+	// older projects carry — rather than fail a repository over a license it
+	// cannot change. It is never a choice for new code (MIT owns the
+	// permissive slot), which is why it has no embedded text and bootstrap
+	// does not offer it: CanGenerate(BSD3) is false by construction.
+	BSD3   ID = "BSD-3-Clause"
 	Closed ID = "Closed-source"
 
 	// Content.
@@ -141,6 +149,8 @@ func Identify(text string) ID {
 		return AGPL30
 	case isGPL20(normalized):
 		return GPL20
+	case isBSD3(normalized):
+		return BSD3
 	case isCC(normalized, "sharealike", "by-sa"):
 		return CCBYSA40
 	case isCC(normalized, "noderivatives", "by-nd") || isCC(normalized, "noderivs", "by-nd"):
@@ -194,6 +204,21 @@ func isGPL20(n string) bool {
 	}
 
 	return strings.Contains(head, "general public license") && strings.Contains(head, "version 2, june 1991")
+}
+
+// isBSD3 recognizes BSD-3-Clause by its grant plus its non-endorsement clause.
+// The anchors deliberately avoid clause 3's subject — the canonical "neither
+// the name of the copyright holder nor the names of its contributors" is the
+// part authors historically personalized ("My name, ... , may not be used"),
+// and the whole point of accepting BSD-3-Clause is inherited licenses we
+// cannot edit. The endorse clause separates it from BSD-2-Clause (which stops
+// at two clauses and must stay Unknown), and the advertising-materials guard
+// separates it from BSD-4-Clause, whose obnoxious advertising clause also
+// precedes a non-endorsement clause.
+func isBSD3(n string) bool {
+	return strings.Contains(n, "redistribution and use in source and binary forms") &&
+		strings.Contains(n, "endorse or promote products derived from this software") &&
+		!strings.Contains(n, "all advertising materials")
 }
 
 // isCC recognizes a Creative Commons 4.0 license. It accepts either the prose

@@ -153,6 +153,41 @@ func TestCheckDisallowedLicense(t *testing.T) {
 	}
 }
 
+// TestCheckInheritedBSD3License: a fork of a BSD-licensed upstream keeps the
+// upstream's LICENSE — here with the personalized clause 3 older projects
+// carry — and the check must pass it. Bootstrap still refuses to create one;
+// that side of the asymmetry is pinned in the license package's tests.
+func TestCheckInheritedBSD3License(t *testing.T) {
+	t.Parallel()
+
+	dir := writeRepo(t, map[string]string{
+		"README.md": "# Thing",
+		"LICENSE": `Copyright (c) 2014-2022  Ulrich Kunitz
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice.
+
+* My name, Ulrich Kunitz, may not be used to endorse or promote products
+  derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS".`,
+		".editorconfig": CanonicalEditorconfig,
+		".gitignore":    "*.log",
+	})
+
+	f := findingByRule(Check(dir, DefaultPolicy()), "license")
+	if !f.OK() {
+		t.Fatalf("inherited BSD-3-Clause LICENSE failed: %s", f.Message)
+	}
+
+	if f.Message != "license BSD-3-Clause" {
+		t.Errorf("license message = %q, want %q", f.Message, "license BSD-3-Clause")
+	}
+}
+
 func TestCheckReadmeVariantAccepted(t *testing.T) {
 	t.Parallel()
 

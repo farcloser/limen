@@ -106,6 +106,9 @@ func TestRunFixAndBootstrap(t *testing.T) {
 		{"bootstrap two paths", []string{"bootstrap", good, empty}, 2},
 		{"bootstrap non-empty", []string{"bootstrap", good}, 2},
 		{"bootstrap bad license", []string{"bootstrap", "-license", "WTFPL", empty}, 2},
+		// BSD-3-Clause is acceptance-only: the check recognizes it on inherited
+		// forks, but a new repository does not get to choose it.
+		{"bootstrap acceptance-only license", []string{"bootstrap", "-license", "BSD-3-Clause", empty}, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
