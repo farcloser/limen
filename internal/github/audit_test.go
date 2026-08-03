@@ -26,7 +26,7 @@ const compliantRepoJSON = `{
   "has_wiki": false,
   "has_projects": false,
   "has_discussions": false,
-  "allow_merge_commit": false,
+  "allow_merge_commit": true,
   "allow_squash_merge": true,
   "allow_rebase_merge": true,
   "allow_auto_merge": true,
@@ -255,7 +255,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	  "has_wiki": true,
 	  "has_projects": false,
 	  "has_discussions": false,
-	  "allow_merge_commit": true,
+	  "allow_merge_commit": false,
 	  "allow_squash_merge": true,
 	  "allow_rebase_merge": true,
 	  "allow_auto_merge": false,
@@ -764,12 +764,12 @@ func TestOutsideCollaborators(t *testing.T) { //nolint:paralleltest // serial: m
 }
 
 func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
-	// limen:main is missing required_linear_history but carries the project's
-	// own status-check context: the reconcile payload must preserve it and
-	// must not inject the canonical defaults.
+	// limen:main is missing non_fast_forward but carries the project's own
+	// status-check context: the reconcile payload must preserve it and must not
+	// inject the canonical defaults.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
+		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},` +
 			`{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
 	}
@@ -799,6 +799,41 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 
 	if strings.Contains(payload, `"context":"gate"`) {
 		t.Error("reconcile must not replace project contexts with the canonical default")
+	}
+}
+
+func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	// A created limen:main must allow merge commits and must NOT require linear
+	// history. The two together left squash as the only usable method — GitHub
+	// disables rebase merges on a signature-required branch (it cannot sign the
+	// commits it rewrites), and linear history forbids merge commits — so every
+	// multi-commit pull request collapsed to one commit. A merge commit is the
+	// only method that lands the commits AND their signatures intact.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
+		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
+	}
+	logPath := stubGH(t, responses)
+
+	_, changes := Audit(testRepo, nil)
+
+	for _, planned := range changes {
+		if planned.Check == checkRulesetDefaultBranch {
+			if err := planned.Apply(); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+
+	payload := string(log)
+	if !strings.Contains(payload, `"merge"`) {
+		t.Errorf("merge commits must be an allowed merge method, got: %s", payload)
+	}
+
+	if strings.Contains(payload, "required_linear_history") {
+		t.Error("linear history must not be required: it forbids the only merge method that keeps signatures")
 	}
 }
 
