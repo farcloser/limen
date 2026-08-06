@@ -46,23 +46,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_darwin_arm64.tar.gz",
-      "checksum": "0E6918BA030F9758917F0A1A5512DC8BA420C5F6126EB2111A7E0AD6817FE445",
+      "id": "github_release/github.com/farcloser/limen/v0.0.11/limen_0.0.11_darwin_arm64.tar.gz",
+      "checksum": "D02B0AD949E5DFDA70BA7E8A65DC52EF1FBA30D61E714539D7A8124B13471CBA",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_linux_amd64.tar.gz",
-      "checksum": "37025CAE09B7014055CB3FDE4DC30C5740E7187EC03B3449016FE0B92F818D22",
+      "id": "github_release/github.com/farcloser/limen/v0.0.11/limen_0.0.11_linux_amd64.tar.gz",
+      "checksum": "F53D6F8D32A05CE23E22F3603FDA224571949421F6AFDFED4EEC441CBA94242C",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_linux_arm64.tar.gz",
-      "checksum": "A294BE1C4A8C34F5E45A763BFFBFF4D0456FC5E64F65FF12D968DCE58E7A90CA",
+      "id": "github_release/github.com/farcloser/limen/v0.0.11/limen_0.0.11_linux_arm64.tar.gz",
+      "checksum": "B16B8D8CCBF36E4C9FBAD5D1F5450E6A0ECEF347FDF8AFD1634A86950C16E076",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/farcloser/limen/v0.0.1/limen_0.0.1_windows_amd64.tar.gz",
-      "checksum": "BCBB9FA04D7D0F36FDFE3B0AA270EE886C6C566A78B46E8FC69D8DCA1485AC74",
+      "id": "github_release/github.com/farcloser/limen/v0.0.11/limen_0.0.11_windows_amd64.tar.gz",
+      "checksum": "2582F2A161D8E21BF0EA7EBA8C538438419FA333E1ACBC741CB7454603E9670F",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/farcloser/limen/v0.0.11/limen_0.0.11_windows_arm64.tar.gz",
+      "checksum": "0E87B3F45818510D3B2C83586664E04C43B947E88689B04A0FDDD03F9A2E71AB",
       "algorithm": "sha256"
     },
     {
