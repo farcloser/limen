@@ -132,7 +132,10 @@ What each shared module is *for* — mechanics live in the module files themselv
   [per-language rules](./per-language.md#homebrew-formulas)), and `github` (the live GitHub
   settings audit — `limen github check`, needing network and an authed `gh`; see
   [the github chapter](./github.md)).
-- **`test`** — the suites, per language (`just do test go`: `unit`, `race`, `bench`, `fuzz`
+- **`test`** — the suites, per language (`just do test go`: `unit`, `race` — which asks the
+  toolchain whether the host has a race detector at all and, where it does not (windows/arm64:
+  Go vendors LLVM's ThreadSanitizer per platform and there is none there), says so loudly and
+  passes rather than fail every push on a Go limitation — `bench`, `fuzz`
   as a short smoke of every `Fuzz*` target — run by the canonical CI's own `fuzz` job on
   one leg, not from the `test` aggregate, so the matrix does not fuzz five times over —
   `cover` with an optional minimum gate, `profile`
