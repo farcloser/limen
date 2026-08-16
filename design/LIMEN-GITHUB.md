@@ -287,6 +287,7 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 | Check | Baseline | API |
 |---|---|---|
 | Installed GitHub Apps | subset of a named allowlist (Renovate just joined — this check makes such grants reviewable) with scopes recorded | `GET /orgs/{o}/installations` |
+| Renovate installed | the `renovate` app is among the installations — the seeded `renovate.json5` and the checksum-refresh workflow depend on it. Fail, no fix: app installation has no API. Self-hosted Renovate = exemption | `GET /orgs/{o}/installations` |
 | Org webhooks | HTTPS + secret + named | `GET /orgs/{o}/hooks` |
 | Org-level secrets | named inventory | `GET /orgs/{o}/actions/secrets` |
 | Fine-grained PAT approvals | inventory (API is partial; mark unverifiable where gated) | `/orgs/{o}/personal-access-token*` |

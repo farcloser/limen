@@ -44,7 +44,9 @@ func compliantOrgResponses() map[string]stubResponse {
 		"GET orgs/test-org/code-security/configurations/defaults": {
 			Body: `[{"default_for_new_repos": "all", "configuration": {"name": "canonical"}}]`,
 		},
-		"GET orgs/test-org/installations":                       {Body: `{"total_count": 0, "installations": []}`},
+		"GET orgs/test-org/installations": {
+			Body: `{"total_count": 1, "installations": [{"app_slug": "renovate"}]}`,
+		},
 		"GET orgs/test-org/hooks?per_page=100":                  {Body: `[]`},
 		"GET orgs/test-org/actions/secrets":                     {Body: `{"total_count": 0, "secrets": []}`},
 		"GET orgs/test-org/teams?per_page=100":                  {Body: `[]`},
@@ -213,6 +215,77 @@ func TestAuditOrgCommunityHealthSubdirectory(t *testing.T) {
 	if finding, found := findingByCheck(findings, checkOrgCommunityHealthSet); !found || finding.Status != StatusOK {
 		t.Errorf("community-health set with .github/-located files: %v (%s), want ok",
 			finding.Status, finding.Message)
+	}
+}
+
+// TestAuditOrgRenovateInstalled: the Renovate app is a floor — absent, a
+// failing verdict with NO planned change (installation is a browser flow with
+// no API); present, ok. Neither outcome disturbs the informational app
+// inventory, which stays ok with the list either way. An org with no apps at
+// all fails the floor too, and the exemption is the self-hosted escape hatch.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditOrgRenovateInstalled(t *testing.T) {
+	// Present, among others: ok, and the inventory lists every slug.
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/installations"] = stubResponse{
+		Body: `{"total_count": 2, "installations": [{"app_slug": "some-app"}, {"app_slug": "renovate"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, _ := AuditOrg(testOrg, nil)
+
+	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusOK {
+		t.Errorf("renovate installed: %v (%s), want ok", finding.Status, finding.Message)
+	}
+
+	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found ||
+		finding.Status != StatusOK || !strings.Contains(finding.Message, "some-app") {
+		t.Errorf("app inventory: %v (%s), want ok listing every app", finding.Status, finding.Message)
+	}
+
+	// Absent (other apps installed): fail, no fix planned.
+	responses["GET orgs/test-org/installations"] = stubResponse{
+		Body: `{"total_count": 1, "installations": [{"app_slug": "some-app"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, changes := AuditOrg(testOrg, nil)
+
+	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusFail {
+		t.Errorf("renovate missing: %v, want fail", finding.Status)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkOrgRenovateInstalled {
+			t.Error("renovate installation planned a change; there is no API to install an app")
+		}
+	}
+
+	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found || finding.Status != StatusOK {
+		t.Errorf("app inventory with renovate missing: %v, want ok (informational)", finding.Status)
+	}
+
+	// No apps at all: the inventory is ok ("none"), the floor still fails.
+	responses["GET orgs/test-org/installations"] = stubResponse{Body: `{"total_count": 0, "installations": []}`}
+	stubGH(t, responses)
+
+	findings, _ = AuditOrg(testOrg, nil)
+
+	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusFail {
+		t.Errorf("no apps: renovate %v, want fail", finding.Status)
+	}
+
+	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found || finding.Status != StatusOK {
+		t.Errorf("no apps: inventory %v, want ok", finding.Status)
+	}
+
+	// Self-hosted Renovate: the exemption turns the failure into an
+	// exempted-ok, as for any other check.
+	findings, _ = AuditOrg(testOrg, map[string]string{checkOrgRenovateInstalled: "self-hosted from ops/renovate"})
+
+	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusOK {
+		t.Errorf("exempted renovate: %v, want ok", finding.Status)
 	}
 }
 
