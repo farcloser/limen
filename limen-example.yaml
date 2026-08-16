@@ -68,6 +68,7 @@ github:
 #   org-actions-self-hosted-runners: <reason>
 #   org-code-security-configuration: <reason>
 #   org-installed-apps: <reason>
+#   org-renovate-installed: <reason>  # e.g. Renovate is self-hosted from <repo>
 #   org-webhooks: <reason>
 #   org-actions-secrets: <reason>
 #   org-teams: <reason>

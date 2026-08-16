@@ -262,6 +262,14 @@ canonically the org's `.github` repository). The catalog:
   secret + TLS verification), org-level Actions secrets (names only), teams,
   and fine-grained PAT grants: visible on every audit, so a grant nobody
   remembers making has nowhere to hide.
+- **Renovate installed** — the one GitHub App the baseline depends on. Every
+  governed repository carries a seeded `renovate.json5` and the content-pinned
+  checksum-refresh workflow that serves Renovate's branches; without the app on
+  the organization none of it runs, and every pin (tool versions in
+  `aqua.yaml`, action SHAs in the workflows) silently stops moving. A failing
+  verdict, but never auto-fixed: installing a GitHub App is a browser-only
+  consent flow with no API. A self-hosted Renovate is an exemption to declare
+  in `limen.yaml`.
 - **The org `.github` repository** — must exist, be public (GitHub silently
   ignores a private one as a fallback source), and carry the canonical
   community-health set: `SECURITY.md`, `CONTRIBUTING.md` (the DCO terms,
