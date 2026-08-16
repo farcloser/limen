@@ -171,15 +171,26 @@ The decided merge model, enforced by both the repository settings and the
   green PRs), and web-UI commits require sign-off — DCO holds even for edits
   made in a browser.
 
-Requiring signatures has one sharp edge worth knowing before it bites:
-**GitHub refuses a squash merge of a pull request you did not author** into a
-signature-required branch. GitHub signs the squash commit with its own key on
-the author's behalf, and it will only do that for the author. In practice this
-means a bot-authored pull request has to be merged by that same bot (Renovate
-merges its own PRs through the API, which is why auto-merge keeps working),
-and any workflow that pushes a plain `git commit` must either sign it or
-confine itself to a non-default branch and go through a pull request like
-everyone else.
+Requiring signatures has two sharp edges worth knowing before they bite:
+
+- **GitHub refuses a squash merge of a pull request you did not author** into
+  a signature-required branch. GitHub signs the squash commit with its own key
+  on the author's behalf, and it will only do that for the author. In practice
+  this means a bot-authored pull request has to be merged by that same bot
+  (Renovate merges its own PRs through the API, which is why auto-merge keeps
+  working).
+- **Every commit on a pull request branch must itself be signed** — going
+  through a pull request is not an escape hatch for an unsigned commit. The
+  method this doctrine leans on, the merge commit, lands the branch's commits
+  *verbatim* on the default branch, so the signatures rule judges each of
+  them; rebase is disabled while signatures are required, and squash is
+  refused to everyone but the author (previous edge). One unsigned commit —
+  say, a workflow's plain `git commit` fix-up on a bot branch — therefore
+  leaves a pull request with no merge path at all. Renovate's own commits are
+  safe (it commits through GitHub's API, which signs), and the canonical
+  `update-aqua-checksum` workflow commits through the GraphQL
+  `createCommitOnBranch` mutation for exactly this reason: GitHub signs the
+  mutation's commits, where a token-authenticated `git push` signs nothing.
 
 The `limen:tags` ruleset restricts `v*` tag creation, update, and deletion to
 repository admins: the tag push is the release button (see the release lanes
