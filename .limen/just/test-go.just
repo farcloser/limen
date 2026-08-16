@@ -209,25 +209,30 @@ profile: (_banner "test go" "profile")
         echo "  -> $png"
     }
     for pkg in $(go list ./...); do
-        # Filename-safe name from the FULL import path, not just the last segment:
-        # example/a/client and example/b/client both end in "client" and would
-        # otherwise overwrite each other's binary and profiles. '/' -> '__'; the
-        # only other char a Go import path carries that matters here is '.', which
-        # is already filename-safe.
-        name=${pkg//\//__}
+        # One directory per package, keyed by the FULL import path used as a
+        # path: example/a/client and example/b/client both end in "client" and
+        # would otherwise overwrite each other's binary and profiles, and any
+        # flattening of the path into a file name ('/' -> '__' and the like) has
+        # the same problem one level down, since '_', '-', '.' and '~' are all
+        # legal in an import path (example/a__b vs example/a/b). The tree is the
+        # one encoding with nothing to collide, and it reads as the package does.
+        # Ancestor packages get their own files (cpu.prof, ...) next to the
+        # child's directory, never inside it. Paths stay cwd-relative for the
+        # WASM dot's sake (see render).
+        mkdir -p "$prof/$pkg" "$docs/$pkg"
         echo "Profiling $pkg..."
-        go test -count=1 -o "$prof/$name.test" "$pkg" \
-            -cpuprofile "$prof/${name}_cpu.prof" \
-            -memprofile "$prof/${name}_mem.prof" || true
-        if [ -s "$prof/${name}_cpu.prof" ]; then
+        go test -count=1 -o "$prof/$pkg/pkg.test" "$pkg" \
+            -cpuprofile "$prof/$pkg/cpu.prof" \
+            -memprofile "$prof/$pkg/mem.prof" || true
+        if [ -s "$prof/$pkg/cpu.prof" ]; then
             echo "  CPU profile (top 20):"
-            go tool pprof -top -nodecount=20 "$prof/${name}_cpu.prof" 2>/dev/null || true
-            render "$prof/${name}_cpu.prof" "$docs/${name}_cpu.png"
+            go tool pprof -top -nodecount=20 "$prof/$pkg/cpu.prof" 2>/dev/null || true
+            render "$prof/$pkg/cpu.prof" "$docs/$pkg/cpu.png"
         fi
-        if [ -s "$prof/${name}_mem.prof" ]; then
+        if [ -s "$prof/$pkg/mem.prof" ]; then
             echo "  Memory profile — alloc_space (top 20):"
-            go tool pprof -top -nodecount=20 -alloc_space "$prof/${name}_mem.prof" 2>/dev/null || true
-            render "$prof/${name}_mem.prof" "$docs/${name}_alloc.png" -alloc_space
+            go tool pprof -top -nodecount=20 -alloc_space "$prof/$pkg/mem.prof" 2>/dev/null || true
+            render "$prof/$pkg/mem.prof" "$docs/$pkg/alloc.png" -alloc_space
         fi
     done
     echo "Profiles written to $prof/, diagrams to $docs/"

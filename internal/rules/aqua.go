@@ -352,8 +352,8 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 		return &finding
 	}
 
-	if short := manifest.shortFormPinNames(); len(short) > 0 {
-		finding := fail(rule, name, name+": "+shortFormPinMessage(short))
+	if twoLine := manifest.twoLinePinNames(); len(twoLine) > 0 {
+		finding := fail(rule, name, name+": "+twoLinePinMessage(twoLine))
 
 		return &finding
 	}
@@ -464,10 +464,10 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		}
 	}
 
-	// One-line pins of two-line-canonical packages (aqua_longform.go): same
-	// folding rule as the self-pin move — into the wholesale replacement when
-	// the section is rebuilt, one replacement per pin otherwise.
-	shortPins := manifest.shortFormPins()
+	// Two-line version: pins (aqua_oneline.go): same folding rule as the
+	// self-pin move — into the wholesale replacement when the section is
+	// rebuilt, one replacement per pin otherwise.
+	twoLinePins := manifest.twoLinePins()
 
 	packagesReplaced := false
 
@@ -498,8 +498,8 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 			packagesReplaced = true
 		default:
 			shift := manifest.pkgEntryIndent() - canonicalAqua.pkgs[0].indent
-			section := rewriteShortFormPins(
-				trimBlankTail(manifest.section(manifest.packages)), shortPins, manifest.packages.start)
+			section := rewriteTwoLinePins(
+				trimBlankTail(manifest.section(manifest.packages)), twoLinePins, manifest.packages.start)
 			lines := append(
 				rewriteSelfPin(section, selfVersion),
 				rewriteSelfPin(canonicalEntryLines(missing, shift), selfVersion)...)
@@ -526,12 +526,12 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		summary = append(summary, "moved the farcloser/limen pin to "+selfVersion+" (the running limen's version)")
 	}
 
-	if len(shortPins) > 0 {
+	if len(twoLinePins) > 0 {
 		if !packagesReplaced {
-			reps = append(reps, shortFormReplacements(shortPins)...)
+			reps = append(reps, twoLineReplacements(twoLinePins)...)
 		}
 
-		summary = append(summary, shortFormSummary(shortPins))
+		summary = append(summary, twoLineSummary(twoLinePins))
 	}
 
 	if len(summary) == 0 {
