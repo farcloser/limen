@@ -9,6 +9,25 @@
   // Supply-chain cooldown: wait before proposing a bump. Doubles as protection
   // against the race where a release tag exists but its assets aren't uploaded yet.
   minimumReleaseAge: "3 days",
+  customManagers: [
+    // The go_install tools pinned as github.com/<owner>/<repo>[/<pkg>…]@vX.Y.Z
+    // (aqua.yaml, local registry). The aqua preset's generic manager cannot read
+    // a dotted owner ("github.com"), and its `_go/` hook needs the two-line
+    // `version:` form that `aqua update` refuses to bump — so these one-line
+    // pins get their own manager, on Renovate's go datasource: the module's
+    // repo tags, /vN major suffix aware, and a package path below the module
+    // root (…/cmd/tool) resolves to the module's tags. Only plain vX.Y.Z pins:
+    // a pseudo-version (v0.0.0-<date>-<hash>, an untagged module) has nothing
+    // Renovate could order it against and is left alone, deliberately.
+    {
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)aqua\\.ya?ml$/"],
+      matchStrings: [
+        " +- +name: +(?<depName>github\\.com/[^@'\" \\n]+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\n]",
+      ],
+      datasourceTemplate: "go",
+    },
+  ],
   packageRules: [
     // lychee tags releases "lychee-vX.Y.Z" (next to "lychee-lib-vX.Y.Z" and
     // "nightly"), and the aqua preset has no manager for that prefix in either
