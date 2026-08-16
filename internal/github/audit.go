@@ -117,9 +117,13 @@ const (
 	scanStateConfigured   = "configured"
 	decimalBase           = 10
 	jsonTypeKey           = "type"
+	jsonRulesKey          = "rules"
+	jsonParametersKey     = "parameters"
+	rulePullRequest       = "pull_request"
 	ruleRequiredChecks    = "required_status_checks"
 	ruleRequiredSigs      = "required_signatures"
 	ruleDeletion          = "deletion"
+	ruleLinearHistory     = "required_linear_history"
 	listSeparator         = ", "
 	repositoryAdminRoleID = 5 // GitHub's fixed id for the repository "admin" role, used in ruleset bypass lists.
 )
@@ -823,10 +827,24 @@ type rulesetRule struct {
 
 type rulesetRuleParameters struct {
 	RequiredStatusChecks []requiredStatusCheck `json:"required_status_checks"`
+	AllowedMergeMethods  []string              `json:"allowed_merge_methods"`
 }
 
 type requiredStatusCheck struct {
 	Context string `json:"context"`
+}
+
+// allowedMergeMethods returns the pull_request rule's allowed merge methods,
+// if the ruleset carries that rule (nil otherwise — or when the API predates
+// the field, which the audit must read as "merge availability unproven").
+func (d rulesetDetail) allowedMergeMethods() []string {
+	for _, rule := range d.Rules {
+		if rule.Type == rulePullRequest && rule.Parameters != nil {
+			return rule.Parameters.AllowedMergeMethods
+		}
+	}
+
+	return nil
 }
 
 // statusCheckContexts returns the contexts of the required_status_checks
@@ -870,20 +888,26 @@ func (a *auditor) auditRulesets() {
 		byName[summary.Name] = summary
 	}
 
-	targets := []struct {
-		check string
-		name  string
-		build func(existingContexts []string) map[string]any
-		rules []string
-	}{
+	targets := []rulesetTarget{
 		{
-			checkRulesetDefaultBranch, rulesetMainName, canonicalMainRuleset,
-			[]string{"pull_request", ruleDeletion, "non_fast_forward", ruleRequiredChecks, ruleRequiredSigs},
+			check: checkRulesetDefaultBranch,
+			name:  rulesetMainName,
+			build: canonicalMainRuleset,
+			rules: []string{rulePullRequest, ruleDeletion, "non_fast_forward", ruleRequiredChecks, ruleRequiredSigs},
+			// Forbidden despite the floor doctrine's "stricter passes":
+			// required_linear_history is not merely stricter. It forbids merge
+			// commits — the one method that lands a pull request's commits AND
+			// their signatures intact — which the baseline mandates be available
+			// (checkMergeMethods enforces the same at the repository level). The
+			// pre-"Fix merging" canonical ruleset carried it, and those stale
+			// rulesets audited clean while blocking nearly every merge.
+			forbidden: []string{ruleLinearHistory},
 		},
 		{
-			checkRulesetVersionTags, rulesetTagsName,
-			func([]string) map[string]any { return canonicalTagsRuleset() },
-			[]string{"creation", "update", ruleDeletion},
+			check: checkRulesetVersionTags,
+			name:  rulesetTagsName,
+			build: func([]string) map[string]any { return canonicalTagsRuleset() },
+			rules: []string{"creation", "update", ruleDeletion},
 		},
 	}
 
@@ -896,26 +920,31 @@ func (a *auditor) auditRulesets() {
 			continue
 		}
 
-		a.auditRuleset(target.check, byName, target.name, target.build, target.rules)
+		a.auditRuleset(target, byName)
 	}
 }
 
-func (a *auditor) auditRuleset(
-	check string,
-	byName map[string]rulesetSummary,
-	name string,
-	build func(existingContexts []string) map[string]any,
-	requiredRules []string,
-) {
-	existing, present := byName[name]
-	if !present {
-		canonical := build(nil)
+// rulesetTarget is one canonical ruleset the audit reconciles toward: the
+// check it reports under, the ruleset's name, its canonical definition, the
+// rule types it must carry, and the rule types it must NOT.
+type rulesetTarget struct {
+	build     func(existingContexts []string) map[string]any
+	check     string
+	name      string
+	rules     []string
+	forbidden []string
+}
 
-		a.flag(check, StatusFail, "(absent)", name,
-			"the canonical ruleset "+name+" does not exist",
+func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSummary) {
+	existing, present := byName[target.name]
+	if !present {
+		canonical := target.build(nil)
+
+		a.flag(target.check, StatusFail, "(absent)", target.name,
+			"the canonical ruleset "+target.name+" does not exist",
 			&Change{
-				Check:   check,
-				Summary: "create ruleset " + name,
+				Check:   target.check,
+				Summary: "create ruleset " + target.name,
 				apply:   func(c client) error { return c.writeJSON("POST", "/rulesets", canonical) },
 			})
 
@@ -928,7 +957,7 @@ func (a *auditor) auditRuleset(
 
 	detailOutcome := a.client.getJSON(rulesetPath, &detail)
 	if detailOutcome.err != nil || detailOutcome.notFound {
-		a.unverifiable(orNotFound(detailOutcome), check)
+		a.unverifiable(orNotFound(detailOutcome), target.check)
 
 		return
 	}
@@ -937,20 +966,49 @@ func (a *auditor) auditRuleset(
 	// project's CI shape — so a reconcile preserves them, exactly like the
 	// standard-registry ref inside the otherwise-pinned aqua sections. An
 	// empty set falls back to the canonical defaults inside the builder.
-	payload := build(detail.statusCheckContexts())
+	payload := target.build(detail.statusCheckContexts())
 	reconcile := &Change{
-		Check:   check,
-		Summary: "reconcile ruleset " + name + " to the canonical definition",
+		Check:   target.check,
+		Summary: "reconcile ruleset " + target.name + " to the canonical definition",
 		apply:   func(c client) error { return c.writeJSON("PUT", rulesetPath, payload) },
 	}
 
 	if existing.Enforcement != enforcementActive {
-		a.flag(check, StatusFail, existing.Enforcement, enforcementActive,
-			"ruleset "+name+" exists but is not active", reconcile)
+		a.flag(target.check, StatusFail, existing.Enforcement, enforcementActive,
+			"ruleset "+target.name+" exists but is not active", reconcile)
 
 		return
 	}
 
+	if problem, drifted := rulesetDrift(target, detail, payload); drifted {
+		a.flag(target.check, StatusFail, problem.current, problem.desired,
+			"ruleset "+target.name+" "+problem.message, reconcile)
+
+		return
+	}
+
+	a.flag(target.check, StatusOK, "", "", "ruleset "+target.name+" is active with the required rules", nil)
+}
+
+// rulesetProblem is one departure of a ruleset's rule content from the
+// canonical definition, phrased for the finding it becomes.
+type rulesetProblem struct {
+	current string
+	desired string
+	message string
+}
+
+// rulesetDrift returns the first departure of the ruleset's rule content from
+// the canonical definition. Rule presence alone is not enough — the lesson of
+// the pre-"Fix merging" rulesets, which carried every required rule and still
+// blocked merges: required_linear_history (now forbidden) plus a merge-method
+// list without "merge" left squash as the only usable method, and the audit
+// read them as compliant. So beyond required rules, forbidden rules and the
+// pull_request rule's allowed merge methods (compared against the canonical
+// payload, so check and fix agree by construction) are judged too. Other rules
+// the canonical definition does not name remain untouched — the floor
+// doctrine: stricter than the baseline passes.
+func rulesetDrift(target rulesetTarget, detail rulesetDetail, payload map[string]any) (rulesetProblem, bool) {
 	have := map[string]bool{}
 	for _, rule := range detail.Rules {
 		have[rule.Type] = true
@@ -958,27 +1016,109 @@ func (a *auditor) auditRuleset(
 
 	var missing []string
 
-	for _, required := range requiredRules {
+	for _, required := range target.rules {
 		if !have[required] {
 			missing = append(missing, required)
 		}
 	}
 
 	if len(missing) > 0 {
-		a.flag(check, StatusFail, "missing rule(s): "+strings.Join(missing, listSeparator), "all required rules",
-			"ruleset "+name+" is missing required rules", reconcile)
+		return rulesetProblem{
+			current: "missing rule(s): " + strings.Join(missing, listSeparator),
+			desired: "all required rules",
+			message: "is missing required rules",
+		}, true
+	}
 
-		return
+	var forbidden []string
+
+	for _, banned := range target.forbidden {
+		if have[banned] {
+			forbidden = append(forbidden, banned)
+		}
+	}
+
+	if len(forbidden) > 0 {
+		return rulesetProblem{
+			current: "forbidden rule(s): " + strings.Join(forbidden, listSeparator),
+			desired: "absent",
+			message: "carries rules the baseline forbids — they block the only merge method that preserves signatures",
+		}, true
+	}
+
+	if methods, ok := missingMergeMethods(detail, payload); !ok {
+		return rulesetProblem{
+			current: "allowed merge methods missing: " + strings.Join(methods, listSeparator),
+			desired: "every canonical method allowed",
+			message: "does not allow every canonical merge method — a merge commit is the only one that lands a pull request's commits and their signatures intact",
+		}, true
 	}
 
 	if have[ruleRequiredChecks] && len(detail.statusCheckContexts()) == 0 {
-		a.flag(check, StatusFail, "required status checks name no contexts", "at least one required check",
-			"ruleset "+name+" requires status checks but names none — merges would not wait for CI", reconcile)
-
-		return
+		return rulesetProblem{
+			current: "required status checks name no contexts",
+			desired: "at least one required check",
+			message: "requires status checks but names none — merges would not wait for CI",
+		}, true
 	}
 
-	a.flag(check, StatusOK, "", "", "ruleset "+name+" is active with the required rules", nil)
+	return rulesetProblem{}, false
+}
+
+// missingMergeMethods compares the ruleset's allowed merge methods against the
+// canonical payload's pull_request rule, returning the canonical methods the
+// live ruleset lacks. Absence of the parameter is drift, not proof: a list
+// that cannot be read cannot prove merge commits are available. A canonical
+// definition without a pull_request rule (limen:tags) has nothing to compare.
+func missingMergeMethods(detail rulesetDetail, payload map[string]any) ([]string, bool) {
+	want := canonicalAllowedMergeMethods(payload)
+	if len(want) == 0 {
+		return nil, true
+	}
+
+	allowed := map[string]bool{}
+	for _, method := range detail.allowedMergeMethods() {
+		allowed[method] = true
+	}
+
+	var missing []string
+
+	for _, method := range want {
+		if !allowed[method] {
+			missing = append(missing, method)
+		}
+	}
+
+	return missing, len(missing) == 0
+}
+
+// canonicalAllowedMergeMethods extracts the allowed_merge_methods of the
+// canonical payload's pull_request rule (nil when the ruleset carries none).
+func canonicalAllowedMergeMethods(payload map[string]any) []string {
+	rules, isRuleList := payload[jsonRulesKey].([]map[string]any)
+	if !isRuleList {
+		return nil
+	}
+
+	for _, rule := range rules {
+		if rule[jsonTypeKey] != rulePullRequest {
+			continue
+		}
+
+		parameters, isObject := rule[jsonParametersKey].(map[string]any)
+		if !isObject {
+			return nil
+		}
+
+		methods, isList := parameters["allowed_merge_methods"].([]string)
+		if !isList {
+			return nil
+		}
+
+		return methods
+	}
+
+	return nil
 }
 
 // ruleOf renders a parameterless ruleset rule of the given kind.
@@ -1033,6 +1173,11 @@ func defaultRequiredChecks() []string {
 // rewrites nothing — the branch's commits land with their own SHAs and their
 // author's signature, under a merge commit GitHub signs itself. Braided history
 // is the price, and it is the cheaper one. See book/github.md.
+//
+// rulesetDrift enforces the reversal on existing rulesets: one created before
+// this change still carries required_linear_history and lacks "merge" in its
+// allowed methods, so it fails (and reconciles) instead of auditing clean
+// while blocking merges.
 func canonicalMainRuleset(existingContexts []string) map[string]any {
 	contexts := existingContexts
 	if len(contexts) == 0 {
@@ -1051,11 +1196,11 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 		"conditions": map[string]any{
 			"ref_name": map[string]any{"include": []string{"~DEFAULT_BRANCH"}, "exclude": []string{}},
 		},
-		"rules": []map[string]any{
+		jsonRulesKey: []map[string]any{
 			ruleOf(ruleDeletion),
 			ruleOf("non_fast_forward"),
 			ruleOf(ruleRequiredSigs),
-			{jsonTypeKey: "pull_request", "parameters": map[string]any{
+			{jsonTypeKey: rulePullRequest, jsonParametersKey: map[string]any{
 				"required_approving_review_count":   0,
 				"dismiss_stale_reviews_on_push":     false,
 				"require_code_owner_review":         false,
@@ -1067,7 +1212,7 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 				// are required; it becomes available again only if that rule goes.
 				"allowed_merge_methods": []string{"merge", "squash", "rebase"},
 			}},
-			{jsonTypeKey: ruleRequiredChecks, "parameters": map[string]any{
+			{jsonTypeKey: ruleRequiredChecks, jsonParametersKey: map[string]any{
 				// Not strict (branches need not be up to date before merge):
 				// update-branch suggestions cover it without serializing every
 				// merge behind a rebase. Turning this on is the mitigation if
@@ -1093,7 +1238,7 @@ func canonicalTagsRuleset() map[string]any {
 		"bypass_actors": []map[string]any{
 			{"actor_type": "RepositoryRole", "actor_id": repositoryAdminRoleID, "bypass_mode": "always"},
 		},
-		"rules": []map[string]any{
+		jsonRulesKey: []map[string]any{
 			ruleOf("creation"),
 			ruleOf("update"),
 			ruleOf(ruleDeletion),
