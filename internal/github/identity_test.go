@@ -59,12 +59,15 @@ func TestResolveUpdateAppIdentityConvention(t *testing.T) {
 	}
 }
 
-// TestResolveUpdateAppIdentityRenamed: with an org-admin token the App is
-// read back from the org — the variable names its id, the installation list
-// its slug — so a renamed App still resolves.
+// TestDiscoverUpdateAppIdentityRenamed: with an org-admin token, Discover
+// reads the App back from the org — the variable names its id, the
+// installation list its slug — so a renamed App is found. Resolve, on the
+// same org with the same token, deliberately does NOT see it: check's answer
+// must not depend on who runs it, so it knows only the convention name (which
+// here does not exist) and reports unknown.
 //
 //nolint:paralleltest // serial by design: mutates package-level seams.
-func TestResolveUpdateAppIdentityRenamed(t *testing.T) {
+func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org/actions/variables/UPDATE_AQUA_CHECKSUM_APP_ID": {
 			Body: `{"name": "UPDATE_AQUA_CHECKSUM_APP_ID", "value": "4242"}`,
@@ -79,13 +82,43 @@ func TestResolveUpdateAppIdentityRenamed(t *testing.T) {
 		"/users/our-ci-pusher[bot]": `{"id": 99, "login": "our-ci-pusher[bot]", "type": "Bot"}`,
 	})
 
-	identity, err := ResolveUpdateAppIdentity("test-org")
+	identity, err := DiscoverUpdateAppIdentity("test-org")
 	if err != nil {
-		t.Fatalf("resolve: %v", err)
+		t.Fatalf("discover: %v", err)
 	}
 
 	if identity.Slug != "our-ci-pusher" || identity.UserID != 99 {
 		t.Errorf("identity = %+v, want the renamed App", identity)
+	}
+
+	if _, err := ResolveUpdateAppIdentity("test-org"); !errors.Is(err, ErrUpdateAppUnknown) {
+		t.Errorf("resolve with a renamed App: %v, want ErrUpdateAppUnknown (check stays credential-independent)",
+			err)
+	}
+}
+
+// TestDiscoverUpdateAppIdentityFallsBack: without a usable token, Discover
+// gives the same answer as Resolve — the convention.
+//
+//nolint:paralleltest // serial by design: mutates package-level seams.
+func TestDiscoverUpdateAppIdentityFallsBack(t *testing.T) {
+	stubGH(t, map[string]stubResponse{})
+	usersServer(t, map[string]string{
+		"/users/limen-ci-test-org[bot]": `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`,
+	})
+
+	discovered, err := DiscoverUpdateAppIdentity("test-org")
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+
+	resolved, err := ResolveUpdateAppIdentity("test-org")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	if discovered != resolved {
+		t.Errorf("discover %+v != resolve %+v without a token", discovered, resolved)
 	}
 }
 

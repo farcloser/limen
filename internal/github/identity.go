@@ -9,12 +9,26 @@
 // ignore that author or it treats every fix-up as a human edit and stops
 // rebasing the branch — the failure mode this file exists to prevent.
 //
-// Two tiers, so the answer is exact when it can be and still useful when it
-// cannot: with an org-admin gh token the App is read back from the org (the
-// variable UPDATE_AQUA_CHECKSUM_APP_ID names it, the installation list gives
-// its slug — robust to a renamed App); without one, the slug is assumed to be
-// the name limen registers (updateAppName). Either way the bot user id comes
-// from the public users endpoint, which needs no token at all.
+// Two entry points, deliberately, because the two limen commands that need
+// the identity have different contracts:
+//
+//   - ResolveUpdateAppIdentity is for `limen check`: DETERMINISTIC. It uses
+//     nothing but the public users endpoint and the naming convention
+//     (updateAppName), so a laptop with an admin gh token and a CI runner with
+//     no token reach the same verdict — "CI green means the same as local
+//     green" is the whole point of check, and a verdict that depended on the
+//     caller's credentials broke it (local red, CI green, on the same tree).
+//   - DiscoverUpdateAppIdentity is for `limen fix` and `bootstrap`: the
+//     human, mutating, credentialed step. With an org-admin gh token it reads
+//     the App back from the org (the variable UPDATE_AQUA_CHECKSUM_APP_ID
+//     names it, the installation list gives its slug — so a renamed App is
+//     found), and writes the truth into the tree; without one it falls back to
+//     the convention. Once fix has written the identity, check has nothing to
+//     resolve on that point: it verifies the file, and a renamed App simply
+//     reads as "unknown" to check rather than as a failure.
+//
+// Either way the bot user id comes from the public users endpoint, which
+// needs no token at all.
 
 package github
 
@@ -60,12 +74,27 @@ func (i UpdateAppIdentity) Email() string {
 	return strconv.FormatInt(i.UserID, decimalBase) + "+" + i.Slug + "[bot]@users.noreply.github.com"
 }
 
-// ResolveUpdateAppIdentity finds the update-App identity for org. It never
-// registers anything; a missing App is ErrUpdateAppUnknown, and so is any
-// transport failure (wrapped, so the cause is printable).
+// ResolveUpdateAppIdentity finds the update-App identity for org
+// deterministically: the convention slug (updateAppName), the public users
+// endpoint, nothing that depends on the caller's credentials. For `limen
+// check`. It never registers anything; a missing App is ErrUpdateAppUnknown,
+// and so is any transport failure (wrapped, so the cause is printable).
 func ResolveUpdateAppIdentity(org string) (UpdateAppIdentity, error) {
-	slug := updateAppSlug(org)
+	return identityFor(updateAppName(org))
+}
 
+// DiscoverUpdateAppIdentity finds the update-App identity for org using every
+// means available: the App read back from the org through gh when the token
+// can (org variable → installation list, so a renamed App is found), the
+// convention otherwise. For `limen fix` and `bootstrap`, which write the
+// answer into the tree — never for check, whose verdict must not depend on
+// who runs it.
+func DiscoverUpdateAppIdentity(org string) (UpdateAppIdentity, error) {
+	return identityFor(discoveredUpdateAppSlug(org))
+}
+
+// identityFor completes an identity from a slug: the bot user's id.
+func identityFor(slug string) (UpdateAppIdentity, error) {
 	userID, err := botUserID(slug)
 	if err != nil {
 		return UpdateAppIdentity{}, err
@@ -74,14 +103,13 @@ func ResolveUpdateAppIdentity(org string) (UpdateAppIdentity, error) {
 	return UpdateAppIdentity{Slug: slug, UserID: userID}, nil
 }
 
-// updateAppSlug is the App's slug: read back from the org through gh when
-// the token can (org variable → installation list), the limen naming
+// discoveredUpdateAppSlug is the App's slug read back from the org through
+// gh when the token can (org variable → installation list), the limen naming
 // convention otherwise. Every failure on the authed path is silent by design
 // — a laptop without gh, a CI runner without a token, a token without org
 // admin — because the convention is the right answer for every App limen
-// registered under its default name, which is all of them unless a human
-// renamed one on the manifest page.
-func updateAppSlug(org string) string {
+// registered under its default name.
+func discoveredUpdateAppSlug(org string) string {
 	orgAPI := orgClient(org)
 
 	var variable struct {

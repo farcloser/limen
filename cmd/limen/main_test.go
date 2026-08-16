@@ -300,12 +300,14 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
 		}
 	}
 
-	previous := resolveIdentity
+	previousResolve, previousDiscover := resolveIdentity, discoverIdentity
 
-	t.Cleanup(func() { resolveIdentity = previous })
+	t.Cleanup(func() { resolveIdentity, discoverIdentity = previousResolve, previousDiscover })
 
-	// Unresolvable: check passes, fix leaves the seed alone.
-	resolveIdentity = func(string) (string, error) { return "", errors.New("offline") }
+	offline := func(string) (string, error) { return "", errors.New("offline") }
+
+	// Unresolvable everywhere: check passes, fix leaves the seed alone.
+	resolveIdentity, discoverIdentity = offline, offline
 
 	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
 		t.Fatalf("check with an unresolvable identity = %d, want 0", code)
@@ -325,17 +327,18 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
 		t.Error("fix edited renovate.json5 without a resolved identity")
 	}
 
-	// Resolvable: the org inferred from origin reaches the resolver; check
-	// fails until fix adds the address; then check passes.
+	// Resolvable by convention: the org inferred from origin reaches the
+	// resolver; check fails until fix adds the address; then check passes.
 	const email = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
 
 	var askedOrg string
 
-	resolveIdentity = func(org string) (string, error) {
+	known := func(org string) (string, error) {
 		askedOrg = org
 
 		return email, nil
 	}
+	resolveIdentity, discoverIdentity = known, known
 
 	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 1 {
 		t.Errorf("check with the identity missing = %d, want 1", code)
@@ -356,5 +359,27 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
 
 	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
 		t.Errorf("check after fix = %d, want 0", code)
+	}
+
+	// The split: an App only the privileged tier can see (renamed; the
+	// convention name does not exist). check must NOT fail for it — the same
+	// tree must get the same verdict on a laptop with an admin token and on a
+	// runner without one — while fix, the credentialed step, still writes it.
+	const renamed = "300983632+limenreapp[bot]@users.noreply.github.com"
+
+	resolveIdentity = offline
+	discoverIdentity = func(string) (string, error) { return renamed, nil }
+
+	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
+		t.Errorf("check with an App only discover can see = %d, want 0 (credential-independent)", code)
+	}
+
+	if code := run([]string{"fix", dir}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("fix (discover) = %d, want 0", code)
+	}
+
+	fixed, _ = os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	if !strings.Contains(string(fixed), "\""+renamed+"\",\n") || !strings.Contains(string(fixed), "\""+email+"\",\n") {
+		t.Errorf("fix did not add the discovered address alongside the earlier one:\n%s", fixed)
 	}
 }

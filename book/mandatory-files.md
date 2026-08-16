@@ -268,17 +268,31 @@ every aqua-bump branch, as the organization's update-App bot user (see
 fix-up. The seed cannot know it: the App is per-organization and its numeric
 user id exists only once the App is registered.
 
-So `limen check` and `limen fix` resolve it at run time — the organization
-from the `origin` remote, the App's slug read back from the org when `gh` is
-authed as an admin (robust to a renamed App) or assumed to be `limen-ci-<org>`
-otherwise, the bot's user id from the public users endpoint (no token needed)
-— and `fix` adds the address as the first element of `gitIgnoredAuthors`
-(`check` fails until it is there). Anything unresolvable — no remote, no
-network, no App registered — makes the rule pass without enforcing; it never
-fails a repository for what could not be looked up. `bootstrap` runs the same
-step right after registering the App, so a fresh repository is complete from
-its first commit. The edit is exactly one array; the rest of the file stays
-the project's own.
+So limen resolves it at run time, from the organization named by the `origin`
+remote — but `check` and `fix` resolve it *differently*, on purpose:
+
+- **`limen check` is deterministic.** It assumes the App is named as limen
+  registers it, `limen-ci-<org>`, and asks the public users endpoint for that
+  bot's id — no token, nothing that depends on who runs it. A laptop with an
+  org-admin `gh` and a CI runner with no credentials reach the same verdict on
+  the same tree; a check that could go red locally and green in CI would
+  defeat what `just lint` is for.
+- **`limen fix` discovers.** It is the human, mutating step, so it may use
+  privilege: with an org-admin `gh` it reads the App back from the org (the
+  `UPDATE_AQUA_CHECKSUM_APP_ID` variable names it, the installation list gives
+  its slug — so an App registered under any name is found); without one it
+  falls back to the convention. It then adds the address as the first element
+  of `gitIgnoredAuthors`, and the truth lives in the tree from there.
+
+`check` fails when the convention-named App exists and is missing from the
+file. Anything unresolvable — no remote, no network, no App under the
+convention name — makes it pass without enforcing; it never fails a repository
+for what could not be looked up. The corollary: an App registered under a
+non-default name is invisible to `check` (it reads as "unknown"), and only
+`fix` — run by someone with the org token — puts it in the file. `bootstrap`
+runs the discovering step right after registering the App, so a fresh
+repository is complete from its first commit. The edit is exactly one array;
+the rest of the file stays the project's own.
 
 ## Link checking — `.limen/lychee.toml`
 
