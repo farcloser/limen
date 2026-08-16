@@ -9,10 +9,25 @@
   // Supply-chain cooldown: wait before proposing a bump. Doubles as protection
   // against the race where a release tag exists but its assets aren't uploaded yet.
   minimumReleaseAge: "3 days",
+  packageRules: [
+    // lychee tags releases "lychee-vX.Y.Z" (next to "lychee-lib-vX.Y.Z" and
+    // "nightly"), and the aqua preset has no manager for that prefix in either
+    // pin form: it reads "lychee-v0.24.2" as the version, cannot order it, and
+    // never proposes a bump. Regex versioning that carries the prefix parses
+    // the pinned value and the candidate tags alike, and excludes the lib and
+    // nightly tags by construction.
+    {
+      matchDepNames: ["lycheeverse/lychee"],
+      versioning: "regex:^lychee-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
+    },
+  ],
   // `just do lint commits` enforces DCO on every PR range, bot commits included.
   commitBody: "Signed-off-by: renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>",
   // The update-aqua-checksum workflow pushes a fix-up commit onto Renovate's
   // branches; without this, Renovate treats the branch as human-modified and
   // stops rebasing it.
-  gitIgnoredAuthors: ["41898282+github-actions[bot]@users.noreply.github.com"],
+  gitIgnoredAuthors: [
+    "300983632+limen-ci-farcloser[bot]@users.noreply.github.com",
+    "41898282+github-actions[bot]@users.noreply.github.com",
+  ],
 }

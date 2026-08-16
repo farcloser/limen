@@ -132,8 +132,8 @@ The decided merge model, enforced by both the repository settings and the
 - **Merges wait for green CI.** The `limen:main` ruleset carries required
   status checks, without which auto-merge (and a hasty human) would merge on
   red. A fresh ruleset requires exactly **one** context, `gate` — the job in
-  the canonical `ci.yaml` that `needs` every matrix leg and fails unless all of
-  them succeeded. The check *names* remain project-owned, so reconciliation
+  the canonical `ci.yaml` that `needs` every matrix leg and the fuzz job, and
+  fails unless all of them succeeded. The check *names* remain project-owned, so reconciliation
   preserves whatever a repository already declared, exactly like the
   standard-registry ref inside the pinned aqua sections.
 
@@ -147,17 +147,35 @@ The decided merge model, enforced by both the repository settings and the
   its matrix freely and no ruleset moves.
 
   The gate job is written with `if: always()` and asserts
-  `needs.verify.result == 'success'` explicitly. Both halves matter: without
+  `needs.verify.result == 'success'` and `needs.fuzz.result == 'success'`
+  explicitly. Both halves matter: without
   `always()` a failed dependency *skips* the gate rather than failing it, and a
   skipped required check does not block a merge — branch protection that has
   quietly stopped protecting.
 
+  <a id="fuzz"></a>
+  **Fuzz.** The canonical `ci.yaml` also carries a `fuzz` job: one linux leg
+  running `just do test go fuzz`, a short coverage-guided fuzz of every
+  `Fuzz*` target (see [recipes](./recipes.md)). One leg, not the matrix —
+  fuzzing explores the same code from the same corpus wherever it runs, so
+  the matrix would spend five times the CPU on one corpus and add no
+  coverage. The job caches the generated corpus between runs (`GOCACHE/fuzz`,
+  keyed on the fuzz sources) so a short budget compounds into depth, uploads
+  any crasher written under `testdata/fuzz/` as an artifact, and feeds `gate`,
+  so a crasher blocks a merge like a failing test. It is safe in every
+  project by construction: the recipe fuzzes what there is and reports "no
+  Fuzz* targets" and passes where there is nothing — a project with no fuzz
+  targets pays one short job for the day it adds some.
+
   **Migration.** `ci.yaml` is seeded once and is the project's own afterwards,
-  so repositories created before the gate job existed do not have it. Their
+  so repositories created before the gate job existed do not have it — and
+  likewise repositories created before the fuzz job existed. Their
   rulesets keep working (reconciliation preserves existing contexts), but the
   gate job must be added to a repository's `ci.yaml` *before* its ruleset is
   moved onto the `gate` context — the wrong order reproduces the very failure
-  this design removes.
+  this design removes. The fuzz job is adopted the same way, by hand, copied
+  from the canonical workflow: a repository that already has `Fuzz*` targets
+  and no fuzz job is running its fuzzers nowhere.
 - **Every commit is signed.** The `limen:main` ruleset requires signatures, so
   an unsigned commit cannot land on the default branch. This is deliberately
   *not* the same guarantee as the DCO: `git-validation` checks that a
@@ -171,15 +189,26 @@ The decided merge model, enforced by both the repository settings and the
   green PRs), and web-UI commits require sign-off — DCO holds even for edits
   made in a browser.
 
-Requiring signatures has one sharp edge worth knowing before it bites:
-**GitHub refuses a squash merge of a pull request you did not author** into a
-signature-required branch. GitHub signs the squash commit with its own key on
-the author's behalf, and it will only do that for the author. In practice this
-means a bot-authored pull request has to be merged by that same bot (Renovate
-merges its own PRs through the API, which is why auto-merge keeps working),
-and any workflow that pushes a plain `git commit` must either sign it or
-confine itself to a non-default branch and go through a pull request like
-everyone else.
+Requiring signatures has two sharp edges worth knowing before they bite:
+
+- **GitHub refuses a squash merge of a pull request you did not author** into
+  a signature-required branch. GitHub signs the squash commit with its own key
+  on the author's behalf, and it will only do that for the author. In practice
+  this means a bot-authored pull request has to be merged by that same bot
+  (Renovate merges its own PRs through the API, which is why auto-merge keeps
+  working).
+- **Every commit on a pull request branch must itself be signed** — going
+  through a pull request is not an escape hatch for an unsigned commit. The
+  method this doctrine leans on, the merge commit, lands the branch's commits
+  *verbatim* on the default branch, so the signatures rule judges each of
+  them; rebase is disabled while signatures are required, and squash is
+  refused to everyone but the author (previous edge). One unsigned commit —
+  say, a workflow's plain `git commit` fix-up on a bot branch — therefore
+  leaves a pull request with no merge path at all. Renovate's own commits are
+  safe (it commits through GitHub's API, which signs), and the canonical
+  `update-aqua-checksum` workflow commits through the GraphQL
+  `createCommitOnBranch` mutation for exactly this reason: GitHub signs the
+  mutation's commits, where a token-authenticated `git push` signs nothing.
 
 The `limen:tags` ruleset restricts `v*` tag creation, update, and deletion to
 repository admins: the tag push is the release button (see the release lanes
@@ -251,6 +280,14 @@ canonically the org's `.github` repository). The catalog:
   secret + TLS verification), org-level Actions secrets (names only), teams,
   and fine-grained PAT grants: visible on every audit, so a grant nobody
   remembers making has nowhere to hide.
+- **Renovate installed** — the one GitHub App the baseline depends on. Every
+  governed repository carries a seeded `renovate.json5` and the content-pinned
+  checksum-refresh workflow that serves Renovate's branches; without the app on
+  the organization none of it runs, and every pin (tool versions in
+  `aqua.yaml`, action SHAs in the workflows) silently stops moving. A failing
+  verdict, but never auto-fixed: installing a GitHub App is a browser-only
+  consent flow with no API. A self-hosted Renovate is an exemption to declare
+  in `limen.yaml`.
 - **The org `.github` repository** — must exist, be public (GitHub silently
   ignores a private one as a fallback source), and carry the canonical
   community-health set: `SECURITY.md`, `CONTRIBUTING.md` (the DCO terms,

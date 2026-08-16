@@ -29,6 +29,7 @@ const (
 	checkOrgSelfHostedRunners   = "org-actions-self-hosted-runners"
 	checkOrgSecurityConfig      = "org-code-security-configuration"
 	checkOrgInstalledApps       = "org-installed-apps"
+	checkOrgRenovateInstalled   = "org-renovate-installed"
 	checkOrgWebhooks            = "org-webhooks"
 	checkOrgActionsSecrets      = "org-actions-secrets" //nolint:gosec // G101: a check identifier, not a credential.
 	checkOrgTeams               = "org-teams"
@@ -60,6 +61,7 @@ func knownOrgChecks() map[string]bool {
 		checkOrgSelfHostedRunners:   true,
 		checkOrgSecurityConfig:      true,
 		checkOrgInstalledApps:       true,
+		checkOrgRenovateInstalled:   true,
 		checkOrgWebhooks:            true,
 		checkOrgActionsSecrets:      true,
 		checkOrgTeams:               true,
@@ -701,9 +703,25 @@ func (a *auditor) auditOrgSurface() {
 	a.auditOrgPATGrants()
 }
 
-// auditOrgInstalledApps inventories GitHub App installations. Informational
-// (ok with the list): the grant already happened through a human; the value
-// is that the roster is visible on every audit.
+// renovateAppSlug is the app_slug of the hosted Renovate GitHub App
+// (github.com/apps/renovate).
+const renovateAppSlug = "renovate"
+
+// auditOrgInstalledApps inventories GitHub App installations, and asserts the
+// one installation the baseline depends on.
+//
+// The inventory is informational (ok with the list): the grant already
+// happened through a human; the value is that the roster is visible on every
+// audit.
+//
+// The Renovate assertion is a floor. Every repository limen governs carries a
+// seeded renovate.json5 and a content-pinned checksum-refresh workflow that
+// exists only to serve Renovate's branches; without the app installed on the
+// organization none of it runs, and every pin — tool versions in aqua.yaml,
+// action SHAs in the workflows — silently stops moving. Installing a GitHub
+// App is a browser-only consent flow (there is no API for it), so the finding
+// carries no fix. A self-hosted Renovate is a legitimate exemption: declare it
+// in limen.yaml.
 func (a *auditor) auditOrgInstalledApps() {
 	var installations struct {
 		Installations []orgAppInstallation `json:"installations"`
@@ -712,24 +730,43 @@ func (a *auditor) auditOrgInstalledApps() {
 
 	outcome := a.client.getJSON("/installations", &installations)
 	if outcome.err != nil || outcome.notFound {
-		a.unverifiable(orNotFound(outcome), checkOrgInstalledApps)
-
-		return
-	}
-
-	if installations.TotalCount == 0 {
-		a.flag(checkOrgInstalledApps, StatusOK, "", "", "no GitHub Apps installed", nil)
+		a.unverifiable(orNotFound(outcome), checkOrgInstalledApps, checkOrgRenovateInstalled)
 
 		return
 	}
 
 	slugs := make([]string, 0, len(installations.Installations))
+	renovateInstalled := false
+
 	for _, installation := range installations.Installations {
 		slugs = append(slugs, installation.AppSlug)
+
+		if installation.AppSlug == renovateAppSlug {
+			renovateInstalled = true
+		}
 	}
 
-	a.flag(checkOrgInstalledApps, StatusOK, "", "",
-		"installed GitHub Apps: "+strings.Join(slugs, listSeparator), nil)
+	if len(slugs) == 0 {
+		a.flag(checkOrgInstalledApps, StatusOK, "", "", "no GitHub Apps installed", nil)
+	} else {
+		a.flag(checkOrgInstalledApps, StatusOK, "", "",
+			"installed GitHub Apps: "+strings.Join(slugs, listSeparator), nil)
+	}
+
+	if renovateInstalled {
+		a.flag(checkOrgRenovateInstalled, StatusOK, renovateAppSlug, renovateAppSlug,
+			"the Renovate GitHub App is installed", nil)
+
+		return
+	}
+
+	a.flag(checkOrgRenovateInstalled, StatusFail, "(not installed)", renovateAppSlug,
+		"the Renovate GitHub App is not installed on this organization: the seeded renovate.json5"+
+			" and the checksum-refresh workflow in every repository do nothing without it, and no pin"+
+			" ever moves. Install it at https://github.com/apps/renovate/installations/new (choose"+
+			" this organization, all repositories) — GitHub offers no API for app installation, so"+
+			" limen cannot fix this. A self-hosted Renovate is an exemption to declare in limen.yaml",
+		nil)
 }
 
 // auditOrgWebhooks is the org twin of the repository webhook hygiene check.

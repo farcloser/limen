@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -269,5 +271,115 @@ func TestEnsureUpdateAppNoOrg(t *testing.T) {
 	warning := stderr.String()
 	if !strings.Contains(warning, "warning") || !strings.Contains(warning, "-org") {
 		t.Errorf("no-org bootstrap did not warn usably: %q", warning)
+	}
+}
+
+// TestUpdateAppIdentityFlowsIntoRenovate: the org comes from the origin
+// remote, the resolver (stubbed here — the real one talks to GitHub) yields
+// the App's address, and `limen fix` writes it into renovate.json5 where
+// `limen check` then requires it. Without a resolvable identity neither
+// command enforces anything.
+//
+//nolint:paralleltest // serial by design: mutates the package-level resolver seam.
+func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
+	dir := compliantRepo(t)
+
+	// compliantRepo seeds a bare .git directory; the identity path needs a
+	// real repository with an origin remote.
+	if err := os.RemoveAll(filepath.Join(dir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"remote", "add", "origin", "git@github.com:test-org/thing.git"},
+	} {
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Skipf("git %v unavailable: %v (%s)", args, err, out)
+		}
+	}
+
+	previousResolve, previousDiscover := resolveIdentity, discoverIdentity
+
+	t.Cleanup(func() { resolveIdentity, discoverIdentity = previousResolve, previousDiscover })
+
+	offline := func(string) (string, error) { return "", errors.New("offline") }
+
+	// Unresolvable everywhere: check passes, fix leaves the seed alone.
+	resolveIdentity, discoverIdentity = offline, offline
+
+	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("check with an unresolvable identity = %d, want 0", code)
+	}
+
+	seed, err := os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if code := run([]string{"fix", dir}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("fix with an unresolvable identity = %d, want 0", code)
+	}
+
+	after, _ := os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	if string(after) != string(seed) {
+		t.Error("fix edited renovate.json5 without a resolved identity")
+	}
+
+	// Resolvable by convention: the org inferred from origin reaches the
+	// resolver; check fails until fix adds the address; then check passes.
+	const email = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
+
+	var askedOrg string
+
+	known := func(org string) (string, error) {
+		askedOrg = org
+
+		return email, nil
+	}
+	resolveIdentity, discoverIdentity = known, known
+
+	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 1 {
+		t.Errorf("check with the identity missing = %d, want 1", code)
+	}
+
+	if askedOrg != "test-org" {
+		t.Errorf("resolver asked for org %q, want test-org (from the origin remote)", askedOrg)
+	}
+
+	if code := run([]string{"fix", dir}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("fix = %d, want 0", code)
+	}
+
+	fixed, _ := os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	if !strings.Contains(string(fixed), "\""+email+"\",\n") {
+		t.Errorf("fix did not add the address:\n%s", fixed)
+	}
+
+	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
+		t.Errorf("check after fix = %d, want 0", code)
+	}
+
+	// The split: an App only the privileged tier can see (renamed; the
+	// convention name does not exist). check must NOT fail for it — the same
+	// tree must get the same verdict on a laptop with an admin token and on a
+	// runner without one — while fix, the credentialed step, still writes it.
+	const renamed = "300983632+limenreapp[bot]@users.noreply.github.com"
+
+	resolveIdentity = offline
+	discoverIdentity = func(string) (string, error) { return renamed, nil }
+
+	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
+		t.Errorf("check with an App only discover can see = %d, want 0 (credential-independent)", code)
+	}
+
+	if code := run([]string{"fix", dir}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("fix (discover) = %d, want 0", code)
+	}
+
+	fixed, _ = os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	if !strings.Contains(string(fixed), "\""+renamed+"\",\n") || !strings.Contains(string(fixed), "\""+email+"\",\n") {
+		t.Errorf("fix did not add the discovered address alongside the earlier one:\n%s", fixed)
 	}
 }

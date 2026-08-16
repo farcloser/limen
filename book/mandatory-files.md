@@ -247,8 +247,8 @@ The `.github` surface deliberately mixes two regimes, and the split is the point
 |------|--------|-----|
 | `.github/workflows/update-aqua-checksum.yaml` | **Content-pinned** — reset on drift. | Limen machinery, and a *write-capable* workflow: its hardening (no `pull_request_target`, no secrets near branch-controlled code, env-only branch names) must never drift. Drift here is not customization, it is a vulnerability. |
 | `.github/actions/setup-aqua/action.yaml` | **Content-pinned** — reset on drift. | The composite action every canonical workflow bootstraps aqua with; its pins and checksum verification are the supply-chain floor. |
-| `.github/workflows/ci.yaml` | **Seeded once** — never overwritten. | Projects legitimately reshape CI (matrix trims, extra jobs, service containers). The enforceable substance already lives in the content-pinned recipes the workflow calls (`just lint`, `just test`) — the workflow file is the one layer where per-project shape is honest. |
-| `renovate.json5` | **Seeded once** — never overwritten. | Projects tune cooldowns and managers; the seed carries the working defaults (aqua preset, DCO sign-off, bot-author handling). |
+| `.github/workflows/ci.yaml` | **Seeded once** — never overwritten. | Projects legitimately reshape CI (matrix trims, extra jobs, service containers). The enforceable substance already lives in the content-pinned recipes the workflow calls (`just lint`, `just test`, `just do test go fuzz`) — the workflow file is the one layer where per-project shape is honest. The seed carries three jobs: `verify` (lint and test across the matrix), `fuzz` (one linux leg, see [the github chapter](./github.md#fuzz)), and `gate`. |
+| `renovate.json5` | **Seeded once** — never overwritten; **one array maintained**: `gitIgnoredAuthors`. | Projects tune cooldowns and managers; the seed carries the working defaults (aqua preset, DCO sign-off, bot-author handling). The one exception to "never touched again" is the `renovate` rule below. |
 | `.github/workflows/release.yaml` | **Seeded once, conditionally**: only where a `.goreleaser.yaml` exists. | Releasing is opt-in by carrying a goreleaser config (the same gate the `release` recipe enforces); a non-releasing repo gets no dormant workflow that would fail red on a stray tag. |
 
 `limen check` fails a drifted or missing pinned piece, a missing seeded piece
@@ -256,6 +256,43 @@ The `.github` surface deliberately mixes two regimes, and the split is the point
 repo that carries goreleaser config. `limen fix` resets the pinned pieces and
 seeds the rest — after which `ci.yaml`, `release.yaml`, and `renovate.json5`
 are the project's own, exactly like the root Justfile.
+
+### The `renovate` rule — who may commit onto Renovate's branches
+
+Renovate treats a commit by any author it does not know as a human edit and
+stops rebasing that branch. The `update-aqua-checksum` workflow commits onto
+every aqua-bump branch, as the organization's update-App bot user (see
+[tooling](./tooling.md)) — so that identity,
+`<user-id>+<app-slug>[bot]@users.noreply.github.com`, must be in
+`gitIgnoredAuthors` or every aqua bump PR quietly goes stale after its first
+fix-up. The seed cannot know it: the App is per-organization and its numeric
+user id exists only once the App is registered.
+
+So limen resolves it at run time, from the organization named by the `origin`
+remote — but `check` and `fix` resolve it *differently*, on purpose:
+
+- **`limen check` is deterministic.** It assumes the App is named as limen
+  registers it, `limen-ci-<org>`, and asks the public users endpoint for that
+  bot's id — no token, nothing that depends on who runs it. A laptop with an
+  org-admin `gh` and a CI runner with no credentials reach the same verdict on
+  the same tree; a check that could go red locally and green in CI would
+  defeat what `just lint` is for.
+- **`limen fix` discovers.** It is the human, mutating step, so it may use
+  privilege: with an org-admin `gh` it reads the App back from the org (the
+  `UPDATE_AQUA_CHECKSUM_APP_ID` variable names it, the installation list gives
+  its slug — so an App registered under any name is found); without one it
+  falls back to the convention. It then adds the address as the first element
+  of `gitIgnoredAuthors`, and the truth lives in the tree from there.
+
+`check` fails when the convention-named App exists and is missing from the
+file. Anything unresolvable — no remote, no network, no App under the
+convention name — makes it pass without enforcing; it never fails a repository
+for what could not be looked up. The corollary: an App registered under a
+non-default name is invisible to `check` (it reads as "unknown"), and only
+`fix` — run by someone with the org token — puts it in the file. `bootstrap`
+runs the discovering step right after registering the App, so a fresh
+repository is complete from its first commit. The edit is exactly one array;
+the rest of the file stays the project's own.
 
 ## Link checking — `.limen/lychee.toml`
 

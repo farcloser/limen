@@ -132,8 +132,11 @@ What each shared module is *for* — mechanics live in the module files themselv
   [per-language rules](./per-language.md#homebrew-formulas)), and `github` (the live GitHub
   settings audit — `limen github check`, needing network and an authed `gh`; see
   [the github chapter](./github.md)).
-- **`test`** — the suites, per language (`just do test go`: `unit`, `race`, `bench`, `cover`
-  with an optional minimum gate, `profile` with rendered call graphs). No default — see
+- **`test`** — the suites, per language (`just do test go`: `unit`, `race`, `bench`, `fuzz`
+  as a short smoke of every `Fuzz*` target — run by the canonical CI's own `fuzz` job on
+  one leg, not from the `test` aggregate, so the matrix does not fuzz five times over —
+  `cover` with an optional minimum gate, `profile`
+  with rendered call graphs). No default — see
   above: bare `just do test` refuses, `just test` is the project's aggregate.
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
   (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate `aqua-checksums.json`)

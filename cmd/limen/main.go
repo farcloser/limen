@@ -179,7 +179,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	findings := rules.Check(root, rules.DefaultPolicy())
+	findings := rules.Check(root, policyFor(root, resolveIdentity))
 
 	if *asJSON {
 		enc := json.NewEncoder(stdout)
@@ -236,9 +236,24 @@ func runFix(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// fix never creates a LICENSE: no License in the options.
-	outcomes := rules.Fix(root, rules.FixOptions{Policy: rules.DefaultPolicy(), SelfVersion: releaseVersion()})
+	outcomes := rules.Fix(root, rules.FixOptions{
+		Policy:      policyFor(root, discoverIdentity),
+		SelfVersion: releaseVersion(),
+	})
 
 	return reportOutcomes(stdout, stderr, cmdFix, root, outcomes, *asJSON)
+}
+
+// policyFor is the default policy plus whatever the repository's context
+// contributes: today the org's update-App commit identity, resolved from the
+// origin remote through the given resolver (best-effort; see
+// updateAppIdentity). Which resolver is the command's contract: check gets
+// the deterministic one, fix the discovering one — see identityResolver.
+func policyFor(root string, resolve identityResolver) rules.Policy {
+	policy := rules.DefaultPolicy()
+	policy.UpdateAppIdentity = updateAppIdentity("", root, resolve)
+
+	return policy
 }
 
 func runBootstrap(args []string, stdout, stderr io.Writer) int {
@@ -330,8 +345,83 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 
 	ensureUpdateApp(*org, root, stderr)
 
+	// The App may have just been registered: only now can its commit identity
+	// be resolved and written into the seeded renovate.json5. A second, narrow
+	// remediation pass — every other rule is already resolved and reports none.
+	if identity := updateAppIdentity(*org, root, discoverIdentity); identity != "" {
+		policy := rules.DefaultPolicy()
+		policy.UpdateAppIdentity = identity
+
+		for _, outcome := range rules.Fix(root, rules.FixOptions{Policy: policy, SelfVersion: releaseVersion()}) {
+			if outcome.Rule == "renovate" && outcome.Action != rules.ActionNone {
+				_, _ = fmt.Fprintf(stderr, "limen: renovate: %s\n", outcome.Message)
+			}
+		}
+	}
+
 	return 0
 }
+
+// identityResolver turns an organization into its update-App commit author
+// address. Two implementations, and the split is the point: check must reach
+// the same verdict on every machine, so it may not use anything that depends
+// on the caller's credentials; fix writes the answer into the tree, so it
+// should use the best answer available.
+type identityResolver func(org string) (string, error)
+
+// updateAppIdentity resolves the commit author address of the org's
+// update-aqua-checksum App for the repository at root: the org from -org or
+// the origin remote, the App through the given resolver. It is best-effort by
+// design — check and fix must work on a laptop with no network, in a
+// sandbox, or on an org that never registered the App — so every failure
+// returns "" and the rules then do not enforce; the renovate finding says so
+// in its message, which is why nothing is printed here.
+func updateAppIdentity(org, root string, resolve identityResolver) string {
+	if org == "" {
+		slug, err := github.InferRepo(root)
+		if err != nil {
+			return ""
+		}
+
+		org, _, _ = strings.Cut(slug, "/")
+	}
+
+	if org == "" {
+		return ""
+	}
+
+	identity, err := resolve(org)
+	if err != nil {
+		return ""
+	}
+
+	return identity
+}
+
+// The two resolvers, package vars so tests can substitute them (the real
+// ones talk to api.github.com and, for discover, gh).
+var (
+	// resolveIdentity is check's: deterministic — convention slug, public
+	// users endpoint, no credentials consulted.
+	resolveIdentity identityResolver = func(org string) (string, error) { //nolint:gochecknoglobals // test seam.
+		identity, err := github.ResolveUpdateAppIdentity(org)
+		if err != nil {
+			return "", fmt.Errorf("resolving the update-app identity of %s: %w", org, err)
+		}
+
+		return identity.Email(), nil
+	}
+	// discoverIdentity is fix's and bootstrap's: reads the App back from the
+	// org when gh is authorized (a renamed App is found), convention otherwise.
+	discoverIdentity identityResolver = func(org string) (string, error) { //nolint:gochecknoglobals // test seam.
+		identity, err := github.DiscoverUpdateAppIdentity(org)
+		if err != nil {
+			return "", fmt.Errorf("discovering the update-app identity of %s: %w", org, err)
+		}
+
+		return identity.Email(), nil
+	}
+)
 
 // ensureUpdateApp converges the org-level push credential of the
 // update-aqua-checksum workflow (book/tooling.md). It is idempotent, and it
