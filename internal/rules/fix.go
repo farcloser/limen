@@ -89,6 +89,7 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateAqua(root, opts.SelfVersion)...)
 	add(remediateLychee(root))
 	add(remediateWorkflows(root)...)
+	add(remediateRenovate(root, opts))
 
 	add(remediateShellcheck(root))
 

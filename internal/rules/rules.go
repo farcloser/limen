@@ -120,6 +120,11 @@ func (f Finding) OK() bool { return f.Status == StatusOK }
 type Policy struct {
 	// AllowedLicenses is the set of license IDs a repository's LICENSE may be.
 	AllowedLicenses []license.ID
+	// UpdateAppIdentity is the commit author address of the organization's
+	// update-aqua-checksum App ("<id>+<slug>[bot]@users.noreply.github.com"),
+	// resolved by the caller (see cmd/limen; the rules package is offline).
+	// Empty means unknown, and the renovate rule then passes without enforcing.
+	UpdateAppIdentity string
 }
 
 // DefaultPolicy returns the policy described in book/mandatory-files.md: the
@@ -161,6 +166,7 @@ func Check(root string, policy Policy) []Finding {
 		checkAqua(root),
 		checkLychee(root),
 		checkWorkflows(root),
+		checkRenovate(root, policy),
 		checkShellcheck(root),
 	}
 
