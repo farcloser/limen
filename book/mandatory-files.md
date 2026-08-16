@@ -248,7 +248,7 @@ The `.github` surface deliberately mixes two regimes, and the split is the point
 | `.github/workflows/update-aqua-checksum.yaml` | **Content-pinned** — reset on drift. | Limen machinery, and a *write-capable* workflow: its hardening (no `pull_request_target`, no secrets near branch-controlled code, env-only branch names) must never drift. Drift here is not customization, it is a vulnerability. |
 | `.github/actions/setup-aqua/action.yaml` | **Content-pinned** — reset on drift. | The composite action every canonical workflow bootstraps aqua with; its pins and checksum verification are the supply-chain floor. |
 | `.github/workflows/ci.yaml` | **Seeded once** — never overwritten. | Projects legitimately reshape CI (matrix trims, extra jobs, service containers). The enforceable substance already lives in the content-pinned recipes the workflow calls (`just lint`, `just test`) — the workflow file is the one layer where per-project shape is honest. |
-| `renovate.json5` | **Seeded once** — never overwritten. | Projects tune cooldowns and managers; the seed carries the working defaults (aqua preset, DCO sign-off, bot-author handling). |
+| `renovate.json5` | **Seeded once** — never overwritten; **one array maintained**: `gitIgnoredAuthors`. | Projects tune cooldowns and managers; the seed carries the working defaults (aqua preset, DCO sign-off, bot-author handling). The one exception to "never touched again" is the `renovate` rule below. |
 | `.github/workflows/release.yaml` | **Seeded once, conditionally**: only where a `.goreleaser.yaml` exists. | Releasing is opt-in by carrying a goreleaser config (the same gate the `release` recipe enforces); a non-releasing repo gets no dormant workflow that would fail red on a stray tag. |
 
 `limen check` fails a drifted or missing pinned piece, a missing seeded piece
@@ -256,6 +256,29 @@ The `.github` surface deliberately mixes two regimes, and the split is the point
 repo that carries goreleaser config. `limen fix` resets the pinned pieces and
 seeds the rest — after which `ci.yaml`, `release.yaml`, and `renovate.json5`
 are the project's own, exactly like the root Justfile.
+
+### The `renovate` rule — who may commit onto Renovate's branches
+
+Renovate treats a commit by any author it does not know as a human edit and
+stops rebasing that branch. The `update-aqua-checksum` workflow commits onto
+every aqua-bump branch, as the organization's update-App bot user (see
+[tooling](./tooling.md)) — so that identity,
+`<user-id>+<app-slug>[bot]@users.noreply.github.com`, must be in
+`gitIgnoredAuthors` or every aqua bump PR quietly goes stale after its first
+fix-up. The seed cannot know it: the App is per-organization and its numeric
+user id exists only once the App is registered.
+
+So `limen check` and `limen fix` resolve it at run time — the organization
+from the `origin` remote, the App's slug read back from the org when `gh` is
+authed as an admin (robust to a renamed App) or assumed to be `limen-ci-<org>`
+otherwise, the bot's user id from the public users endpoint (no token needed)
+— and `fix` adds the address as the first element of `gitIgnoredAuthors`
+(`check` fails until it is there). Anything unresolvable — no remote, no
+network, no App registered — makes the rule pass without enforcing; it never
+fails a repository for what could not be looked up. `bootstrap` runs the same
+step right after registering the App, so a fresh repository is complete from
+its first commit. The edit is exactly one array; the rest of the file stays
+the project's own.
 
 ## Link checking — `.limen/lychee.toml`
 

@@ -179,7 +179,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	findings := rules.Check(root, rules.DefaultPolicy())
+	findings := rules.Check(root, policyFor(root))
 
 	if *asJSON {
 		enc := json.NewEncoder(stdout)
@@ -236,9 +236,19 @@ func runFix(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// fix never creates a LICENSE: no License in the options.
-	outcomes := rules.Fix(root, rules.FixOptions{Policy: rules.DefaultPolicy(), SelfVersion: releaseVersion()})
+	outcomes := rules.Fix(root, rules.FixOptions{Policy: policyFor(root), SelfVersion: releaseVersion()})
 
 	return reportOutcomes(stdout, stderr, cmdFix, root, outcomes, *asJSON)
+}
+
+// policyFor is the default policy plus whatever the repository's context
+// contributes: today the org's update-App commit identity, resolved from the
+// origin remote (best-effort; see updateAppIdentity).
+func policyFor(root string) rules.Policy {
+	policy := rules.DefaultPolicy()
+	policy.UpdateAppIdentity = updateAppIdentity("", root)
+
+	return policy
 }
 
 func runBootstrap(args []string, stdout, stderr io.Writer) int {
@@ -330,7 +340,62 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 
 	ensureUpdateApp(*org, root, stderr)
 
+	// The App may have just been registered: only now can its commit identity
+	// be resolved and written into the seeded renovate.json5. A second, narrow
+	// remediation pass — every other rule is already resolved and reports none.
+	if identity := updateAppIdentity(*org, root); identity != "" {
+		policy := rules.DefaultPolicy()
+		policy.UpdateAppIdentity = identity
+
+		for _, outcome := range rules.Fix(root, rules.FixOptions{Policy: policy, SelfVersion: releaseVersion()}) {
+			if outcome.Rule == "renovate" && outcome.Action != rules.ActionNone {
+				_, _ = fmt.Fprintf(stderr, "limen: renovate: %s\n", outcome.Message)
+			}
+		}
+	}
+
 	return 0
+}
+
+// updateAppIdentity resolves the commit author address of the org's
+// update-aqua-checksum App for the repository at root: the org from -org or
+// the origin remote, the App through github.ResolveUpdateAppIdentity. It is
+// best-effort by design — check and fix must work on a laptop with no
+// network, in a sandbox, or on an org that never registered the App — so
+// every failure returns "" and the rules then do not enforce; the renovate
+// finding says so in its message, which is why nothing is printed here.
+// Tests substitute resolveIdentity.
+func updateAppIdentity(org, root string) string {
+	if org == "" {
+		slug, err := github.InferRepo(root)
+		if err != nil {
+			return ""
+		}
+
+		org, _, _ = strings.Cut(slug, "/")
+	}
+
+	if org == "" {
+		return ""
+	}
+
+	identity, err := resolveIdentity(org)
+	if err != nil {
+		return ""
+	}
+
+	return identity
+}
+
+// resolveIdentity is the update-App identity resolver, a package var so tests
+// can substitute it (the real one talks to api.github.com).
+var resolveIdentity = func(org string) (string, error) { //nolint:gochecknoglobals // test seam.
+	identity, err := github.ResolveUpdateAppIdentity(org)
+	if err != nil {
+		return "", fmt.Errorf("resolving the update-app identity of %s: %w", org, err)
+	}
+
+	return identity.Email(), nil
 }
 
 // ensureUpdateApp converges the org-level push credential of the
