@@ -202,7 +202,7 @@ func compliantResponses() map[string]stubResponse {
 			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
 		"GET repos/test/repo/rulesets/1": {
-			Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
+			Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
 		},
 		"GET repos/test/repo/rulesets/2": {
 			Body: `{"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
@@ -881,8 +881,8 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 	// assertion, not proof of authorship. The reconcile must add the rule back.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
-			`{"type":"required_linear_history"},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
 	}
 	logPath := stubGH(t, responses)
@@ -915,8 +915,8 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},{"type":"non_fast_forward"},` +
-			`{"type":"required_linear_history"},{"type":"required_signatures"},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[]}}]}`,
 	}
 	stubGH(t, responses)
@@ -926,5 +926,94 @@ func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // seria
 	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
 	if finding.Status != StatusFail {
 		t.Errorf("required status checks with no contexts: %v, want fail", finding.Status)
+	}
+}
+
+func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	// The pre-"Fix merging" canonical shape: every required rule present — the
+	// rule-presence test alone reads it as compliant — plus required_linear_history
+	// and a merge-method list without "merge". On a signature-required branch
+	// GitHub disables rebase, and linear history forbids merge commits, so the
+	// ruleset audited clean while blocking merges. It must fail, and the
+	// reconcile must drop the forbidden rule while preserving the project's
+	// own status-check context.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},` +
+			`{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Fatalf("stale canonical ruleset: %v, want fail", finding.Status)
+	}
+
+	if !strings.Contains(finding.Current, ruleLinearHistory) {
+		t.Errorf("the finding must name the forbidden rule, got %q", finding.Current)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkRulesetDefaultBranch {
+			if err := planned.Apply(); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	payload := string(log)
+
+	if strings.Contains(payload, ruleLinearHistory) {
+		t.Error("the reconcile payload must drop required_linear_history")
+	}
+
+	if !strings.Contains(payload, `"merge"`) {
+		t.Errorf("the reconcile payload must allow merge commits, got: %s", payload)
+	}
+
+	if !strings.Contains(payload, `"context":"my-ci"`) {
+		t.Error("the reconcile must preserve the project's own status-check contexts")
+	}
+}
+
+func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	// Exactly the canonical rules, but the pull_request rule does not allow
+	// merge commits: parameter drift the rule-presence test cannot see, and
+	// below the floor — checkMergeMethods mandates the same availability at
+	// the repository level.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Fatalf("merge-method drift: %v, want fail", finding.Status)
+	}
+
+	if !strings.Contains(finding.Current, "merge") {
+		t.Errorf("the finding must name the missing method, got %q", finding.Current)
+	}
+
+	planned := false
+
+	for _, change := range changes {
+		if change.Check == checkRulesetDefaultBranch {
+			planned = true
+		}
+	}
+
+	if !planned {
+		t.Error("merge-method drift must plan a reconcile")
 	}
 }
