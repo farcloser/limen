@@ -3,6 +3,8 @@ package rules //nolint:testpackage // white-box: exercises the unexported editin
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,24 +14,34 @@ import (
 const testIdentity = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
 
 // TestEnsureIgnoredAuthor covers the editing helper on the shapes it meets:
-// the seed's one-line array, an already multi-line array, an empty array,
-// and a file with no such key.
+// the canonical seed (whatever its array currently holds — the seed is
+// limen's own renovate.json5, and limen fix keeps that array current, so the
+// test derives its expectation from the seed rather than hard-coding it), a
+// one-line array, an already multi-line array, an empty array, and a file
+// with no such key.
 func TestEnsureIgnoredAuthor(t *testing.T) {
 	t.Parallel()
 
-	// The canonical seed: one-line array. Grows into the multi-line shape
-	// with the new address FIRST and the seed's entry preserved.
+	// The canonical seed: the new address goes FIRST, every existing entry is
+	// preserved in order, and the block takes the canonical multi-line shape.
 	updated, ok := ensureIgnoredAuthor(limen.CanonicalRenovate, testIdentity)
 	if !ok {
 		t.Fatal("the canonical seed's gitIgnoredAuthors was not found")
 	}
 
-	want := "  gitIgnoredAuthors: [\n" +
-		"    \"" + testIdentity + "\",\n" +
-		"    \"41898282+github-actions[bot]@users.noreply.github.com\",\n" +
-		"  ],\n"
+	existing := ignoredAuthorsOf(t, limen.CanonicalRenovate)
+	if !slices.Contains(existing, "41898282+github-actions[bot]@users.noreply.github.com") {
+		t.Fatalf("the seed must carry at least the default-token identity, got %v", existing)
+	}
+
+	want := "  gitIgnoredAuthors: [\n    \"" + testIdentity + "\",\n"
+	for _, entry := range existing {
+		want += "    \"" + entry + "\",\n"
+	}
+
+	want += "  ],\n"
 	if !strings.Contains(updated, want) {
-		t.Errorf("seed after insertion lacks the canonical multi-line block:\n%s", updated)
+		t.Errorf("seed after insertion lacks the expected block:\n%s\n--- got:\n%s", want, updated)
 	}
 
 	// Everything outside the array is byte-identical: the file minus the
@@ -41,6 +53,16 @@ func TestEnsureIgnoredAuthor(t *testing.T) {
 
 	if !strings.HasSuffix(updated, "],\n}\n") {
 		t.Errorf("content after the array changed:\n%s", updated)
+	}
+
+	// The seed's one-line shape (what a fresh seed looked like before any fix
+	// touched it) grows into the multi-line block.
+	oneLine := "{\n  gitIgnoredAuthors: [\"41898282+github-actions[bot]@users.noreply.github.com\"],\n}\n"
+
+	grown, ok := ensureIgnoredAuthor(oneLine, testIdentity)
+	if !ok || grown != "{\n  gitIgnoredAuthors: [\n    \""+testIdentity+"\",\n"+
+		"    \"41898282+github-actions[bot]@users.noreply.github.com\",\n  ],\n}\n" {
+		t.Errorf("one-line array:\n%s", grown)
 	}
 
 	// Idempotent through the rule's presence test, and a second insertion of
@@ -134,6 +156,32 @@ func TestRenovateRule(t *testing.T) {
 	if f := findingByRule(Check(root, known), ruleRenovate); !f.OK() {
 		t.Errorf("missing file must not double-report: %s", f.Message)
 	}
+}
+
+// ignoredAuthorsOf extracts the quoted entries of the file's gitIgnoredAuthors
+// array, in order.
+func ignoredAuthorsOf(t *testing.T, content string) []string {
+	t.Helper()
+
+	loc := ignoredAuthorsKeyPattern.FindStringIndex(content)
+	if loc == nil {
+		t.Fatal("no gitIgnoredAuthors array")
+	}
+
+	open := loc[1] - 1
+
+	closeIdx := closingBracket(content, open)
+	if closeIdx < 0 {
+		t.Fatal("unterminated gitIgnoredAuthors array")
+	}
+
+	var entries []string
+
+	for _, quoted := range regexp.MustCompile(`"([^"]*)"`).FindAllStringSubmatch(content[open+1:closeIdx], -1) {
+		entries = append(entries, quoted[1])
+	}
+
+	return entries
 }
 
 func outcomeByRule(outcomes []Outcome, rule string) Outcome {

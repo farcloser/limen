@@ -80,6 +80,23 @@ func rewriteSelfPin(lines []string, version string) []string {
 	return out
 }
 
+// selfPinReplacement is the one-line replacement moving a project's existing
+// farcloser/limen pin to version — the path taken when the packages section
+// is NOT rebuilt wholesale (when it is, the move is folded into that
+// replacement). Empty when no line moves.
+func selfPinReplacement(manifest aquaManifest, version string) []aquaReplacement {
+	for line := manifest.packages.start; line < manifest.packages.end; line++ {
+		rewritten := rewriteSelfPin(manifest.lines[line:line+1], version)[0]
+		if rewritten == manifest.lines[line] {
+			continue
+		}
+
+		return []aquaReplacement{{start: line, end: line + 1, lines: []string{rewritten}}}
+	}
+
+	return nil
+}
+
 // canonicalAqua is the parsed embedded aqua.yaml — the baseline the rule
 // enforces. The canonical file is limen's own, so failing to parse it is a
 // build defect, caught the first time the package loads.
@@ -335,6 +352,12 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 		return &finding
 	}
 
+	if short := manifest.shortFormPinNames(); len(short) > 0 {
+		finding := fail(rule, name, name+": "+shortFormPinMessage(short))
+
+		return &finding
+	}
+
 	return nil
 }
 
@@ -441,6 +464,11 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		}
 	}
 
+	// One-line pins of two-line-canonical packages (aqua_longform.go): same
+	// folding rule as the self-pin move — into the wholesale replacement when
+	// the section is rebuilt, one replacement per pin otherwise.
+	shortPins := manifest.shortFormPins()
+
 	packagesReplaced := false
 
 	if missing := manifest.missingCanonicalPkgs(); len(missing) > 0 {
@@ -470,8 +498,10 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 			packagesReplaced = true
 		default:
 			shift := manifest.pkgEntryIndent() - canonicalAqua.pkgs[0].indent
+			section := rewriteShortFormPins(
+				trimBlankTail(manifest.section(manifest.packages)), shortPins, manifest.packages.start)
 			lines := append(
-				rewriteSelfPin(trimBlankTail(manifest.section(manifest.packages)), selfVersion),
+				rewriteSelfPin(section, selfVersion),
 				rewriteSelfPin(canonicalEntryLines(missing, shift), selfVersion)...)
 			reps = append(
 				reps,
@@ -490,19 +520,18 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 
 	if selfPinMoves {
 		if !packagesReplaced {
-			for line := manifest.packages.start; line < manifest.packages.end; line++ {
-				rewritten := rewriteSelfPin(manifest.lines[line:line+1], selfVersion)[0]
-				if rewritten == manifest.lines[line] {
-					continue
-				}
-
-				reps = append(reps, aquaReplacement{start: line, end: line + 1, lines: []string{rewritten}})
-
-				break
-			}
+			reps = append(reps, selfPinReplacement(manifest, selfVersion)...)
 		}
 
 		summary = append(summary, "moved the farcloser/limen pin to "+selfVersion+" (the running limen's version)")
+	}
+
+	if len(shortPins) > 0 {
+		if !packagesReplaced {
+			reps = append(reps, shortFormReplacements(shortPins)...)
+		}
+
+		summary = append(summary, shortFormSummary(shortPins))
 	}
 
 	if len(summary) == 0 {
