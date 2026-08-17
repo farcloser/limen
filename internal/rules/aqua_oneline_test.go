@@ -45,8 +45,8 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 			"    version: v1.2.2 # renovate: depName=_go/github.com/vbatts/git-validation\n"+
 			"    registry: local\n", 1)
 	manifest = strings.Replace(manifest,
-		"  - name: cli/cli@v2.96.0\n",
-		"  - name: cli/cli\n    version: v2.96.0 # held back on purpose\n", 1)
+		"  - name: cli/cli@v2.97.0\n",
+		"  - name: cli/cli\n    version: v2.97.0 # held back on purpose\n", 1)
 
 	if strings.Count(manifest, "\n    version:") != 4 {
 		t.Fatal("the fixture did not diverge from the canonical as intended — update the replacements")
@@ -73,7 +73,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		"  - name: golang/go@go1.25.9\n",
 		"  - name: \"jqlang/jq@jq-1.8.2\"\n",
 		"  - name: github.com/vbatts/git-validation@v1.2.2\n    registry: local\n",
-		"  - name: cli/cli@v2.96.0 # held back on purpose\n",
+		"  - name: cli/cli@v2.97.0 # held back on purpose\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("merged manifest lacks:\n%s\n--- got:\n%s", want, out)
@@ -118,7 +118,7 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	manifest = strings.Replace(manifest,
 		"  - name: golang/go@go1.26.6\n",
 		"  - name: golang/go\n    version: go1.26.6 # renovate: depName=golang/go\n", 1)
-	manifest = strings.Replace(manifest, "  - name: cli/cli@v2.96.0\n", "", 1) // now missing
+	manifest = strings.Replace(manifest, "  - name: cli/cli@v2.97.0\n", "", 1) // now missing
 
 	parsed, ok := parseAquaManifest(manifest)
 	if !ok {
@@ -131,7 +131,7 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	}
 
 	if !strings.Contains(out, "  - name: golang/go@go1.26.6\n") ||
-		!strings.Contains(out, "  - name: cli/cli@v2.96.0\n") || strings.Contains(out, "\n    version:") {
+		!strings.Contains(out, "  - name: cli/cli@v2.97.0\n") || strings.Contains(out, "\n    version:") {
 		t.Errorf("merged manifest:\n%s", out)
 	}
 
