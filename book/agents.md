@@ -87,9 +87,39 @@ verifies the human's. That file is the same in every repository and hand-copied
 today; it is the shape of a canonical, content-pinned file, and making it one is
 the planned next step — until then, the script prints the line to add.
 
-## Rules of engagement
+## The workflow
 
-The agent commits with a DCO sign-off as itself, pushes branches, and opens
-pull requests. It does not merge, does not push to `main`, does not force-push,
-and does not tag releases — those are not trust questions, they are the
-rulesets and the release lane doing their job.
+The agent is a contributor with its own branches and its own worktrees, and it
+owns the whole path from a change to a green pull request. The human's
+branches are the human's.
+
+- **Its own branches, in their own worktrees.** Every task starts from a fresh
+  `origin/main` in a git worktree, on a branch named after the bot
+  (`claudio/<topic>`), one topic per branch and per pull request. The
+  worktree keeps the human's checkout untouched and lets several tasks run
+  side by side. Inside a new worktree: `aqua policy allow aqua-policy.yaml`
+  then `aqua install --only-link` — aqua's policy is keyed by path.
+- **Never on `work`.** The human's `work` branch is the human's, or the
+  human's with the agent pairing interactively at the human's request. The
+  agent does not commit there on its own, and never on `main`.
+- **Commits.** Signed as the bot, with a DCO sign-off as the bot; when the
+  change is the human's work, the human is the author and the bot the
+  committer. No scratchpads: `AUDIT.md` and its kind are transient notes
+  whose surviving findings become code, tests, or book prose.
+- **Green before pushing.** The full `just lint` and `just test`, not one
+  lane: what CI runs on other platforms (a linux-only package, a windows leg)
+  is what a single lane on one machine misses.
+- **Push, open, own.** Push the branch, open the pull request with a
+  description drawn from the commit messages, then own the checks: watch
+  them, read the failed logs, fix, push again. A red check is the agent's to
+  turn green or to explain — never to leave for the human to discover.
+- **Keep `main` fresh.** After a merge: fetch and fast-forward the local
+  `main`, prune the merged branch and its worktree, and rebase every open
+  branch onto `main` — so that both the human and the agent can rebase often
+  and cheaply.
+- **Not the agent's to do.** Merging, pushing to `main`, force-pushing shared
+  branches, and tagging releases. Those are not trust questions; they are the
+  rulesets and the release lane doing their job.
+
+These rules ship as a skill (`skills/contribute`), so an agent applies them
+without being told each time.

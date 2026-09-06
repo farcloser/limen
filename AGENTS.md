@@ -16,3 +16,7 @@
 - Always name the recipe (`just do fix go`, `just do lint yaml`); module defaults are curated
   subsets, not "run everything".
 - Do not bump tool versions manually; use `just do tools set` / `just do tools update`.
+- **Contributing — branches, commits, pull requests.** Follow `skills/contribute`
+  (doctrine in `book/agents.md`): your own branch in your own worktree, never the
+  human's `work` branch, the full lint and test before pushing, and a pull
+  request you own until its checks are green.
