@@ -51,3 +51,7 @@ _scratch/
 # yarn-debug.log*
 # yarn-error.log*
 # pnpm-debug.log*
+
+# Audit scratchpads: notes to be evaluated for possible issues, never a
+# deliverable — the findings that survive become code, tests, or the book.
+AUDIT.md

@@ -583,10 +583,12 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		default:
 			shift := manifest.pkgEntryIndent() - canonicalAqua.pkgs[0].indent
 			section := rewriteTwoLinePins(
-				trimBlankTail(manifest.section(manifest.packages)), twoLinePins, manifest.packages.start)
+				trimBlankTail(manifest.section(manifest.packages)), twoLinePins, manifest.packages.start,
+			)
 			lines := append(
 				rewriteSelfPin(section, selfVersion),
-				rewriteSelfPin(canonicalEntryLines(missing, shift), selfVersion)...)
+				rewriteSelfPin(canonicalEntryLines(missing, shift), selfVersion)...,
+			)
 			reps = append(
 				reps,
 				aquaReplacement{

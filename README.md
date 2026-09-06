@@ -13,7 +13,7 @@ be read by both — prose that explains *why* we do things a certain way, and to
 |-----------|---------|
 | [`book/`](./book) | The book of best practices — prose, rationale, and the canonical statement of every rule. If a rule is real, it is written down here first. |
 | [`cmd/limen/`](./cmd/limen), [`internal/`](./internal) | Devtools, in Go (one module, rooted here). The executable counterpart to the book: `limen` checks, fixes, and bootstraps a repository against the rules. *Limen* — Latin for "threshold": nothing crosses into our codebases without passing it. |
-| `skills/` *(planned)* | AI agent skills — packaged instructions that let a coding agent apply our practices directly, invoking `limen` where machine verification is needed. |
+| [`skills/`](./skills) | AI agent skills — packaged instructions that let a coding agent apply our practices directly. `contribute` is the workflow: its own branch in its own worktree, signed commits, green before pushing, a pull request it owns. How an agent gets to *commit and push* at all — its own account, an enclave-bound key, the sandbox — is [`book/agents.md`](./book/agents.md). |
 
 ## The operating principle
 

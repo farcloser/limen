@@ -338,7 +338,8 @@ func TestAuditUnverifiable(t *testing.T) { //nolint:paralleltest // serial by de
 func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
 	responses := compliantResponses()
 	responses["GET repos/test/repo"] = stubResponse{Body: strings.Replace(
-		compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1)}
+		compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1,
+	)}
 	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
 	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
 	logPath := stubGH(t, responses)
@@ -380,7 +381,8 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
 	responses := compliantResponses()
 	responses["GET repos/test/repo"] = stubResponse{Body: strings.Replace(
-		compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1)}
+		compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1,
+	)}
 	stubGH(t, responses)
 
 	findings, changes := Audit(testRepo, map[string]string{checkWiki: "hosts the operations runbook"})
@@ -610,7 +612,8 @@ func TestInferRepo(t *testing.T) {
 			} {
 				gitCmd := exec.Command(
 					"git",
-					append([]string{"-C", dir}, args...)...)
+					append([]string{"-C", dir}, args...)...,
+				)
 				if out, gitErr := gitCmd.CombinedOutput(); gitErr != nil {
 					t.Fatalf("git %v: %v: %s", args, gitErr, out)
 				}
