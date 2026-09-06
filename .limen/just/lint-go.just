@@ -19,9 +19,28 @@ default: code mod vuln licenses
 # revive findings proved environment-nondeterministic across the per-GOOS
 # legs — the suppression itself then flakes as "unused". revive's own
 # selective directives are invisible to nolintlint, hence stable.
-code: (_banner "lint go" "go") (_per-goos "golangci-lint run")
+code: (_banner "lint go" "go") _golangci-toolchain-check (_per-goos "golangci-lint run")
     golangci-lint fmt --diff
     @if git grep -nE 'nolint:[a-z, ]*revive' -- '*.go'; then echo 'blanket revive suppression is banned — use //revive:disable-next-line:<rule> (or a disable/enable block) instead' >&2; exit 1; fi
+
+# golangci-lint embeds Go's type checker, so a golangci built with go1.N cannot
+# analyze a go1.N+1 toolchain: it panics with "file requires newer Go version".
+# The two pins move in lockstep — golangci first (a release built with the
+# newer Go), then golang/go — and this check turns the panic into that
+# instruction. The canonical renovate.json5 groups the two bumps for the same
+# reason. Compares major.minor only: patch releases share a language version.
+[private]
+_golangci-toolchain-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    built="$(golangci-lint version 2>/dev/null | sed -nE 's/.*built with go([0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
+    toolchain="$(go env GOVERSION | sed -nE 's/^go([0-9]+\.[0-9]+).*/\1/p')"
+    if [ -n "$built" ] && [ -n "$toolchain" ] && [ "$(printf '%s\n%s\n' "$toolchain" "$built" | sort -V | tail -n 1)" != "$built" ]; then
+        echo "golangci-lint was built with go${built} but the pinned toolchain is go${toolchain}:" >&2
+        echo "it cannot analyze a newer Go. Bump golangci/golangci-lint to a release built with go${toolchain}" >&2
+        echo "(just do tools update golangci-lint) BEFORE bumping golang/go." >&2
+        exit 1
+    fi
 
 # go.mod/go.sum tidiness — fails printing the diff; `just do fix go mod` repairs.
 mod: (_banner "lint go" "mod")
@@ -158,4 +177,8 @@ _go-tool name pkg:
         exit 1
     fi
     mkdir -p build/tools
-    GOOS='' GOARCH='' go build -o 'build/tools/{{ name }}' '{{ pkg }}'
+    # Directory form of -o: go names the binary itself, which on windows means
+    # the .exe suffix the loader needs — git-bash then resolves the bare
+    # build/tools/<name> the recipes call to it. (go strips a /vN major suffix
+    # when naming, so github.com/google/go-licenses/v2 lands as go-licenses.)
+    GOOS='' GOARCH='' go build -o 'build/tools/' '{{ pkg }}'

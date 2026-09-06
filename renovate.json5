@@ -54,6 +54,15 @@
       ],
       enabled: true,
     },
+    // golangci-lint embeds Go's type checker: a golangci built with go1.N
+    // panics on a go1.N+1 toolchain, so a golang/go bump can only land with
+    // (or after) a golangci release built with that Go. One grouped PR keeps
+    // the two in lockstep; the lint recipe's toolchain check names the fix
+    // when they still disagree (golangci lagging a fresh Go minor).
+    {
+      matchDepNames: ["golang/go", "golangci/golangci-lint"],
+      groupName: "go toolchain and golangci-lint",
+    },
     // lychee tags releases "lychee-vX.Y.Z" (next to "lychee-lib-vX.Y.Z" and
     // "nightly"), and the aqua preset has no manager for that prefix in either
     // pin form: it reads "lychee-v0.24.2" as the version, cannot order it, and
