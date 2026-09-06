@@ -430,7 +430,12 @@ The workflow accepts two, in order of preference:
 
    The manual equivalent, one-time setup per org:
    - Register an App on the org (Settings → Developer settings → GitHub Apps): webhook
-     disabled, repository permission **Contents: read and write**, nothing else.
+     disabled, repository permissions **Contents: read and write** and **Workflows: read
+     and write**, nothing else. Workflows is not optional: a limen bump converges the
+     baseline, and the baseline includes canonical workflow files — GitHub refuses a
+     commit touching `.github/workflows/` from a token without it, the checksum never
+     lands, and the bump PR fails two jobs away on "checksum is required". The
+     bootstrap's audit reports an installation missing either permission.
    - Generate a private key, and install the App on the org, all repositories.
    - Set the org **variable** `UPDATE_AQUA_CHECKSUM_APP_ID` and the org **secret**
      `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`.
@@ -441,7 +446,7 @@ The workflow accepts two, in order of preference:
    the private key, and a private key must never leave the org that owns it — installing
    someone else's App would grant *that org* write access to your repositories while
    giving your own workflows nothing to mint with.
-2. **A fine-grained PAT** — contents: read and write, stored as the org secret
+2. **A fine-grained PAT** — contents and workflows: read and write, stored as the org secret
    `UPDATE_AQUA_CHECKSUM_TOKEN` — the drop-in fallback. It works identically, but it is
    bound to a user account and it expires: when it lapses, the workflow silently degrades
    to the default token and bump PRs go back to being blocked. Prefer the App.

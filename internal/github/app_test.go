@@ -58,10 +58,12 @@ func appSeams(t *testing.T, browser func(string) error, secret func(string, stri
 //nolint:paralleltest // serial by design: mutates package seams.
 func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 	logPath := stubGH(t, map[string]stubResponse{
-		"GET orgs/test-org":               {Body: `{}`},
-		testVariablePath:                  {Body: `{"name":"` + updateAppVariable + `","value":"42"}`},
-		testSecretPath:                    {Body: `{"name":"` + updateAppSecret + `"}`},
-		"GET orgs/test-org/installations": {Body: `{"installations":[{"app_id":42}]}`},
+		"GET orgs/test-org": {Body: `{}`},
+		testVariablePath:    {Body: `{"name":"` + updateAppVariable + `","value":"42"}`},
+		testSecretPath:      {Body: `{"name":"` + updateAppSecret + `"}`},
+		"GET orgs/test-org/installations": {
+			Body: `{"installations":[{"app_id":42,"permissions":{"contents":"write","workflows":"write"}}]}`,
+		},
 	})
 	appSeams(t, nil, nil)
 
@@ -78,6 +80,40 @@ func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 
 	if strings.Contains(string(calls), "POST") {
 		t.Errorf("an already-configured org triggered a write:\n%s", calls)
+	}
+}
+
+// The App is installed but was never granted workflows: write — the state
+// every org registered before that permission joined the manifest is in.
+// A limen bump's convergence then touches canonical workflow files and
+// GitHub refuses the whole commit; the audit must say so, and say how.
+//
+//nolint:paralleltest // serial by design: mutates package seams.
+func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
+	stubGH(t, map[string]stubResponse{
+		"GET orgs/test-org": {Body: `{}`},
+		testVariablePath:    {Body: `{"value":"42"}`},
+		testSecretPath:      {Body: `{}`},
+		"GET orgs/test-org/installations": {
+			Body: `{"installations":[{"app_id":42,"permissions":{"contents":"write"}}]}`,
+		},
+	})
+	appSeams(t, nil, nil)
+
+	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+
+	if finding.Status != StatusAdvisory {
+		t.Fatalf("installation without workflows: %v (%s), want advisory", finding.Status, finding.Message)
+	}
+
+	for _, want := range []string{"workflows: write", "Permissions & events"} {
+		if !strings.Contains(finding.Message, want) {
+			t.Errorf("advisory %q does not name %q", finding.Message, want)
+		}
+	}
+
+	if strings.Contains(finding.Message, "contents: write,") || strings.Contains(finding.Message, "lacks contents") {
+		t.Errorf("advisory %q blames the permission that IS granted", finding.Message)
 	}
 }
 
@@ -206,7 +242,9 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 			Body: `{"id":7,"slug":"limen-test-org","pem":"PRIVATE-KEY-PEM","html_url":"https://github.com/apps/limen-test-org"}`,
 		},
 		"POST orgs/test-org/actions/variables": {Body: `{}`},
-		"GET orgs/test-org/installations":      {Body: `{"installations":[{"app_id":7}]}`},
+		"GET orgs/test-org/installations": {
+			Body: `{"installations":[{"app_id":7,"permissions":{"contents":"write","workflows":"write"}}]}`,
+		},
 	})
 
 	var storedOrg, storedName, storedValue string
