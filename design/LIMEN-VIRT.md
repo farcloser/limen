@@ -113,7 +113,7 @@ tool hands you**:
   free promotion over Lima.
 - **apple/containerization + `cctl` — the daemonless, doctrine-*aligned* option.** The
   Swift **framework** underneath `apple/container`, shipped with `cctl` (upstream's
-  API playground). `cctl run --kernel <vmlinux> --image alpine:3.16 --mount /h:/g
+  API playground). `cctl run --kernel <vmlinux> --image alpine:<tag>@sha256:<digest> --mount /h:/g
   --rosetta …` boots a Virtualization.framework micro-VM **in-process**, runs the
   container, and exits — **no launchd daemon, no `/usr/local`, bring-your-own pinned
   kernel + image** (build from the included config or reuse Kata's). That per-invocation,
