@@ -134,7 +134,7 @@ export BUILDKIT_HOST="unix://$LIMA_HOME/limen-buildkit/sock/buildkitd.sock"
 buildctl build \
   --frontend dockerfile.v0 \
   --local context=. --local dockerfile=. \
-  --output type=image,name=ghcr.io/farcloser/foo:tag,push=true
+  --output type=image,name=ghcr.io/farcloser/foo:<tag>@sha256:<digest>,push=true
 # or, no registry: --output type=oci,dest=image.tar  (portable OCI archive)
 ```
 
@@ -187,8 +187,8 @@ reading the upstream machinery (curl/curl-for-win, live on 2026-07-07):
 
 - **curl-for-win uses Docker as a *runtime*, not a builder.** Its `_build.sh`
   (1980 lines) contains **no `docker build`**; the container model (per its README)
-  is to run that script *inside* a reproducible `debian:testing-slim` container —
-  i.e. `docker run debian:testing-slim ./_build.sh`, then collect artifacts. It
+  is to run that script *inside* a reproducible `debian:testing-slim` container (digest-pinned, as everything we run) —
+  i.e. `docker run debian:testing-slim@sha256:<digest> ./_build.sh`, then collect artifacts. It
   downloads and compiles curl + its TLS/HTTP deps and emits release archives.
 - **BuildKit cannot `docker run`** — it builds images, it does not execute
   containers as a runtime. So a literal lift of curl-for-win's invocation fails.
@@ -196,7 +196,7 @@ reading the upstream machinery (curl/curl-for-win, live on 2026-07-07):
   a Dockerfile whose `RUN` executes the compile, and export the artifacts:
 
   ```dockerfile
-  FROM debian:testing-slim
+  FROM debian:testing-slim@sha256:<digest>
   COPY . /src
   RUN cd /src && ./_build.sh        # compile runs as a build step
   ```
