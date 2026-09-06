@@ -30,7 +30,7 @@ mod: (_banner "lint go" "mod")
 # Known-vulnerability scan against the Go vulnerability database (network:
 # govulncheck fetches vuln.go.dev), once per supported platform (see _per-goos
 # in lib.just: call paths and dependencies differ by GOOS).
-vuln: (_banner "lint go" "vuln") (_per-goos "govulncheck ./...")
+vuln: (_banner "lint go" "vuln") (_go-tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck") (_per-goos "build/tools/govulncheck ./...")
 
 # Dependency license compliance, once per supported platform (see _per-goos in
 # lib.just: each GOOS pulls its own dependencies). A project that needs extra
@@ -43,11 +43,10 @@ vuln: (_banner "lint go" "vuln") (_per-goos "govulncheck ./...")
 # LINT_GO_LICENSES_FLAGS='--ignore=x' just do lint go licenses
 #
 # GOROOT is passed explicitly because go-licenses recognizes stdlib packages by
-# their location under GOROOT — but, being a go_install binary, its built-in
-# default is the GOROOT of whatever toolchain COMPILED it. When that differs
-# from the pinned toolchain on PATH (which is where packages actually load
-# from), every stdlib package degrades to "does not have module info" errors.
-licenses: (_banner "lint go" "licenses") (_per-goos 'GOROOT="$(go env GOROOT)" go-licenses check --include_tests --allowed_licenses=Apache-2.0,BSD-2-Clause,BSD-3-Clause,MIT ${LINT_GO_LICENSES_FLAGS:-} ./...')
+# their location under GOROOT, reading its default from its own build. _go-tool
+# compiles it with the pinned toolchain, so the two agree by construction; the
+# explicit value keeps that true even when a project overrides GOROOT.
+licenses: (_banner "lint go" "licenses") (_go-tool "go-licenses" "github.com/google/go-licenses/v2") (_per-goos 'GOROOT="$(go env GOROOT)" build/tools/go-licenses check --include_tests --allowed_licenses=Apache-2.0,BSD-2-Clause,BSD-3-Clause,MIT ${LINT_GO_LICENSES_FLAGS:-} ./...')
 
 # Bounds-check-elimination report: every bounds check the compiler could NOT
 # eliminate, for performance tuning. Informational — it never fails, so it is
@@ -60,7 +59,21 @@ bce: (_banner "lint go" "bce")
     echo "Bounds Check Elimination Report"
     echo "================================"
     echo ""
-    output=$(go build -gcflags='-d=ssa/check_bce/debug=1' ./... 2>&1 | grep -v '^#' || true)
+    # Keep compiler diagnostics only (file.go:line:col:): the build's other
+    # chatter — package banners, a CGO link's `ld: warning` — must not count.
+    output=$(go build -gcflags='-d=ssa/check_bce/debug=1' ./... 2>&1 | grep -E '\.go:[0-9]+:[0-9]+: ' || true)
+    # Generic instantiations compile in the CALLER's package, so the compiler
+    # also reports positions inside GOROOT (slices.SortFunc & co) and the module
+    # cache (a generic dependency). Real checks in the binary, but not this
+    # module's code to change — keep the module's own files only. Positions are
+    # relative to the module root, so anything outside it starts with "../" (or
+    # is absolute).
+    external=$(echo "$output" | grep -cE '^(\.\./|/)' || true)
+    output=$(echo "$output" | grep -vE '^(\.\./|/)' || true)
+    if [ "$external" != 0 ]; then
+        echo "(${external} in generic instantiations from GOROOT/module cache omitted — not this module's code)"
+        echo ""
+    fi
     if [ -z "$output" ]; then
         echo "No bounds checks detected (BCE fully eliminated)."
     else
@@ -81,11 +94,20 @@ bce: (_banner "lint go" "bce")
 escape: (_banner "lint go" "escape")
     #!/usr/bin/env bash
     set -euo pipefail
-    output=$(go build -gcflags='-m' ./... 2>&1 | grep -v '^#' || true)
+    # Same filters as bce: compiler diagnostics only, then drop positions
+    # inside GOROOT / the module cache (generic instantiations compiled into
+    # this module's packages).
+    output=$(go build -gcflags='-m' ./... 2>&1 | grep -E '\.go:[0-9]+:[0-9]+: ' || true)
+    external=$(echo "$output" | grep -cE '^(\.\./|/)' || true)
+    output=$(echo "$output" | grep -vE '^(\.\./|/)' || true)
     heap=$(echo "$output" | grep -E 'escapes to heap|moved to heap' || true)
     noinline=$(echo "$output" | grep 'cannot inline' || true)
     echo "Escape Analysis Report"
     echo "======================"
+    if [ "$external" != 0 ]; then
+        echo "(${external} lines in generic instantiations from GOROOT/module cache omitted — not this module's code)"
+        echo ""
+    fi
     if [ -z "$heap" ]; then
         echo "No heap escapes."
     else
@@ -111,5 +133,29 @@ escape: (_banner "lint go" "escape")
 # per-package `unused` linter in golangci). -test keeps library-only repos
 # analyzable (test binaries serve as roots) and stops dead code from hiding
 # behind test-only callers. Informational: native only, not in the default set.
-deadcode: (_banner "lint go" "deadcode")
-    deadcode -test ./...
+deadcode: (_banner "lint go" "deadcode") (_go-tool "deadcode" "golang.org/x/tools/cmd/deadcode")
+    build/tools/deadcode -test ./...
+
+# The Go-source analyzers — deadcode, govulncheck, go-licenses — are go.mod
+# `tool` directives, NOT aqua packages (see book/tooling.md, "Go-source
+# analyzers are go.mod tools"): each embeds Go's own source loader, so it must
+# be compiled by the same toolchain that compiles the project. aqua builds a
+# go_install package once per tool version, with whichever project's pinned go
+# ran it first, and then shares that binary across projects — an analyzer built
+# by go1.N cannot read a module that declares go1.N+1.
+#
+# The per-GOOS legs cannot run `go tool <name>` directly: `go tool` honours
+# GOOS/GOARCH and would cross-compile the analyzer itself (exec format error).
+# So the analyzer is built natively ONCE, into build/tools/, from the pinned
+# go.mod entry with the pinned go (cached per toolchain), and the legs run that
+# binary. A go.mod without the directive fails here with the exact command to
+# add it; `limen check` reports the same (the gotools rule).
+_go-tool name pkg:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! grep -qE '^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)' go.mod; then
+        echo "go.mod lacks 'tool {{ pkg }}' — add it: go get -tool {{ pkg }}@<version> && go mod tidy (see book/tooling.md)" >&2
+        exit 1
+    fi
+    mkdir -p build/tools
+    GOOS='' GOARCH='' go build -o 'build/tools/{{ name }}' '{{ pkg }}'

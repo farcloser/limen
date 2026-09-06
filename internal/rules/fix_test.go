@@ -398,6 +398,11 @@ func TestMain(m *testing.M) {
 		os.Exit(runAquaStub())
 	}
 
+	if os.Getenv(goStubEnv) != "" {
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(runGoStub())
+	}
+
 	m.Run()
 }
 

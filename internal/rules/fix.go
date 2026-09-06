@@ -87,6 +87,7 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateGitattributes(root))
 	add(remediateJustfile(root)...)
 	add(remediateAqua(root, opts.SelfVersion)...)
+	add(remediateGoTools(root))
 	add(remediateLychee(root))
 	add(remediateWorkflows(root)...)
 	add(remediateRenovate(root, opts))
