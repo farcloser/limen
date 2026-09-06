@@ -70,12 +70,22 @@ setup).
 ## What the baseline asserts
 
 - **Security features on.** Secret scanning with push protection, Dependabot
-  alerts and security updates, private vulnerability reporting. These are
-  GitHub's own defenses; there is no repository for which "off" is the right
-  setting. (Code scanning is deliberately *not* required: the SAST posture is
-  the per-GOOS golangci run plus govulncheck — see
-  [per-language](./per-language.md) tooling; a repo may opt in via the
-  exceptions file.)
+  alerts, private vulnerability reporting. These are GitHub's own defenses;
+  there is no repository for which "off" is the right setting. (Code scanning
+  is deliberately *not* required: the SAST posture is the per-GOOS golangci
+  run plus govulncheck — see [per-language](./per-language.md) tooling; a
+  repo may opt in via the exceptions file.)
+- **One dependency bot.** Dependabot *alerts* stay on because they are the
+  vulnerability signal Renovate consumes; Dependabot *security updates* — the
+  toggle that has Dependabot itself open PRs — must be **off**. Two bots do
+  not coordinate (one advisory, two PRs), and Dependabot ignores every
+  convention the repository sets: no release cooldown, no aqua preset, its own
+  branch and commit shape. The seeded `renovate.json5` enables
+  `vulnerabilityAlerts` explicitly, which is what makes Renovate's fix PRs
+  reach `// indirect` Go modules as well (its gomod manager otherwise leaves
+  indirect deps alone) — so nothing Dependabot would have caught goes
+  unraised. A repository that wants Dependabot's PRs anyway declares
+  `dependabot-security-updates` as an exception.
 - **Actions hardened.** The default workflow token is read-only, workflows
   cannot approve pull requests, and the allowed-actions policy is restricted —
   GitHub-owned actions plus an explicitly pinned allowlist, never "all". This

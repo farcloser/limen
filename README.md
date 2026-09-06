@@ -40,10 +40,12 @@ that *can* be verified gets a `limen` check and becomes policy.
 | POSIX userland: **grep, sed, awk, head, tr, mv, mktemp, xargs** | used by the shared `tools` / `lint` / `fix` recipes. Present by default on any Unix; the hermetic PATH keeps `/usr/bin:/bin:/usr/sbin:/sbin` so they resolve. |
 
 Everything else the recipes use — `go`, `just`, and the whole lint/test/release toolbelt
-(`shellcheck`, `golangci-lint`, `yamlfmt`, `lychee`, `jq`, `go-licenses`, `git-validation`,
-`govulncheck`, `deadcode`, `godolint`, `gotestsum`, `goreleaser`, `cosign`, `dot`, and
-`limen` itself) — is pinned and installed **by aqua**, so it is not a manual prerequisite;
-[`aqua.yaml`](./aqua.yaml) is the authoritative list.
+(`shellcheck`, `golangci-lint`, `yamlfmt`, `lychee`, `jq`, `git-validation`, `godolint`,
+`gotestsum`, `goreleaser`, `cosign`, `dot`, and `limen` itself) — is pinned and installed
+**by aqua**, so it is not a manual prerequisite; [`aqua.yaml`](./aqua.yaml) is the
+authoritative list. The Go-source analyzers (`deadcode`, `govulncheck`, `go-licenses`) are
+`tool` directives in [`go.mod`](./go.mod), built by the pinned `go` itself (see
+[`book/tooling.md`](./book/tooling.md#go-source-analyzers-are-gomod-tools)).
 
 ## Using `limen`
 
