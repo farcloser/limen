@@ -18,3 +18,5 @@ Either the use case is genuinely generic now, or by design, or it should be kept
 - proper architecture and modularization: interfaces are *client-defined* to reduce hard dependencies, underlying details never leak into high level abstractions
 - error handling is first-class citizen: use sentinel and wrap errors with a clean, reasonably sized set of module specific errors
 - logging: slog
+- pinned means by digest: every image, action, and tool is pinned to content, not to a tag — in code, in examples, and in documentation alike, because examples are what gets copied
+- linters are law: no finding is ignored, and a finding that is silenced is silenced by its rule, never by its linter (see [per-language rules](./per-language.md#go--silencing-a-finding))

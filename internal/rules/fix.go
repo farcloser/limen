@@ -577,7 +577,7 @@ func regenerateAquaChecksums(root string) error {
 	} {
 		// aquaBin is "aqua" outside tests (a package-level seam, not user
 		// input), and args come from the fixed lists above.
-		cmd := exec.CommandContext(context.Background(), aquaBin, args...) //nolint:gosec // G204: see above.
+		cmd := exec.CommandContext(context.Background(), aquaBin, args...) // #nosec G204 -- see above.
 
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {

@@ -644,7 +644,8 @@ func joinIDs(ids []license.ID) string {
 // gosec's G304 sees is the contract, not a flaw. The raw os error already
 // carries the failing path, so it travels unwrapped.
 func readRepoFile(root, relPath string) ([]byte, error) {
-	return os.ReadFile(filepath.Join(root, filepath.FromSlash(relPath))) //nolint:gosec,wrapcheck // See doc comment.
+	// #nosec G304 -- See doc comment.
+	return os.ReadFile(filepath.Join(root, filepath.FromSlash(relPath))) //nolint:wrapcheck // See doc comment.
 }
 
 // findFirst returns the first of names that exists directly under root.

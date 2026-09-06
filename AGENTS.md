@@ -20,3 +20,7 @@
   (doctrine in `book/agents.md`): your own branch in your own worktree, never the
   human's `work` branch, the full lint and test before pushing, and a pull
   request you own until its checks are green.
+- **Silencing a linter finding: by rule, never by linter.** `//revive:disable-next-line:<rule>`,
+  `// #nosec G### -- reason`, `//nolint:staticcheck // SA####: reason`; never
+  `//nolint:revive`, `//nolint:gosec`, a bare `#nosec`, or a bare `//nolint`. Doctrine in
+  `book/per-language.md`; `just do lint go` rejects the banned forms.

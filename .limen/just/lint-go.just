@@ -14,14 +14,44 @@ default: code mod vuln licenses
 
 # golangci-lint, once per supported platform (see _per-goos in lib.just:
 # platform-specific files are only analyzed for the GOOS that builds them).
-# The formatter is build-graph-independent and runs once. The last step bans
-# blanket revive suppressions: nolintlint polices golangci directives, and
-# revive findings proved environment-nondeterministic across the per-GOOS
-# legs — the suppression itself then flakes as "unused". revive's own
-# selective directives are invisible to nolintlint, hence stable.
-code: (_banner "lint go" "go") _golangci-toolchain-check (_per-goos "golangci-lint run")
+# The formatter is build-graph-independent and runs once. The last step
+# enforces the suppression doctrine (book/per-language.md, "silencing a
+# finding"): a finding is silenced by its rule, never by its linter.
+code: (_banner "lint go" "go") _golangci-toolchain-check (_per-goos "golangci-lint run") _suppression-check
     golangci-lint fmt --diff
-    @if git grep -nE 'nolint:[a-z, ]*revive' -- '*.go'; then echo 'blanket revive suppression is banned — use //revive:disable-next-line:<rule> (or a disable/enable block) instead' >&2; exit 1; fi
+
+# The doctrine, textually — nolintlint polices the shape of a golangci
+# directive, not which linter it names. Bag linters (revive, gosec,
+# staticcheck) must be silenced per rule: revive and gosec through their own
+# selective directives, staticcheck — whose //lint:ignore golangci-lint does
+# not honor — by naming the check in the reason. //nolint:revive in
+# particular also proved environment-nondeterministic across the per-GOOS
+# legs, flaking as "unused"; revive's own directives are invisible to
+# nolintlint, hence stable. Tracked Go files only.
+[private]
+_suppression-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fail=0
+    # ban <message> <pattern> [<allowed-pattern>]: every tracked Go line matching
+    # <pattern> and not <allowed-pattern> is a violation.
+    ban() {
+        local hits
+        hits="$(git grep -nE "$2" -- '*.go' || true)"
+        if [ -n "$hits" ] && [ -n "${3:-}" ]; then hits="$(printf '%s\n' "$hits" | grep -vE "$3" || true)"; fi
+        if [ -n "$hits" ]; then printf '%s\n' "$hits" >&2; echo "$1" >&2; fail=1; fi
+    }
+    ban 'blanket revive suppression is banned — use //revive:disable-next-line:<rule> (or a disable/enable block)' \
+        'nolint:[a-z, ]*revive'
+    ban 'blanket gosec suppression is banned — use gosec'"'"'s own // #nosec G### -- reason (on its own comment line when combined with a //nolint)' \
+        'nolint:[a-z, ]*gosec'
+    ban '#nosec must name its rule(s): // #nosec G### -- reason' \
+        '#nosec' '#nosec( G[0-9]{3})+( --|[[:space:]]*$)'
+    ban 'staticcheck suppressions must name the check in the reason: //nolint:staticcheck // SA####: reason' \
+        'nolint:[a-z, ]*staticcheck' '(^|[^A-Z])(SA|ST|S|QF)[0-9]{4}([^0-9]|$)'
+    ban 'bare //nolint is banned — name the linter (or, for a bag linter, the rule)' \
+        '//nolint(:all)?([^a-z:]|$)'
+    exit "$fail"
 
 # golangci-lint embeds Go's type checker, so a golangci built with go1.N cannot
 # analyze a go1.N+1 toolchain: it panics with "file requires newer Go version".

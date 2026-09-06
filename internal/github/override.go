@@ -67,7 +67,7 @@ func stripInlineComment(line string) string {
 func LoadOverrides(dir string) (map[string]string, error) {
 	path := filepath.Join(dir, filepath.FromSlash(OverridePath))
 
-	data, err := os.ReadFile(path) //nolint:gosec // G304: caller-designated repository, the tool's contract.
+	data, err := os.ReadFile(path) // #nosec G304 -- caller-designated repository, the tool's contract.
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return map[string]string{}, nil

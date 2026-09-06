@@ -37,7 +37,7 @@ import (
 // The variable/secret contract shared with update-aqua-checksum.yaml.
 const (
 	updateAppVariable = "UPDATE_AQUA_CHECKSUM_APP_ID"
-	updateAppSecret   = "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" //nolint:gosec // G101: the secret's NAME, not a credential.
+	updateAppSecret   = "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" // #nosec G101 -- the secret's NAME, not a credential.
 )
 
 // checkUpdateApp labels the finding EnsureUpdateAquaChecksumApp returns.
@@ -77,7 +77,7 @@ var (
 		}
 
 		// name is from the fixed table above; url is built by this package.
-		cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204: see above.
+		cmd := exec.CommandContext(context.Background(), name, args...) // #nosec G204 -- see above.
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("opening the browser: %w", err)
 		}
@@ -93,7 +93,7 @@ var (
 		args := []string{"secret", "set", name, "--org", org, "--visibility", "all"}
 
 		// ghBin is "gh" outside tests; args are fixed flags plus the org.
-		cmd := exec.CommandContext(context.Background(), ghBin, args...) //nolint:gosec // G204: see above.
+		cmd := exec.CommandContext(context.Background(), ghBin, args...) // #nosec G204 -- see above.
 		cmd.Stdin = strings.NewReader(string(value))
 
 		var stderr strings.Builder

@@ -78,6 +78,11 @@ Three things, all one-time, all deliberately human:
 2. Creating its key in Secretive and registering the public key on the account
    as both an authentication key and a signing key.
 3. Running `limen-install-agent`, which does everything else and verifies.
+4. Linking the contribute skill where the agent's harness discovers skills —
+   for Claude Code, `~/.claude/skills/contribute` → this repository's
+   `skills/contribute` — so the working agreement below loads in every
+   session, whichever repository it starts in. The agent cannot do this
+   itself: its sandbox denies writes under `~/.claude`.
 
 ## Per repository
 
@@ -113,13 +118,63 @@ branches are the human's.
   description drawn from the commit messages, then own the checks: watch
   them, read the failed logs, fix, push again. A red check is the agent's to
   turn green or to explain — never to leave for the human to discover.
+- **Green, then the reviewer.** Once the checks are green and the pull
+  request is ready, request the repository owner's review — the human is
+  told, not left to notice, and told once: a review request on a red pull
+  request is a request to watch the agent work. Ready also means
+  *mergeable on its own*: a pull request stacked on another — branched
+  from an unmerged branch, showing that branch's commits until it lands —
+  waits, unrequested, until its base has merged and it has been rebased
+  down to its own commits. The owner is whoever the repository says: a
+  `CODEOWNERS` entry when there is one, else the organization's owner.
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local
   `main`, prune the merged branch and its worktree, and rebase every open
   branch onto `main` — so that both the human and the agent can rebase often
   and cheaply.
+- **Stacking, rarely and said out loud.** A branch is cut from the human's
+  unmerged branch only when the change cannot be green without it — a
+  repository whose CI is broken on `main` until the human's pending
+  migration lands. The pull request body names what it stacks on; once the
+  base merges, the branch is rebased down to its own commits. A stacked
+  pull request is never sent for review.
 - **Not the agent's to do.** Merging, pushing to `main`, force-pushing shared
   branches, and tagging releases. Those are not trust questions; they are the
   rulesets and the release lane doing their job.
+
+## Scope and priorities
+
+The human sets the priorities; the agent measures scope before it moves.
+
+- **The ask is the deliverable.** Thing A, whole, not thing B and not A plus
+  B. Something unrelated that genuinely needs fixing is finished-A-first,
+  then mentioned; acting on it is the human's call.
+- **Drive-by fixes are fine; campaigns are not.** A one-line pin, a stale
+  suppression, a workflow that hides its own failure — casual, on the way
+  through, in scope. Several repositories are in a broken state and their
+  large-scale repair — onboarding onto limen, wholesale lint cleanups —
+  waits for the human's explicit green light, however tempting.
+- **A red inherited from `main`** is explained on the pull request, not
+  fixed there: the fix is its own change, if the human wants it, and a
+  file under the human's active edit is left alone.
+- **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged;
+  what survives judgment becomes code, tests, or book prose. They are never
+  committed.
+
+## Where the conversation happens
+
+- **Instructions come in the conversation**; the agent keeps a running queue
+  of them and does not lose one to another. A short list from the human is
+  enough — structure is welcome, not required.
+- **Review happens on GitHub.** A review request is the signal that a pull
+  request is green and ready: it lands in the human's review inbox and is
+  sent once. The human's comments on the pull request are the review; the
+  agent addresses them when the human points it there, or when it next
+  checks its open pull requests. If a requested pull request turns red, the
+  request is withdrawn until it is green again.
+- **Answers, not menus.** Lead with the conclusion; give one recommendation,
+  not a survey; a fix that cuts against recorded doctrine is named as such
+  and argued, never slipped in. When something is either the right call or
+  not, say which.
 
 These rules ship as a skill (`skills/contribute`), so an agent applies them
 without being told each time.
