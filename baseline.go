@@ -120,6 +120,20 @@ var CanonicalWorkflowRelease string
 //go:embed renovate.json5
 var CanonicalRenovate string
 
+// CanonicalAgents is the repository's AGENTS.md — the working agreement for a
+// coding agent, content-pinned in every repo so the same rules hold wherever
+// an agent starts. Harness-neutral: AGENTS.md is the file every agent reads.
+// See book/agents.md and book/mandatory-files.md.
+//
+//go:embed AGENTS.md
+var CanonicalAgents string
+
+// CanonicalClaudeSeed is the CLAUDE.md seeded once into a repository that has
+// none: Claude Code reads CLAUDE.md, not AGENTS.md, and this one line imports
+// the latter. The file is the project's own after the seed — repo-specific
+// notes for the agent go below the import.
+const CanonicalClaudeSeed = "@AGENTS.md\n"
+
 // CanonicalOverrideExample is the reference limen.yaml — every configurable
 // declaration key, commented. Seeded by bootstrap only, for documentation:
 // fix never touches it and no check requires it. See book/github.md.

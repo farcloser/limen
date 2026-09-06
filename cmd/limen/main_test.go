@@ -29,6 +29,8 @@ func compliantRepo(t *testing.T) string {
 		".editorconfig":             rules.CanonicalEditorconfig,
 		".gitignore":                limen.CanonicalGitignore,
 		".gitattributes":            rules.CanonicalGitattributes,
+		"AGENTS.md":                 rules.CanonicalAgents,
+		"CLAUDE.md":                 limen.CanonicalClaudeSeed,
 		"Justfile":                  rules.CanonicalJustfileImport + "\n",
 		"aqua.yaml":                 limen.CanonicalAquaYAML,
 		"aqua-checksums.json":       "{}\n",

@@ -78,11 +78,11 @@ Three things, all one-time, all deliberately human:
 2. Creating its key in Secretive and registering the public key on the account
    as both an authentication key and a signing key.
 3. Running `limen-install-agent`, which does everything else and verifies.
-4. Linking the contribute skill where the agent's harness discovers skills —
-   for Claude Code, `~/.claude/skills/contribute` → this repository's
-   `skills/contribute` — so the working agreement below loads in every
-   session, whichever repository it starts in. The agent cannot do this
-   itself: its sandbox denies writes under `~/.claude`.
+
+The working agreement itself needs no machine step: it travels with every
+repository as the content-pinned `AGENTS.md` (imported by a seeded
+`CLAUDE.md`), one of the [mandatory files](./mandatory-files.md#canonical-agentsmd),
+so it loads whichever repository a session starts in.
 
 ## Per repository
 
@@ -176,5 +176,8 @@ The human sets the priorities; the agent measures scope before it moves.
   and argued, never slipped in. When something is either the right call or
   not, say which.
 
-These rules ship as a skill (`skills/contribute`), so an agent applies them
-without being told each time.
+These rules ship in two forms: compressed into the content-pinned `AGENTS.md`
+every repository carries — the harness-neutral file any coding agent reads —
+and as a skill (`skills/contribute`, the step-by-step procedure with the
+commands) for harnesses that load skills. An agent applies them without being
+told each time.

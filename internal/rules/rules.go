@@ -64,6 +64,13 @@ var CanonicalEditorconfig = limen.CanonicalEditorconfig //nolint:gochecknoglobal
 // embedded — the rule is content-pinned, so extras are not allowed.
 var CanonicalGitattributes = limen.CanonicalGitattributes //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
+// CanonicalAgents is the exact AGENTS.md every repository must carry verbatim:
+// the working agreement for a coding agent (book/agents.md), identical
+// everywhere so the same rules load whichever repository an agent starts in.
+// It is this repo's own AGENTS.md, embedded — content-pinned, so a project's
+// own notes for the agent go in CLAUDE.md, below its import line.
+var CanonicalAgents = limen.CanonicalAgents //nolint:gochecknoglobals // immutable alias of embedded canonical data.
+
 // CanonicalShellcheckrc is the exact .limen/.shellcheckrc a repository must carry
 // verbatim (when the repo ships shell). It is this repo's .limen/.shellcheckrc,
 // embedded — the rule is content-pinned, so extras are not allowed.
@@ -162,6 +169,7 @@ func Check(root string, policy Policy) []Finding {
 		checkEditorconfig(root),
 		checkGitignore(root),
 		checkGitattributes(root),
+		checkAgents(root),
 		checkJustfile(root),
 		checkAqua(root),
 		checkLychee(root),
@@ -397,6 +405,39 @@ func checkGitattributes(root string) Finding {
 	}
 
 	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: name + matchesCanonicalMsg}
+}
+
+// checkAgents verifies the agent surface in its two regimes: AGENTS.md is
+// content-pinned (the working agreement is the same in every repository —
+// see CanonicalAgents), and CLAUDE.md need only exist (seeded as the one-line
+// import Claude Code needs to read AGENTS.md at all; the content is the
+// project's own after that: repo-specific notes for the agent go below the
+// import). Unconditional: every repository is somewhere an agent may work.
+func checkAgents(root string) Finding {
+	const (
+		rule       = "agents"
+		agentsName = "AGENTS.md"
+		claudeName = "CLAUDE.md"
+	)
+
+	if f := checkPinned(root, rule, agentsName, CanonicalAgents); f != nil {
+		return *f
+	}
+
+	if _, err := readRepoFile(root, claudeName); err != nil {
+		return fail(
+			rule,
+			"",
+			claudeName+" is missing (the import that makes Claude Code read AGENTS.md; limen fix seeds it)",
+		)
+	}
+
+	return Finding{
+		Rule:    rule,
+		Status:  StatusOK,
+		Path:    agentsName,
+		Message: agentsName + matchesCanonicalMsg + "; " + claudeName + " present",
+	}
 }
 
 // checkLychee content-pins .limen/lychee.toml, the canonical configuration of

@@ -20,6 +20,20 @@ func bootstrapOpts() FixOptions {
 	return FixOptions{Policy: DefaultPolicy(), License: license.Closed, Holder: "Farcloser", Year: 2026}
 }
 
+// outcomesFor returns every outcome a rule produced, in order, for rules that
+// remediate more than one file.
+func outcomesFor(outcomes []Outcome, rule string) []Outcome {
+	var got []Outcome
+
+	for _, o := range outcomes {
+		if o.Rule == rule {
+			got = append(got, o)
+		}
+	}
+
+	return got
+}
+
 func outcomeFor(outcomes []Outcome, rule string) Outcome {
 	for _, o := range outcomes {
 		if o.Rule == rule {
@@ -258,6 +272,57 @@ func TestShellcheckrcIsUnconditional(t *testing.T) {
 
 	if f := checkShellcheck(dir); !f.OK() {
 		t.Errorf("shellcheck should pass after seeding: %s", f.Message)
+	}
+}
+
+func TestFixAgents(t *testing.T) {
+	t.Parallel()
+
+	// Missing -> AGENTS.md created from the canonical, CLAUDE.md seeded.
+	dir := writeRepo(t, nil)
+
+	outcomes := Fix(dir, bootstrapOpts())
+	if got := outcomesFor(
+		outcomes,
+		"agents",
+	); len(got) != 2 || got[0].Action != ActionCreated ||
+		got[1].Action != ActionCreated {
+		t.Fatalf("agents outcomes = %v, want two creations", got)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if string(data) != CanonicalAgents {
+		t.Error("created AGENTS.md does not equal the canonical")
+	}
+
+	data, _ = os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
+	if string(data) != limen.CanonicalClaudeSeed {
+		t.Errorf("seeded CLAUDE.md = %q, want the import line", data)
+	}
+
+	// Drifted AGENTS.md -> overwritten exactly; a project-owned CLAUDE.md -> untouched.
+	drifted := writeRepo(t, map[string]string{
+		"AGENTS.md": CanonicalAgents + "\n- my own rule\n",
+		"CLAUDE.md": "@AGENTS.md\n\n## Mine\n",
+	})
+
+	got := outcomesFor(Fix(drifted, bootstrapOpts()), "agents")
+	if len(got) != 2 || got[0].Action != ActionOverwrote || got[1].Action != ActionNone {
+		t.Fatalf("agents outcomes = %v, want overwrote + none", got)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(drifted, "AGENTS.md"))
+	if string(data) != CanonicalAgents {
+		t.Errorf("AGENTS.md was not reset to the canonical exactly:\n%s", data)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(drifted, "CLAUDE.md"))
+	if string(data) != "@AGENTS.md\n\n## Mine\n" {
+		t.Errorf("a project-owned CLAUDE.md was touched:\n%s", data)
+	}
+
+	if f := checkAgents(drifted); !f.OK() {
+		t.Errorf("agents should pass after fix: %s", f.Message)
 	}
 }
 

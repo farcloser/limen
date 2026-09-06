@@ -63,6 +63,8 @@ func compliantFiles() map[string]string {
 		".editorconfig":       CanonicalEditorconfig,
 		".gitignore":          "*.log\n", // any present .gitignore satisfies the rule
 		".gitattributes":      CanonicalGitattributes,
+		"AGENTS.md":           CanonicalAgents,
+		"CLAUDE.md":           limen.CanonicalClaudeSeed,
 		"Justfile":            CanonicalJustfileImport + "\n",
 		"aqua.yaml":           limen.CanonicalAquaYAML,
 		"aqua-checksums.json": "{}\n",
@@ -129,7 +131,7 @@ func TestCheckMissingEverything(t *testing.T) {
 	}
 
 	for _, rule := range []string{
-		"git", "readme", "license", "editorconfig", "gitignore", "gitattributes", "justfile", "aqua", "lychee",
+		"git", "readme", "license", "editorconfig", "gitignore", "gitattributes", "agents", "justfile", "aqua", "lychee",
 	} {
 		if findingByRule(findings, rule).OK() {
 			t.Errorf("rule %s unexpectedly passed", rule)
@@ -243,6 +245,43 @@ func TestEditorconfigMustMatchExactly(t *testing.T) {
 	partial[".editorconfig"] = CanonicalEditorconfig[:cut]
 	if f := findingByRule(Check(writeRepo(t, partial), DefaultPolicy()), "editorconfig"); f.OK() {
 		t.Error("a truncated .editorconfig should fail")
+	}
+}
+
+func TestAgentsPinnedAndClaudeSeeded(t *testing.T) {
+	t.Parallel()
+
+	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "agents"); !f.OK() {
+		t.Errorf("the canonical AGENTS.md plus a CLAUDE.md should pass: %s", f.Message)
+	}
+
+	missing := compliantFiles()
+	delete(missing, "AGENTS.md")
+
+	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "agents"); f.OK() {
+		t.Error("a missing AGENTS.md should fail")
+	}
+
+	drifted := compliantFiles()
+	drifted["AGENTS.md"] = CanonicalAgents + "\n- my own rule\n"
+
+	if f := findingByRule(Check(writeRepo(t, drifted), DefaultPolicy()), "agents"); f.OK() {
+		t.Error("a drifted AGENTS.md should fail (content-pinned)")
+	}
+
+	noClaude := compliantFiles()
+	delete(noClaude, "CLAUDE.md")
+
+	if f := findingByRule(Check(writeRepo(t, noClaude), DefaultPolicy()), "agents"); f.OK() {
+		t.Error("a missing CLAUDE.md should fail (the import is what makes AGENTS.md load)")
+	}
+
+	// CLAUDE.md is the project's own after the seed: any content passes.
+	own := compliantFiles()
+	own["CLAUDE.md"] = "@AGENTS.md\n\n## This repository\n\n- something specific\n"
+
+	if f := findingByRule(Check(writeRepo(t, own), DefaultPolicy()), "agents"); !f.OK() {
+		t.Errorf("a project-owned CLAUDE.md should pass: %s", f.Message)
 	}
 }
 

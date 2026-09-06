@@ -85,6 +85,7 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateEditorconfig(root))
 	add(remediateGitignore(root))
 	add(remediateGitattributes(root))
+	add(remediateAgents(root)...)
 	add(remediateJustfile(root)...)
 	add(remediateAqua(root, opts.SelfVersion)...)
 	add(remediateGoTools(root))
@@ -593,6 +594,20 @@ func regenerateAquaChecksums(root string) error {
 // see checkGitattributes for why no local additions are allowed).
 func remediateGitattributes(root string) Outcome {
 	return pinExact(root, "gitattributes", ".gitattributes", CanonicalGitattributes)
+}
+
+// remediateAgents brings the agent surface to the baseline in its two regimes
+// (see checkAgents): AGENTS.md content-pinned exactly — created if missing,
+// overwritten if drifted — and CLAUDE.md seeded once as the import line,
+// then the project's own.
+func remediateAgents(root string) []Outcome {
+	const rule = "agents"
+
+	return []Outcome{
+		pinExact(root, rule, "AGENTS.md", CanonicalAgents),
+		seedIfMissing(root, rule, "CLAUDE.md", limen.CanonicalClaudeSeed,
+			"seeded CLAUDE.md as the AGENTS.md import (the content is the project's own from here)"),
+	}
 }
 
 // remediateLychee content-pins .limen/lychee.toml exactly: created if missing,
