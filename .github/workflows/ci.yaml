@@ -94,9 +94,9 @@ jobs:
   # under testdata/fuzz/<Target> rather than from the exit code (the
   # coordinator reports a spurious "context deadline exceeded" when a worker
   # is mid-iteration as the budget expires; that is retried once), and a
-  # tree with no Fuzz* targets reporting so and passing. So this job is safe
-  # in every project: it fuzzes what there is, and is a one-line no-op where
-  # there is nothing.
+  # tree with no Fuzz* targets reporting so and passing — as does a tree with
+  # no Go module at all. So this job is safe in every project: it fuzzes what
+  # there is, and is a one-line no-op where there is nothing, Go or not.
   fuzz:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
