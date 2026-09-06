@@ -29,7 +29,7 @@ Recipes do not run in your shell's environment; they run in one the `Justfile` c
   pin bump instead of fetching an unpinned compiler); `GOFLAGS`, `GOPRIVATE`, `GOOS`/`GOARCH`
   neutralized so ambient flags or a cross-compile target can't rewrite a build; and
   `GOSUMDB`/`GOPROXY` pinned to their real defaults so an ambient `GOSUMDB=off` cannot
-  defeat the checksum verification the `go_install` pins rely on. Each stays overridable
+  defeat the checksum verification the `go_install` pins and `go.mod` tools rely on. Each stays overridable
   by a project's own `Justfile` — explicit and tracked, never ambient. **The one
   exception is `GOWORK`:** a `go.work` in the tree (or a parent) deliberately puts recipes
   into workspace mode — Go workspaces are a supported way to work here, at the eyes-open

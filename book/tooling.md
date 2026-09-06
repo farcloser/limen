@@ -52,15 +52,50 @@ aqua matches every paramount requirement directly:
 - **Exact per-tool pinning** is native: `golangci/golangci-lint@<version>`.
 - **Per-project** via a committed `aqua.yaml`; projects never collide.
 - **Security**: binary-release tools are checksum-verified and, where the vendor publishes
-  them, cosign/SLSA/attestation-verified. Go-only (`go_install`) tools fall back to
-  **GOSUMDB** — the *same* trust root the old `Makefile` already relied on, now pinned and
-  declarative. A net improvement over the status quo, never a regression.
+  them, cosign/SLSA/attestation-verified. Go-only tools — aqua's `go_install` packages and
+  the `go.mod` tools below — fall back to **GOSUMDB**, the *same* trust root the old
+  `Makefile` already relied on, now pinned and declarative. A net improvement over the
+  status quo, never a regression.
 - **Maintenance**: Renovate opens per-tool version-bump PRs; a checksum-refresh workflow
   keeps `aqua-checksums.json` in sync automatically.
 
-**The one tradeoff we accept:** `go_install` tools are not aqua-checksum-verified (GOSUMDB
+**The one tradeoff we accept:** Go-only tools are not aqua-checksum-verified (GOSUMDB
 instead of a pinned binary checksum). If hermetic rebuild verification of those *specific* Go
 tools ever becomes the paramount axis, revisit Nix for that subset.
+
+### Go-source analyzers are `go.mod` tools
+
+A Go tool that **loads Go source** — `deadcode`, `govulncheck`, `go-licenses`, anything built
+on `go/packages` — embeds the source loader of the Go that compiled *it*. Compiled by go1.N,
+it cannot read a module that declares go1.N+1. So such a tool must be built by the **same
+toolchain that builds the project**, and aqua cannot promise that: a `go_install` package is
+compiled once per tool version, by whichever project's pinned `go` happens to run it first,
+and that binary is then shared by every project pinning the same tool version. The pin names
+the tool; the Go that built it is decided by run order on the machine. CI never sees the
+problem (every runner builds fresh with its own pin) — it surfaces only on a laptop that
+works on two repos with different Go pins, as an analyzer refusing sources it should read.
+
+The fix is Go's own: the analyzers are `tool` directives in `go.mod`. `go tool <name>` builds
+the tool from the module's pinned requirement with the module's pinned toolchain, cached per
+toolchain, so the skew is impossible by construction — and the pin lives in the one file that
+already governs the module. The shared recipes build each analyzer natively once
+(`build/tools/`) and run that binary per GOOS, because `go tool` itself honours
+`GOOS`/`GOARCH` and would cross-compile the analyzer. Renovate bumps them through its `gomod`
+manager (the canonical `renovate.json5` re-enables these modules, which Go lists as
+`// indirect`).
+
+The doctrine is enforced from both sides: the `gotools` rule requires the directives in every
+`go.mod` (`limen fix` adds them with `go get -tool … && go mod tidy`), and the `aqua` rule
+retires the old `go_install` pins (`limen fix` removes them). What stays in aqua is every tool
+that never loads Go source — `git-validation`, `godolint`, `dot` — including the ones non-Go
+repositories rely on.
+
+Adding or bumping one by hand:
+
+```bash
+go get -tool golang.org/x/tools/cmd/deadcode@<version>   # add, or move the pin
+go mod tidy
+```
 
 ## Tools without upstream binaries: the sourcing ladder
 
@@ -200,7 +235,7 @@ repo/
 ├── aqua.yaml                              # the manifest: pinned tool versions
 ├── aqua-checksums.json                    # GENERATED — commit it
 ├── aqua-policy.yaml                       # authorizes the local registry
-├── .limen/aqua-registry.yaml                     # local registry: go_install tools + farcloser/limen
+├── .limen/aqua-registry.yaml                     # local registry: non-Go-source go_install tools + farcloser/limen
 ├── renovate.json5                         # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
@@ -213,12 +248,13 @@ What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
   `supported_envs` is part of the pinned section: adding an environment (say `windows/amd64`)
   is a change to limen's canonical baseline, not a per-repo edit.
 - The **canonical `registries:` section**: the standard registry plus the `local` registry for
-  `go_install` tools (e.g. `go-licenses`). One field is the project's: the standard registry's
+  `go_install` tools (e.g. `git-validation`). One field is the project's: the standard registry's
   `ref`, which Renovate bumps per repo — but it must always be an **exact pin** (a `vX.Y.Z`
   tag or a full commit SHA, never a branch).
 - **At least the canonical packages**, matched by name — the *versions* are the project's
   (Renovate bumps them), and extra per-project packages are welcome. A package is never
-  listed twice.
+  listed twice — and never a **retired** one: the Go-source analyzers moved to `go.mod`
+  (see [above](#go-source-analyzers-are-gomod-tools)); `limen fix` removes a lingering pin.
 
 > **Content-pinned files.** `aqua-policy.yaml` and `.limen/aqua-registry.yaml` are **canonical
 > everywhere** — `limen` requires them to match its embedded copies byte for byte (and `limen
@@ -227,7 +263,7 @@ What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
 > **generated, never hand-edited**: `limen fix` regenerates it (`aqua update-checksum`)
 > whenever it changes the manifest or the file is missing. Consequence: the catalog of
 > `go_install` tools is **shared** — to add one, it goes into limen's canonical registry, not
-> a single repo's.
+> a single repo's. And only tools that never load Go source qualify (see above).
 
 Bootstrap, from the repo root:
 
@@ -243,10 +279,6 @@ git commit --message "tooling: pin project CLIs via aqua"
 ```
 
 After this, every tool resolves to its exact pinned version on first invocation.
-
-> **go-licenses note:** because it is a `go_install` tool, pin it to an exact tag or a raw
-> commit SHA in `aqua.yaml`. For the v2-alpha situation, a commit pin is the cleanest, fully
-> reproducible escape — no `vendorHash` to maintain.
 
 ---
 
