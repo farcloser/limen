@@ -12,7 +12,7 @@ import (
 // HTTPS (https://github.com/owner/name) remote forms.
 func InferRepo(dir string) (string, error) {
 	gitArgs := []string{"-C", dir, "remote", "get-url", "origin"}
-	cmd := exec.CommandContext(context.Background(), "git", gitArgs...) //nolint:gosec // G204: fixed argument list.
+	cmd := exec.CommandContext(context.Background(), "git", gitArgs...) // #nosec G204 -- fixed argument list.
 
 	out, err := cmd.Output()
 	if err != nil {

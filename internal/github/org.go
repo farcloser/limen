@@ -31,7 +31,7 @@ const (
 	checkOrgInstalledApps       = "org-installed-apps"
 	checkOrgRenovateInstalled   = "org-renovate-installed"
 	checkOrgWebhooks            = "org-webhooks"
-	checkOrgActionsSecrets      = "org-actions-secrets" //nolint:gosec // G101: a check identifier, not a credential.
+	checkOrgActionsSecrets      = "org-actions-secrets" // #nosec G101 -- a check identifier, not a credential.
 	checkOrgTeams               = "org-teams"
 	checkOrgPATGrants           = "org-personal-access-tokens"
 	checkOrgProfileDescription  = "org-profile-description"

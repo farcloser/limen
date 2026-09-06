@@ -116,6 +116,38 @@ The proof beyond linting — `brew install --build-from-source` plus `brew test`
 the machine's live brew and therefore belongs to disposable CI runners, not to a shared
 recipe; a tap wires that in its own workflow.
 
+## Go — silencing a finding
+
+A finding is silenced by its **rule**, never by its **linter**. `//nolint:<linter>` is
+golangci-lint's idiom, and for a linter that is a bag of independent rules — revive, gosec,
+staticcheck — it switches the whole bag off for that line: the rule the author meant, and
+every rule the line grows into later. The rule-level directive keeps the rest of the bag
+armed, and it is *checked*: a directive naming the wrong rule still fails, so the
+suppression stays an honest record of one accepted finding.
+
+The forms, per linter:
+
+- **revive**: `//revive:disable-next-line:<rule>`, or a `//revive:disable:<rule>` …
+  `//revive:enable:<rule>` block around a region. `//nolint:revive` is banned outright — it
+  also proved environment-nondeterministic across the per-GOOS legs, where the
+  suppression then flakes as "unused"; revive's own directives are invisible to
+  nolintlint and stable.
+- **gosec**: `// #nosec G### -- reason`, gosec's own directive, which golangci-lint honors
+  on the line itself or on the line above. gosec does not look inside a `//nolint:`
+  comment, so a line that needs both gets two comment lines: the `#nosec` first, the
+  `//nolint:<other>` second. A bare `#nosec` silences every rule and is banned, as is
+  `//nolint:gosec`.
+- **staticcheck**: golangci-lint ignores staticcheck's own `//lint:ignore` directive, so
+  `//nolint:staticcheck` is the only form that works — and the reason must then name the
+  check (`//nolint:staticcheck // ST1003: …`), so the suppression still records one rule
+  and the ids are already in place for the day the selective form is honored.
+- **single-purpose linters** (wrapcheck, noctx, gochecknoglobals, …): `//nolint:<linter>
+  // reason` is already rule-level. Bare `//nolint` and `//nolint:all` are banned.
+
+`just do lint go` enforces this after golangci-lint runs: nolintlint polices the *shape*
+of a directive, not which linter it names, so the recipe greps the tracked Go files for
+every banned form and fails with the fix spelled out.
+
 ## Enforcement
 
 `limen check [path]` evaluates the applicable per-language rules alongside the mandatory

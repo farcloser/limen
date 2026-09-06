@@ -100,7 +100,7 @@ func (c client) api(method, path string, payload []byte) apiOutcome {
 	// The rules API carries no context; Background is the honest choice.
 	// ghBin is "gh" outside tests (a package seam, not user input), and every
 	// argument is a fixed API path built above.
-	cmd := exec.CommandContext(context.Background(), ghBin, args...) //nolint:gosec // G204: see above.
+	cmd := exec.CommandContext(context.Background(), ghBin, args...) // #nosec G204 -- see above.
 	if payload != nil {
 		cmd.Stdin = bytes.NewReader(payload)
 	}

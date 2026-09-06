@@ -476,7 +476,7 @@ func installTooling(root string, progress io.Writer) error {
 		_, _ = fmt.Fprintf(progress, "\n$ %s\n", command)
 
 		// aquaBinary is a constant; every argument is from the fixed lists above.
-		cmd := exec.CommandContext(context.Background(), aquaBinary, args...) //nolint:gosec // G204: see above.
+		cmd := exec.CommandContext(context.Background(), aquaBinary, args...) // #nosec G204 -- see above.
 		cmd.Dir = root
 		cmd.Stdout = progress
 

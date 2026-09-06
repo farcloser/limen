@@ -151,7 +151,7 @@ func remediateGoTools(root string) Outcome {
 	for _, args := range [][]string{getArgs, {"mod", "tidy"}} {
 		// goBin is "go" outside tests (a package-level seam, not user input),
 		// and args are the fixed lists above plus baseline package paths.
-		cmd := exec.CommandContext(context.Background(), goBin, args...) //nolint:gosec // G204: see above.
+		cmd := exec.CommandContext(context.Background(), goBin, args...) // #nosec G204 -- see above.
 
 		cmd.Dir = root
 		if combined, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
