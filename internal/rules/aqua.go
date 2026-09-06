@@ -292,6 +292,73 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 	return missing
 }
 
+// retiredCanonicalPkgs are packages the baseline once required and now
+// forbids: the Go-source analyzers (deadcode, govulncheck, go-licenses) moved
+// to go.mod `tool` directives — see book/tooling.md, "Go-source analyzers are
+// go.mod tools", and the gotools rule. aqua compiles a go_install package once
+// per tool version, with whichever project's pinned go ran it first, and then
+// shares that binary across projects; an analyzer embeds Go's own source
+// loader, so it must be compiled by the project's toolchain, which only the
+// module's tool directive guarantees. A manifest still pinning one fails check
+// (the recipes no longer look for it on PATH), and fix removes the entry.
+//
+//nolint:gochecknoglobals // immutable baseline data, like canonicalAqua.
+var retiredCanonicalPkgs = []string{
+	"github.com/google/go-licenses/v2",
+	"golang.org/x/vuln/cmd/govulncheck",
+	"golang.org/x/tools/cmd/deadcode",
+}
+
+// retiredPkgs returns the retired canonical packages the manifest still
+// declares, in manifest order.
+func (m *aquaManifest) retiredPkgs() []string {
+	var retired []string
+
+	for _, p := range m.pkgs {
+		if slices.Contains(retiredCanonicalPkgs, p.name) {
+			retired = append(retired, p.name)
+		}
+	}
+
+	return retired
+}
+
+// withoutPkgs returns the manifest with the named packages' entries (entry
+// line plus continuation lines) removed, re-parsed so every section range is
+// current. The bool is false when the stripped text no longer parses, which
+// the parser's shape rules make impossible for a removal — reported rather
+// than trusted.
+func (m *aquaManifest) withoutPkgs(names []string) (aquaManifest, bool) {
+	drop := make([]bool, len(m.lines))
+
+	for _, p := range m.pkgs {
+		if !slices.Contains(names, p.name) {
+			continue
+		}
+
+		for i := p.start; i < p.end; i++ {
+			drop[i] = true
+		}
+	}
+
+	kept := make([]string, 0, len(m.lines))
+
+	for i, line := range m.lines {
+		if !drop[i] {
+			kept = append(kept, line)
+		}
+	}
+
+	return parseAquaManifest(strings.Join(kept, "\n"))
+}
+
+// retiredPkgsMessage is the check failure / fix summary wording for retired
+// canonical packages still present.
+func retiredPkgsMessage(retired []string) string {
+	return "retired canonical package(s): " + strings.Join(retired, ", ") +
+		" (now go.mod tool directives, see book/tooling.md; limen fix removes the entry)"
+}
+
 // checkAquaManifest evaluates a parsed manifest against the canonical baseline
 // and returns the first failure, or nil when it complies.
 func checkAquaManifest(name string, manifest aquaManifest) *Finding {
@@ -352,6 +419,12 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 		return &finding
 	}
 
+	if retired := manifest.retiredPkgs(); len(retired) > 0 {
+		finding := fail(rule, name, name+": "+retiredPkgsMessage(retired))
+
+		return &finding
+	}
+
 	if twoLine := manifest.twoLinePinNames(); len(twoLine) > 0 {
 		finding := fail(rule, name, name+": "+twoLinePinMessage(twoLine))
 
@@ -385,6 +458,17 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 	var tail [][]string // sections to append at EOF, canonical order
 
 	var summary []string
+
+	// Retired packages go first, as a whole-text pass: every range planned
+	// below is then computed on the stripped manifest, so no replacement can
+	// straddle a removed entry.
+	if retired := manifest.retiredPkgs(); len(retired) > 0 {
+		if stripped, ok := manifest.withoutPkgs(retired); ok {
+			manifest = stripped
+
+			summary = append(summary, "removed "+retiredPkgsMessage(retired))
+		}
+	}
 
 	canonChecksum := trimBlankTail(canonicalAqua.section(canonicalAqua.checksum))
 	canonRegistries := trimBlankTail(canonicalAqua.section(canonicalAqua.registries))

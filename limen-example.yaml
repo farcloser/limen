@@ -18,7 +18,7 @@ github:
 #   secret-scanning: <reason>
 #   secret-scanning-push-protection: <reason>
 #   dependabot-alerts: <reason>
-#   dependabot-security-updates: <reason>
+#   dependabot-security-updates: <reason>  # baseline is OFF (Renovate is the one bot); exempt to keep Dependabot's own PRs
 #   private-vulnerability-reporting: <reason>
 #   code-scanning: <reason>  # OPT-IN: listing this REQUIRES CodeQL default setup (a stricter floor), never exempts
 # --- Repository: Actions hardening ---
