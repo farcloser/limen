@@ -524,6 +524,22 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 // auditSecurityToggles covers the R1 endpoints that answer through dedicated
 // URLs: Dependabot alerts (status-code endpoint), Dependabot security updates,
 // and private vulnerability reporting (public repositories only).
+//
+// The two Dependabot toggles point in opposite directions, deliberately.
+// Alerts are ON: they are the vulnerability signal Renovate reads (its
+// vulnerabilityAlerts feature is fed by GitHub's Dependabot alerts API), and
+// the canonical renovate.json5 turns them into fix PRs. Security updates are
+// OFF: that toggle is a second dependency bot — Dependabot itself opening
+// PRs — beside the one the baseline mandates. The two do not coordinate
+// (duplicate PRs for one advisory), and Dependabot honours none of the
+// repository's conventions: no minimumReleaseAge cooldown, no aqua preset,
+// its own branch and commit shape. One bot, one convention set. Renovate
+// covers what Dependabot would have: the canonical renovate.json5 enables
+// vulnerabilityAlerts explicitly, which is what makes Renovate raise fix PRs
+// for `// indirect` Go modules too (indirect deps are otherwise disabled in
+// its gomod manager, and the alert path re-enables them only when the
+// vulnerabilityAlerts object says enabled). A repository that wants
+// Dependabot's PRs anyway declares the exception.
 func (a *auditor) auditSecurityToggles() {
 	// Dependabot alerts: 204 = enabled, 404 = disabled.
 	alertsOutcome := a.client.api("GET", "/vulnerability-alerts", nil)
@@ -552,15 +568,17 @@ func (a *auditor) auditSecurityToggles() {
 	switch {
 	case fixesOutcome.err != nil || fixesOutcome.notFound:
 		a.unverifiable(orNotFound(fixesOutcome), checkDependabotFixes)
-	case fixes.Enabled:
-		a.flag(checkDependabotFixes, StatusOK, "", "", "Dependabot security updates are enabled", nil)
+	case !fixes.Enabled:
+		a.flag(checkDependabotFixes, StatusOK, "", "",
+			"Dependabot security updates are off (Renovate raises the vulnerability-fix PRs)", nil)
 	default:
-		a.flag(checkDependabotFixes, StatusFail, disabledValue, enabledValue,
-			"Dependabot security updates must be enabled",
+		a.flag(checkDependabotFixes, StatusFail, enabledValue, disabledValue,
+			"Dependabot security updates must be off — Renovate is the one dependency bot "+
+				"(its vulnerabilityAlerts PRs cover this, indirect Go modules included)",
 			&Change{
 				Check:   checkDependabotFixes,
-				Summary: "dependabot security updates: disabled → enabled",
-				apply:   func(c client) error { return c.writeJSON("PUT", "/automated-security-fixes", nil) },
+				Summary: "dependabot security updates: enabled → disabled",
+				apply:   func(c client) error { return c.deleteResource("/automated-security-fixes") },
 			})
 	}
 

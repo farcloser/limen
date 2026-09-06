@@ -192,7 +192,7 @@ func compliantResponses() map[string]stubResponse {
 	return map[string]stubResponse{
 		"GET repos/test/repo":                                 {Body: compliantRepoJSON},
 		"GET repos/test/repo/vulnerability-alerts":            {Body: ""},
-		"GET repos/test/repo/automated-security-fixes":        {Body: `{"enabled": true}`},
+		"GET repos/test/repo/automated-security-fixes":        {Body: `{"enabled": false}`},
 		"GET repos/test/repo/private-vulnerability-reporting": {Body: `{"enabled": true}`},
 		"GET repos/test/repo/actions/permissions/workflow": {
 			Body: `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`,
@@ -271,6 +271,8 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	  }
 	}`}
 	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
+	// Dependabot's own PRs on: a second dependency bot beside Renovate.
+	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{Body: `[]`}
 	stubGH(t, responses)
 
@@ -279,7 +281,8 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	wantFail := []string{
 		checkMergeMethods, checkSquashDefaults, checkDeleteBranchOnMerge, checkAutoMerge,
 		checkWebCommitSignoff, checkWiki, checkForking, checkSecretScanning,
-		checkPushProtection, checkDependabotAlerts, checkRulesetDefaultBranch, checkRulesetVersionTags,
+		checkPushProtection, checkDependabotAlerts, checkDependabotFixes,
+		checkRulesetDefaultBranch, checkRulesetVersionTags,
 	}
 	for _, check := range wantFail {
 		finding, found := findingByCheck(findings, check)
@@ -337,6 +340,7 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 	responses["GET repos/test/repo"] = stubResponse{Body: strings.Replace(
 		compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1)}
 	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
+	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
 	logPath := stubGH(t, responses)
 
 	_, changes := Audit(testRepo, nil)
@@ -366,6 +370,10 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 
 	if !strings.Contains(calls, "PUT repos/test/repo/vulnerability-alerts") {
 		t.Error("expected Dependabot alerts to be enabled")
+	}
+
+	if !strings.Contains(calls, "DELETE repos/test/repo/automated-security-fixes") {
+		t.Error("expected Dependabot security updates to be disabled (Renovate is the one bot)")
 	}
 }
 
