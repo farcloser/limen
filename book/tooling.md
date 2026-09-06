@@ -222,6 +222,10 @@ afterward if it says it changed your rc. Checksum enforcement and registry polic
 configured **per project**, not globally — the global config exists only to carry the
 scaffolder.
 
+A second, optional bootstrap in the same repository, `limen-install-agent`, sets the
+machine up so a coding agent can commit and push as its own identity — see
+[coding agents as contributors](./agents.md).
+
 ---
 
 ## Scaffolding a new project
