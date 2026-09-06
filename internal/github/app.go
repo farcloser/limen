@@ -24,11 +24,13 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -211,16 +213,17 @@ func probeUpdateApp(orgAPI client) (updateAppState, *Finding) {
 }
 
 // confirmInstallation checks that the App behind appID is installed on the
-// org and folds the answer into the finding. An unreadable installations list
-// downgrades to unverifiable — configured, but the last leg cannot be proven.
+// org with the permissions the workflow needs, and folds the answer into the
+// finding. An unreadable installations list downgrades to unverifiable —
+// configured, but the last leg cannot be proven.
 func confirmInstallation(orgAPI client, appID, configured string) Finding {
-	installed, err := appInstalled(orgAPI, appID)
+	installation, err := findInstallation(orgAPI, appID)
 	if err != nil {
 		return updateAppFinding(StatusUnverifiable,
 			fmt.Sprintf("%s; installation not verifiable: %v", configured, err))
 	}
 
-	if !installed {
+	if installation == nil {
 		return updateAppFinding(
 			StatusAdvisory,
 			fmt.Sprintf(
@@ -231,18 +234,67 @@ func confirmInstallation(orgAPI client, appID, configured string) Finding {
 		)
 	}
 
-	return updateAppFinding(StatusOK, fmt.Sprintf("%s; App id %s installed", configured, appID))
+	if missing := installation.missingPermissions(); missing != "" {
+		return updateAppFinding(
+			StatusAdvisory,
+			fmt.Sprintf("%s; App id %s installed but %s", configured, appID, missing),
+		)
+	}
+
+	return updateAppFinding(
+		StatusOK,
+		fmt.Sprintf("%s; App id %s installed with %s", configured, appID, updateAppPermissionsText),
+	)
 }
 
-// appInstallation is one entry of the org's installations list; the app id
-// is the only field the check needs.
+// updateAppPermissions is every repository permission the checksum-update
+// workflow's commit needs, and therefore what the manifest requests and what
+// the installation audit verifies. contents is the push itself. workflows is
+// the one that is easy to miss: a limen bump converges the baseline, and the
+// baseline includes canonical workflow files — GitHub refuses a commit that
+// touches .github/workflows/ from a token without it ("Resource not
+// accessible by integration"), the checksum never lands, and the bump PR
+// fails on "checksum is required" with the real cause two jobs away.
+//
+//nolint:gochecknoglobals // immutable lookup table.
+var updateAppPermissions = map[string]string{"contents": "write", "workflows": "write"}
+
+// updateAppPermissionsText names the required permissions in findings and
+// remediation text, in a stable order.
+const updateAppPermissionsText = "contents: write and workflows: write"
+
+// appInstallation is one entry of the org's installations list: the app id
+// identifies ours, the permissions map is what the org granted it.
 type appInstallation struct {
-	AppID int64 `json:"app_id"`
+	AppID       int64             `json:"app_id"`
+	Permissions map[string]string `json:"permissions"`
 }
 
-// appInstalled reports whether the org has an installation of the App with
-// the given id.
-func appInstalled(orgAPI client, appID string) (bool, error) {
+// missingPermissions names the required permissions the installation lacks,
+// with the remediation, or returns "" when all are granted. GitHub reports a
+// permission the App never asked for as absent, and one asked for but not
+// yet accepted as absent too — both are fixed the same way, in the App's
+// settings and then on the org's installation.
+func (installation appInstallation) missingPermissions() string {
+	var missing []string
+
+	for _, name := range slices.Sorted(maps.Keys(updateAppPermissions)) {
+		if installation.Permissions[name] != updateAppPermissions[name] {
+			missing = append(missing, name+": "+updateAppPermissions[name])
+		}
+	}
+
+	if len(missing) == 0 {
+		return ""
+	}
+
+	return "its installation lacks " + strings.Join(missing, ", ") +
+		" — grant it under the App's settings (Permissions & events → Repository permissions), then accept the new permissions on the org's installation"
+}
+
+// findInstallation returns the org's installation of the App with the given
+// id, or nil when there is none.
+func findInstallation(orgAPI client, appID string) (*appInstallation, error) {
 	var response struct {
 		Installations []appInstallation `json:"installations"`
 	}
@@ -250,19 +302,19 @@ func appInstalled(orgAPI client, appID string) (bool, error) {
 	outcome := orgAPI.getJSON("/installations", &response)
 	if outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
-			return false, errEndpointNotFound
+			return nil, errEndpointNotFound
 		}
 
-		return false, outcome.err
+		return nil, outcome.err
 	}
 
 	for _, installation := range response.Installations {
 		if strconv.FormatInt(installation.AppID, decimalBase) == appID {
-			return true, nil
+			return &installation, nil
 		}
 	}
 
-	return false, nil
+	return nil, nil //nolint:nilnil // absence is the answer, not an error.
 }
 
 // appConversion is what POST /app-manifests/{code}/conversions returns —
@@ -409,7 +461,7 @@ func manifestFormHandler(org, redirectURL string) http.HandlerFunc {
 		URL:                updateAppHomepage,
 		RedirectURL:        redirectURL,
 		Public:             false,
-		DefaultPermissions: map[string]string{"contents": "write"},
+		DefaultPermissions: updateAppPermissions,
 	}
 
 	return func(writer http.ResponseWriter, _ *http.Request) {
@@ -486,13 +538,25 @@ func awaitInstallation(orgAPI client, conversion appConversion, progress io.Writ
 	deadline := time.Now().Add(installWait)
 
 	for {
-		installed, err := appInstalled(orgAPI, appID)
+		installation, err := findInstallation(orgAPI, appID)
 		if err != nil {
 			return updateAppFinding(StatusUnverifiable,
 				fmt.Sprintf("App id %s registered and credentials stored; installation not verifiable: %v", appID, err))
 		}
 
-		if installed {
+		if installation != nil {
+			if missing := installation.missingPermissions(); missing != "" {
+				return updateAppFinding(
+					StatusAdvisory,
+					fmt.Sprintf(
+						"App %q registered, credentials stored, installed (id %s) but %s",
+						conversion.Slug,
+						appID,
+						missing,
+					),
+				)
+			}
+
 			return updateAppFinding(StatusOK,
 				fmt.Sprintf("App %q registered, credentials stored, installed (id %s)", conversion.Slug, appID))
 		}
