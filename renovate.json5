@@ -9,6 +9,17 @@
   // Supply-chain cooldown: wait before proposing a bump. Doubles as protection
   // against the race where a release tag exists but its assets aren't uploaded yet.
   minimumReleaseAge: "3 days",
+  // Vulnerability-fix PRs from GitHub's Dependabot alerts (the baseline keeps
+  // the alerts on for exactly this; Dependabot's OWN update PRs are off —
+  // Renovate is the one dependency bot). Stated explicitly, not left to the
+  // preset default, because `enabled: true` here is what reaches `// indirect`
+  // Go modules: the gomod manager disables indirect deps, and the alert path
+  // re-enables a dep only when this object says enabled. Fix PRs skip the
+  // cooldown above (a known-vulnerable version is the worse risk) and take
+  // the lowest fixed version, both Renovate defaults for this object.
+  vulnerabilityAlerts: {
+    enabled: true,
+  },
   customManagers: [
     // The go_install tools pinned as github.com/<owner>/<repo>[/<pkg>…]@vX.Y.Z
     // (aqua.yaml, local registry). The aqua preset's generic manager cannot read
@@ -29,6 +40,20 @@
     },
   ],
   packageRules: [
+    // The Go-source analyzers are go.mod `tool` directives (see
+    // book/tooling.md), and Go lists a tool-only module as `// indirect` —
+    // which the gomod manager skips by default. Re-enable exactly these, so
+    // the analyzers keep getting their version-bump PRs after the move out of
+    // aqua.yaml.
+    {
+      matchManagers: ["gomod"],
+      matchDepNames: [
+        "golang.org/x/tools",
+        "golang.org/x/vuln",
+        "github.com/google/go-licenses/v2",
+      ],
+      enabled: true,
+    },
     // lychee tags releases "lychee-vX.Y.Z" (next to "lychee-lib-vX.Y.Z" and
     // "nightly"), and the aqua preset has no manager for that prefix in either
     // pin form: it reads "lychee-v0.24.2" as the version, cannot order it, and

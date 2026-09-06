@@ -176,7 +176,7 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Secret scanning | enabled | ✓ | `PATCH /repos/{o}/{r}` `security_and_analysis` |
 | Secret scanning push protection | enabled | ✓ | same |
 | Dependabot alerts | enabled | ✓ | `PUT /repos/{o}/{r}/vulnerability-alerts` |
-| Dependabot security updates | enabled | ✓ | `PUT /repos/{o}/{r}/automated-security-fixes` |
+| Dependabot security updates | **disabled** (Renovate is the one dependency bot; alerts stay on as its signal, and the seeded renovate.json5 enables `vulnerabilityAlerts` so fix PRs cover indirect Go modules too) | ✓ | `DELETE /repos/{o}/{r}/automated-security-fixes` |
 | Private vulnerability reporting | enabled (public repos) | ✓ | `PUT /repos/{o}/{r}/private-vulnerability-reporting` |
 | Code scanning default setup | **not required** (decided: our SAST posture is gosec + staticcheck via golangci and govulncheck, per-GOOS; CodeQL's marginal catch is taint-flow analysis, which matters for network/parser-heavy services — revisit if we ship one; repos may opt in via the override file) | ✓ when opted in | `PATCH /repos/{o}/{r}/code-scanning/default-setup` |
 

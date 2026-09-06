@@ -14,7 +14,7 @@ export LIMEN_BIN := 'go run ./cmd/limen'
 default:
     @just --list
 
-lint: do::lint::default do::lint::go::default
+lint: do::lint::default do::lint::go::default do::lint::go::deadcode
 fix: do::fix::default do::fix::go::default
 test: do::test::go::default
 

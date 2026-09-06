@@ -163,6 +163,19 @@ func (c client) getJSON(path string, out any) apiOutcome {
 	return outcome
 }
 
+// deleteResource issues DELETE on a repo-relative path and reports the error,
+// if any. A 404 is an error here, as in writeJSON: the caller only deletes
+// what the audit just observed, so "not found" means the endpoint, not the
+// setting, is missing.
+func (c client) deleteResource(path string) error {
+	outcome := c.api("DELETE", path, nil)
+	if outcome.notFound {
+		return fmt.Errorf("gh api DELETE %s: %w", path, errEndpointNotFound)
+	}
+
+	return outcome.err
+}
+
 // writeJSON sends payload (marshaled) to a repo-relative path with the given
 // method and reports the error, if any.
 func (c client) writeJSON(method, path string, payload any) error {
