@@ -11,6 +11,8 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | `.editorconfig` | Present, and **content-pinned**: equals the [canonical baseline](#canonical-editorconfig) byte for byte — no extra sections, no edited values. |
 | `.gitignore` | Present. Seeded from the [canonical file](#gitignore) when absent; an existing one is the project's own. |
 | `.gitattributes` | Present, and **content-pinned**: the [canonical file](#canonical-gitattributes) disabling git line-ending conversion. |
+| `AGENTS.md` | Present, and **content-pinned**: the [working agreement](#canonical-agentsmd) for a coding agent, identical everywhere. |
+| `CLAUDE.md` | Present. Seeded as the one-line `@AGENTS.md` import when absent; an existing one is the project's own. |
 | `README` | Present, as `README.md`. |
 | `Justfile` | Present, carrying the shared-baseline import — the rest of the file is the project’s own. The [`.limen/` modules](#justfile) it mounts are canonical. |
 | `.limen/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--limenlycheetoml). |
@@ -185,6 +187,32 @@ Two deliberate consequences, both inherited from the Go project's identical file
 - **No local additions.** The file is content-pinned: an extra attribute line (an `eol=`
   override, an LFS filter) would reintroduce content transformation between the working
   tree and the object store, which is exactly what the pin removes.
+
+## Canonical AGENTS.md
+
+The working agreement for a coding agent — branches and worktrees, commits, green before
+pushing, when a review is requested, scope and green lights, silence-by-rule, pin-by-digest —
+compressed to the rules that must hold in every repository, each pointing at the book
+chapter that argues it. The doctrine lives in the book; `AGENTS.md` is its enforceable
+summary, and `limen` pins it so the same rules load whichever repository an agent starts
+in — no per-machine setup, no symlink to forget.
+
+Two regimes, deliberately:
+
+- **`AGENTS.md` is content-pinned.** It is the harness-neutral file every coding agent
+  reads (Codex, Copilot, Cursor, and Claude Code through the import below), and the rules
+  in it are the organization's, not a project's: a local addition would make one
+  repository's agreement drift from the rest. Repository-specific notes for an agent have
+  their own home, below.
+- **`CLAUDE.md` is seeded once, then the project's own.** Claude Code reads `CLAUDE.md`,
+  not `AGENTS.md`; the seed is the single line `@AGENTS.md`, which imports the agreement.
+  Everything a project wants to tell an agent about itself — a self-hosting knob, a
+  module it must not reconverge, a testing quirk — goes below that line. `limen` requires
+  the file to exist and never touches its content.
+
+The step-by-step procedure (the exact commands for a worktree, a signed commit, a pull
+request and its review request) is a skill, `skills/contribute` in the limen repository,
+for harnesses that load skills; `AGENTS.md` carries the rules without it.
 
 ## Justfile
 
