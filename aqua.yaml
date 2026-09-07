@@ -34,7 +34,7 @@ packages:
   - name: github.com/farcloser/godolint/cmd/godolint@v0.1.0
     registry: local
   # --- farcloser tools (local registry; standard once registered upstream) ---
-  - name: farcloser/limen@v0.1.1 # renovate: depName=farcloser/limen
+  - name: farcloser/limen@v0.1.2 # renovate: depName=farcloser/limen
     registry: local
   # sha256sum and base64 under their bare names; the registry entry says how
   # it is verified.
