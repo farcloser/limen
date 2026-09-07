@@ -250,6 +250,12 @@ desired — and applies only on consent (interactively, or `-yes` for unattended
 use). Repairs are minimal writes; the advisory class is never touched: nothing
 that could lock a person out or break a credential is ever changed by a tool.
 After applying, it re-audits and reports the **post-state**, not the intent.
+A change that applied without error and still fails on the re-audit is a write
+GitHub accepted and ignored — a feature it gates by plan on that repository,
+such as auto-merge on a private repository in a Free organization — and the
+finding says so, with the ways out (visibility, plan, or a declared exception),
+rather than reading like a fix that never ran. It stays a failure: the setting
+really is non-compliant.
 
 ## Authentication
 
