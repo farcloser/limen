@@ -1,9 +1,11 @@
 package github
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"maps"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -984,7 +986,17 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 	// project's CI shape — so a reconcile preserves them, exactly like the
 	// standard-registry ref inside the otherwise-pinned aqua sections. An
 	// empty set falls back to the canonical defaults inside the builder.
-	payload := target.build(detail.statusCheckContexts())
+	// One exception, the migration: contexts that are the canonical matrix
+	// legs by name, on a repository whose ci.yaml carries the gate job, are
+	// moved onto the gate — see legacyMatrixContexts.
+	contexts := detail.statusCheckContexts()
+
+	migrate := target.check == checkRulesetDefaultBranch && legacyMatrixContexts(contexts) && a.workflowHasGate()
+	if migrate {
+		contexts = defaultRequiredChecks()
+	}
+
+	payload := target.build(contexts)
 	reconcile := &Change{
 		Check:   target.check,
 		Summary: "reconcile ruleset " + target.name + " to the canonical definition",
@@ -1005,8 +1017,66 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 		return
 	}
 
+	if migrate {
+		a.flag(target.check, StatusFail,
+			"required checks: "+strings.Join(detail.statusCheckContexts(), listSeparator),
+			strings.Join(defaultRequiredChecks(), listSeparator),
+			"ruleset "+target.name+" requires the matrix legs by name while ci.yaml carries the gate job — "+
+				"a leg the matrix no longer runs is a check nothing reports, and the pull request waits on it forever",
+			reconcile)
+
+		return
+	}
+
 	a.flag(target.check, StatusOK, "", "", "ruleset "+target.name+" is active with the required rules", nil)
 }
+
+// legacyMatrixContexts reports whether every required context is a canonical
+// matrix leg by name — "verify (<runner>)", the shape the ruleset carried
+// before the gate job existed. Only that exact shape is migrated: a project's
+// own check names, or a mix, are the project's and stay preserved.
+func legacyMatrixContexts(contexts []string) bool {
+	if len(contexts) == 0 {
+		return false
+	}
+
+	for _, context := range contexts {
+		if !strings.HasPrefix(context, "verify (") {
+			return false
+		}
+	}
+
+	return true
+}
+
+// workflowHasGate reports whether the repository's ci.yaml on the default
+// branch defines the gate job — the single aggregate context the canonical
+// ruleset requires. Read through the contents API: the audit has no working
+// tree, and the branch GitHub evaluates the ruleset against is the one that
+// matters. Anything unreadable counts as no gate, which keeps the legacy
+// contexts preserved rather than moving a ruleset onto a job that may not
+// exist.
+func (a *auditor) workflowHasGate() bool {
+	var file struct {
+		Content string `json:"content"`
+	}
+
+	outcome := a.client.getJSON("/contents/.github/workflows/ci.yaml", &file)
+	if outcome.err != nil || outcome.notFound {
+		return false
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(file.Content, "\n", ""))
+	if err != nil {
+		return false
+	}
+
+	return gateJobRE.Match(decoded)
+}
+
+// gateJobRE matches the gate job's key at the jobs level of the canonical
+// ci.yaml (two-space indent, the job name, nothing else on the line).
+var gateJobRE = regexp.MustCompile(`(?m)^  gate:\s*$`)
 
 // rulesetProblem is one departure of a ruleset's rule content from the
 // canonical definition, phrased for the finding it becomes.
@@ -1159,8 +1229,10 @@ func ruleOf(kind string) map[string]any {
 // Migration note: ci.yaml is seeded once and is the project's own thereafter,
 // so a repository created before the gate job existed does not have it. The
 // reconcile path preserves a ruleset's existing contexts, so those repositories
-// keep working — but their ci.yaml needs the gate job before their ruleset can
-// be moved onto this name.
+// keep working. Once their ci.yaml carries the gate job, a ruleset still naming
+// the matrix legs is drift: auditRuleset moves it onto this name (see
+// legacyMatrixContexts) — otherwise a leg the matrix drops or never had waits
+// forever as "Expected", exactly the failure the gate was introduced to end.
 func defaultRequiredChecks() []string {
 	return []string{"gate"}
 }
