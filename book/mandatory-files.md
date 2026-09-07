@@ -323,15 +323,19 @@ runs the discovering step right after registering the App, so a fresh
 repository is complete from its first commit. The edit is exactly one array;
 the rest of the file stays the project's own.
 
-### The `gotools` rule — `go.mod` tool directives
+### The `gotools` rule — `tools/go.mod` tool directives
 
 A repository that carries a `go.mod` must declare the Go-source analyzers the shared recipes
-run — `deadcode`, `govulncheck`, `go-licenses` — as `tool` directives, so each is compiled by
-the module's own pinned toolchain. The reasoning is in
-[tooling](./tooling.md#go-source-analyzers-are-gomod-tools). `limen fix` adds a missing one
-with `go get -tool <pkg>@latest` followed by `go mod tidy` (the resolved version is then
-pinned, and Renovate bumps it); when the pinned `go` or the network is unavailable, the rule
-ends as an advisory carrying that exact command. Repositories without a `go.mod` are silent.
+run — `deadcode`, `govulncheck`, `go-licenses` — as `tool` directives in `tools/go.mod`, a
+module of its own, so each is compiled by the repository's pinned toolchain without the
+analyzers' dependency graph entering the project's `go.mod` and every consumer's. A `tool`
+directive in the project's own `go.mod` fails the rule. The reasoning is in
+[tooling](./tooling.md#go-source-analyzers-are-gomod-tools). `limen fix` creates
+`tools/go.mod` (module path `<module>/tools`, the root's `go` directive), adds a missing
+directive with `go -C tools get -tool <pkg>@latest` followed by `go -C tools mod tidy` (the
+resolved version is then pinned, and Renovate bumps it), and strips any directive out of the
+root `go.mod`, tidying it; when the pinned `go` or the network is unavailable, the rule ends as
+an advisory carrying the exact command. Repositories without a `go.mod` are silent.
 
 ## Link checking — `.limen/lychee.toml`
 
