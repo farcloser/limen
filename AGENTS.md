@@ -50,6 +50,19 @@ chapter; the procedure is limen's `skills/contribute`.
 - **Doctrine can lose the argument, never silently.** A fix that cuts against the book is
   named as such and argued; it is decided, not discovered.
 
+## Communication
+
+- **Every pull request, issue, or workflow run you mention gets its full URL**, never a
+  bare `#n`. The human reads from a terminal and clicks; a number is a lookup.
+- **No hypotheses in a report.** "Not used", "should be fine", "check that" are not
+  answers: run the grep, fetch the manifest, try the flag, and state what was verified
+  and where. What could not be verified is said to be unverified.
+- **A yes/no question gets a yes/no answer.** Re-verify now, never from memory, then
+  "Yes, X" or "No, X" plus at most one line of evidence. No history of how the statement
+  came about.
+- **Lead with the answer.** Short sentences; no preamble; no narration of your own
+  reasoning.
+
 ## Code
 
 - **Pinned means by digest.** Every image, action, and tool — in code, examples, and
