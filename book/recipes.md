@@ -37,9 +37,10 @@ Recipes do not run in your shell's environment; they run in one the `Justfile` c
 
 The consequence, and the point: a recipe behaves identically on every machine that ran
 [machine setup](./tooling.md#machine-setup-limen-install-one-time-per-machine), and
-anything *not* pinned is unusable from a recipe by construction. (This is also why
-language toolchains that aqua cannot pin — rustup-managed cargo, for instance — need an
-explicit, documented decision before their recipes can work.)
+anything *not* pinned is unusable from a recipe by construction. (This is also why a
+language toolchain that lives outside aqua — a rustup-managed cargo, for instance — needs
+an explicit, documented decision before its recipes can work; the Rust one is in the
+[per-language rules](./per-language.md#rust--cargo-is-pinned-through-rustup-never-ambient).)
 
 ## Conventions every shared recipe follows
 
