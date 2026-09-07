@@ -384,7 +384,7 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 	a.flagToggle(toggle{
 		check:       checkAutoMerge,
 		compliant:   settings.AllowAutoMerge,
-		failMessage: "auto-merge must be allowed (Renovate merges green PRs)",
+		failMessage: autoMergeFailMessage(settings),
 		okMessage:   "auto-merge is allowed",
 		fields:      map[string]any{"allow_auto_merge": true},
 	})

@@ -219,21 +219,34 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	}
 
 	failed := 0
+	applied := make([]string, 0, len(changes))
 
 	for _, planned := range changes {
 		if applyErr := planned.Apply(); applyErr != nil {
 			failed++
 
 			_, _ = fmt.Fprintf(stderr, "limen: %s: %v\n", planned.Check, applyErr)
+
+			continue
 		}
+
+		applied = append(applied, planned.Check)
 	}
 
 	if failed > 0 {
 		_, _ = fmt.Fprintf(stderr, "limen: %d change(s) failed to apply\n", failed)
 	}
 
-	// Re-audit: the post-state, not the intent, is what gets reported.
+	// Re-audit: the post-state, not the intent, is what gets reported. A
+	// check whose change applied without error and still fails is a write
+	// GitHub accepted and ignored — a feature it gates by plan on this target
+	// — and is reported as that, not as a fix that quietly did nothing. Only
+	// when every change applied: the consolidated PATCH rides on one change
+	// and the rest are no-ops, so a failed PATCH is not several ignored writes.
 	final, _ := audit(overrides)
+	if failed == 0 {
+		github.MarkIneffective(final, applied)
+	}
 
 	return reportGithubOutcome(stdout, stderr, label, final, printer)
 }
