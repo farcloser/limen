@@ -75,26 +75,33 @@ the tool; the Go that built it is decided by run order on the machine. CI never 
 problem (every runner builds fresh with its own pin) — it surfaces only on a laptop that
 works on two repos with different Go pins, as an analyzer refusing sources it should read.
 
-The fix is Go's own: the analyzers are `tool` directives in `go.mod`. `go tool <name>` builds
-the tool from the module's pinned requirement with the module's pinned toolchain, cached per
-toolchain, so the skew is impossible by construction — and the pin lives in the one file that
-already governs the module. The shared recipes build each analyzer natively once
-(`build/tools/`) and run that binary per platform, because `go tool` itself honours
-`GOOS`/`GOARCH` and would cross-compile the analyzer. Renovate bumps them through its `gomod`
-manager (the shared Renovate preset re-enables these modules, which Go lists as
-`// indirect`).
+The fix is Go's own: the analyzers are `tool` directives, built from a pinned requirement by
+the module's own pinned toolchain, cached per toolchain, so the skew is impossible by
+construction. They live in **`tools/go.mod`, a module of their own** (`<module>/tools`), not
+in the project's `go.mod`: a `tool` directive drags the analyzer's whole dependency graph into
+the module that declares it as `// indirect` requirements — twenty modules and a hundred and
+fifty `go.sum` lines for the three analyzers — and everything a library's `go.mod` requires
+is inherited by every consumer's module graph, `go.sum` and dependency scanners. A
+zero-dependency library must stay one. The nested module keeps the pin next to the code, under
+the same toolchain and GOSUMDB, and Renovate's `gomod` manager finds nested `go.mod` files on
+its own (the shared preset re-enables these modules, which Go lists as `// indirect`). The
+shared recipes build each analyzer natively once (`go -C tools build`, into `build/tools/`) and
+run that binary per platform, because `go tool` itself honours `GOOS`/`GOARCH` and would
+cross-compile the analyzer.
 
-The doctrine is enforced from both sides: the `gotools` rule requires the directives in every
-`go.mod` (`limen fix` adds them with `go get -tool … && go mod tidy`), and the `aqua` rule
-retires the old `go_install` pins (`limen fix` removes them). What stays in aqua is every tool
-that never loads Go source — `git-validation`, `godolint`, `dot` — including the ones non-Go
-repositories rely on.
+The doctrine is enforced from both sides: the `gotools` rule requires `tools/go.mod` with the
+directives in every Go repository and rejects a `tool` directive in the project's `go.mod`
+(`limen fix` creates the module, adds the directives with `go -C tools get -tool … && go -C
+tools mod tidy`, and moves any directive out of the root), and the `aqua` rule retires the old
+`go_install` pins (`limen fix` removes them). What stays in aqua is every tool that never loads
+Go source — `git-validation`, `godolint`, `dot` — including the ones non-Go repositories rely
+on.
 
 Adding or bumping one by hand:
 
 ```bash
-go get -tool golang.org/x/tools/cmd/deadcode@<version>   # add, or move the pin
-go mod tidy
+go -C tools get -tool golang.org/x/tools/cmd/deadcode@<version>   # add, or move the pin
+go -C tools mod tidy
 ```
 
 ## Tools without upstream binaries: the sourcing ladder

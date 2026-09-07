@@ -36,9 +36,10 @@ code: (_banner "fix go" "go") (_per-platform "golangci-lint run --fix")
         golangci-lint fmt
     done
 
-# Tidy go.mod/go.sum.
+# Tidy go.mod/go.sum, for the module and for tools/ (the analyzers' module).
 mod: (_banner "fix go" "mod")
     go mod tidy
+    go -C tools mod tidy
 
 # Update every dependency to its latest version, then tidy.
 up: (_banner "fix go" "up") && mod
