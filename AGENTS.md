@@ -73,3 +73,7 @@ chapter; the procedure is limen's `skills/contribute`.
   bare `#nosec`, or a bare `//nolint`; `just do lint go` rejects them. See the book's
   [per-language rules](https://github.com/farcloser/limen/blob/main/book/per-language.md).
 - **Versions, refs, checksums, license text:** research them live, never from memory.
+- **A comment names a trap, not a story.** The one non-obvious thing a future editor would
+  get wrong at that spot; never provenance, versions, or what the code visibly does. The
+  reasoning goes in the commit message. See the book's
+  [generic principles](https://github.com/farcloser/limen/blob/main/book/index.md#generic-principles).
