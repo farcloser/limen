@@ -13,21 +13,12 @@ import 'lib.just'
 default: code mod
 
 # golangci-lint auto-fixes, once per supported platform (see _per-goos in
-# lib.just: platform-specific files are only analyzed for the GOOS that
-# builds them). The formatter is build-graph-independent and runs last, so the
-# fixes' edits end up formatted — but it runs to CONVERGENCE, not once.
-#
-# `golangci-lint fmt` applies every enabled formatter in a single pass, and the
-# set is not confluent: one formatter's output can be work for another (gofumpt
-# wanting a blank line that golines' rewrite exposed, say). One pass can
-# therefore leave a tree that `fmt --diff` still rejects — so `just fix` would
-# report success and `just lint` immediately fail, which is the worst possible
-# pairing. Observed on protoc-gen-go output, which needs exactly two passes.
-#
-# Bounded, because non-convergence has two causes and only one is benign: a
-# formatter set that merely needs another pass settles in two or three, while
-# two formatters that undo each other never settle. Loop for the first, fail
-# loudly for the second instead of hanging CI forever.
+# lib.just). The formatter runs LAST and to CONVERGENCE: `golangci-lint fmt`
+# applies every formatter in one pass and the set is not confluent (one
+# formatter's output can be another's work), so a single pass can leave a tree
+# `fmt --diff` still rejects — `just fix` green, `just lint` red. Bounded,
+# because two formatters undoing each other never settle: loop for the benign
+# case, fail loudly for the other.
 code: (_banner "fix go" "go") (_per-goos "golangci-lint run --fix")
     #!/usr/bin/env bash
     set -euo pipefail

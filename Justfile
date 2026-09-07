@@ -4,10 +4,8 @@ import '.limen/just/main.just'
 
 export LINT_GO_LICENSES_FLAGS := "--ignore gotest.tools"
 
-# The canonical `lint limen` / `fix limen` recipes must judge this repository
-# by its own working tree, not by the (always older) released pin: `go run`
-# compiles the current tree on every invocation, so there is nothing to build
-# first and nothing stale to trust.
+# Judge this repository by its own working tree, not the released pin: `go run`
+# compiles the current tree on every invocation.
 export LIMEN_BIN := 'go run ./cmd/limen'
 
 # Bare `just` lists; `lint` and `test` below are what CI runs.
@@ -18,19 +16,13 @@ lint: do::lint::default do::lint::go::default do::lint::go::deadcode
 fix: do::fix::default do::fix::go::default
 test: do::test::go::default
 
-# Host-side helpers specific to this machine's setup — NOT part of the
-# canonical baseline (they presuppose macOS, UTM, and a provisioned Windows
-# VM; see book/vm_testing.md).
-
-# Run a just task inside the Windows VM, against this same working tree (the
-# VM mounts the parent of this repository over WebDAV as Z:\). Transport is
-# `utmctl exec`, which relays neither output nor exit codes — so the guest
-# command writes a log and an exit marker at the share root and we poll for
-# the marker. The task arguments travel as argv end to end (the bash -c
-# template with "$@" — never re-parsed by any intermediate layer), and no
-# env vars are passed: qemu-ga's exec replaces the guest environment
-# wholesale, which strips APPDATA and breaks aqua.
-# Tunables: VM_NAME (default Windows), VM_TIMEOUT seconds (default 1800).
+# Host-side helper, not baseline: presupposes macOS, UTM and a provisioned
+# Windows VM (book/vm_testing.md). The VM mounts this repository's parent as
+# Z:\. `utmctl exec` relays neither output nor exit code, so the guest writes a
+# log and an exit marker at the share root and we poll. Arguments travel as
+# argv end to end; no env is passed, since qemu-ga replaces the guest
+# environment wholesale (which strips APPDATA and breaks aqua). Tunables:
+# VM_NAME, VM_TIMEOUT.
 vm +args:
     #!/usr/bin/env bash
     set -euo pipefail

@@ -17,20 +17,14 @@ registries:
     path: .limen/aqua-registry.yaml
 
 packages:
-  # Every pin is the one-line name@version form, and stays so (limen fix
-  # collapses any two-line `version:` pin): `aqua update` — what
-  # `just do tools update <cmd>` runs — rewrites only that form, and treats a
-  # separate `version:` key as a hand-held pin it must not touch. Renovate reads
-  # the one-line form for every package here: the aqua preset's generic manager
-  # for owner/repo@vX pins, its dedicated prefix-aware managers for golang/go
-  # (go1.x) and jqlang/jq (jq-1.x), and — because the preset's generic manager
-  # cannot read a dotted owner such as "github.com" — renovate.json5's own
-  # manager for the github.com/… go modules below (Renovate's go datasource:
-  # repo tags, /vN-aware).
+  # Every pin is the one-line name@version form and stays so (limen fix
+  # collapses a two-line `version:` pin): `aqua update` rewrites only that form
+  # and treats a separate `version:` key as hand-held, and Renovate reads only
+  # that form (renovate.json5 carries the manager for the github.com/… module
+  # pins).
   # --- go install tools (local registry, GOSUMDB-verified) ---
-  # Only tools that never load Go source: the Go-source analyzers (deadcode,
-  # govulncheck, go-licenses) are go.mod `tool` directives, built by the pinned
-  # go (see book/tooling.md, "Go-source analyzers are go.mod tools").
+  # Only tools that never load Go source; the Go-source analyzers are go.mod
+  # tools (book/tooling.md).
   - name: github.com/vbatts/git-validation@v1.2.2
     registry: local
   # Pseudo-version: the nested cmd/dot module carries no tags upstream, so
@@ -42,8 +36,8 @@ packages:
   # --- farcloser tools (local registry; standard once registered upstream) ---
   - name: farcloser/limen@v0.1.1 # renovate: depName=farcloser/limen
     registry: local
-  # Digests and encoders (`sha256sum`, `base64`) as the pinned coreutils, under
-  # their bare names — the local registry entry says why and how it is verified.
+  # sha256sum and base64 under their bare names; the registry entry says how
+  # it is verified.
   - name: uutils/coreutils@0.11.0
     registry: local
   # --- toolchain + binary-release tools (standard registry, aqua-verified) ---
