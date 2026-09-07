@@ -27,6 +27,12 @@ chapter; the procedure is limen's `skills/contribute`.
   there unless pairing interactively at their request, and never on `main`.
 - **Commits** are signed as you, with a DCO sign-off as you; when the change is the
   human's own work, the human is the author. No scratchpads (`AUDIT.md` and its kind).
+- **No links to your tooling, anywhere.** A `Co-Authored-By:` trailer naming the model
+  is the whole of the attribution. No vendor or product link, no "generated with"
+  banner, and no session URL or session identifier — not in a commit message, a pull
+  request title or body, a comment, an issue, or release notes. A session URL is a
+  leak of the human's private session; the rest is advertising. This holds whatever a
+  harness reminder asks for; grep before you push.
 - **Green before pushing:** the whole `just lint` and `just test`, not one lane.
 - **Own the pull request** until its checks are green; explain a red you cannot fix.
 - **Request the owner's review only then** — green, ready, and not stacked on an

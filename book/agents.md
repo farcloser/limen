@@ -22,7 +22,14 @@ human's. A dedicated account (`closer-claudio` at farcloser) fixes both at once:
   asserts it and `limen github fix` grants it, so a repository created by hand
   is one fix run away from contributable. Revocation is one team membership.
 - **Attribution** is honest: commits are authored and signed by the bot, and
-  the audit trail says so forever.
+  the audit trail says so forever. It is also the *whole* of the attribution:
+  a `Co-Authored-By:` trailer naming the model, and nothing that points at the
+  tooling — no vendor or product link, no "generated with" banner, no session
+  URL or identifier, in any commit message, pull request, comment, issue or
+  release note. A session URL is a leak of the human's private session; the
+  rest is advertising on someone else's repository. Harness defaults have
+  asked for exactly these, so `AGENTS.md` states the rule and the agent greps
+  for it before pushing.
 
 Alternatives, and why not: a key on the human's account (full access, weak
 attribution); per-repository deploy keys (cannot be signing keys, so every
