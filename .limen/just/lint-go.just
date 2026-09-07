@@ -10,7 +10,7 @@ set quiet
 # Shared private _banner recipe (see lib.just).
 import 'lib.just'
 
-default: code mod vuln licenses
+default: code vet mod vuln licenses
 
 # golangci-lint, once per supported platform (see _per-goos in lib.just:
 # platform-specific files are only analyzed for the GOOS that builds them).
@@ -67,6 +67,22 @@ _golangci-toolchain-check:
         echo "(just do tools update golangci-lint) BEFORE bumping golang/go." >&2
         exit 1
     fi
+
+# The two `go vet` analyzers golangci-lint cannot run: its package loader never
+# hands analyzers a package's non-Go files, so asmdecl (assembly against the Go
+# declarations it implements) and buildtag (constraints in non-Go files) report
+# nothing through it whatever the govet configuration says — even
+# `enable-all`. Broken amd64 assembly passed `lint go` on the amd64 CI legs
+# for exactly that reason. Scoped to those two on purpose: `go vet` reads
+# neither .golangci.yml nor //nolint, so any analyzer that overlaps with
+# golangci's govet would re-report findings a project deliberately silenced,
+# and the same exception would then have to be written twice. Every
+# supported GOOS/GOARCH pair (see _per-platform in lib.just: assembly is
+# arch-suffixed, so a per-GOOS run on an arm64 host never loads the amd64
+# file); vet type-checks without an assembler or C toolchain, so each leg is
+# a few seconds. Note `go test` is not a backstop here: the vet subset it runs
+# excludes both analyzers.
+vet: (_banner "lint go" "vet") (_per-platform "go vet -asmdecl -buildtag ./...")
 
 # go.mod/go.sum tidiness — fails printing the diff; `just do fix go mod` repairs.
 mod: (_banner "lint go" "mod")

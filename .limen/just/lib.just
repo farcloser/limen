@@ -51,3 +51,30 @@ _per-goos +cmd:
             CGO_ENABLED=0 GOOS="$goos" {{ cmd }}
         done
     fi
+
+# Run CMD once per supported GOOS/GOARCH pair (the list below mirrors the
+# canonical checksum.supported_envs in aqua.yaml — extend them together). The
+# finer sibling of _per-goos, for the few tools whose input is selected by
+# architecture as well as OS: assembly files carry a GOARCH suffix, so
+# compress_amd64.s is not in the package at all on an arm64 host and no
+# per-GOOS leg can ever see it. Same cgo rule as _per-goos — a cgo project gets
+# one native run — and the native pair runs first for the same reason.
+_per-platform +cmd:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{ go_cgo }}" = "1" ]; then
+        echo "CGO_ENABLED=1: cross-platform runs are impossible (foreign-platform package" >&2
+        echo "loading needs that platform's C toolchain) — native platform only." >&2
+        {{ cmd }}
+    else
+        platforms=(darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64)
+        native="$(go env GOHOSTOS)/$(go env GOHOSTARCH)"
+        ordered=("$native")
+        for platform in "${platforms[@]}"; do
+            [ "$platform" = "$native" ] || ordered+=("$platform")
+        done
+        for platform in "${ordered[@]}"; do
+            echo "→ GOOS=${platform%/*} GOARCH=${platform#*/}"
+            CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}" {{ cmd }}
+        done
+    fi
