@@ -1,6 +1,7 @@
 package rules //nolint:testpackage // white-box: exercises the manifest merge directly.
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -21,6 +22,24 @@ func TestCanonicalAquaHasNoTwoLinePins(t *testing.T) {
 	}
 }
 
+// canonicalPin returns a canonical package's one-line pin exactly as the
+// embedded aqua.yaml spells it, and its version. The fixtures below are
+// built from these rather than from copied literals: a copied version is a
+// second pin of the same tool that Renovate does not know about, and every
+// bump of the canonical manifest then broke these tests for no reason.
+func canonicalPin(t *testing.T, name string) (line, version string) {
+	t.Helper()
+
+	re := regexp.MustCompile(`(?m)^  - name: ` + regexp.QuoteMeta(name) + `@(\S+)\n`)
+
+	m := re.FindStringSubmatch(limen.CanonicalAquaYAML)
+	if m == nil {
+		t.Fatalf("the canonical aqua.yaml carries no one-line pin for %s", name)
+	}
+
+	return m[0], m[1]
+}
+
 // TestAquaTwoLinePinsCollapsed: a project pinning packages on a separate
 // version: line fails check, and fix collapses exactly those entries — the
 // project's version kept, quotes kept, continuation lines untouched, the
@@ -29,24 +48,28 @@ func TestCanonicalAquaHasNoTwoLinePins(t *testing.T) {
 func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	t.Parallel()
 
-	// Canonical, except four two-line pins: one with the renovate hook, one
-	// quoted, one with a registry: continuation line AFTER the version, one
-	// with a project's own comment on the version line.
+	// Canonical, except four two-line pins: one with the renovate hook and a
+	// project's own (older) version, one quoted, one with a registry:
+	// continuation line AFTER the version, one with a project's own comment
+	// on the version line.
+	goLine, _ := canonicalPin(t, "golang/go")
+	jqLine, jqVersion := canonicalPin(t, "jqlang/jq")
+	gvLine, gvVersion := canonicalPin(t, "github.com/vbatts/git-validation")
+	cliLine, cliVersion := canonicalPin(t, "cli/cli")
+
+	const heldBackGo = "go1.0.0" // any version but the canonical: the project's, kept as is
+
 	manifest := limen.CanonicalAquaYAML
-	manifest = strings.Replace(manifest,
-		"  - name: golang/go@go1.26.6\n",
-		"  - name: golang/go\n    version: go1.25.9 # renovate: depName=golang/go\n", 1)
-	manifest = strings.Replace(manifest,
-		"  - name: jqlang/jq@jq-1.8.2\n",
-		"  - name: \"jqlang/jq\"\n    version: \"jq-1.8.2\"\n", 1)
-	manifest = strings.Replace(manifest,
-		"  - name: github.com/vbatts/git-validation@v1.2.2\n    registry: local\n",
+	manifest = strings.Replace(manifest, goLine,
+		"  - name: golang/go\n    version: "+heldBackGo+" # renovate: depName=golang/go\n", 1)
+	manifest = strings.Replace(manifest, jqLine,
+		"  - name: \"jqlang/jq\"\n    version: \""+jqVersion+"\"\n", 1)
+	manifest = strings.Replace(manifest, gvLine+"    registry: local\n",
 		"  - name: github.com/vbatts/git-validation\n"+
-			"    version: v1.2.2 # renovate: depName=_go/github.com/vbatts/git-validation\n"+
+			"    version: "+gvVersion+" # renovate: depName=_go/github.com/vbatts/git-validation\n"+
 			"    registry: local\n", 1)
-	manifest = strings.Replace(manifest,
-		"  - name: cli/cli@v2.96.0\n",
-		"  - name: cli/cli\n    version: v2.96.0 # held back on purpose\n", 1)
+	manifest = strings.Replace(manifest, cliLine,
+		"  - name: cli/cli\n    version: "+cliVersion+" # held back on purpose\n", 1)
 
 	if strings.Count(manifest, "\n    version:") != 4 {
 		t.Fatal("the fixture did not diverge from the canonical as intended — update the replacements")
@@ -70,10 +93,10 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"  - name: golang/go@go1.25.9\n",
-		"  - name: \"jqlang/jq@jq-1.8.2\"\n",
-		"  - name: github.com/vbatts/git-validation@v1.2.2\n    registry: local\n",
-		"  - name: cli/cli@v2.96.0 # held back on purpose\n",
+		"  - name: golang/go@" + heldBackGo + "\n",
+		"  - name: \"jqlang/jq@" + jqVersion + "\"\n",
+		gvLine + "    registry: local\n",
+		"  - name: cli/cli@" + cliVersion + " # held back on purpose\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("merged manifest lacks:\n%s\n--- got:\n%s", want, out)
@@ -114,11 +137,13 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	t.Parallel()
 
+	goLine, goVersion := canonicalPin(t, "golang/go")
+	cliLine, _ := canonicalPin(t, "cli/cli")
+
 	manifest := limen.CanonicalAquaYAML
-	manifest = strings.Replace(manifest,
-		"  - name: golang/go@go1.26.6\n",
-		"  - name: golang/go\n    version: go1.26.6 # renovate: depName=golang/go\n", 1)
-	manifest = strings.Replace(manifest, "  - name: cli/cli@v2.96.0\n", "", 1) // now missing
+	manifest = strings.Replace(manifest, goLine,
+		"  - name: golang/go\n    version: "+goVersion+" # renovate: depName=golang/go\n", 1)
+	manifest = strings.Replace(manifest, cliLine, "", 1) // now missing
 
 	parsed, ok := parseAquaManifest(manifest)
 	if !ok {
@@ -130,8 +155,8 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 		t.Fatalf("expected both a missing-package add and a collapse, got %v", summary)
 	}
 
-	if !strings.Contains(out, "  - name: golang/go@go1.26.6\n") ||
-		!strings.Contains(out, "  - name: cli/cli@v2.96.0\n") || strings.Contains(out, "\n    version:") {
+	if !strings.Contains(out, goLine) ||
+		!strings.Contains(out, cliLine) || strings.Contains(out, "\n    version:") {
 		t.Errorf("merged manifest:\n%s", out)
 	}
 
