@@ -20,6 +20,11 @@
   vulnerabilityAlerts: {
     enabled: true,
   },
+  // A Go module bump rewrites go.mod; without this, go.sum keeps the old
+  // module's lines and `just do lint go mod` (go mod tidy, diffed) fails
+  // every gomod PR. Renovate then runs `go mod tidy` after the bump, as the
+  // recipe would.
+  postUpdateOptions: ["gomodTidy"],
   customManagers: [
     // The go_install tools pinned as github.com/<owner>/<repo>[/<pkg>…]@vX.Y.Z
     // (aqua.yaml, local registry). The aqua preset's generic manager cannot read
