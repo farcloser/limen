@@ -14,13 +14,14 @@ human's request, and never commit on `main`.
 
 ```
 git fetch --prune origin main:main
-git worktree add -b claudio/<topic> ../<repo>-<topic> main   # or the harness's worktree tool
-cd ../<repo>-<topic>
+git worktree add -b claudio/$(date +%Y%m%d)-<topic> ../<repo>-<date>-<topic> main   # or the harness's worktree tool
+cd ../<repo>-<date>-<topic>
 aqua policy allow aqua-policy.yaml && aqua install --only-link
 ```
 
 One topic per branch and per pull request. The bot's login is the branch
-prefix.
+prefix, the day it was cut comes next (`claudio/20260906-<topic>`), so a
+branch listing reads in date order and a stale one shows its age.
 
 ## 2. Commit
 
@@ -53,9 +54,9 @@ trailer eaten by a shell variable — in your tree, not in CI.
 ## 4. Push, open the pull request, own it
 
 ```
-git c push origin claudio/<topic>             # `git c` drops the sandbox's GIT_SSH_COMMAND
-gh pr create --base main --head claudio/<topic> --title "…" --body "…"
-gh pr checks claudio/<topic> --watch
+git c push origin claudio/<date>-<topic>             # `git c` drops the sandbox's GIT_SSH_COMMAND
+gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
+gh pr checks claudio/<date>-<topic> --watch
 ```
 
 No `-u` on the push — recording the upstream writes `.git/config`, which the
@@ -78,14 +79,14 @@ when next checking open pull requests.
 
 ```
 owner="$(gh api "orgs/<org>/members?role=admin" -q '.[0].login')"   # a CODEOWNERS entry, when the repo has one
-gh pr edit claudio/<topic> --add-reviewer "$owner"
+gh pr edit claudio/<date>-<topic> --add-reviewer "$owner"
 ```
 
 ## 5. After a merge
 
 ```
 git fetch --prune origin main:main
-git worktree remove ../<repo>-<topic> && git branch -d claudio/<topic>
+git worktree remove ../<repo>-<date>-<topic> && git branch -d claudio/<date>-<topic>
 ```
 
 Rebase every open branch of yours onto the fresh `main`, so the human and you
