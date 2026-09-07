@@ -97,8 +97,12 @@ rule's phrasing, and silently skipping unqueryable settings would fake complianc
 ### Fix safety model
 
 - Plan-then-apply, always; `--yes` for unattended use.
-- **Never auto-fix people or credentials**: collaborators, team grants, deploy keys,
-  webhooks, app installations are advisory-only, with the exact `gh` command printed.
+- **Never auto-fix people or credentials**: collaborators, deploy keys, webhooks, app
+  installations are advisory-only, with the exact `gh` command printed. Team grants
+  likewise, with one carve-out: the canonical `agents` team's write grant is baseline
+  apparatus, not a person — `fix` adds it, and only adds it (never a removal, never a
+  human; the team and its members stay human work). Decided 2026-09-06, after every
+  hand-created repository failed the bot's first push.
 - Fixes are minimal PATCHes (only the non-compliant fields), idempotent, and re-checked
   after application (same pattern as `remediateAqua`'s post-check).
 - Drift direction matters: settings drift *back* when humans click. The companion is a
@@ -291,7 +295,7 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 | Org webhooks | HTTPS + secret + named | `GET /orgs/{o}/hooks` |
 | Org-level secrets | named inventory | `GET /orgs/{o}/actions/secrets` |
 | Fine-grained PAT approvals | inventory (API is partial; mark unverifiable where gated) | `/orgs/{o}/personal-access-token*` |
-| Teams & grants | inventory only in v1 of org support (peribolos territory; management deliberately out of scope while the org is one person) | `GET /orgs/{o}/teams` |
+| Teams & grants | inventory (peribolos territory; management out of scope while the org is one person) — plus the one asserted grant: the `agents` team exists, has members, and holds write on every non-archived repository; fix grants the missing ones | `GET /orgs/{o}/teams`, `/teams/agents/repos`, `/teams/agents/members`, `PUT /orgs/{o}/teams/agents/repos/{o}/{r}` |
 | Custom properties schema | reserved for future repo classification (safe-settings uses these well) | `/orgs/{o}/properties/schema` |
 
 ### O5 — Org rulesets (v3, powerful)

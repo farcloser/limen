@@ -47,9 +47,14 @@ func compliantOrgResponses() map[string]stubResponse {
 		"GET orgs/test-org/installations": {
 			Body: `{"total_count": 1, "installations": [{"app_slug": "renovate"}]}`,
 		},
-		"GET orgs/test-org/hooks?per_page=100":                  {Body: `[]`},
-		"GET orgs/test-org/actions/secrets":                     {Body: `{"total_count": 0, "secrets": []}`},
-		"GET orgs/test-org/teams?per_page=100":                  {Body: `[]`},
+		"GET orgs/test-org/hooks?per_page=100":                {Body: `[]`},
+		"GET orgs/test-org/actions/secrets":                   {Body: `{"total_count": 0, "secrets": []}`},
+		"GET orgs/test-org/teams?per_page=100":                {Body: `[{"slug":"agents"}]`},
+		"GET orgs/test-org/teams/agents/members?per_page=100": {Body: `[{"login":"bot"}]`},
+		"GET orgs/test-org/teams/agents/repos?per_page=100": {
+			Body: `[{"name":"alpha","permissions":{"push":true}}]`,
+		},
+		"GET orgs/test-org/repos?per_page=100&type=all":         {Body: `[{"name":"alpha"}]`},
 		"GET orgs/test-org/personal-access-tokens":              {Body: `[]`},
 		"GET repos/test-org/.github":                            {Body: `{"private": false}`},
 		"GET repos/test-org/.github/contents/SECURITY.md":       {Body: `{}`},

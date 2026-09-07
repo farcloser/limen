@@ -37,6 +37,7 @@ const (
 	checkOrgProfileDescription  = "org-profile-description"
 	checkOrgCommunityHealthRepo = "org-community-health-repo"
 	checkOrgCommunityHealthSet  = "org-community-health-content"
+	checkOrgAgentsTeam          = "org-agents-team"
 )
 
 // knownOrgChecks is every org-level identifier, merged into knownChecks for
@@ -69,6 +70,7 @@ func knownOrgChecks() map[string]bool {
 		checkOrgProfileDescription:  true,
 		checkOrgCommunityHealthRepo: true,
 		checkOrgCommunityHealthSet:  true,
+		checkOrgAgentsTeam:          true,
 	}
 }
 
@@ -156,6 +158,7 @@ func AuditOrg(org string, overrides map[string]string) ([]Finding, []Change) {
 	aud.auditOrgActions()
 	aud.auditOrgSecurityConfiguration()
 	aud.auditOrgSurface()
+	aud.auditOrgAgentsTeam(org)
 	aud.auditOrgCommunityHealth(org)
 	aud.flushSettingsPatch()
 

@@ -49,6 +49,7 @@ github:
 #   outside-collaborators: <reason>
 #   webhooks: <reason>
 #   deploy-keys: <reason>
+#   agents-team: <reason>
 # --- Organization (only read by `limen github … -org <name>`) ---
 #   org-two-factor-requirement: <reason>
 #   org-default-repository-permission: <reason>
@@ -72,6 +73,7 @@ github:
 #   org-webhooks: <reason>
 #   org-actions-secrets: <reason>
 #   org-teams: <reason>
+#   org-agents-team: <reason>
 #   org-personal-access-tokens: <reason>
 #   org-profile-description: <reason>
 #   org-community-health-repo: <reason>
