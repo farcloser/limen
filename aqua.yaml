@@ -42,6 +42,10 @@ packages:
   # --- farcloser tools (local registry; standard once registered upstream) ---
   - name: farcloser/limen@v0.1.0 # renovate: depName=farcloser/limen
     registry: local
+  # Digests and encoders (`sha256sum`, `base64`) as the pinned coreutils, under
+  # their bare names — the local registry entry says why and how it is verified.
+  - name: uutils/coreutils@0.11.0
+    registry: local
   # --- toolchain + binary-release tools (standard registry, aqua-verified) ---
   - name: golang/go@go1.27.1
   - name: casey/just@1.58.0
