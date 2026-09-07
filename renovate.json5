@@ -20,6 +20,11 @@
   vulnerabilityAlerts: {
     enabled: true,
   },
+  // A Go module bump rewrites go.mod; without this, go.sum keeps the old
+  // module's lines and `just do lint go mod` (go mod tidy, diffed) fails
+  // every gomod PR. Renovate then runs `go mod tidy` after the bump, as the
+  // recipe would.
+  postUpdateOptions: ["gomodTidy"],
   customManagers: [
     // The go_install tools pinned as github.com/<owner>/<repo>[/<pkg>…]@vX.Y.Z
     // (aqua.yaml, local registry). The aqua preset's generic manager cannot read
@@ -40,6 +45,22 @@
     },
   ],
   packageRules: [
+    // Content-pinned canonical files are limen's, byte for byte: the
+    // checksum-update workflow, the setup-aqua action, everything under
+    // .limen/. A bump Renovate makes inside one of them is drift the next
+    // `limen check` rejects (limen-install #13, #14 sat red for a month on
+    // exactly that). Their pins move in limen — its own repository is the
+    // one place Renovate must keep touching them — and reach every other
+    // repository through a limen release.
+    {
+      matchFileNames: [
+        ".github/workflows/update-aqua-checksum.yaml",
+        ".github/actions/setup-aqua/**",
+        ".limen/**",
+      ],
+      matchRepositories: ["!farcloser/limen"],
+      enabled: false,
+    },
     // The Go-source analyzers are go.mod `tool` directives (see
     // book/tooling.md), and Go lists a tool-only module as `// indirect` —
     // which the gomod manager skips by default. Re-enable exactly these, so
