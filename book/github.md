@@ -80,7 +80,7 @@ setup).
   toggle that has Dependabot itself open PRs — must be **off**. Two bots do
   not coordinate (one advisory, two PRs), and Dependabot ignores every
   convention the repository sets: no release cooldown, no aqua preset, its own
-  branch and commit shape. The seeded `renovate.json5` enables
+  branch and commit shape. The shared Renovate preset enables
   `vulnerabilityAlerts` explicitly, which is what makes Renovate's fix PRs
   reach `// indirect` Go modules as well (its gomod manager otherwise leaves
   indirect deps alone) — so nothing Dependabot would have caught goes

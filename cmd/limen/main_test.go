@@ -42,7 +42,7 @@ func compliantRepo(t *testing.T) string {
 		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
 		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
-		"renovate.json5":                              limen.CanonicalRenovate,
+		"renovate.json5":                              rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
 	}
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content

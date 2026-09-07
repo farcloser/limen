@@ -1,105 +1,18 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  extends: [
-    "config:recommended",
-    // Default preset: detects owner/repo@ver and go-module packages in aqua.yaml,
-    // updates the standard-registry ref, and bumps aqua_version in CI/devcontainer too.
-    "github>aquaproj/aqua-renovate-config#2.13.0",
-  ],
-  // Supply-chain cooldown: wait before proposing a bump. Doubles as protection
-  // against the race where a release tag exists but its assets aren't uploaded yet.
-  minimumReleaseAge: "3 days",
-  // Vulnerability-fix PRs from GitHub's Dependabot alerts (the baseline keeps
-  // the alerts on for exactly this; Dependabot's OWN update PRs are off —
-  // Renovate is the one dependency bot). Stated explicitly, not left to the
-  // preset default, because `enabled: true` here is what reaches `// indirect`
-  // Go modules: the gomod manager disables indirect deps, and the alert path
-  // re-enables a dep only when this object says enabled. Fix PRs skip the
-  // cooldown above (a known-vulnerable version is the worse risk) and take
-  // the lowest fixed version, both Renovate defaults for this object.
-  vulnerabilityAlerts: {
-    enabled: true,
-  },
-  // A Go module bump rewrites go.mod; without this, go.sum keeps the old
-  // module's lines and `just do lint go mod` (go mod tidy, diffed) fails
-  // every gomod PR. Renovate then runs `go mod tidy` after the bump, as the
-  // recipe would.
-  postUpdateOptions: ["gomodTidy"],
-  customManagers: [
-    // The go_install tools pinned as github.com/<owner>/<repo>[/<pkg>…]@vX.Y.Z
-    // (aqua.yaml, local registry). The aqua preset's generic manager cannot read
-    // a dotted owner ("github.com"), and its `_go/` hook needs the two-line
-    // `version:` form that `aqua update` refuses to bump — so these one-line
-    // pins get their own manager, on Renovate's go datasource: the module's
-    // repo tags, /vN major suffix aware, and a package path below the module
-    // root (…/cmd/tool) resolves to the module's tags. Only plain vX.Y.Z pins:
-    // a pseudo-version (v0.0.0-<date>-<hash>, an untagged module) has nothing
-    // Renovate could order it against and is left alone, deliberately.
-    {
-      customType: "regex",
-      managerFilePatterns: ["/(^|/)aqua\\.ya?ml$/"],
-      matchStrings: [
-        " +- +name: +(?<depName>github\\.com/[^@'\" \\n]+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\n]",
-      ],
-      datasourceTemplate: "go",
-    },
-  ],
-  packageRules: [
-    // Content-pinned canonical files are limen's, byte for byte: the
-    // checksum-update workflow, the setup-aqua action, everything under
-    // .limen/. A bump Renovate makes inside one of them is drift the next
-    // `limen check` rejects (limen-install #13, #14 sat red for a month on
-    // exactly that). Their pins move in limen — its own repository is the
-    // one place Renovate must keep touching them — and reach every other
-    // repository through a limen release.
-    {
-      matchFileNames: [
-        ".github/workflows/update-aqua-checksum.yaml",
-        ".github/actions/setup-aqua/**",
-        ".limen/**",
-      ],
-      matchRepositories: ["!farcloser/limen"],
-      enabled: false,
-    },
-    // The Go-source analyzers are go.mod `tool` directives (see
-    // book/tooling.md), and Go lists a tool-only module as `// indirect` —
-    // which the gomod manager skips by default. Re-enable exactly these, so
-    // the analyzers keep getting their version-bump PRs after the move out of
-    // aqua.yaml.
-    {
-      matchManagers: ["gomod"],
-      matchDepNames: [
-        "golang.org/x/tools",
-        "golang.org/x/vuln",
-        "github.com/google/go-licenses/v2",
-      ],
-      enabled: true,
-    },
-    // golangci-lint embeds Go's type checker: a golangci built with go1.N
-    // panics on a go1.N+1 toolchain, so a golang/go bump can only land with
-    // (or after) a golangci release built with that Go. One grouped PR keeps
-    // the two in lockstep; the lint recipe's toolchain check names the fix
-    // when they still disagree (golangci lagging a fresh Go minor).
-    {
-      matchDepNames: ["golang/go", "golangci/golangci-lint"],
-      groupName: "go toolchain and golangci-lint",
-    },
-    // lychee tags releases "lychee-vX.Y.Z" (next to "lychee-lib-vX.Y.Z" and
-    // "nightly"), and the aqua preset has no manager for that prefix in either
-    // pin form: it reads "lychee-v0.24.2" as the version, cannot order it, and
-    // never proposes a bump. Regex versioning that carries the prefix parses
-    // the pinned value and the candidate tags alike, and excludes the lib and
-    // nightly tags by construction.
-    {
-      matchDepNames: ["lycheeverse/lychee"],
-      versioning: "regex:^lychee-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
-    },
-  ],
-  // `just do lint commits` enforces DCO on every PR range, bot commits included.
-  commitBody: "Signed-off-by: renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>",
+  // The canonical Renovate configuration is a shared preset — `default.json`
+  // in the limen repository — so every repository inherits it by reference
+  // and a fix there reaches all of them without a file being re-seeded. The
+  // ref is pinned: the `renovate` rule keeps it at the repository's own limen
+  // version (the farcloser/limen pin in aqua.yaml), so the preset moves with
+  // the release like every other canonical file. limen itself, the preset's
+  // author, reads it from its own default branch. Everything below is the
+  // project's own — overrides and additions go here, next to the ref.
+  extends: ["local>farcloser/limen"],
   // The update-aqua-checksum workflow pushes a fix-up commit onto Renovate's
   // branches; without this, Renovate treats the branch as human-modified and
-  // stops rebasing it.
+  // stops rebasing it. The org's App identity is the org's, so the array
+  // stays here (the `renovate` rule maintains it) rather than in the preset.
   gitIgnoredAuthors: [
     "300983632+limen-ci-farcloser[bot]@users.noreply.github.com",
     "41898282+github-actions[bot]@users.noreply.github.com",

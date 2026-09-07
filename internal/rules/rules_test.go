@@ -81,7 +81,9 @@ func compliantFiles() map[string]string {
 		pathWorkflowChecksum: limen.CanonicalWorkflowUpdateAquaChecksum,
 		pathActionSetupAqua:  limen.CanonicalActionSetupAqua,
 		pathWorkflowCI:       limen.CanonicalWorkflowCI,
-		pathRenovate:         limen.CanonicalRenovate,
+		// The seed, with its preset reference pinned to this manifest's limen
+		// version — what `limen fix` leaves behind (the renovate rule).
+		pathRenovate: CanonicalRenovateFor(limen.CanonicalAquaYAML),
 	}
 	// Every shared just module (.limen/*.just) must be present.
 	for _, m := range limen.JustModules() {
