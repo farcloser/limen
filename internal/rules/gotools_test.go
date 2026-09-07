@@ -145,7 +145,7 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 
 	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools)
 	if f.OK() {
-		t.Fatal("a go.mod without the analyzer tool directives should fail")
+		t.Fatal("a Go module without tools/go.mod should fail")
 	}
 
 	for _, pkg := range goModTools {
@@ -154,10 +154,38 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 		}
 	}
 
+	files[goToolsModFile] = goModBare
+	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools); f.OK() {
+		t.Fatal("a tools/go.mod without the analyzer tool directives should fail")
+	}
+
+	files[goToolsModFile] = goModWithTools
+	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools); !f.OK() {
+		t.Fatalf("a tools/go.mod declaring every analyzer should pass: %s", f.Message)
+	}
+
+	// The directives in the project's own go.mod are the pollution the rule
+	// exists to stop, even when tools/go.mod is complete.
 	files[goModFile] = goModWithTools
 
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools); !f.OK() {
-		t.Fatalf("a go.mod declaring every analyzer should pass: %s", f.Message)
+	f = findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools)
+	if f.OK() || !strings.Contains(f.Message, "belong in "+goToolsModFile) {
+		t.Fatalf("tool directives in go.mod should fail naming tools/go.mod: ok=%v %s", f.OK(), f.Message)
+	}
+}
+
+func TestStripGoModToolDirectives(t *testing.T) {
+	t.Parallel()
+
+	stripped := stripGoModToolDirectives(goModWithTools)
+	if len(goModToolDirectives(stripped)) != 0 {
+		t.Fatalf("directives survived stripping:\n%s", stripped)
+	}
+
+	for _, keep := range []string{"module example.com/proj", "go 1.26", "require golang.org/x/tools v0.49.0 // indirect"} {
+		if !strings.Contains(stripped, keep) {
+			t.Errorf("stripping lost %q:\n%s", keep, stripped)
+		}
 	}
 }
 
@@ -258,12 +286,48 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 		t.Fatalf("got %s (%s), want merged", outcome.Action, outcome.Message)
 	}
 
+	toolsMod, err := os.ReadFile(filepath.Join(dir, goToolsModFile))
+	if err != nil {
+		t.Fatalf("tools/go.mod not created: %v", err)
+	}
+
+	if !strings.Contains(string(toolsMod), "module example.com/proj/tools") ||
+		!strings.Contains(string(toolsMod), "go 1.26") {
+		t.Errorf("tools/go.mod lacks the derived module path or go directive:\n%s", toolsMod)
+	}
+
 	if f, ok := checkGoTools(dir); !ok || !f.OK() {
 		t.Fatalf("rule does not pass after fix: %s", f.Message)
 	}
 
 	if again := remediateGoTools(dir); again.Action != ActionNone {
 		t.Fatalf("second fix not a no-op: %s (%s)", again.Action, again.Message)
+	}
+}
+
+// TestFixGoToolsMovesDirectivesOutOfRoot: directives in the project's go.mod
+// are stripped (go mod tidy stubbed) and tools/go.mod ends complete.
+//
+//nolint:paralleltest // serial by design: mutates the package-level goBin.
+func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
+	stubGo(t)
+
+	files := compliantFiles()
+	files[goModFile] = goModWithTools
+	dir := writeRepo(t, files)
+
+	outcome := remediateGoTools(dir)
+	if outcome.Action != ActionMerged || !strings.Contains(outcome.Message, "moved tool directive(s)") {
+		t.Fatalf("got %s (%s), want merged with the move reported", outcome.Action, outcome.Message)
+	}
+
+	rootMod, _ := os.ReadFile(filepath.Join(dir, goModFile))
+	if len(goModToolDirectives(string(rootMod))) != 0 {
+		t.Errorf("go.mod still carries tool directives:\n%s", rootMod)
+	}
+
+	if f, ok := checkGoTools(dir); !ok || !f.OK() {
+		t.Fatalf("rule does not pass after fix: %s", f.Message)
 	}
 }
 
@@ -286,7 +350,7 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) {
 		t.Fatalf("got %s (%s), want advisory", outcome.Action, outcome.Message)
 	}
 
-	if !strings.Contains(outcome.Message, "go get -tool") {
+	if !strings.Contains(outcome.Message, "go -C tools get -tool") {
 		t.Errorf("advisory lacks the manual command: %s", outcome.Message)
 	}
 
