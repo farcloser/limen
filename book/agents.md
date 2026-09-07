@@ -100,7 +100,8 @@ branches are the human's.
 
 - **Its own branches, in their own worktrees.** Every task starts from a fresh
   `origin/main` in a git worktree, on a branch named after the bot
-  (`claudio/<topic>`), one topic per branch and per pull request. The
+  (`claudio/<YYYYMMDD>-<topic>`, the day it was cut so a listing reads in
+  date order), one topic per branch and per pull request. The
   worktree keeps the human's checkout untouched and lets several tasks run
   side by side. Inside a new worktree: `aqua policy allow aqua-policy.yaml`
   then `aqua install --only-link` — aqua's policy is keyed by path.
