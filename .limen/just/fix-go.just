@@ -12,14 +12,14 @@ import 'lib.just'
 
 default: code mod
 
-# golangci-lint auto-fixes, once per supported platform (see _per-goos in
+# golangci-lint auto-fixes, once per supported platform (see _per-platform in
 # lib.just). The formatter runs LAST and to CONVERGENCE: `golangci-lint fmt`
 # applies every formatter in one pass and the set is not confluent (one
 # formatter's output can be another's work), so a single pass can leave a tree
 # `fmt --diff` still rejects — `just fix` green, `just lint` red. Bounded,
 # because two formatters undoing each other never settle: loop for the benign
 # case, fail loudly for the other.
-code: (_banner "fix go" "go") (_per-goos "golangci-lint run --fix")
+code: (_banner "fix go" "go") (_per-platform "golangci-lint run --fix")
     #!/usr/bin/env bash
     set -euo pipefail
     max=5

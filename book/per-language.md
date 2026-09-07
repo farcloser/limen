@@ -151,7 +151,7 @@ The forms, per linter:
 
 - **revive**: `//revive:disable-next-line:<rule>`, or a `//revive:disable:<rule>` …
   `//revive:enable:<rule>` block around a region. `//nolint:revive` is banned outright — it
-  also proved environment-nondeterministic across the per-GOOS legs, where the
+  also proved environment-nondeterministic across the per-platform legs, where the
   suppression then flakes as "unused"; revive's own directives are invisible to
   nolintlint and stable.
 - **gosec**: `// #nosec G### -- reason`, gosec's own directive, which golangci-lint honors
@@ -188,10 +188,10 @@ overlaps with golangci-lint's `govet` would re-report a finding the project deli
 silenced and force the exception to be written twice, in two syntaxes. Restricted to the
 analyzers golangci-lint physically cannot run, the step can never contradict a project's
 lint configuration, and a finding from it is silenced the same way as any other: by
-fixing the assembly or the constraint, or by regenerating it. The architecture loop matters
-as much as the analyzer: assembly files are selected by their `_amd64.s` suffix, so on an
-arm64 host the file is not in the package at all, and a per-GOOS run — the shape the rest
-of the Go lint uses — would never load it.
+fixing the assembly or the constraint, or by regenerating it. The platform loop matters as
+much as the analyzer: assembly files are selected by their `_amd64.s` suffix, so on an
+arm64 host the file is not in the package at all; every Go analysis step iterates the full
+GOOS/GOARCH matrix for that reason (see [recipes](./recipes.md)).
 
 ## Enforcement
 

@@ -468,7 +468,7 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 // flagToggle records the common boolean shape: a compliant toggle reports
 // okMessage; a non-compliant one fails with failMessage and stages the
 // repository PATCH fields. A struct rather than a boolean parameter: revive's
-// flag-parameter rule proved environment-nondeterministic under the per-GOOS
+// flag-parameter rule proved environment-nondeterministic under the per-platform
 // lint legs, so no suppressible boolean control parameter may exist here.
 type toggle struct {
 	fields      map[string]any
@@ -787,7 +787,7 @@ func (a *auditor) auditActionsAccess() {
 }
 
 // auditCodeScanning is opt-in, per the decided baseline (the SAST posture is
-// golangci's gosec/staticcheck plus govulncheck, per GOOS): listing
+// golangci's gosec/staticcheck plus govulncheck, per platform): listing
 // "code-scanning" in the override file REQUIRES CodeQL default setup rather
 // than exempting anything (see optInChecks). Repositories that have not
 // opted in are not even queried.

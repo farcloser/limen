@@ -89,14 +89,14 @@ an explicit, documented decision before its recipes can work; the Rust one is in
   the recipe's own `-ldflags` string instead, last, where it adds to the baseline and still
   wins an explicit conflict. Prefer this shape whenever a knob would otherwise let a project
   overwrite something the baseline is responsible for.
-- **Go analysis runs once per supported platform.** The Go build graph differs per GOOS —
-  a file built only on linux is invisible to a darwin-only run — so the Go linters,
-  vulnerability scan, and license check iterate over the supported platforms with CGO
-  disabled (the `_per-goos` helper). A project that genuinely needs cgo exports
-  `CGO_ENABLED=1` and gets a single native run, with the reduced coverage announced
-  loudly rather than hidden. The `vet` step goes one finer (`_per-platform`, every
-  GOOS/GOARCH pair): it exists for assembly, and assembly files are selected by
-  architecture, so a per-GOOS run on an arm64 host never even loads the amd64 file.
+- **Go analysis runs once per supported platform.** The Go build graph is selected by
+  GOOS *and* GOARCH — a file built only on linux is invisible to a darwin run, and a
+  file built only on amd64 (an `_amd64.go`, an `_amd64.s`) is invisible to an arm64 one —
+  so the Go linters, vet, vulnerability scan, and license check iterate over every
+  supported GOOS/GOARCH pair with CGO disabled (the `_per-platform` helper). A GOOS-only
+  loop at the host's architecture would silently skip half the matrix. A project that
+  genuinely needs cgo exports `CGO_ENABLED=1` and gets a single native run, with the
+  reduced coverage announced loudly rather than hidden.
 - **Names are spelled out.** Recipes, commands, flags, and variables use explicit,
   qualified names that can be read and understood without a syllabus: `--dry-run`, never
   `-n`; `just do release`, never `just rel`; `limen github`, never `limen gh`. Shorthand
