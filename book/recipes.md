@@ -35,6 +35,15 @@ Recipes do not run in your shell's environment; they run in one the `Justfile` c
   into workspace mode — Go workspaces are a supported way to work here, at the eyes-open
   cost that a build under an active workspace can differ from CI.
 
+Digests and encoders are pinned too: `sha256sum` and `base64` on the hermetic PATH are the
+aqua-pinned coreutils (one Rust multicall binary linked under the names recipes type — the
+local registry entry says how), never the runner's. The ambient ones differ by platform
+(perl's `shasum` on macOS, GNU on Linux), and a `command -v` fallback between them
+institutionalizes the ambient tool instead of pinning one; write the bare GNU name and let the
+PATH answer. Call it from the project tree: an aqua shim finds its pin by walking up from the
+working directory, so a recipe that `cd`s into a temp dir outside the repository has no pinned
+tool there — hand it the path instead.
+
 The consequence, and the point: a recipe behaves identically on every machine that ran
 [machine setup](./tooling.md#machine-setup-limen-install-one-time-per-machine), and
 anything *not* pinned is unusable from a recipe by construction. (This is also why a
