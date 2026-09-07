@@ -91,6 +91,109 @@ func TestEnsureIgnoredAuthor(t *testing.T) {
 	}
 }
 
+// TestEnsurePresetRef covers the editing helper on every shape it meets: a
+// tagged reference to move, the seed's local reference to pin, an extends
+// array without the preset (one-line, multi-line, empty), a file with no
+// extends at all, and one with nothing to anchor on.
+func TestEnsurePresetRef(t *testing.T) {
+	t.Parallel()
+
+	const ref = "github>farcloser/limen#v9.9.9"
+
+	cases := []struct {
+		name, in, want string
+	}{
+		{
+			"tagged, moved",
+			"{\n  extends: [\"github>farcloser/limen#v0.0.1\"],\n}\n",
+			"{\n  extends: [\"" + ref + "\"],\n}\n",
+		},
+		{"local, pinned", "{\n  extends: [\"local>farcloser/limen\"],\n}\n", "{\n  extends: [\"" + ref + "\"],\n}\n"},
+		{
+			"one-line, absent",
+			"{\n  extends: [\"config:recommended\"],\n}\n",
+			"{\n  extends: [\"" + ref + "\", \"config:recommended\"],\n}\n",
+		},
+		{
+			"multi-line, absent",
+			"{\n  extends: [\n    \"config:recommended\",\n  ],\n}\n",
+			"{\n  extends: [\n    \"" + ref + "\",\n    \"config:recommended\",\n  ],\n}\n",
+		},
+		{"empty", "{\n  extends: [],\n}\n", "{\n  extends: [\"" + ref + "\"],\n}\n"},
+		{
+			"no extends",
+			"{\n  minimumReleaseAge: \"3 days\",\n}\n",
+			"{\n  extends: [\"" + ref + "\"],\n  minimumReleaseAge: \"3 days\",\n}\n",
+		},
+	}
+
+	for _, c := range cases {
+		got, ok := ensurePresetRef(c.in, ref)
+		if !ok || got != c.want {
+			t.Errorf("%s: ok=%v\n--- got:\n%s--- want:\n%s", c.name, ok, got, c.want)
+		}
+
+		if !hasPresetRef(got, ref) {
+			t.Errorf("%s: the result does not satisfy the check", c.name)
+		}
+	}
+
+	if _, ok := ensurePresetRef("not json at all\n", ref); ok {
+		t.Error("a file without an opening brace must not be edited")
+	}
+
+	// Two references, one stale: not satisfied; the edit moves both.
+	two := "{\n  extends: [\"" + ref + "\", \"local>farcloser/limen\"],\n}\n"
+	if hasPresetRef(two, ref) {
+		t.Error("a stale second reference must not pass")
+	}
+
+	if got, _ := ensurePresetRef(two, ref); !hasPresetRef(got, ref) {
+		t.Errorf("both references must be moved:\n%s", got)
+	}
+}
+
+// TestCanonicalPresetRef: limen extends its own default branch; every other
+// repository extends the preset at its pinned limen version; a repository
+// without a limen pin has nothing to pin to.
+func TestCanonicalPresetRef(t *testing.T) {
+	t.Parallel()
+
+	self := writeRepo(t, map[string]string{"go.mod": "module github.com/farcloser/limen\n\ngo 1.26\n"})
+	if got := canonicalPresetRef(self); got != presetLocalRef {
+		t.Errorf("limen itself: %q, want %q", got, presetLocalRef)
+	}
+
+	pinned := writeRepo(t, map[string]string{
+		"go.mod":    "module example.com/thing\n\ngo 1.26\n",
+		"aqua.yaml": "packages:\n  - name: farcloser/limen@v1.2.3 # renovate: depName=farcloser/limen\n    registry: local\n",
+	})
+	if got := canonicalPresetRef(pinned); got != "github>farcloser/limen#v1.2.3" {
+		t.Errorf("pinned repository: %q", got)
+	}
+
+	if got := canonicalPresetRef(writeRepo(t, map[string]string{"aqua.yaml": "packages: []\n"})); got != "" {
+		t.Errorf("no limen pin: %q, want nothing enforced", got)
+	}
+
+	if want := "github>farcloser/limen#" + canonicalLimenVersion(t); presetRefFor(limen.CanonicalAquaYAML) != want {
+		t.Errorf("canonical manifest: %q, want %q", presetRefFor(limen.CanonicalAquaYAML), want)
+	}
+}
+
+// canonicalLimenVersion reads the farcloser/limen pin off the canonical
+// manifest, the way the fixtures derive every version they need.
+func canonicalLimenVersion(t *testing.T) string {
+	t.Helper()
+
+	m := regexp.MustCompile(`(?m)^  - name: farcloser/limen@(\S+)`).FindStringSubmatch(limen.CanonicalAquaYAML)
+	if m == nil {
+		t.Fatal("the canonical aqua.yaml carries no farcloser/limen pin")
+	}
+
+	return m[1]
+}
+
 // TestRenovateRule: check and fix agree, the identity is enforced only when
 // known, and fix's edit is exactly what check wants.
 func TestRenovateRule(t *testing.T) {
@@ -134,6 +237,35 @@ func TestRenovateRule(t *testing.T) {
 	// Idempotent.
 	if o := outcomeByRule(Fix(root, FixOptions{Policy: known}), ruleRenovate); o.Action != ActionNone {
 		t.Errorf("second fix: %s, want none", o.Action)
+	}
+
+	// The seed as seeded — extending limen's own default branch — is not what
+	// a repository must carry: check names the pinned reference, fix sets it
+	// (identity known or not), and the file is otherwise untouched.
+	seeded := compliantFiles()
+	seeded[pathRenovate] = limen.CanonicalRenovate
+	root = writeRepo(t, seeded)
+
+	want := "github>farcloser/limen#" + canonicalLimenVersion(t)
+	if f := findingByRule(Check(root, DefaultPolicy()), ruleRenovate); f.OK() || !strings.Contains(f.Message, want) {
+		t.Errorf("the raw seed must fail naming %s, got: %+v", want, f)
+	}
+
+	if o := outcomeByRule(Fix(root, FixOptions{Policy: DefaultPolicy()}), ruleRenovate); o.Action != ActionMerged {
+		t.Errorf("fix on the raw seed: %s (%s), want merged", o.Action, o.Message)
+	}
+
+	data, err = os.ReadFile(filepath.Join(root, pathRenovate))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(data) != CanonicalRenovateFor(limen.CanonicalAquaYAML) {
+		t.Errorf("fix must pin the reference and change nothing else:\n%s", data)
+	}
+
+	if f := findingByRule(Check(root, DefaultPolicy()), ruleRenovate); !f.OK() {
+		t.Errorf("after pinning: %s", f.Message)
 	}
 
 	// A project that rewrote renovate.json5 without the key: advisory, and the

@@ -81,7 +81,7 @@ toolchain, so the skew is impossible by construction — and the pin lives in th
 already governs the module. The shared recipes build each analyzer natively once
 (`build/tools/`) and run that binary per GOOS, because `go tool` itself honours
 `GOOS`/`GOARCH` and would cross-compile the analyzer. Renovate bumps them through its `gomod`
-manager (the canonical `renovate.json5` re-enables these modules, which Go lists as
+manager (the shared Renovate preset re-enables these modules, which Go lists as
 `// indirect`).
 
 The doctrine is enforced from both sides: the `gotools` rule requires the directives in every
