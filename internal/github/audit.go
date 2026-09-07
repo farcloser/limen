@@ -46,6 +46,7 @@ const (
 	checkWebCommitSignoff     = "web-commit-signoff"
 	checkDescription          = "description"
 	checkTopics               = "topics"
+	checkIssues               = "issues"
 	checkWiki                 = "wiki"
 	checkProjects             = "projects"
 	checkDiscussions          = "discussions"
@@ -84,6 +85,7 @@ func knownChecks() map[string]bool {
 		checkWebCommitSignoff:     true,
 		checkDescription:          true,
 		checkTopics:               true,
+		checkIssues:               true,
 		checkWiki:                 true,
 		checkProjects:             true,
 		checkDiscussions:          true,
@@ -141,6 +143,7 @@ type repoSettings struct {
 	SquashMergeCommitMessage string               `json:"squash_merge_commit_message"`
 	Topics                   []string             `json:"topics"`
 	Private                  bool                 `json:"private"`
+	HasIssues                bool                 `json:"has_issues"`
 	HasWiki                  bool                 `json:"has_wiki"`
 	HasProjects              bool                 `json:"has_projects"`
 	HasDiscussions           bool                 `json:"has_discussions"`
@@ -327,7 +330,7 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 		a.unverifiable(err,
 			checkMergeMethods, checkSquashDefaults, checkDeleteBranchOnMerge, checkAutoMerge,
 			checkUpdateBranch, checkDefaultBranch, checkWebCommitSignoff, checkDescription,
-			checkTopics, checkWiki, checkProjects, checkDiscussions, checkForking,
+			checkTopics, checkIssues, checkWiki, checkProjects, checkDiscussions, checkForking,
 			checkSecretScanning, checkPushProtection)
 
 		return
@@ -426,6 +429,19 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 	} else {
 		a.flag(checkTopics, StatusOK, "", "", "topics present (or repository is private)", nil)
 	}
+
+	// Issues are the tracker every other rule assumes: SUPPORT.md sends people
+	// there, the org-wide issue forms only render where they are on, and
+	// discussions are refused below on the grounds that issues exist. Four
+	// repositories drifted to off with nothing flagging it — the toggle that
+	// says "on" needs a check as much as the three that say "off".
+	a.flagToggle(toggle{
+		check:       checkIssues,
+		compliant:   settings.HasIssues,
+		failMessage: "issues must be on (the tracker; the org-wide issue forms and SUPPORT.md assume it)",
+		okMessage:   "issues are on",
+		fields:      map[string]any{"has_issues": true},
+	})
 
 	a.flagToggle(toggle{
 		check:       checkWiki,

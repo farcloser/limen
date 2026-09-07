@@ -24,6 +24,7 @@ const compliantRepoJSON = `{
   "default_branch": "main",
   "description": "a description",
   "topics": ["tooling"],
+  "has_issues": true,
   "has_wiki": false,
   "has_projects": false,
   "has_discussions": false,
@@ -258,6 +259,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	  "default_branch": "master",
 	  "description": "",
 	  "topics": [],
+	  "has_issues": false,
 	  "has_wiki": true,
 	  "has_projects": false,
 	  "has_discussions": false,
@@ -286,7 +288,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 
 	wantFail := []string{
 		checkMergeMethods, checkSquashDefaults, checkDeleteBranchOnMerge, checkAutoMerge,
-		checkWebCommitSignoff, checkWiki, checkForking, checkSecretScanning,
+		checkWebCommitSignoff, checkIssues, checkWiki, checkForking, checkSecretScanning,
 		checkPushProtection, checkDependabotAlerts, checkDependabotFixes,
 		checkRulesetDefaultBranch, checkRulesetVersionTags,
 	}
@@ -343,9 +345,10 @@ func TestAuditUnverifiable(t *testing.T) { //nolint:paralleltest // serial by de
 
 func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
 	responses := compliantResponses()
-	responses["GET repos/test/repo"] = stubResponse{Body: strings.Replace(
-		compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1,
-	)}
+	responses["GET repos/test/repo"] = stubResponse{Body: strings.NewReplacer(
+		`"has_wiki": false`, `"has_wiki": true`,
+		`"has_issues": true`, `"has_issues": false`,
+	).Replace(compliantRepoJSON)}
 	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
 	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
 	logPath := stubGH(t, responses)
@@ -373,6 +376,10 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 
 	if !strings.Contains(calls, `"has_wiki":false`) {
 		t.Error("expected the PATCH payload to turn the wiki off")
+	}
+
+	if !strings.Contains(calls, `"has_issues":true`) {
+		t.Error("expected the PATCH payload to turn issues on")
 	}
 
 	if !strings.Contains(calls, "PUT repos/test/repo/vulnerability-alerts") {
