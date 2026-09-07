@@ -4,6 +4,7 @@
 package github //nolint:testpackage // white-box (see above).
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -810,6 +811,73 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 
 	if strings.Contains(payload, `"context":"gate"`) {
 		t.Error("reconcile must not replace project contexts with the canonical default")
+	}
+}
+
+// A ruleset still naming the matrix legs, on a repository whose ci.yaml has
+// the gate job, is the limen-install case: a required "verify (windows-11-arm)"
+// its four-leg matrix never reports, and a pull request that waits forever.
+// The audit must fail it and the reconcile must move it onto the gate.
+func TestRulesetMigratesLegacyContextsToGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":` +
+			`[{"context":"verify (ubuntu-24.04)"},{"context":"verify (windows-11-arm)"}]}}]}`,
+	}
+	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = stubResponse{
+		Body: `{"content":"` + base64.StdEncoding.EncodeToString(
+			[]byte("jobs:\n  verify:\n    runs-on: x\n  gate:\n    needs: verify\n"),
+		) + `"}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Fatalf("legacy matrix contexts with a gate job: %v (%s), want fail", finding.Status, finding.Message)
+	}
+
+	if !strings.Contains(finding.Message, "gate job") {
+		t.Errorf("the finding must name the migration, got: %s", finding.Message)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == checkRulesetDefaultBranch {
+			if err := planned.Apply(); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	payload := string(log)
+
+	if !strings.Contains(payload, `"context":"gate"`) {
+		t.Error("reconcile must move the required checks onto the gate")
+	}
+
+	if strings.Contains(payload, "verify (") {
+		t.Error("reconcile must drop the per-leg contexts")
+	}
+}
+
+// The same legacy contexts on a repository whose ci.yaml has NO gate job stay
+// preserved: moving them would require a check nothing reports.
+func TestRulesetKeepsLegacyContextsWithoutGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = stubResponse{
+		Body: `{"content":"` + base64.StdEncoding.EncodeToString([]byte("jobs:\n  verify:\n    runs-on: x\n")) + `"}`,
+	}
+	stubGH(t, responses)
+
+	findings, _ := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusOK {
+		t.Fatalf("legacy contexts without a gate job: %v (%s), want ok (preserved)", finding.Status, finding.Message)
 	}
 }
 

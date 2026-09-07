@@ -145,7 +145,13 @@ The decided merge model, enforced by both the repository settings and the
   the canonical `ci.yaml` that `needs` every matrix leg and the fuzz job, and
   fails unless all of them succeeded. The check *names* remain project-owned, so reconciliation
   preserves whatever a repository already declared, exactly like the
-  standard-registry ref inside the pinned aqua sections.
+  standard-registry ref inside the pinned aqua sections — with one exception.
+  A ruleset that still names the matrix legs themselves (`verify (…)`, the
+  shape rulesets had before the gate job existed) on a repository whose
+  `ci.yaml` now carries the gate job is drift, and `limen github fix` moves it
+  onto `gate`: a leg the matrix dropped or never ran is a check nothing
+  reports, and the pull request waits on it forever. A repository without the
+  gate job keeps its legs until it has one.
 
   The single gate is deliberate. Branch protection names contexts as *strings*,
   so requiring the matrix legs directly (`verify (macos-15)` and friends) would
