@@ -182,7 +182,7 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Dependabot alerts | enabled | ✓ | `PUT /repos/{o}/{r}/vulnerability-alerts` |
 | Dependabot security updates | **disabled** (Renovate is the one dependency bot; alerts stay on as its signal, and the seeded renovate.json5 enables `vulnerabilityAlerts` so fix PRs cover indirect Go modules too) | ✓ | `DELETE /repos/{o}/{r}/automated-security-fixes` |
 | Private vulnerability reporting | enabled (public repos) | ✓ | `PUT /repos/{o}/{r}/private-vulnerability-reporting` |
-| Code scanning default setup | **not required** (decided: our SAST posture is gosec + staticcheck via golangci and govulncheck, per-GOOS; CodeQL's marginal catch is taint-flow analysis, which matters for network/parser-heavy services — revisit if we ship one; repos may opt in via the override file) | ✓ when opted in | `PATCH /repos/{o}/{r}/code-scanning/default-setup` |
+| Code scanning default setup | **not required** (decided: our SAST posture is gosec + staticcheck via golangci and govulncheck, per platform; CodeQL's marginal catch is taint-flow analysis, which matters for network/parser-heavy services — revisit if we ship one; repos may opt in via the override file) | ✓ when opted in | `PATCH /repos/{o}/{r}/code-scanning/default-setup` |
 
 ### R2 — Actions hardening (v1)
 
@@ -374,7 +374,7 @@ already pending for `UPDATE_AQUA_CHECKSUM_TOKEN`; solve once, reuse.
    confirmed as the 2026 posture for this org (bisectable/revertable main, DCO survives
    rebase); to be written into the book alongside implementation.
 2. **Code scanning**: not required. Our SAST posture is gosec + staticcheck (golangci,
-   per-GOOS) + govulncheck; CodeQL's marginal value (taint-flow) applies to
+   per platform) + govulncheck; CodeQL's marginal value (taint-flow) applies to
    network/parser-heavy services we do not currently ship. Opt-in via the override file;
    revisit when that changes.
 3. **PRs on main**: mandatory, always, no exceptions — with 0 required approvals

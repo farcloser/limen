@@ -526,7 +526,7 @@ func dirEmpty(root string) bool {
 
 // The suppression below is revive's own directive rather than a golangci one,
 // deliberately: nolintlint polices golangci directives, and this finding is
-// environment-nondeterministic across the per-GOOS legs — the policing itself
+// environment-nondeterministic across the per-platform legs — the policing itself
 // then flakes.
 //
 //revive:disable:flag-parameter
