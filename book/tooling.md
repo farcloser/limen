@@ -435,7 +435,10 @@ The workflow accepts two, in order of preference:
      baseline, and the baseline includes canonical workflow files — GitHub refuses a
      commit touching `.github/workflows/` from a token without it, the checksum never
      lands, and the bump PR fails two jobs away on "checksum is required". The
-     bootstrap's audit reports an installation missing either permission.
+     bootstrap's audit reports an installation missing either permission, and the
+     lane requests both by name when it mints the token — naming any permission
+     scopes the token to exactly the named ones, so an installation that holds
+     `workflows: write` is not enough on its own.
    - Generate a private key, and install the App on the org, all repositories.
    - Set the org **variable** `UPDATE_AQUA_CHECKSUM_APP_ID` and the org **secret**
      `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`.
