@@ -80,10 +80,12 @@ jobs:
         with:
           app-id: ${{ vars.UPDATE_AQUA_CHECKSUM_APP_ID }}
           private-key: ${{ secrets.UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY }}
-          # Least privilege: the minted token only ever pushes a commit, so scope it
-          # to contents:write rather than inheriting whatever the App installation
-          # happens to hold now or later.
+          # Least privilege, but both: naming any permission scopes the token to
+          # exactly those, and the fix-up carries canonical workflow files whenever
+          # a limen bump changed one. GitHub refuses that commit from a token
+          # without workflows:write ("Resource not accessible by integration").
           permission-contents: write
+          permission-workflows: write
 
       - name: Commit the update through the API, if any
         env:
