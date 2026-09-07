@@ -163,10 +163,14 @@ Two roles deserve emphasis because they close the enforcement loop:
   `LIMEN_BIN` knob exists for exactly one consumer: the limen repository, which points it
   at `go run ./cmd/limen` so its working tree is judged by its own enforcer rather than
   the (always older) released pin.
-- **`just do release`** is shared but opt-in. The recipe lives in `.limen/just/release.just`,
+- **`just do release`** is shared; artifacts are opt-in. The recipe lives in `.limen/just/release.just`,
   imported *flat* into the `do` namespace (`do.just`, hence `just do release vX.Y.Z` — a
-  module invocation could not take the tag argument), and refuses before touching anything unless the repo carries a
-  `.goreleaser.yaml` — which stays project-owned, like the root Justfile. Two lanes share
+  module invocation could not take the tag argument). Every repository can be released:
+  `just do release vX.Y.Z` verifies a clean tree, creates the *signed* tag and pushes it. For
+  a repository without a `.goreleaser.yaml` — a Go module, a tap, a configuration — that
+  signed tag **is** the release: there is nothing to build or publish, and Go's module
+  proxy, Renovate and `go get` all read the tag. A `.goreleaser.yaml` (project-owned, like
+  the root Justfile) opts the repository into artifacts, and the two lanes below then share
   every guard. The **CI lane** (public repos, the default): `just do release vX.Y.Z`
   verifies a clean tree, creates the *signed* tag — a human signs the intent — and pushes
   it; the tag push triggers the release workflow, which runs `just do release --ci`:
