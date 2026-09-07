@@ -94,7 +94,9 @@ an explicit, documented decision before its recipes can work; the Rust one is in
   vulnerability scan, and license check iterate over the supported platforms with CGO
   disabled (the `_per-goos` helper). A project that genuinely needs cgo exports
   `CGO_ENABLED=1` and gets a single native run, with the reduced coverage announced
-  loudly rather than hidden.
+  loudly rather than hidden. The `vet` step goes one finer (`_per-platform`, every
+  GOOS/GOARCH pair): it exists for assembly, and assembly files are selected by
+  architecture, so a per-GOOS run on an arm64 host never even loads the amd64 file.
 - **Names are spelled out.** Recipes, commands, flags, and variables use explicit,
   qualified names that can be read and understood without a syllabus: `--dry-run`, never
   `-n`; `just do release`, never `just rel`; `limen github`, never `limen gh`. Shorthand
@@ -136,7 +138,7 @@ What each shared module is *for* — mechanics live in the module files themselv
 - **`lint`** — read-only verifiers: `limen` (this repository against the rules — the
   first thing the default runs, since every other linter trusts the canonical files it
   verifies), `just`, `aqua`, `links`, `yaml`, `shell`, `dockerfile`, and `commits` (DCO and
-  commit hygiene over a range) in the default, plus the explicit `go` submodule (code, mod,
+  commit hygiene over a range) in the default, plus the explicit `go` submodule (code, vet, mod,
   vuln, licenses, and the informational bce/escape/deadcode reports), `rust`, `homebrew`
   (formula style and audit through brew's own vendored tooling — see
   [per-language rules](./per-language.md#homebrew-formulas)), and `github` (the live GitHub
