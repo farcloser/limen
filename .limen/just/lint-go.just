@@ -84,9 +84,11 @@ _golangci-toolchain-check:
 # excludes both analyzers.
 vet: (_banner "lint go" "vet") (_per-platform "go vet -asmdecl -buildtag ./...")
 
-# go.mod/go.sum tidiness — fails printing the diff; `just do fix go mod` repairs.
+# go.mod/go.sum tidiness, for the module and for tools/ (the analyzers' own
+# module — see _go-tool). Fails printing the diff; `just do fix go mod` repairs.
 mod: (_banner "lint go" "mod")
     go mod tidy -diff
+    go -C tools mod tidy -diff
 
 # Known-vulnerability scan against the Go vulnerability database (network:
 # govulncheck fetches vuln.go.dev), once per supported platform (see _per-platform
@@ -192,13 +194,15 @@ deadcode: (_banner "lint go" "deadcode") (_go-tool "deadcode" "golang.org/x/tool
 # Built natively ONCE into build/tools/ from the go.mod `tool` directive
 # (book/tooling.md, "Go-source analyzers are go.mod tools"). The per-platform legs
 # cannot run `go tool <name>`: it honours GOOS/GOARCH and would cross-compile
-# the analyzer itself (exec format error). A go.mod without the directive
+# the analyzer itself (exec format error). The directives live in tools/go.mod,
+# a module of its own, so the analyzers' dependency graph never reaches the
+# project's go.mod and its consumers. A tools/go.mod without the directive
 # fails with the command to add it.
 _go-tool name pkg:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! grep -qE '^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)' go.mod; then
-        echo "go.mod lacks 'tool {{ pkg }}' — add it: go get -tool {{ pkg }}@<version> && go mod tidy (see book/tooling.md)" >&2
+    if ! grep -qE '^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)' tools/go.mod 2>/dev/null; then
+        echo "tools/go.mod lacks 'tool {{ pkg }}' — add it: go -C tools get -tool {{ pkg }}@<version> && go -C tools mod tidy (see book/tooling.md)" >&2
         exit 1
     fi
     mkdir -p build/tools
@@ -206,4 +210,5 @@ _go-tool name pkg:
     # the .exe suffix the loader needs — git-bash then resolves the bare
     # build/tools/<name> the recipes call to it. (go strips a /vN major suffix
     # when naming, so github.com/google/go-licenses/v2 lands as go-licenses.)
-    GOOS='' GOARCH='' go build -o 'build/tools/' '{{ pkg }}'
+    # -o is resolved relative to -C.
+    GOOS='' GOARCH='' go -C tools build -o '../build/tools/' '{{ pkg }}'
