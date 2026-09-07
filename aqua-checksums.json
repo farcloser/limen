@@ -226,6 +226,26 @@
       "algorithm": "sha256"
     },
     {
+      "id": "github_release/github.com/quint-co/quint/v0.32.0/quint-linux-amd64",
+      "checksum": "939B64095B706017F2F202C6F99C860C40BE7C31BDDC2B98557316E50F42CD7F",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/quint-co/quint/v0.32.0/quint-linux-arm64",
+      "checksum": "5B23E6F7E6F6B9C870C5EA7D38675E8FC709F4578BCF4A236918414157267A35",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/quint-co/quint/v0.32.0/quint-macos-arm64",
+      "checksum": "EB038B5E47D9839977053097830EEA386F42081780CA7E6A9B6B4FF5F3DE131F",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/quint-co/quint/v0.32.0/quint-pc-amd64.exe",
+      "checksum": "A5197EC8CCFDE5B5AD40F5C62FA7D4CBA2A01D1AFFE1A93B72D41B2385AFF7AC",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/sigstore/cosign/v3.1.3/cosign-darwin-arm64",
       "checksum": "5CF948C2F4DFE59687BDD0B8523709067383E03982CC543475C8A7DC70E92A76",
       "algorithm": "sha256"
