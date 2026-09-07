@@ -91,9 +91,10 @@ setup).
   GitHub-owned actions plus an explicitly pinned allowlist, never "all". This
   mirrors the construction rules of the canonical workflows themselves (one
   SHA-pinned first-party action, everything else through aqua and `just`).
-- **Features off unless used.** Wiki, projects, discussions: documentation
-  lives in the repository, issues are the tracker. A repo that wants one
-  declares the exception.
+- **Features off unless used, issues on.** Wiki, projects, discussions:
+  documentation lives in the repository, issues are the tracker — so issues
+  themselves must be on, or `SUPPORT.md` and the org-wide issue forms point at
+  nothing. A repo that wants an exception either way declares it.
 - **The agents team has write.** Coding agents contribute through a dedicated
   account that holds write on every repository through the organization's
   `agents` team (see [agents](./agents.md)). A repository created without the

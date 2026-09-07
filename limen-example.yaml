@@ -41,6 +41,7 @@ github:
 # --- Repository: hygiene & surface ---
 #   description: <reason>
 #   topics: <reason>
+#   issues: <reason>
 #   wiki: hosts the operations runbook  # (example of a real entry)
 #   projects: <reason>
 #   discussions: <reason>

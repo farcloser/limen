@@ -223,6 +223,7 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 |---|---|---|---|
 | Description set | non-empty | adv (content is human) | `PATCH /repos/{o}/{r}` |
 | Topics | non-empty for public repos | adv | `PUT /repos/{o}/{r}/topics` |
+| Issues | on unless override (the tracker: SUPPORT.md and the org-wide issue forms assume it) | ✓ | `PATCH /repos/{o}/{r}` |
 | Wiki / Projects / Discussions | off unless override (docs live in-repo; issues are the tracker) | ✓ | `PATCH /repos/{o}/{r}` |
 | Template repo flag, archived, visibility | as declared in override file only — visibility changes are never auto-fixed | adv | same |
 | Pages | off unless override | adv | `GET /repos/{o}/{r}/pages` |
