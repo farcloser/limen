@@ -45,6 +45,11 @@ the rule, never the linter: `//revive:disable-next-line:<rule>`,
 recipe rejects `//nolint:revive`, `//nolint:gosec`, a bare `#nosec`, and a bare
 `//nolint` (`book/per-language.md`, "silencing a finding").
 
+Then commit, and lint the commit itself before pushing: `just do lint commits`
+judges a range, and a `just lint` run before the commit existed has not seen
+it. This is what catches a missing sign-off, a subject over the limit, or a
+trailer eaten by a shell variable — in your tree, not in CI.
+
 ## 4. Push, open the pull request, own it
 
 ```
