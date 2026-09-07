@@ -109,30 +109,60 @@ jobs:
           path: '**/testdata/fuzz/'
           if-no-files-found: ignore
 
+  # Every pin resolves and builds. The verify legs link only, and a go_install
+  # package has no checksum to fail on, so a pin whose module does not exist at
+  # that version (a root tag for a nested module) merges green and fails at
+  # first use. One linux leg pays for the real install; aqua's package store
+  # is cached on the exact pins, so a warm key costs seconds and a changed pin
+  # is always a real install.
+  tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install aqua (pinned, checksum-verified)
+        uses: ./.github/actions/setup-aqua
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.AQUA_ROOT_DIR }}/pkgs
+          key: aqua-pkgs-${{ runner.os }}-${{ hashFiles('aqua.yaml', 'aqua-checksums.json', '.limen/aqua-registry.yaml') }}
+
+      - name: Install every pinned tool
+        run: aqua install
+
   # The ONE required status check (defaultRequiredChecks in
   # internal/github/audit.go). Requiring the matrix legs by name would bake
   # this runner list into every ruleset; this job collapses the matrix to one
   # stable name.
   gate:
-    needs: [verify, fuzz]
+    needs: [verify, fuzz, tools]
     # always(), and the result asserted explicitly. Without always() a failed
     # or cancelled dependency SKIPS this job instead of failing it, and a
     # skipped required check does not block a merge — branch protection that
     # quietly stops protecting. `needs.verify.result` is success only when
-    # every matrix leg succeeded; fuzz is asserted alongside so a crasher
-    # blocks a merge the same way a failing test does.
+    # every matrix leg succeeded; fuzz and tools are asserted alongside so a
+    # crasher, or a pin that does not build, blocks a merge the same way a
+    # failing test does.
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Every verify leg and fuzz succeeded
+      - name: Every verify leg, fuzz and tools succeeded
         env:
           # Via env, never interpolated into the script: the shell sees data,
           # not something the expression layer can rewrite into code.
           RESULT: ${{ needs.verify.result }}
           RESULT_FUZZ: ${{ needs.fuzz.result }}
+          RESULT_TOOLS: ${{ needs.tools.result }}
         run: |
           printf 'verify: %s\n' "$RESULT"
           printf 'fuzz: %s\n' "$RESULT_FUZZ"
-          [ "$RESULT" = "success" ] && [ "$RESULT_FUZZ" = "success" ]
+          printf 'tools: %s\n' "$RESULT_TOOLS"
+          [ "$RESULT" = "success" ] && [ "$RESULT_FUZZ" = "success" ] && [ "$RESULT_TOOLS" = "success" ]

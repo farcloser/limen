@@ -151,8 +151,8 @@ The decided merge model, enforced by both the repository settings and the
 - **Merges wait for green CI.** The `limen:main` ruleset carries required
   status checks, without which auto-merge (and a hasty human) would merge on
   red. A fresh ruleset requires exactly **one** context, `gate` — the job in
-  the canonical `ci.yaml` that `needs` every matrix leg and the fuzz job, and
-  fails unless all of them succeeded. The check *names* remain project-owned, so reconciliation
+  the canonical `ci.yaml` that `needs` every matrix leg, the fuzz job and the
+  tools job, and fails unless all of them succeeded. The check *names* remain project-owned, so reconciliation
   preserves whatever a repository already declared, exactly like the
   standard-registry ref inside the pinned aqua sections — with one exception.
   A ruleset that still names the matrix legs themselves (`verify (…)`, the
@@ -192,9 +192,20 @@ The decided merge model, enforced by both the repository settings and the
   Fuzz* targets" and passes where there is nothing — a project with no fuzz
   targets pays one short job for the day it adds some.
 
+  <a id="tools"></a>
+  **Tools.** A `tools` job, one linux leg, runs a real `aqua install` where
+  every other job only links. Links verify nothing, and a `go_install`
+  package has no checksum to fail on either, so without this job a pin whose
+  module does not exist at that version — a root tag pinned for a nested
+  module — merges green and fails months later at first use, in whichever
+  recipe happens to run the tool. The job caches aqua's package store keyed
+  on the exact pins (`aqua.yaml`, `aqua-checksums.json`, the registry), so an
+  unchanged pin set costs seconds and a changed one is always a real install;
+  it feeds `gate`, so a pin that does not build blocks a merge.
+
   **Migration.** `ci.yaml` is seeded once and is the project's own afterwards,
   so repositories created before the gate job existed do not have it — and
-  likewise repositories created before the fuzz job existed. Their
+  likewise repositories created before the fuzz and tools jobs existed. Their
   rulesets keep working (reconciliation preserves existing contexts), but the
   gate job must be added to a repository's `ci.yaml` *before* its ruleset is
   moved onto the `gate` context — the wrong order reproduces the very failure
