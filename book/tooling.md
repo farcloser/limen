@@ -79,7 +79,7 @@ The fix is Go's own: the analyzers are `tool` directives in `go.mod`. `go tool <
 the tool from the module's pinned requirement with the module's pinned toolchain, cached per
 toolchain, so the skew is impossible by construction — and the pin lives in the one file that
 already governs the module. The shared recipes build each analyzer natively once
-(`build/tools/`) and run that binary per GOOS, because `go tool` itself honours
+(`build/tools/`) and run that binary per platform, because `go tool` itself honours
 `GOOS`/`GOARCH` and would cross-compile the analyzer. Renovate bumps them through its `gomod`
 manager (the shared Renovate preset re-enables these modules, which Go lists as
 `// indirect`).

@@ -10,14 +10,15 @@ set quiet
 # Shared private _banner recipe (see lib.just).
 import 'lib.just'
 
-default: code mod vuln licenses
+default: code vet mod vuln licenses
 
-# golangci-lint, once per supported platform (see _per-goos in lib.just:
-# platform-specific files are only analyzed for the GOOS that builds them).
+# golangci-lint, once per supported platform (see _per-platform in lib.just:
+# platform-specific files are only analyzed for the GOOS/GOARCH that builds
+# them).
 # The formatter is build-graph-independent and runs once. The last step
 # enforces the suppression doctrine (book/per-language.md, "silencing a
 # finding"): a finding is silenced by its rule, never by its linter.
-code: (_banner "lint go" "go") _golangci-toolchain-check (_per-goos "golangci-lint run") _suppression-check
+code: (_banner "lint go" "go") _golangci-toolchain-check (_per-platform "golangci-lint run") _suppression-check
     golangci-lint fmt --diff
 
 # Polices the shape the book requires (per-language.md, "silencing a
@@ -68,17 +69,32 @@ _golangci-toolchain-check:
         exit 1
     fi
 
+# The two `go vet` analyzers golangci-lint cannot run: its package loader never
+# hands analyzers a package's non-Go files, so asmdecl (assembly against the Go
+# declarations it implements) and buildtag (constraints in non-Go files) report
+# nothing through it whatever the govet configuration says — even
+# `enable-all`. Broken amd64 assembly passed `lint go` on the amd64 CI legs
+# for exactly that reason. Scoped to those two on purpose: `go vet` reads
+# neither .golangci.yml nor //nolint, so any analyzer that overlaps with
+# golangci's govet would re-report findings a project deliberately silenced,
+# and the same exception would then have to be written twice. Every
+# supported platform, like the rest (see _per-platform in lib.just); vet
+# type-checks without an assembler or C toolchain, so each leg is a few
+# seconds. Note `go test` is not a backstop here: the vet subset it runs
+# excludes both analyzers.
+vet: (_banner "lint go" "vet") (_per-platform "go vet -asmdecl -buildtag ./...")
+
 # go.mod/go.sum tidiness — fails printing the diff; `just do fix go mod` repairs.
 mod: (_banner "lint go" "mod")
     go mod tidy -diff
 
 # Known-vulnerability scan against the Go vulnerability database (network:
-# govulncheck fetches vuln.go.dev), once per supported platform (see _per-goos
-# in lib.just: call paths and dependencies differ by GOOS).
-vuln: (_banner "lint go" "vuln") (_go-tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck") (_per-goos "build/tools/govulncheck ./...")
+# govulncheck fetches vuln.go.dev), once per supported platform (see _per-platform
+# in lib.just: call paths and dependencies differ by platform).
+vuln: (_banner "lint go" "vuln") (_go-tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck") (_per-platform "build/tools/govulncheck ./...")
 
-# Dependency license compliance, once per supported platform (see _per-goos in
-# lib.just: each GOOS pulls its own dependencies). Extra flags (typically
+# Dependency license compliance, once per supported platform (see _per-platform in
+# lib.just: each platform pulls its own dependencies). Extra flags (typically
 # --ignore=<module> for the false positives of google/go-licenses#186): export
 # LINT_GO_LICENSES_FLAGS from the root Justfile.
 #
@@ -86,7 +102,7 @@ vuln: (_banner "lint go" "vuln") (_go-tool "govulncheck" "golang.org/x/vuln/cmd/
 # their location under GOROOT, reading its default from its own build. _go-tool
 # compiles it with the pinned toolchain, so the two agree by construction; the
 # explicit value keeps that true even when a project overrides GOROOT.
-licenses: (_banner "lint go" "licenses") (_go-tool "go-licenses" "github.com/google/go-licenses/v2") (_per-goos 'GOROOT="$(go env GOROOT)" build/tools/go-licenses check --include_tests --allowed_licenses=Apache-2.0,BSD-2-Clause,BSD-3-Clause,MIT ${LINT_GO_LICENSES_FLAGS:-} ./...')
+licenses: (_banner "lint go" "licenses") (_go-tool "go-licenses" "github.com/google/go-licenses/v2") (_per-platform 'GOROOT="$(go env GOROOT)" build/tools/go-licenses check --include_tests --allowed_licenses=Apache-2.0,BSD-2-Clause,BSD-3-Clause,MIT ${LINT_GO_LICENSES_FLAGS:-} ./...')
 
 # Every bounds check the compiler could not eliminate. Informational: never
 # fails, native arch only (BCE is arch-specific), not in the default set.
@@ -174,7 +190,7 @@ deadcode: (_banner "lint go" "deadcode") (_go-tool "deadcode" "golang.org/x/tool
     build/tools/deadcode -test ./...
 
 # Built natively ONCE into build/tools/ from the go.mod `tool` directive
-# (book/tooling.md, "Go-source analyzers are go.mod tools"). The per-GOOS legs
+# (book/tooling.md, "Go-source analyzers are go.mod tools"). The per-platform legs
 # cannot run `go tool <name>`: it honours GOOS/GOARCH and would cross-compile
 # the analyzer itself (exec format error). A go.mod without the directive
 # fails with the command to add it.

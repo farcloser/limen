@@ -50,8 +50,9 @@ export PATH := if os() == 'windows' { aqua_bin + ';' + env_var('PATH') } else { 
 #                mirror cannot change where modules resolve from; a project
 #                needing an internal proxy sets it in its own Justfile.
 #   GOOS/GOARCH  '' = native. Ambient values silently cross-compile every
-#                build/lint/test; the per-GOOS analysis sets GOOS itself where
-#                it needs to (see _per-goos in lib.just), overriding this.
+#                build/lint/test; the per-platform analysis sets GOOS/GOARCH
+#                itself where it needs to (see _per-platform in lib.just),
+#                overriding this.
 #
 # GOWORK is deliberately not neutralized: a go.work in the tree puts the
 # recipes into workspace mode, and a build there may differ from CI

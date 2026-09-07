@@ -151,7 +151,7 @@ The forms, per linter:
 
 - **revive**: `//revive:disable-next-line:<rule>`, or a `//revive:disable:<rule>` …
   `//revive:enable:<rule>` block around a region. `//nolint:revive` is banned outright — it
-  also proved environment-nondeterministic across the per-GOOS legs, where the
+  also proved environment-nondeterministic across the per-platform legs, where the
   suppression then flakes as "unused"; revive's own directives are invisible to
   nolintlint and stable.
 - **gosec**: `// #nosec G### -- reason`, gosec's own directive, which golangci-lint honors
@@ -169,6 +169,29 @@ The forms, per linter:
 `just do lint go` enforces this after golangci-lint runs: nolintlint polices the *shape*
 of a directive, not which linter it names, so the recipe greps the tracked Go files for
 every banned form and fails with the fix spelled out.
+
+## Go — what golangci-lint cannot see
+
+golangci-lint's `govet` runs the same analyzers as `go vet`, with one structural gap: its
+package loader never hands an analyzer the package's *non-Go* files. Two analyzers work on
+exactly those — `asmdecl`, which checks an assembly function's frame and argument offsets
+against the Go declaration it implements, and `buildtag`, which checks `//go:build`
+constraints in non-Go files — so through golangci-lint they report nothing, whatever the
+configuration says. A hash library's generated amd64 assembly failed `go vet` on every
+amd64 build while `just do lint go` stayed green on the amd64 CI legs; nothing in the
+pipeline could observe it, because `go test` runs a fixed vet subset that excludes both.
+
+`just do lint go vet` closes the gap by running `go vet -asmdecl -buildtag` — those two
+analyzers and **no others** — over every supported GOOS/GOARCH pair. The scoping is the
+point: `go vet` honours neither `.golangci.yml` nor `//nolint`, so any analyzer that
+overlaps with golangci-lint's `govet` would re-report a finding the project deliberately
+silenced and force the exception to be written twice, in two syntaxes. Restricted to the
+analyzers golangci-lint physically cannot run, the step can never contradict a project's
+lint configuration, and a finding from it is silenced the same way as any other: by
+fixing the assembly or the constraint, or by regenerating it. The platform loop matters as
+much as the analyzer: assembly files are selected by their `_amd64.s` suffix, so on an
+arm64 host the file is not in the package at all; every Go analysis step iterates the full
+GOOS/GOARCH matrix for that reason (see [recipes](./recipes.md)).
 
 ## Enforcement
 
