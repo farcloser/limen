@@ -14,9 +14,13 @@ personal account is account-wide: everything the human can push to, the agent
 could too, and every commit the agent made would be indistinguishable from the
 human's. A dedicated account (`closer-claudio` at farcloser) fixes both at once:
 
-- **Blast radius** is exactly the repositories it is invited to, as an outside
-  collaborator with write access — never as an organization member, so it
-  inherits no org-wide defaults. Revocation is one account.
+- **Blast radius** is exactly what the organization's `agents` team is granted.
+  The bot is an organization member whose only access comes through that
+  team, on an organization whose members' base permission is read — the
+  `org-default-repository-permission` floor `limen github check -org` keeps.
+  Every governed repository grants the team write: the `agents-team` check
+  asserts it and `limen github fix` grants it, so a repository created by hand
+  is one fix run away from contributable. Revocation is one team membership.
 - **Attribution** is honest: commits are authored and signed by the bot, and
   the audit trail says so forever.
 
@@ -74,7 +78,8 @@ the bot.
 
 Three things, all one-time, all deliberately human:
 
-1. Creating the bot's GitHub account and inviting it per repository.
+1. Creating the bot's GitHub account, inviting it to the organization, and
+   adding it to the `agents` team.
 2. Creating its key in Secretive and registering the public key on the account
    as both an authentication key and a signing key.
 3. Running `limen-install-agent`, which does everything else and verifies.

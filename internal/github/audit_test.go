@@ -215,6 +215,11 @@ func compliantResponses() map[string]stubResponse {
 		"GET repos/test/repo/hooks?per_page=100":                             {Body: `[]`},
 		"GET repos/test/repo/keys?per_page=100":                              {Body: `[]`},
 		"GET repos/test/repo/pages":                                          {NotFound: true},
+		"GET orgs/test":                                                      {Body: `{"login":"test"}`},
+		"GET orgs/test/teams?per_page=100":                                   {Body: `[{"slug":"agents"}]`},
+		"GET repos/test/repo/teams?per_page=100": {
+			Body: `[{"slug":"agents","permission":"push"}]`,
+		},
 	}
 }
 

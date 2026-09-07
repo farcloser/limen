@@ -94,6 +94,14 @@ setup).
 - **Features off unless used.** Wiki, projects, discussions: documentation
   lives in the repository, issues are the tracker. A repo that wants one
   declares the exception.
+- **The agents team has write.** Coding agents contribute through a dedicated
+  account that holds write on every repository through the organization's
+  `agents` team (see [agents](./agents.md)). A repository created without the
+  grant is one the agents can read but not push to, and nothing says so until a
+  push fails on a 403. `check` reports it; `fix` grants it — the one team grant
+  the baseline applies itself, additive only: write for the canonical team,
+  never a removal, never a person. The team and its members stay human work: a
+  missing team is a failing verdict with the commands printed, never a fix.
 - **The merge doctrine and the rulesets** — below.
 
 ## Mainline doctrine: pull requests always
@@ -296,6 +304,11 @@ canonically the org's `.github` repository). The catalog:
   secret + TLS verification), org-level Actions secrets (names only), teams,
   and fine-grained PAT grants: visible on every audit, so a grant nobody
   remembers making has nowhere to hide.
+- **The agents team, organization-wide** — the team exists, has members, and
+  holds write on every repository that is not archived: the org view of the
+  per-repository `agents-team` check, so one audit lists every repository
+  created without the grant, and `fix -org` grants them in one run. A missing
+  team or an empty one is reported, never created or filled — people.
 - **Renovate installed** — the one GitHub App the baseline depends on. Every
   governed repository carries a seeded `renovate.json5` and the content-pinned
   checksum-refresh workflow that serves Renovate's branches; without the app on

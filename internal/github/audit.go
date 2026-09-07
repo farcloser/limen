@@ -59,6 +59,7 @@ const (
 	checkRulesetVersionTags   = "ruleset-version-tags"
 	checkWebhooks             = "webhooks"
 	checkDeployKeys           = "deploy-keys"
+	checkAgentsTeam           = "agents-team"
 )
 
 // knownChecks is every check identifier — repository and organization level
@@ -96,6 +97,7 @@ func knownChecks() map[string]bool {
 		checkRulesetVersionTags:   true,
 		checkWebhooks:             true,
 		checkDeployKeys:           true,
+		checkAgentsTeam:           true,
 	})
 
 	return checks
@@ -200,6 +202,9 @@ func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
 	aud.auditCodeScanning()
 	aud.auditRulesets()
 	aud.auditSurface()
+
+	owner, name, _ := strings.Cut(repo, "/")
+	aud.auditAgentsTeam(owner, name)
 	aud.flushSettingsPatch()
 
 	return aud.findings, aud.changes
