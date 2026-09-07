@@ -25,13 +25,39 @@ branch listing reads in date order and a stale one shows its age.
 
 ## 2. Commit
 
-- Signed as the bot, with a `Signed-off-by:` trailer as the bot. When the
-  change is the human's own work, `--author` the human; the bot stays the
-  committer.
-- Subject line, blank line, the reasoning. The commit message is the record;
-  the pull request description is derived from it.
-- Never commit scratchpads (`AUDIT.md` and the like) or generated files the
-  repository ignores.
+The commit message is the record; the pull request description is derived
+from it. Sloppy trailers have been caught by the human before; the steps below
+are what prevents it.
+
+1. **Name the tree on every git command**: `git -C <absolute worktree path> …`,
+   or `cd <absolute path> && …` in the same command. Never rely on the shell's
+   current directory — it resets between commands, and a worktree cut from the
+   wrong clone once pushed a branch with no shared history to another
+   repository.
+2. **Write the subject, the body and the co-author trailer; let `-s` add the
+   sign-off.** Subject line, blank line, the reasoning in prose, blank line,
+   then the one trailer you write, naming the model:
+   ```
+   Co-Authored-By: <Model> <noreply@vendor.example>
+   ```
+   Commit with `git -C <path> commit -s -F -` and a heredoc. `-s` appends
+   `Signed-off-by:` last, from the configured identity, so it cannot be
+   mistyped; never write `Signed-off-by:` by hand — `-s` on top of a
+   hand-written one that is not the last line produces two. When the change is
+   the human's own work, `--author` the human; the bot stays the committer and
+   the sign-off is still the bot's.
+3. **Verify in the same command as the commit, before anything is pushed:**
+   ```
+   git -C <path> log -1 --format=%B | grep -c '^Signed-off-by:'   # 1
+   git -C <path> log -1 --format=%B | grep -ciE '<vendor>\.|generated with|-Session:'   # 0 (AGENTS.md, "No links to your tooling")
+   git -C <path> log -1 --format='%G?'                             # G — signed; anything else means the identity or key is wrong: stop and say so
+   just do lint commits                                            # passes
+   ```
+   A wrong answer is fixed with `git -C <path> commit --amend -F -` before the
+   push. Amending after a push means `--force-with-lease=<branch>:<old sha>` to
+   the bot's own branch, then the checks again.
+4. **Never commit scratchpads** (`AUDIT.md` and the like) or generated files
+   the repository ignores.
 
 ## 3. Green before pushing
 
