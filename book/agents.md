@@ -81,6 +81,13 @@ git configuration (`GIT_CONFIG_*` in the agent's environment), so the human's
 own git configuration is never modified and a shell the human opens never sees
 the bot.
 
+**Breakage is reported, not routed around.** An agent that finds the rig not working —
+the installed ssh refused, signing unable to reach the agent, a recipe failing — says so
+first and stops there; a private workaround that keeps the work moving hides the defect
+from the one person who can fix it, and once hid a broken installer for a whole session
+while pushes quietly took another path. A workaround needs the human's agreement and is
+named as one each time it is used.
+
 ## What stays manual
 
 Three things, all one-time, all deliberately human:
