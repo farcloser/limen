@@ -194,14 +194,14 @@ The decided merge model, enforced by both the repository settings and the
 
   <a id="tools"></a>
   **Tools.** A `tools` job, one linux leg, runs a real `aqua install` where
-  every other job only links. Links verify nothing, and a `go_install`
-  package has no checksum to fail on either, so without this job a pin whose
-  module does not exist at that version — a root tag pinned for a nested
-  module — merges green and fails months later at first use, in whichever
-  recipe happens to run the tool. The job caches aqua's package store keyed
-  on the exact pins (`aqua.yaml`, `aqua-checksums.json`, the registry), so an
-  unchanged pin set costs seconds and a changed one is always a real install;
-  it feeds `gate`, so a pin that does not build blocks a merge.
+  every other job only links. Links verify nothing, so without this job an
+  asset missing from a release, or failing its checksum, merges green and
+  fails months later at first use, in whichever recipe happens to run the
+  tool. The job caches aqua's package store keyed on the exact pins
+  (`aqua.yaml`, `aqua-checksums.json`, the registry), so an unchanged pin set
+  costs seconds and a changed one is always a real install; it feeds `gate`,
+  so a pin that does not install blocks a merge. (The Go-built tools are
+  `tools/go.mod` directives; the verify legs build them.)
 
   **Migration.** `ci.yaml` is seeded once and is the project's own afterwards,
   so repositories created before the gate job existed do not have it — and

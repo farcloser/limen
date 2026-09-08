@@ -33,7 +33,7 @@ against the requirements above.
 | Exact **per-tool** version pin | Clunky — one `nixpkgs` commit pins *everything* together; independent versions require separate inputs | **Native** — `owner/repo@version` |
 | Per-project | Yes (flake) | Yes (`aqua.yaml`) |
 | Unifies Go + non-Go tools | Yes, but via a heavy apparatus | Yes, one manifest |
-| Security model | Hermetic, source-hash-pinned builds (strongest for *source*) | Checksum + cosign/SLSA for binaries; GOSUMDB for `go_install` tools |
+| Security model | Hermetic, source-hash-pinned builds (strongest for *source*) | Checksum + cosign/SLSA for binaries; GOSUMDB for the `go.mod` tools |
 | Update automation | Manual / multi-input juggling | **Renovate-native**, per-tool PRs |
 | Upstream-release latency | Packaging layer adds delay | Near-zero (vendor release consumed directly) |
 | Ops / learning overhead | High (Nix language, `/nix/store`, daemon, GC) | Low (single binary + YAML) |
@@ -52,10 +52,9 @@ aqua matches every paramount requirement directly:
 - **Exact per-tool pinning** is native: `golangci/golangci-lint@<version>`.
 - **Per-project** via a committed `aqua.yaml`; projects never collide.
 - **Security**: binary-release tools are checksum-verified and, where the vendor publishes
-  them, cosign/SLSA/attestation-verified. Go-only tools — aqua's `go_install` packages and
-  the `go.mod` tools below — fall back to **GOSUMDB**, the *same* trust root the old
-  `Makefile` already relied on, now pinned and declarative. A net improvement over the
-  status quo, never a regression.
+  them, cosign/SLSA/attestation-verified. Go-built tools — the `go.mod` tools below — fall
+  back to **GOSUMDB**, the *same* trust root the old `Makefile` already relied on, now pinned
+  and declarative. A net improvement over the status quo, never a regression.
 - **Maintenance**: Renovate opens per-tool version-bump PRs; a checksum-refresh workflow
   keeps `aqua-checksums.json` in sync automatically.
 
@@ -63,39 +62,49 @@ aqua matches every paramount requirement directly:
 instead of a pinned binary checksum). If hermetic rebuild verification of those *specific* Go
 tools ever becomes the paramount axis, revisit Nix for that subset.
 
-### Go-source analyzers are `go.mod` tools
+<a id="go-source-analyzers-are-gomod-tools"></a>
+### Go-built tools are `go.mod` tools
 
-A Go tool that **loads Go source** — `deadcode`, `govulncheck`, `go-licenses`, anything built
-on `go/packages` — embeds the source loader of the Go that compiled *it*. Compiled by go1.N,
-it cannot read a module that declares go1.N+1. So such a tool must be built by the **same
-toolchain that builds the project**, and aqua cannot promise that: a `go_install` package is
-compiled once per tool version, by whichever project's pinned `go` happens to run it first,
-and that binary is then shared by every project pinning the same tool version. The pin names
-the tool; the Go that built it is decided by run order on the machine. CI never sees the
-problem (every runner builds fresh with its own pin) — it surfaces only on a laptop that
-works on two repos with different Go pins, as an analyzer refusing sources it should read.
+aqua's `go_install` package type is `go install <path>@<version>` with whatever `go` is on
+`PATH`, cached under the tool's version alone: the package is compiled once per tool version,
+by whichever project's pinned `go` happens to run it first, and that binary is then shared by
+every project pinning the same tool version, on that machine, for good. The pin names the
+tool; the Go that built it — its standard library, its fixes — is decided by run order.
+Nothing in the manifest describes the binary that actually runs, which is the opposite of
+what a pin is for. So **no Go-built tool is an aqua package**.
 
-The fix is Go's own: the analyzers are `tool` directives, built from a pinned requirement by
-the module's own pinned toolchain, cached per toolchain, so the skew is impossible by
-construction. They live in **`tools/go.mod`, a module of their own** (`<module>/tools`), not
-in the project's `go.mod`: a `tool` directive drags the analyzer's whole dependency graph into
-the module that declares it as `// indirect` requirements — twenty modules and a hundred and
-fifty `go.sum` lines for the three analyzers — and everything a library's `go.mod` requires
+For a tool that **loads Go source** — `deadcode`, `govulncheck`, `go-licenses`, anything built
+on `go/packages` — the gap is a correctness failure, not only a provenance one: such a tool
+embeds the source loader of the Go that compiled *it*, and compiled by go1.N it cannot read a
+module that declares go1.N+1. CI never sees it (every runner builds fresh with its own pin) —
+it surfaces on a laptop that works on two repos with different Go pins, as an analyzer refusing
+sources it should read.
+
+The fix is Go's own: every Go-built tool is a `tool` directive, built from a pinned requirement
+by the module's own pinned toolchain, cached per toolchain, so the skew is impossible by
+construction. They live in **`tools/go.mod`, a module of their own** (`<module>/tools` in a Go
+repository, `tools` elsewhere), not in the project's `go.mod`: a `tool` directive drags the
+tool's whole dependency graph into the module that declares it as `// indirect` requirements —
+dozens of modules and hundreds of `go.sum` lines — and everything a library's `go.mod` requires
 is inherited by every consumer's module graph, `go.sum` and dependency scanners. A
 zero-dependency library must stay one. The nested module keeps the pin next to the code, under
 the same toolchain and GOSUMDB, and Renovate's `gomod` manager finds nested `go.mod` files on
 its own (the shared preset re-enables these modules, which Go lists as `// indirect`). The
-shared recipes build each analyzer natively once (`go -C tools build`, into `build/tools/`) and
-run that binary per platform, because `go tool` itself honours `GOOS`/`GOARCH` and would
-cross-compile the analyzer.
+shared recipes build each tool natively once (`go -C tools build`, into `build/tools/`) and run
+that binary — per platform for the analyzers — because `go tool` itself honours
+`GOOS`/`GOARCH` and would cross-compile the tool.
+
+Every repository carries the module, not only Go ones: `git-validation` (commit hygiene),
+`godolint` (Dockerfiles) and `dot` (profile graphs; graphviz compiled to WASM, a single Go
+binary) run everywhere, and every repository already pins `golang/go` in aqua to build them.
+A Go repository adds the three source analyzers.
 
 The doctrine is enforced from both sides: the `gotools` rule requires `tools/go.mod` with the
-directives in every Go repository and rejects a `tool` directive in the project's `go.mod`
+directives in every repository and rejects a `tool` directive in the project's `go.mod`
 (`limen fix` creates the module, adds the directives with `go -C tools get -tool … && go -C
 tools mod tidy`, and moves any directive out of the root), and the `aqua` rule retires the old
-`go_install` pins (`limen fix` removes them). What stays in aqua is every tool that never loads
-Go source — `git-validation`, `godolint`, `dot` — including the ones non-Go repositories rely
-on.
+`go_install` pins (`limen fix` removes them). The local registry carries no `go_install`
+entry, and never will again.
 
 Adding or bumping one by hand:
 
@@ -107,7 +116,7 @@ go -C tools mod tidy
 ## Tools without upstream binaries: the sourcing ladder
 
 aqua consumes prebuilt artifacts; it does not build C (`go_install` and `cargo` are the only
-compiling package types). When a tool's upstream publishes no usable release binaries, work
+compiling package types, and `go_install` is off the table — see above). When a tool's upstream publishes no usable release binaries, work
 down this ladder — each rung is a weaker trust position than the one above, and the rung
 must be chosen deliberately, not by whatever the registry happens to carry:
 
@@ -246,8 +255,8 @@ repo/
 ├── aqua.yaml                              # the manifest: pinned tool versions
 ├── aqua-checksums.json                    # GENERATED — commit it
 ├── aqua-policy.yaml                       # authorizes the local registry
-├── .limen/aqua-registry.yaml                     # local registry: non-Go-source go_install tools + farcloser/limen
-├── renovate.json                         # automated version bumps
+├── .limen/aqua-registry.yaml                     # local registry: farcloser/limen and the coreutils names
+├── renovate.json                          # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
 
@@ -258,13 +267,13 @@ What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
   `require_checksum: true` mean a missing or mismatched checksum **fails** the install, and
   `supported_envs` is part of the pinned section: adding an environment (say `windows/amd64`)
   is a change to limen's canonical baseline, not a per-repo edit.
-- The **canonical `registries:` section**: the standard registry plus the `local` registry for
-  `go_install` tools (e.g. `git-validation`). One field is the project's: the standard registry's
+- The **canonical `registries:` section**: the standard registry plus the `local` registry
+  (limen itself, the coreutils names). One field is the project's: the standard registry's
   `ref`, which Renovate bumps per repo — but it must always be an **exact pin** (a `vX.Y.Z`
   tag or a full commit SHA, never a branch).
 - **At least the canonical packages**, matched by name — the *versions* are the project's
   (Renovate bumps them), and extra per-project packages are welcome. A package is never
-  listed twice — and never a **retired** one: the Go-source analyzers moved to `go.mod`
+  listed twice — and never a **retired** one: the Go-built tools moved to `tools/go.mod`
   (see [above](#go-source-analyzers-are-gomod-tools)); `limen fix` removes a lingering pin.
 
 > **Content-pinned files.** `aqua-policy.yaml` and `.limen/aqua-registry.yaml` are **canonical
@@ -273,8 +282,9 @@ What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
 > extra packages, and the standard registry ref are project-owned. `aqua-checksums.json` is
 > **generated, never hand-edited**: `limen fix` regenerates it (`aqua update-checksum`)
 > whenever it changes the manifest or the file is missing. Consequence: the catalog of
-> `go_install` tools is **shared** — to add one, it goes into limen's canonical registry, not
-> a single repo's. And only tools that never load Go source qualify (see above).
+> local-registry packages is **shared** — to add one, it goes into limen's canonical registry,
+> not a single repo's. A Go-built tool never qualifies (see above): it is a `tools/go.mod`
+> directive, which is the project's own.
 
 Bootstrap, from the repo root:
 
@@ -348,9 +358,8 @@ just do tools remove junegunn/fzf                    # remove a tool entirely
 
 The mutating recipes (`add`, `set`, `update`) end by refreshing the checksum
 (`aqua update-checksum`) and then performing a **full** `aqua install` — deliberately not
-link-only: links verify nothing, and for checksum-less package types (`go_install`) the
-checksum step is silent too, so only a real install proves the new pin resolves, builds,
-and verifies. A green run means exactly that; a bad pin fails inside the recipe instead of
+link-only: links verify nothing, so only a real install proves the new pin downloads and
+verifies. A green run means exactly that; a bad pin fails inside the recipe instead of
 at first tool use. (`remove` ends at the checksum refresh — nothing is left to install.)
 Commit both files afterward:
 
@@ -366,7 +375,7 @@ rather than raw aliases:
   second entry for an already-present package (its merge is an unconditional list append), not
   update the existing one — so `tools set` rewrites the version on the existing line instead.
 - **`tools remove` edits the manifest too.** `aqua remove` only uninstalls the binary; it does not
-  touch `aqua.yaml` (and cannot remove `go_install` tools at all). The recipe removes the
+  touch `aqua.yaml`. The recipe removes the
   package's entry, then `aqua remove`s the binary, then `aqua update-checksum --prune`s the orphaned checksum.
 
 These recipes are the preferred interface for any hand-made change. Renovate (below) still

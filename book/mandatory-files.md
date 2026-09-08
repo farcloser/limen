@@ -17,7 +17,7 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | `Justfile` | Present, carrying the shared-baseline import — the rest of the file is the project’s own. The [`.limen/` modules](#justfile) it mounts are canonical. |
 | `.limen/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--limenlycheetoml). |
 | `.github/` workflows | The [CI surface](#ci-workflows--github): two content-pinned limen pieces, plus seeded-once workflows and renovate config. |
-| `go.mod` (Go modules only) | Declares the Go-source analyzers as `tool` directives — the [`gotools` rule](#the-gotools-rule--gomod-tool-directives). |
+| `tools/go.mod` | Declares the Go-built tools the recipes run as `tool` directives; a Go module adds the source analyzers — the [`gotools` rule](#the-gotools-rule--toolsgomod-tool-directives). |
 
 `limen` resolves common spelling/extension variants (`LICENSE`, `LICENSE.md`, `LICENSE.txt`,
 `COPYING`; `README`, `README.md`, `README.txt`) so a repo is not failed on a technicality,
@@ -325,17 +325,20 @@ the rest of the file stays the project's own.
 
 ### The `gotools` rule — `tools/go.mod` tool directives
 
-A repository that carries a `go.mod` must declare the Go-source analyzers the shared recipes
-run — `deadcode`, `govulncheck`, `go-licenses` — as `tool` directives in `tools/go.mod`, a
-module of its own, so each is compiled by the repository's pinned toolchain without the
-analyzers' dependency graph entering the project's `go.mod` and every consumer's. A `tool`
-directive in the project's own `go.mod` fails the rule. The reasoning is in
+Every repository declares the Go-built tools the shared recipes run as `tool` directives in
+`tools/go.mod`, a module of its own, so each is compiled by the repository's pinned toolchain
+without the tools' dependency graph entering the project's `go.mod` and every consumer's.
+Three are required everywhere — `git-validation`, `godolint`, `dot`: the lint and test recipes
+of every repository run them — and a repository whose root carries a `go.mod` adds the
+Go-source analyzers `deadcode`, `govulncheck`, `go-licenses`. A `tool` directive in the
+project's own `go.mod` fails the rule. The reasoning is in
 [tooling](./tooling.md#go-source-analyzers-are-gomod-tools). `limen fix` creates
-`tools/go.mod` (module path `<module>/tools`, the root's `go` directive), adds a missing
-directive with `go -C tools get -tool <pkg>@latest` followed by `go -C tools mod tidy` (the
-resolved version is then pinned, and Renovate bumps it), and strips any directive out of the
-root `go.mod`, tidying it; when the pinned `go` or the network is unavailable, the rule ends as
-an advisory carrying the exact command. Repositories without a `go.mod` are silent.
+`tools/go.mod` (module path `<module>/tools` and the root's `go` directive in a Go repository;
+`tools` and the aqua-pinned `go` elsewhere), adds a missing directive with `go -C tools get
+-tool <pkg>@latest` followed by `go -C tools mod tidy` (the resolved version is then pinned,
+and Renovate bumps it), and strips any directive out of the root `go.mod`, tidying it; when
+the pinned `go` or the network is unavailable, the rule ends as an advisory carrying the exact
+command.
 
 ## Link checking — `.limen/lychee.toml`
 

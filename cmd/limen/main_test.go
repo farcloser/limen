@@ -43,6 +43,11 @@ func compliantRepo(t *testing.T) string {
 		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
 		"renovate.json":                               rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
+		// The Go-built tools every repository declares (the gotools rule).
+		"tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
+			"\tgithub.com/vbatts/git-validation\n" +
+			"\tgithub.com/farcloser/godolint/cmd/godolint\n" +
+			"\tgithub.com/goccy/go-graphviz/cmd/dot\n)\n",
 	}
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
@@ -130,20 +135,38 @@ func TestRunFixAndBootstrap(t *testing.T) {
 // or the environment forbids it, the test is skipped rather than failed. A stub
 // `aqua` on PATH keeps the install step hermetic (no real aqua, no network) and
 // records the calls bootstrap makes, so the exact install sequence is asserted
-// instead of suppressed.
+// instead of suppressed. A stub `go` next to it keeps the gotools step
+// hermetic the same way: `go get -tool a@v b@v` appends the directives to the
+// go.mod in the working directory, anything else succeeds silently.
 func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
 	stubDir := t.TempDir()
 	stub := filepath.Join(stubDir, "aqua")
 	script := "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/log\"\n"
+	goStub := filepath.Join(stubDir, "go")
+	goScript := "#!/bin/sh\n" +
+		"[ \"$1\" = get ] && [ \"$2\" = -tool ] || exit 0\n" +
+		"shift 2\n" +
+		"for arg; do echo \"tool ${arg%@*}\" >> go.mod; done\n"
 
 	if runtime.GOOS == "windows" {
 		stub += ".bat"
 		script = "@echo off\r\n>> \"%~dp0log\" echo %*\r\n"
+		goStub += ".bat"
+		goScript = "@echo off\r\n" +
+			"if not \"%1\"==\"get\" exit /b 0\r\n" +
+			"if not \"%2\"==\"-tool\" exit /b 0\r\n" +
+			"shift\r\nshift\r\n" +
+			":loop\r\n" +
+			"if \"%1\"==\"\" exit /b 0\r\n" +
+			"for /f \"delims=@\" %%a in (\"%1\") do >> go.mod echo tool %%a\r\n" +
+			"shift\r\ngoto loop\r\n"
 	}
 
-	// 0o700, not 0o600: the stub must be executable.
-	if err := os.WriteFile(stub, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+	// 0o700, not 0o600: the stubs must be executable.
+	for path, content := range map[string]string{stub: script, goStub: goScript} {
+		if err := os.WriteFile(path, []byte(content), 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))

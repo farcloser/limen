@@ -68,6 +68,9 @@ func compliantFiles() map[string]string {
 		"Justfile":            CanonicalJustfileImport + "\n",
 		"aqua.yaml":           limen.CanonicalAquaYAML,
 		"aqua-checksums.json": "{}\n",
+		// Every repository declares the Go-built tools the recipes run (the
+		// gotools rule); without a root go.mod, the everywhere set is enough.
+		goToolsModFile: goModToolsEverywhere,
 		// The aqua policy, local registry, and lychee config are content-pinned exactly.
 		"aqua-policy.yaml":          CanonicalAquaPolicy,
 		".limen/aqua-registry.yaml": CanonicalAquaRegistry,

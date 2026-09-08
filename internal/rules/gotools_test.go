@@ -3,21 +3,34 @@ package rules //nolint:testpackage // white-box: exercises the goBin seam and un
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 )
 
-// goStubEnv flips the re-executed test binary into fake-go mode (see
-// TestMain): `go get -tool a@latest b@latest` appends the directives to the
-// go.mod in the working directory, `go mod tidy` is a silent no-op.
-const goStubEnv = "LIMEN_TEST_GO_STUB"
+// The fake go (see TestMain and installGoStub): `go get -tool a@latest
+// b@latest` appends the directives to the go.mod in the working directory,
+// `go mod tidy` and anything else succeed silently.
 
 const goModBare = "module example.com/proj\n\ngo 1.26\n"
 
-// goModWithTools declares every required analyzer, in the block form Go
-// writes, plus an unrelated tool and a comment — the parser must see through
-// both.
+// goModToolsEverywhere is a tools module of a repository without a root
+// go.mod: the everywhere set, nothing more — what the compliant fixture
+// carries.
+const goModToolsEverywhere = `module tools
+
+go 1.26
+
+tool (
+	github.com/vbatts/git-validation
+	github.com/farcloser/godolint/cmd/godolint
+	github.com/goccy/go-graphviz/cmd/dot
+)
+`
+
+// goModWithTools declares every required tool, in the block form Go writes,
+// plus an unrelated tool and a comment — the parser must see through both.
 const goModWithTools = `module example.com/proj
 
 go 1.26
@@ -26,6 +39,9 @@ tool (
 	github.com/google/go-licenses/v2 // the license scanner
 	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
+	github.com/vbatts/git-validation
+	github.com/farcloser/godolint/cmd/godolint
+	github.com/goccy/go-graphviz/cmd/dot
 	example.com/other/cmd/thing
 )
 
@@ -59,26 +75,46 @@ func runGoStub() int {
 	return 0
 }
 
-// stubGo points remediation at the test binary in fake-go mode. Serial by
-// design (mutates goBin, sets env), like stubAqua.
-func stubGo(t *testing.T) {
-	t.Helper()
-
+// installGoStub points goBin at the test binary under the name `go`, which
+// TestMain recognizes: a symlink where the platform allows one, a copy
+// elsewhere (Windows). Helper-process pattern rather than a generated
+// script, like the aqua stub. The returned func removes the directory.
+func installGoStub() (func(), error) {
 	self, err := os.Executable()
 	if err != nil {
-		t.Fatalf("locating the test binary: %v", err)
+		return nil, err
 	}
 
-	t.Setenv(goStubEnv, "1")
+	dir, err := os.MkdirTemp("", "limen-go-stub")
+	if err != nil {
+		return nil, err
+	}
 
-	previous := goBin
-	goBin = self
+	// The name is the dispatch key (TestMain): exactly `go`, plus the
+	// extension Windows needs to execute it. Not the test binary's own
+	// extension — `rules.test` would yield `go.test`, which TestMain does not
+	// recognize, and every child would then run the suite: a fork bomb.
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
 
-	t.Cleanup(func() { goBin = previous })
-}
+	stub := filepath.Join(dir, "go"+ext)
+	if err := os.Symlink(self, stub); err != nil {
+		data, readErr := os.ReadFile(self)
+		if readErr != nil {
+			return nil, readErr
+		}
 
-func hasFinding(findings []Finding, rule string) bool {
-	return slices.ContainsFunc(findings, func(f Finding) bool { return f.Rule == rule })
+		// 0o700, not 0o600: the stub must be executable.
+		if err := os.WriteFile(stub, data, 0o700); err != nil {
+			return nil, err
+		}
+	}
+
+	goBin = stub
+
+	return func() { _ = os.RemoveAll(dir) }, nil
 }
 
 func TestGoModToolDirectives(t *testing.T) {
@@ -95,7 +131,9 @@ func TestGoModToolDirectives(t *testing.T) {
 			gomod: goModWithTools,
 			want: []string{
 				"github.com/google/go-licenses/v2", "golang.org/x/tools/cmd/deadcode",
-				"golang.org/x/vuln/cmd/govulncheck", "example.com/other/cmd/thing",
+				"golang.org/x/vuln/cmd/govulncheck", "github.com/vbatts/git-validation",
+				"github.com/farcloser/godolint/cmd/godolint", "github.com/goccy/go-graphviz/cmd/dot",
+				"example.com/other/cmd/thing",
 			},
 		},
 		{
@@ -128,12 +166,33 @@ func TestGoModToolDirectives(t *testing.T) {
 	}
 }
 
-func TestGoToolsSilentWithoutGoMod(t *testing.T) {
+// TestGoToolsEverywhere: a repository without go.mod must still declare the
+// everywhere set — and only that: the analyzers are not asked of it.
+func TestGoToolsEverywhere(t *testing.T) {
 	t.Parallel()
 
-	findings := Check(writeRepo(t, compliantFiles()), DefaultPolicy())
-	if hasFinding(findings, ruleGoTools) {
-		t.Fatal("the gotools rule must not report on a repository without go.mod")
+	files := compliantFiles()
+	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools); !f.OK() {
+		t.Fatalf("the compliant fixture should pass: %s", f.Message)
+	}
+
+	delete(files, goToolsModFile)
+
+	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools)
+	if f.OK() {
+		t.Fatal("a repository without tools/go.mod should fail")
+	}
+
+	for _, pkg := range goToolsEverywhere {
+		if !strings.Contains(f.Message, pkg) {
+			t.Errorf("message did not name %s: %s", pkg, f.Message)
+		}
+	}
+
+	for _, pkg := range goSourceAnalyzers {
+		if strings.Contains(f.Message, pkg) {
+			t.Errorf("message asks a non-Go repository for the analyzer %s: %s", pkg, f.Message)
+		}
 	}
 }
 
@@ -143,25 +202,34 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 	files := compliantFiles()
 	files[goModFile] = goModBare
 
+	// The everywhere set alone is not enough once the root carries a go.mod.
 	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools)
 	if f.OK() {
-		t.Fatal("a Go module without tools/go.mod should fail")
+		t.Fatal("a Go module whose tools/go.mod lacks the analyzers should fail")
 	}
 
-	for _, pkg := range goModTools {
+	for _, pkg := range goSourceAnalyzers {
 		if !strings.Contains(f.Message, pkg) {
 			t.Errorf("message did not name %s: %s", pkg, f.Message)
 		}
 	}
 
-	files[goToolsModFile] = goModBare
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools); f.OK() {
-		t.Fatal("a tools/go.mod without the analyzer tool directives should fail")
+	delete(files, goToolsModFile)
+
+	f = findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools)
+	if f.OK() {
+		t.Fatal("a Go module without tools/go.mod should fail")
+	}
+
+	for _, pkg := range requiredGoTools([]byte(goModBare)) {
+		if !strings.Contains(f.Message, pkg) {
+			t.Errorf("message did not name %s: %s", pkg, f.Message)
+		}
 	}
 
 	files[goToolsModFile] = goModWithTools
 	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), ruleGoTools); !f.OK() {
-		t.Fatalf("a tools/go.mod declaring every analyzer should pass: %s", f.Message)
+		t.Fatalf("a tools/go.mod declaring every tool should pass: %s", f.Message)
 	}
 
 	// The directives in the project's own go.mod are the pollution the rule
@@ -189,19 +257,20 @@ func TestStripGoModToolDirectives(t *testing.T) {
 	}
 }
 
-// The two halves of one doctrine: what go.mod must declare is exactly what
-// aqua.yaml must no longer pin, and the canonical manifest pins none of it.
+// The two halves of one doctrine: what tools/go.mod must declare is exactly
+// what aqua.yaml must no longer pin, and the canonical manifest pins none of
+// it.
 func TestGoToolsMatchRetiredAquaPackages(t *testing.T) {
 	t.Parallel()
 
-	want := slices.Clone(goModTools)
+	want := requiredGoTools([]byte(goModBare))
 	got := slices.Clone(retiredCanonicalPkgs)
 
 	slices.Sort(want)
 	slices.Sort(got)
 
 	if !slices.Equal(want, got) {
-		t.Fatalf("goModTools %v and retiredCanonicalPkgs %v must be the same set", goModTools, retiredCanonicalPkgs)
+		t.Fatalf("required tools %v and retiredCanonicalPkgs %v must be the same set", want, got)
 	}
 
 	for _, p := range canonicalAqua.pkgs {
@@ -216,14 +285,14 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 
 	files := compliantFiles()
 	files["aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
-		"packages:\n  - name: golang.org/x/tools/cmd/deadcode@v0.47.0\n    registry: local\n")
+		"packages:\n  - name: github.com/vbatts/git-validation@v1.2.2\n    registry: local\n")
 
 	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("a retired canonical package should fail")
 	}
 
-	if !strings.Contains(f.Message, "retired") || !strings.Contains(f.Message, "golang.org/x/tools/cmd/deadcode") {
+	if !strings.Contains(f.Message, "retired") || !strings.Contains(f.Message, "github.com/vbatts/git-validation") {
 		t.Errorf("message did not explain the retirement: %s", f.Message)
 	}
 }
@@ -261,24 +330,69 @@ func TestFixRemovesRetiredPackages(t *testing.T) {
 	}
 }
 
-func TestFixGoToolsNotApplicableWithoutGoMod(t *testing.T) {
+func TestFixGoToolsNoOpWhenComplete(t *testing.T) {
 	t.Parallel()
 
 	outcome := remediateGoTools(writeRepo(t, compliantFiles()))
-	if outcome.Action != ActionNone || !strings.Contains(outcome.Message, "not applicable") {
-		t.Fatalf("got %s (%s), want a not-applicable no-op", outcome.Action, outcome.Message)
+	if outcome.Action != ActionNone || outcome.Message != goToolsPassMessage {
+		t.Fatalf("got %s (%s), want a no-op", outcome.Action, outcome.Message)
 	}
 }
 
-// TestFixGoToolsAddsDirectives: fix adds the missing directives through
-// `go get -tool` (stubbed) and the rule then passes.
-//
-//nolint:paralleltest // serial by design: mutates the package-level goBin.
+// TestFixGoToolsSeedsWithoutGoMod: a repository without a root go.mod gets a
+// bare `tools` module at the aqua-pinned go, the everywhere set added through
+// `go get -tool` (the fake go), and the rule then passes.
+func TestFixGoToolsSeedsWithoutGoMod(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	delete(files, goToolsModFile)
+	dir := writeRepo(t, files)
+
+	outcome := remediateGoTools(dir)
+	if outcome.Action != ActionMerged || !strings.Contains(outcome.Message, "created "+goToolsModFile) {
+		t.Fatalf("got %s (%s), want merged with the module created", outcome.Action, outcome.Message)
+	}
+
+	toolsMod, err := os.ReadFile(filepath.Join(dir, goToolsModFile))
+	if err != nil {
+		t.Fatalf("tools/go.mod not created: %v", err)
+	}
+
+	goDirective := aquaGoDirective(dir)
+	if goDirective == fallbackGoDirective {
+		t.Fatal("the canonical aqua.yaml carries no golang/go pin to derive the go directive from")
+	}
+
+	if !strings.Contains(string(toolsMod), "\nmodule "+bareToolsModule+"\n") ||
+		!strings.Contains(string(toolsMod), "\n"+goDirective+"\n") {
+		t.Errorf(
+			"tools/go.mod lacks the bare module path or the aqua-pinned go directive (%s):\n%s",
+			goDirective,
+			toolsMod,
+		)
+	}
+
+	declared := goModToolDirectives(string(toolsMod))
+	for _, pkg := range goSourceAnalyzers {
+		if declared[pkg] {
+			t.Errorf("fix added the analyzer %s to a repository without go.mod", pkg)
+		}
+	}
+
+	if f := checkGoTools(dir); !f.OK() {
+		t.Fatalf("rule does not pass after fix: %s", f.Message)
+	}
+}
+
+// TestFixGoToolsAddsDirectives: in a Go module, fix adds every missing
+// directive through `go get -tool` (the fake go) and the rule then passes.
 func TestFixGoToolsAddsDirectives(t *testing.T) {
-	stubGo(t)
+	t.Parallel()
 
 	files := compliantFiles()
 	files[goModFile] = goModBare
+	delete(files, goToolsModFile)
 	dir := writeRepo(t, files)
 
 	outcome := remediateGoTools(dir)
@@ -296,7 +410,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 		t.Errorf("tools/go.mod lacks the derived module path or go directive:\n%s", toolsMod)
 	}
 
-	if f, ok := checkGoTools(dir); !ok || !f.OK() {
+	if f := checkGoTools(dir); !f.OK() {
 		t.Fatalf("rule does not pass after fix: %s", f.Message)
 	}
 
@@ -306,11 +420,10 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 }
 
 // TestFixGoToolsMovesDirectivesOutOfRoot: directives in the project's go.mod
-// are stripped (go mod tidy stubbed) and tools/go.mod ends complete.
-//
-//nolint:paralleltest // serial by design: mutates the package-level goBin.
+// are stripped (go mod tidy is the fake go's no-op) and tools/go.mod ends
+// complete.
 func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
-	stubGo(t)
+	t.Parallel()
 
 	files := compliantFiles()
 	files[goModFile] = goModWithTools
@@ -326,7 +439,7 @@ func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
 		t.Errorf("go.mod still carries tool directives:\n%s", rootMod)
 	}
 
-	if f, ok := checkGoTools(dir); !ok || !f.OK() {
+	if f := checkGoTools(dir); !f.OK() {
 		t.Fatalf("rule does not pass after fix: %s", f.Message)
 	}
 }
@@ -358,4 +471,44 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) {
 	if string(data) != goModBare {
 		t.Errorf("go.mod was modified despite the failure:\n%s", data)
 	}
+}
+
+func TestAquaGoDirective(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		manifest string
+		want     string
+	}{
+		{name: "canonical", manifest: compliantFiles()["aqua.yaml"], want: "go " + canonicalGoVersion(t)},
+		{name: "quoted", manifest: "packages:\n  - name: 'golang/go@go1.25.3' # pinned\n", want: "go 1.25.3"},
+		{name: "no pin", manifest: "packages:\n  - name: casey/just@1.0.0\n", want: fallbackGoDirective},
+		{name: "no manifest", manifest: "", want: fallbackGoDirective},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			files := map[string]string{}
+			if testCase.manifest != "" {
+				files["aqua.yaml"] = testCase.manifest
+			}
+
+			if got := aquaGoDirective(writeRepo(t, files)); got != testCase.want {
+				t.Errorf("got %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+// canonicalGoVersion is the golang/go version the canonical aqua.yaml pins,
+// read from the manifest itself so a Renovate bump never breaks the test.
+func canonicalGoVersion(t *testing.T) string {
+	t.Helper()
+
+	_, version := canonicalPin(t, "golang/go")
+
+	return strings.TrimPrefix(version, "go")
 }

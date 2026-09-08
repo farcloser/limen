@@ -455,7 +455,21 @@ func stubAqua(t *testing.T) {
 }
 
 // TestMain lets the binary double as the fake aqua (see stubAqua).
+// suiteGuardEnv marks the environment of the running suite. The test binary
+// doubles as two stubs (below), so a child that is this binary and matches
+// neither stub is a bug — and running the suite from inside the suite is a
+// fork bomb. The guard turns that into an immediate failure.
+const suiteGuardEnv = "LIMEN_TEST_SUITE_RUNNING"
+
 func TestMain(m *testing.M) {
+	// Invoked under the name `go`: the fake go (see installGoStub). Decided
+	// on the name, not an env var, so a test that also arms the aqua stub
+	// (env-triggered, below) can never make a go child run as aqua.
+	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "go" {
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(runGoStub())
+	}
+
 	if os.Getenv(aquaStubEnv) != "" {
 		// The stub's exit status IS its contract; this branch never reaches
 		// the test runner's own exit handling.
@@ -463,12 +477,32 @@ func TestMain(m *testing.M) {
 		os.Exit(runAquaStub())
 	}
 
-	if os.Getenv(goStubEnv) != "" {
+	if os.Getenv(suiteGuardEnv) != "" {
+		fmt.Fprintf(os.Stderr, "test binary re-executed as %q from inside the suite: refusing to recurse\n", os.Args)
 		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(runGoStub())
+		os.Exit(1)
 	}
 
+	if err := os.Setenv(suiteGuardEnv, "1"); err != nil {
+		fmt.Fprintln(os.Stderr, "arming the suite guard:", err)
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(1)
+	}
+
+	// Every test runs against the fake go: the gotools remediation shells
+	// out on any repository lacking a directive, which is most fixtures, and
+	// the real go would reach the network from dozens of parallel tests.
+	cleanup, err := installGoStub()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "installing the go stub:", err)
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(1)
+	}
+
+	// The runner exits with m.Run's status once TestMain returns; the stub
+	// directory is removed on the way out.
 	m.Run()
+	cleanup()
 }
 
 // runAquaStub mimics the two invocations remediation makes: `policy allow`
