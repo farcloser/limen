@@ -16,7 +16,7 @@ import (
 // the one-line pin of every package the canonical carries — the generic
 // owner/repo@vX manager, the prefix-aware managers for golang/go (go1.x) and
 // jqlang/jq (jq-1.x), the golang.org/ manager for the x/ tools — and the
-// canonical renovate.json5 adds a manager for the github.com/… go modules the
+// canonical renovate.json adds a manager for the github.com/… go modules the
 // preset's generic manager cannot read (a dotted owner). The `# renovate:
 // depName=` hook the two-line form carried is not needed and is dropped.
 //

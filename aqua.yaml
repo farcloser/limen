@@ -20,7 +20,7 @@ packages:
   # Every pin is the one-line name@version form and stays so (limen fix
   # collapses a two-line `version:` pin): `aqua update` rewrites only that form
   # and treats a separate `version:` key as hand-held, and Renovate reads only
-  # that form (renovate.json5 carries the manager for the github.com/… module
+  # that form (renovate.json carries the manager for the github.com/… module
   # pins).
   # --- go install tools (local registry, GOSUMDB-verified) ---
   # Only tools that never load Go source; the Go-source analyzers are go.mod

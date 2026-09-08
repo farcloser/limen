@@ -718,7 +718,7 @@ const renovateAppSlug = "renovate"
 // audit.
 //
 // The Renovate assertion is a floor. Every repository limen governs carries a
-// seeded renovate.json5 and a content-pinned checksum-refresh workflow that
+// seeded renovate.json and a content-pinned checksum-refresh workflow that
 // exists only to serve Renovate's branches; without the app installed on the
 // organization none of it runs, and every pin — tool versions in aqua.yaml,
 // action SHAs in the workflows — silently stops moving. Installing a GitHub
@@ -764,7 +764,7 @@ func (a *auditor) auditOrgInstalledApps() {
 	}
 
 	a.flag(checkOrgRenovateInstalled, StatusFail, "(not installed)", renovateAppSlug,
-		"the Renovate GitHub App is not installed on this organization: the seeded renovate.json5"+
+		"the Renovate GitHub App is not installed on this organization: the seeded renovate.json"+
 			" and the checksum-refresh workflow in every repository do nothing without it, and no pin"+
 			" ever moves. Install it at https://github.com/apps/renovate/installations/new (choose"+
 			" this organization, all repositories) — GitHub offers no API for app installation, so"+

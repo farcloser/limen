@@ -180,7 +180,7 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Secret scanning | enabled | ✓ | `PATCH /repos/{o}/{r}` `security_and_analysis` |
 | Secret scanning push protection | enabled | ✓ | same |
 | Dependabot alerts | enabled | ✓ | `PUT /repos/{o}/{r}/vulnerability-alerts` |
-| Dependabot security updates | **disabled** (Renovate is the one dependency bot; alerts stay on as its signal, and the seeded renovate.json5 enables `vulnerabilityAlerts` so fix PRs cover indirect Go modules too) | ✓ | `DELETE /repos/{o}/{r}/automated-security-fixes` |
+| Dependabot security updates | **disabled** (Renovate is the one dependency bot; alerts stay on as its signal, and the seeded renovate.json enables `vulnerabilityAlerts` so fix PRs cover indirect Go modules too) | ✓ | `DELETE /repos/{o}/{r}/automated-security-fixes` |
 | Private vulnerability reporting | enabled (public repos) | ✓ | `PUT /repos/{o}/{r}/private-vulnerability-reporting` |
 | Code scanning default setup | **not required** (decided: our SAST posture is gosec + staticcheck via golangci and govulncheck, per platform; CodeQL's marginal catch is taint-flow analysis, which matters for network/parser-heavy services — revisit if we ship one; repos may opt in via the override file) | ✓ when opted in | `PATCH /repos/{o}/{r}/code-scanning/default-setup` |
 
@@ -292,7 +292,7 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 | Check | Baseline | API |
 |---|---|---|
 | Installed GitHub Apps | subset of a named allowlist (Renovate just joined — this check makes such grants reviewable) with scopes recorded | `GET /orgs/{o}/installations` |
-| Renovate installed | the `renovate` app is among the installations — the seeded `renovate.json5` and the checksum-refresh workflow depend on it. Fail, no fix: app installation has no API. Self-hosted Renovate = exemption | `GET /orgs/{o}/installations` |
+| Renovate installed | the `renovate` app is among the installations — the seeded `renovate.json` and the checksum-refresh workflow depend on it. Fail, no fix: app installation has no API. Self-hosted Renovate = exemption | `GET /orgs/{o}/installations` |
 | Org webhooks | HTTPS + secret + named | `GET /orgs/{o}/hooks` |
 | Org-level secrets | named inventory | `GET /orgs/{o}/actions/secrets` |
 | Fine-grained PAT approvals | inventory (API is partial; mark unverifiable where gated) | `/orgs/{o}/personal-access-token*` |

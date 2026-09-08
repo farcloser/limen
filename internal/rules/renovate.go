@@ -1,17 +1,21 @@
 package rules
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/farcloser/limen"
 )
 
-// The renovate rule maintains two things in renovate.json5: the `extends`
-// reference to the shared canonical preset (see presetRepo below), and the
-// gitIgnoredAuthors array, kept in step with the identities that commit onto
-// Renovate's branches. Renovate treats a commit by
-// any other author as a human edit and stops rebasing the branch — so the
+// The renovate rule maintains three things in renovate.json: the `extends`
+// reference to the shared canonical preset (see presetRepo below),
+// forkProcessing, and the gitIgnoredAuthors array, kept in step with the
+// identities that commit onto Renovate's branches. Renovate treats a commit
+// by any other author as a human edit and stops rebasing the branch — so the
 // update-aqua-checksum fix-up commit, made as the org's update-App bot user
 // (book/tooling.md), must be listed or every aqua bump PR quietly goes stale.
 //
@@ -19,18 +23,30 @@ import (
 // App), and resolving it takes the network. The caller resolves it (see
 // cmd/limen) and passes the address through Policy/FixOptions; empty means
 // unknown, and the rule then passes without enforcing — never fails a repo
-// for what could not be looked up. renovate.json5 itself is seeded by the
+// for what could not be looked up. renovate.json itself is seeded by the
 // workflows rule (seeded once, the project's own afterwards): this rule edits
-// exactly one array in it and touches nothing else.
-
+// exactly the keys below and leaves every other key untouched.
 const ruleRenovate = "renovate"
 
-// ignoredAuthorsKey is the renovate.json5 key this rule maintains.
-const ignoredAuthorsKey = "gitIgnoredAuthors"
+// The keys this rule maintains.
+const (
+	ignoredAuthorsKey = "gitIgnoredAuthors"
+	extendsKey        = "extends"
+	forkProcessingKey = "forkProcessing"
+)
 
-// The rule's second charge: the `extends` reference to the shared preset.
+// forkProcessingValue is what forkProcessing must say. Renovate skips forked
+// repositories by default under an all-repositories App installation, and it
+// decides that from this file alone, fetched through the platform API before
+// any preset is resolved — so the setting cannot be inherited from the shared
+// preset, and a fork without it is never processed at all. Every farcloser
+// and forkcloser repository is or may become a fork, and the failure is
+// silent: no PR, no issue, no log the repository can see.
+const forkProcessingValue = "enabled"
+
+// The rule's first charge: the `extends` reference to the shared preset.
 // The canonical Renovate configuration lives in limen's default.json, and
-// each repository's renovate.json5 extends it — pinned to the repository's
+// each repository's renovate.json extends it — pinned to the repository's
 // own limen version (the farcloser/limen pin in aqua.yaml), so the preset
 // moves with the release exactly like the content-pinned files do, and a
 // fix to the canonical configuration reaches every repository at its next
@@ -42,18 +58,78 @@ const (
 	presetModulePath = "github.com/farcloser/limen"
 )
 
-// quote wraps a JSON5 string value.
-const quote = `"`
-
-// presetRefPattern matches any quoted reference to the shared preset, tagged
-// or not, from either source.
-var presetRefPattern = regexp.MustCompile(`"(?:github|local)>` + regexp.QuoteMeta(presetRepo) + `(?:#[^"]*)?"`)
+// presetRefPattern matches a reference to the shared preset, tagged or not,
+// from either source.
+var presetRefPattern = regexp.MustCompile(`^(?:github|local)>` + regexp.QuoteMeta(presetRepo) + `(?:#.*)?$`)
 
 // limenPinPattern finds the repository's farcloser/limen pin in aqua.yaml.
 var limenPinPattern = regexp.MustCompile(`(?m)^\s*-\s+name:\s*"?` + regexp.QuoteMeta(presetRepo) + `@([^"\s#]+)`)
 
 // goModulePattern reads the module path off go.mod.
 var goModulePattern = regexp.MustCompile(`(?m)^module\s+(\S+)`)
+
+// config is a parsed renovate.json. Renovate's schema is open-ended and most
+// of the file is the project's own, so it is carried as a map and written
+// back whole: only the maintained keys are ever replaced. json.Number keeps
+// integers from round-tripping through float64.
+type config map[string]any
+
+// parseConfig decodes renovate.json.
+func parseConfig(data []byte) (config, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+
+	var cfg config
+	if err := decoder.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("not valid JSON: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// render writes a config back out. HTML escaping is off because a preset
+// reference contains `>` and would otherwise come back as >; keys are
+// emitted in the encoder's stable (sorted) order, so a fix is deterministic.
+func render(cfg config) (string, error) {
+	var buf bytes.Buffer
+
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(cfg); err != nil {
+		return "", fmt.Errorf("cannot render renovate.json: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// strings returns the value at key as a slice of strings; ok is false when
+// the key is absent or is not an array of strings.
+func (cfg config) strings(key string) ([]string, bool) {
+	raw, present := cfg[key]
+	if !present {
+		return nil, false
+	}
+
+	items, isArray := raw.([]any)
+	if !isArray {
+		return nil, false
+	}
+
+	out := make([]string, 0, len(items))
+
+	for _, item := range items {
+		text, isString := item.(string)
+		if !isString {
+			return nil, false
+		}
+
+		out = append(out, text)
+	}
+
+	return out, true
+}
 
 // canonicalPresetRef returns the preset reference this repository must
 // extend: the local default branch when the repository IS limen, else the
@@ -90,89 +166,127 @@ func presetRefFor(manifest string) string {
 	return "github>" + presetRepo + "#" + m[1]
 }
 
-// CanonicalRenovateFor returns the seeded renovate.json5 as `limen fix`
-// leaves it in a repository whose aqua.yaml is the given manifest: the seed
-// with its preset reference pinned to that manifest's limen version. A
-// manifest without a limen pin gets the seed as is. Exported for the
-// command's tests, which build compliant repositories from the canonical
-// files.
+// CanonicalRenovateFor returns the seeded renovate.json as `limen fix` leaves
+// it in a repository whose aqua.yaml is the given manifest: the seed with its
+// preset reference pinned to that manifest's limen version. A manifest
+// without a limen pin gets the seed as is. Exported for the command's tests,
+// which build compliant repositories from the canonical files.
 func CanonicalRenovateFor(manifest string) string {
 	ref := presetRefFor(manifest)
 	if ref == "" {
 		return limen.CanonicalRenovate
 	}
 
-	pinned, ok := ensurePresetRef(limen.CanonicalRenovate, ref)
-	if !ok {
+	cfg, err := parseConfig([]byte(limen.CanonicalRenovate))
+	if err != nil {
+		return limen.CanonicalRenovate
+	}
+
+	cfg.setPresetRef(ref)
+
+	pinned, err := render(cfg)
+	if err != nil {
 		return limen.CanonicalRenovate
 	}
 
 	return pinned
 }
 
-// hasPresetRef reports whether the content extends exactly the given
-// reference and no other reference to the preset.
-func hasPresetRef(content, ref string) bool {
-	refs := presetRefPattern.FindAllString(content, -1)
-	if len(refs) == 0 {
+// hasPresetRef reports whether extends carries exactly the given reference
+// and no other reference to the preset.
+func (cfg config) hasPresetRef(ref string) bool {
+	refs, ok := cfg.strings(extendsKey)
+	if !ok {
 		return false
 	}
 
-	for _, found := range refs {
-		if found != quote+ref+quote {
+	found := false
+
+	for _, entry := range refs {
+		if !presetRefPattern.MatchString(entry) {
+			continue
+		}
+
+		if entry != ref {
 			return false
 		}
+
+		found = true
 	}
 
-	return true
+	return found
 }
 
-// ensurePresetRef returns the content extending ref: every existing
-// reference to the preset is rewritten to it; absent one, ref is inserted as
-// the first element of `extends`, and absent that array, an `extends` line
-// goes right after the opening brace. False only when the file has no
-// opening brace to anchor on.
-func ensurePresetRef(content, ref string) (string, bool) {
-	quoted := quote + ref + quote
+// setPresetRef rewrites every reference to the preset to ref, or prepends it
+// when extends carries none. A non-array extends is replaced outright: it is
+// the maintained key, and the rule's job is to leave it correct.
+func (cfg config) setPresetRef(ref string) {
+	existing, ok := cfg.strings(extendsKey)
+	if !ok {
+		cfg[extendsKey] = []any{ref}
 
-	if presetRefPattern.MatchString(content) {
-		return presetRefPattern.ReplaceAllLiteralString(content, quoted), true
+		return
 	}
 
-	if loc := extendsKeyPattern.FindStringSubmatchIndex(content); loc != nil {
-		open := loc[1] - 1 // index of '['
-		if closingBracket(content, open) < 0 {
-			return content, false
+	out := make([]any, 0, len(existing)+1)
+	replaced := false
+
+	for _, entry := range existing {
+		if presetRefPattern.MatchString(entry) {
+			if !replaced {
+				out = append(out, ref)
+				replaced = true
+			}
+
+			continue
 		}
 
-		rest := strings.TrimLeft(content[open+1:], " \t\n")
-		separator := ", "
-
-		if strings.HasPrefix(rest, "]") {
-			separator = ""
-		} else if strings.HasPrefix(content[open+1:], "\n") {
-			// Multi-line array: give the new element its own line.
-			indent := content[loc[2]:loc[3]]
-
-			return content[:open+1] + "\n" + indent + "  " + quoted + "," + content[open+1:], true
-		}
-
-		return content[:open+1] + quoted + separator + content[open+1:], true
+		out = append(out, entry)
 	}
 
-	brace := strings.Index(content, "{")
-	if brace < 0 {
-		return content, false
+	if !replaced {
+		out = append([]any{ref}, out...)
 	}
 
-	return content[:brace+1] + "\n  extends: [" + quoted + "]," + content[brace+1:], true
+	cfg[extendsKey] = out
 }
 
-// extendsKeyPattern finds `extends: [` with its indentation.
-var extendsKeyPattern = regexp.MustCompile(`(?m)^([ \t]*)"?extends"?\s*:\s*\[`)
+// hasIgnoredAuthor reports whether the address is listed in gitIgnoredAuthors.
+func (cfg config) hasIgnoredAuthor(email string) bool {
+	authors, ok := cfg.strings(ignoredAuthorsKey)
+	if !ok {
+		return false
+	}
 
-// checkRenovate verifies the update-App identity is among gitIgnoredAuthors,
-// when the identity is known.
+	return slices.Contains(authors, email)
+}
+
+// addIgnoredAuthor puts the address first in gitIgnoredAuthors, keeping the
+// existing entries in order.
+func (cfg config) addIgnoredAuthor(email string) {
+	existing, _ := cfg.strings(ignoredAuthorsKey)
+
+	out := make([]any, 0, len(existing)+1)
+	out = append(out, email)
+
+	for _, author := range existing {
+		if author != email {
+			out = append(out, author)
+		}
+	}
+
+	cfg[ignoredAuthorsKey] = out
+}
+
+// hasForkProcessing reports whether forkProcessing is enabled.
+func (cfg config) hasForkProcessing() bool {
+	value, ok := cfg[forkProcessingKey].(string)
+
+	return ok && value == forkProcessingValue
+}
+
+// checkRenovate verifies the preset reference, forkProcessing, and — when the
+// identity is known — that it is among gitIgnoredAuthors.
 func checkRenovate(root string, policy Policy) Finding {
 	data, err := readRepoFile(root, pathRenovate)
 	if err != nil {
@@ -181,29 +295,16 @@ func checkRenovate(root string, policy Policy) Finding {
 			Rule:    ruleRenovate,
 			Status:  StatusOK,
 			Path:    pathRenovate,
-			Message: "no renovate.json5 yet (the workflows rule seeds it) — not evaluated",
+			Message: "no renovate.json yet (the workflows rule seeds it) — not evaluated",
 		}
 	}
 
-	if policy.UpdateAppIdentity == "" {
-		if ref := canonicalPresetRef(root); ref != "" && !hasPresetRef(string(data), ref) {
-			return fail(
-				ruleRenovate,
-				pathRenovate,
-				"extends must carry the shared preset at the repository's limen pin, "+ref+
-					" — the canonical Renovate configuration is inherited from there (limen fix sets it)",
-			)
-		}
-
-		return Finding{
-			Rule:    ruleRenovate,
-			Status:  StatusOK,
-			Path:    pathRenovate,
-			Message: "extends the shared preset; update-App identity unknown (no org or App resolvable) — gitIgnoredAuthors not enforced",
-		}
+	cfg, err := parseConfig(data)
+	if err != nil {
+		return fail(ruleRenovate, pathRenovate, err.Error())
 	}
 
-	if ref := canonicalPresetRef(root); ref != "" && !hasPresetRef(string(data), ref) {
+	if ref := canonicalPresetRef(root); ref != "" && !cfg.hasPresetRef(ref) {
 		return fail(
 			ruleRenovate,
 			pathRenovate,
@@ -212,12 +313,33 @@ func checkRenovate(root string, policy Policy) Finding {
 		)
 	}
 
-	if hasIgnoredAuthor(string(data), policy.UpdateAppIdentity) {
+	if !cfg.hasForkProcessing() {
+		return fail(
+			ruleRenovate,
+			pathRenovate,
+			forkProcessingKey+" must be \""+forkProcessingValue+
+				"\" — Renovate skips a forked repository otherwise, and decides that from this file "+
+				"before any preset is read, so the shared preset cannot carry it (limen fix sets it)",
+		)
+	}
+
+	if policy.UpdateAppIdentity == "" {
 		return Finding{
-			Rule:    ruleRenovate,
-			Status:  StatusOK,
-			Path:    pathRenovate,
-			Message: "extends the shared preset; gitIgnoredAuthors carries the update-App identity " + policy.UpdateAppIdentity,
+			Rule:   ruleRenovate,
+			Status: StatusOK,
+			Path:   pathRenovate,
+			Message: "extends the shared preset; forks are processed; update-App identity unknown " +
+				"(no org or App resolvable) — gitIgnoredAuthors not enforced",
+		}
+	}
+
+	if cfg.hasIgnoredAuthor(policy.UpdateAppIdentity) {
+		return Finding{
+			Rule:   ruleRenovate,
+			Status: StatusOK,
+			Path:   pathRenovate,
+			Message: "extends the shared preset; forks are processed; gitIgnoredAuthors carries the " +
+				"update-App identity " + policy.UpdateAppIdentity,
 		}
 	}
 
@@ -229,8 +351,8 @@ func checkRenovate(root string, policy Policy) Finding {
 	)
 }
 
-// remediateRenovate adds the update-App identity to gitIgnoredAuthors when it
-// is known and missing.
+// remediateRenovate sets the preset reference and forkProcessing, and adds
+// the update-App identity to gitIgnoredAuthors when it is known and missing.
 func remediateRenovate(root string, opts FixOptions) Outcome {
 	data, err := readRepoFile(root, pathRenovate)
 	if err != nil {
@@ -238,50 +360,48 @@ func remediateRenovate(root string, opts FixOptions) Outcome {
 			Rule:    ruleRenovate,
 			Action:  ActionNone,
 			Path:    pathRenovate,
-			Message: "no renovate.json5 (the workflows rule seeds it) — nothing to edit",
+			Message: "no renovate.json (the workflows rule seeds it) — nothing to edit",
 		}
 	}
 
-	content := string(data)
+	cfg, err := parseConfig(data)
+	if err != nil {
+		return Outcome{
+			Rule:    ruleRenovate,
+			Action:  ActionAdvisory,
+			Path:    pathRenovate,
+			Message: err.Error() + " — fix the syntax by hand, then run limen fix again",
+		}
+	}
 
 	var done []string
 
-	if ref := canonicalPresetRef(root); ref != "" && !hasPresetRef(content, ref) {
-		updated, ok := ensurePresetRef(content, ref)
-		if !ok {
-			return Outcome{
-				Rule:    ruleRenovate,
-				Action:  ActionAdvisory,
-				Path:    pathRenovate,
-				Message: "could not find an extends array (or an opening brace) to edit — add \"" + ref + "\" to extends by hand",
-			}
-		}
-
-		content = updated
+	if ref := canonicalPresetRef(root); ref != "" && !cfg.hasPresetRef(ref) {
+		cfg.setPresetRef(ref)
 
 		done = append(done, "set extends to the shared preset "+ref)
+	}
+
+	if !cfg.hasForkProcessing() {
+		cfg[forkProcessingKey] = forkProcessingValue
+
+		done = append(done, "set "+forkProcessingKey+" to \""+forkProcessingValue+"\"")
 	}
 
 	switch {
 	case opts.Policy.UpdateAppIdentity == "":
 		done = append(done, "update-App identity unknown (no org or App resolvable) — gitIgnoredAuthors left as is")
-	case hasIgnoredAuthor(content, opts.Policy.UpdateAppIdentity):
+	case cfg.hasIgnoredAuthor(opts.Policy.UpdateAppIdentity):
 		done = append(done, "gitIgnoredAuthors already carries "+opts.Policy.UpdateAppIdentity)
 	default:
-		updated, ok := ensureIgnoredAuthor(content, opts.Policy.UpdateAppIdentity)
-		if !ok {
-			return Outcome{
-				Rule:   ruleRenovate,
-				Action: ActionAdvisory,
-				Path:   pathRenovate,
-				Message: "could not find a " + ignoredAuthorsKey + " array to edit — add \"" +
-					opts.Policy.UpdateAppIdentity + "\" to it by hand",
-			}
-		}
-
-		content = updated
+		cfg.addIgnoredAuthor(opts.Policy.UpdateAppIdentity)
 
 		done = append(done, "added the update-App identity "+opts.Policy.UpdateAppIdentity+" to "+ignoredAuthorsKey)
+	}
+
+	content, err := render(cfg)
+	if err != nil {
+		return Outcome{Rule: ruleRenovate, Action: ActionFailed, Path: pathRenovate, Message: err.Error()}
 	}
 
 	if content == string(data) {
@@ -293,76 +413,4 @@ func remediateRenovate(root string, opts FixOptions) Outcome {
 	}
 
 	return Outcome{Rule: ruleRenovate, Action: ActionMerged, Path: pathRenovate, Message: strings.Join(done, "; ")}
-}
-
-// hasIgnoredAuthor reports whether the address appears as a quoted string
-// anywhere in the file. A textual test, deliberately: renovate.json5 is
-// JSON5 with comments and the seed's array has one well-known shape; the
-// address is specific enough (a numeric id, a [bot] slug, the noreply
-// domain) that a match outside gitIgnoredAuthors is not a realistic false
-// positive.
-func hasIgnoredAuthor(content, email string) bool {
-	return strings.Contains(content, `"`+email+`"`)
-}
-
-// ignoredAuthorsArray finds `gitIgnoredAuthors: [ ... ]` and returns the
-// indices of the opening bracket and its matching close, plus the key's line
-// indentation. Nested brackets are not a thing here (an array of strings),
-// so the first `]` after the `[` closes it — but the scan skips string
-// contents anyway, in case an address ever carried one.
-var ignoredAuthorsKeyPattern = regexp.MustCompile(`(?m)^([ \t]*)"?` + ignoredAuthorsKey + `"?\s*:\s*\[`)
-
-// ensureIgnoredAuthor returns the content with email added as the FIRST
-// element of the gitIgnoredAuthors array, and false when no such array is
-// found. The array is rewritten in the canonical multi-line shape (one
-// element per line, trailing commas), whatever shape it had — the seed's
-// one-line form grows into it on the first addition. Existing elements are
-// kept in order; comments inside the array (none in the seed) are dropped,
-// which is the one editorial liberty this takes.
-func ensureIgnoredAuthor(content, email string) (string, bool) {
-	loc := ignoredAuthorsKeyPattern.FindStringSubmatchIndex(content)
-	if loc == nil {
-		return content, false
-	}
-
-	indent := content[loc[2]:loc[3]]
-	open := loc[1] - 1 // index of '['
-
-	closeIdx := closingBracket(content, open)
-	if closeIdx < 0 {
-		return content, false
-	}
-
-	existing := regexp.MustCompile(`"(?:[^"\\]|\\.)*"`).FindAllString(content[open+1:closeIdx], -1)
-
-	lines := make([]string, 0, len(existing)+1)
-	for _, element := range append([]string{`"` + email + `"`}, existing...) {
-		lines = append(lines, indent+"  "+element+",\n")
-	}
-
-	return content[:open+1] + "\n" + strings.Join(lines, "") + indent + content[closeIdx:], true
-}
-
-// closingBracket returns the index of the `]` closing the array whose `[` is
-// at open, skipping string contents (and escapes within them); -1 if none.
-func closingBracket(content string, open int) int {
-	inString := false
-
-	for pos := open + 1; pos < len(content); pos++ {
-		switch content[pos] {
-		case '\\':
-			if inString {
-				pos++ // skip the escaped character
-			}
-		case '"':
-			inString = !inString
-		case ']':
-			if !inString {
-				return pos
-			}
-		default:
-		}
-	}
-
-	return -1
 }

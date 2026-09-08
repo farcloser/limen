@@ -54,7 +54,7 @@ _suppression-check:
 # analyze a go1.N+1 toolchain: it panics with "file requires newer Go version".
 # The two pins move in lockstep — golangci first (a release built with the
 # newer Go), then golang/go — and this check turns the panic into that
-# instruction. The canonical renovate.json5 groups the two bumps for the same
+# instruction. The canonical renovate.json groups the two bumps for the same
 # reason. Compares major.minor only: patch releases share a language version.
 [private]
 _golangci-toolchain-check:

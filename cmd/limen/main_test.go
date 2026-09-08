@@ -42,7 +42,7 @@ func compliantRepo(t *testing.T) string {
 		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
 		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
-		"renovate.json5":                              rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
+		"renovate.json":                               rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
 	}
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
@@ -278,7 +278,7 @@ func TestEnsureUpdateAppNoOrg(t *testing.T) {
 
 // TestUpdateAppIdentityFlowsIntoRenovate: the org comes from the origin
 // remote, the resolver (stubbed here — the real one talks to GitHub) yields
-// the App's address, and `limen fix` writes it into renovate.json5 where
+// the App's address, and `limen fix` writes it into renovate.json where
 // `limen check` then requires it. Without a resolvable identity neither
 // command enforces anything.
 //
@@ -315,7 +315,7 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
 		t.Fatalf("check with an unresolvable identity = %d, want 0", code)
 	}
 
-	seed, err := os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	seed, err := os.ReadFile(filepath.Join(dir, "renovate.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,9 +324,9 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
 		t.Fatalf("fix with an unresolvable identity = %d, want 0", code)
 	}
 
-	after, _ := os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	after, _ := os.ReadFile(filepath.Join(dir, "renovate.json"))
 	if string(after) != string(seed) {
-		t.Error("fix edited renovate.json5 without a resolved identity")
+		t.Error("fix edited renovate.json without a resolved identity")
 	}
 
 	// Resolvable by convention: the org inferred from origin reaches the
@@ -354,7 +354,7 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
 		t.Fatalf("fix = %d, want 0", code)
 	}
 
-	fixed, _ := os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	fixed, _ := os.ReadFile(filepath.Join(dir, "renovate.json"))
 	if !strings.Contains(string(fixed), "\""+email+"\",\n") {
 		t.Errorf("fix did not add the address:\n%s", fixed)
 	}
@@ -380,7 +380,7 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) {
 		t.Fatalf("fix (discover) = %d, want 0", code)
 	}
 
-	fixed, _ = os.ReadFile(filepath.Join(dir, "renovate.json5"))
+	fixed, _ = os.ReadFile(filepath.Join(dir, "renovate.json"))
 	if !strings.Contains(string(fixed), "\""+renamed+"\",\n") || !strings.Contains(string(fixed), "\""+email+"\",\n") {
 		t.Errorf("fix did not add the discovered address alongside the earlier one:\n%s", fixed)
 	}

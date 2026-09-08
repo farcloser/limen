@@ -551,13 +551,13 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 // The two Dependabot toggles point in opposite directions, deliberately.
 // Alerts are ON: they are the vulnerability signal Renovate reads (its
 // vulnerabilityAlerts feature is fed by GitHub's Dependabot alerts API), and
-// the canonical renovate.json5 turns them into fix PRs. Security updates are
+// the canonical renovate.json turns them into fix PRs. Security updates are
 // OFF: that toggle is a second dependency bot — Dependabot itself opening
 // PRs — beside the one the baseline mandates. The two do not coordinate
 // (duplicate PRs for one advisory), and Dependabot honours none of the
 // repository's conventions: no minimumReleaseAge cooldown, no aqua preset,
 // its own branch and commit shape. One bot, one convention set. Renovate
-// covers what Dependabot would have: the canonical renovate.json5 enables
+// covers what Dependabot would have: the canonical renovate.json enables
 // vulnerabilityAlerts explicitly, which is what makes Renovate raise fix PRs
 // for `// indirect` Go modules too (indirect deps are otherwise disabled in
 // its gomod manager, and the alert path re-enables them only when the

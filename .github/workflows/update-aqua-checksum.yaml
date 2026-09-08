@@ -16,7 +16,7 @@
 # those and the main ruleset requires signatures (see the commit step). Its
 # author is the token's identity: github-actions[bot] by default, or the
 # App/PAT identity when UPDATE_AQUA_CHECKSUM_APP_ID (+ private key secret) or
-# UPDATE_AQUA_CHECKSUM_TOKEN is set — that identity must be in renovate.json5's
+# UPDATE_AQUA_CHECKSUM_TOKEN is set — that identity must be in renovate.json's
 # gitIgnoredAuthors or Renovate stops rebasing. The App is worth it:
 # default-token commits get no CI run.
 name: update-aqua-checksum
