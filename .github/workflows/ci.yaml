@@ -109,12 +109,12 @@ jobs:
           path: '**/testdata/fuzz/'
           if-no-files-found: ignore
 
-  # Every pin resolves and builds. The verify legs link only, and a go_install
-  # package has no checksum to fail on, so a pin whose module does not exist at
-  # that version (a root tag for a nested module) merges green and fails at
-  # first use. One linux leg pays for the real install; aqua's package store
-  # is cached on the exact pins, so a warm key costs seconds and a changed pin
-  # is always a real install.
+  # Every pin resolves. The verify legs link only, and a link verifies
+  # nothing: an asset that is missing from a release, or that fails its
+  # checksum, would merge green and fail at first use. One linux leg pays for
+  # the real install; aqua's package store is cached on the exact pins, so a
+  # warm key costs seconds and a changed pin is always a real install. (The
+  # Go-built tools are tools/go.mod directives, built by the verify legs.)
   tools:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
