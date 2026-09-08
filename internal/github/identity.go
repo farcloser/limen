@@ -1,6 +1,6 @@
 // identity.go — resolves the commit identity of an organization's
 // update-aqua-checksum App, so the tree rules can keep it in every
-// repository's renovate.json5 gitIgnoredAuthors (book/tooling.md).
+// repository's renovate.json gitIgnoredAuthors (book/tooling.md).
 //
 // The workflow commits through the createCommitOnBranch mutation, which
 // attributes the commit to the token's identity: with the App configured that
@@ -69,7 +69,7 @@ type UpdateAppIdentity struct {
 }
 
 // Email is the noreply address GitHub attributes the App's commits to — the
-// exact string that belongs in renovate.json5's gitIgnoredAuthors.
+// exact string that belongs in renovate.json's gitIgnoredAuthors.
 func (i UpdateAppIdentity) Email() string {
 	return strconv.FormatInt(i.UserID, decimalBase) + "+" + i.Slug + "[bot]@users.noreply.github.com"
 }

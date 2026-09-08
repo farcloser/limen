@@ -1,6 +1,7 @@
-package rules //nolint:testpackage // white-box: exercises the unexported editing helper directly.
+package rules //nolint:testpackage // white-box: exercises the unexported config helpers directly.
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,143 +14,139 @@ import (
 
 const testIdentity = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
 
-// TestEnsureIgnoredAuthor covers the editing helper on the shapes it meets:
-// the canonical seed (whatever its array currently holds — the seed is
-// limen's own renovate.json5, and limen fix keeps that array current, so the
-// test derives its expectation from the seed rather than hard-coding it), a
-// one-line array, an already multi-line array, an empty array, and a file
-// with no such key.
-func TestEnsureIgnoredAuthor(t *testing.T) {
+// TestConfigRoundTrip: the two things rendering must not do to a config it
+// only meant to edit one key of — escape the `>` in a preset reference, and
+// turn an integer into a float.
+func TestConfigRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	// The canonical seed: the new address goes FIRST, every existing entry is
-	// preserved in order, and the block takes the canonical multi-line shape.
-	updated, ok := ensureIgnoredAuthor(limen.CanonicalRenovate, testIdentity)
-	if !ok {
-		t.Fatal("the canonical seed's gitIgnoredAuthors was not found")
+	cfg, err := parseConfig([]byte(`{"extends":["github>farcloser/limen#v1.2.3"],"prConcurrentLimit":10}`))
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	existing := ignoredAuthorsOf(t, limen.CanonicalRenovate)
-	if !slices.Contains(existing, "41898282+github-actions[bot]@users.noreply.github.com") {
-		t.Fatalf("the seed must carry at least the default-token identity, got %v", existing)
+	out, err := render(cfg)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	want := "  gitIgnoredAuthors: [\n    \"" + testIdentity + "\",\n"
-	for _, entry := range existing {
-		want += "    \"" + entry + "\",\n"
+	if !strings.Contains(out, "github>farcloser/limen#v1.2.3") {
+		t.Errorf("the preset reference was escaped:\n%s", out)
 	}
 
-	want += "  ],\n"
-	if !strings.Contains(updated, want) {
-		t.Errorf("seed after insertion lacks the expected block:\n%s\n--- got:\n%s", want, updated)
+	if !strings.Contains(out, "10") || strings.Contains(out, "1e+01") {
+		t.Errorf("an integer did not survive:\n%s", out)
 	}
 
-	// Everything outside the array is byte-identical: the file minus the
-	// array must be unchanged.
-	head, _, found := strings.Cut(limen.CanonicalRenovate, "gitIgnoredAuthors")
-	if !found || !strings.HasPrefix(updated, head) {
-		t.Error("content before the array changed")
+	// Rendering is deterministic: a fix that changes nothing writes nothing.
+	again, err := render(cfg)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if !strings.HasSuffix(updated, "],\n}\n") {
-		t.Errorf("content after the array changed:\n%s", updated)
-	}
-
-	// The seed's one-line shape (what a fresh seed looked like before any fix
-	// touched it) grows into the multi-line block.
-	oneLine := "{\n  gitIgnoredAuthors: [\"41898282+github-actions[bot]@users.noreply.github.com\"],\n}\n"
-
-	grown, ok := ensureIgnoredAuthor(oneLine, testIdentity)
-	if !ok || grown != "{\n  gitIgnoredAuthors: [\n    \""+testIdentity+"\",\n"+
-		"    \"41898282+github-actions[bot]@users.noreply.github.com\",\n  ],\n}\n" {
-		t.Errorf("one-line array:\n%s", grown)
-	}
-
-	// Idempotent through the rule's presence test, and a second insertion of
-	// a DIFFERENT address goes first while keeping order.
-	again, ok := ensureIgnoredAuthor(updated, "1+other[bot]@users.noreply.github.com")
-	if !ok || !strings.Contains(again,
-		"    \"1+other[bot]@users.noreply.github.com\",\n    \""+testIdentity+"\",\n") {
-		t.Errorf("second insertion misordered:\n%s", again)
-	}
-
-	// Empty array.
-	empty, ok := ensureIgnoredAuthor("{\n  gitIgnoredAuthors: [],\n}\n", testIdentity)
-	if !ok || empty != "{\n  gitIgnoredAuthors: [\n    \""+testIdentity+"\",\n  ],\n}\n" {
-		t.Errorf("empty array:\n%s", empty)
-	}
-
-	// Quoted key (plain JSON) works too.
-	quoted, ok := ensureIgnoredAuthor("{\n  \"gitIgnoredAuthors\": [\"a@b\"]\n}\n", testIdentity)
-	if !ok || !strings.Contains(quoted, "\""+testIdentity+"\",\n    \"a@b\",\n  ]\n}") {
-		t.Errorf("quoted key:\n%s", quoted)
-	}
-
-	// No key: not editable.
-	if _, ok := ensureIgnoredAuthor("{\n  extends: [\"config:recommended\"],\n}\n", testIdentity); ok {
-		t.Error("a file without gitIgnoredAuthors must not be edited")
+	if again != out {
+		t.Error("render is not deterministic")
 	}
 }
 
-// TestEnsurePresetRef covers the editing helper on every shape it meets: a
-// tagged reference to move, the seed's local reference to pin, an extends
-// array without the preset (one-line, multi-line, empty), a file with no
-// extends at all, and one with nothing to anchor on.
-func TestEnsurePresetRef(t *testing.T) {
+// TestSetPresetRef covers the shapes extends arrives in: absent, carrying an
+// outdated reference, carrying only unrelated presets, and already correct.
+func TestSetPresetRef(t *testing.T) {
 	t.Parallel()
 
-	const ref = "github>farcloser/limen#v9.9.9"
+	const want = "github>farcloser/limen#v9.9.9"
 
-	cases := []struct {
-		name, in, want string
-	}{
-		{
-			"tagged, moved",
-			"{\n  extends: [\"github>farcloser/limen#v0.0.1\"],\n}\n",
-			"{\n  extends: [\"" + ref + "\"],\n}\n",
-		},
-		{"local, pinned", "{\n  extends: [\"local>farcloser/limen\"],\n}\n", "{\n  extends: [\"" + ref + "\"],\n}\n"},
-		{
-			"one-line, absent",
-			"{\n  extends: [\"config:recommended\"],\n}\n",
-			"{\n  extends: [\"" + ref + "\", \"config:recommended\"],\n}\n",
-		},
-		{
-			"multi-line, absent",
-			"{\n  extends: [\n    \"config:recommended\",\n  ],\n}\n",
-			"{\n  extends: [\n    \"" + ref + "\",\n    \"config:recommended\",\n  ],\n}\n",
-		},
-		{"empty", "{\n  extends: [],\n}\n", "{\n  extends: [\"" + ref + "\"],\n}\n"},
-		{
-			"no extends",
-			"{\n  minimumReleaseAge: \"3 days\",\n}\n",
-			"{\n  extends: [\"" + ref + "\"],\n  minimumReleaseAge: \"3 days\",\n}\n",
-		},
-	}
-
-	for _, c := range cases {
-		got, ok := ensurePresetRef(c.in, ref)
-		if !ok || got != c.want {
-			t.Errorf("%s: ok=%v\n--- got:\n%s--- want:\n%s", c.name, ok, got, c.want)
+	for name, input := range map[string]string{
+		"absent":           `{}`,
+		"no extends array": `{"extends":"github>farcloser/limen#v1.0.0"}`,
+		"outdated ref":     `{"extends":["github>farcloser/limen#v1.0.0","config:recommended"]}`,
+		"local ref":        `{"extends":["local>farcloser/limen"]}`,
+		"only unrelated":   `{"extends":["config:recommended"]}`,
+		"already correct":  `{"extends":["` + want + `","config:recommended"]}`,
+		"duplicated stale": `{"extends":["github>farcloser/limen#v1.0.0","github>farcloser/limen#v2.0.0"]}`,
+	} {
+		cfg, err := parseConfig([]byte(input))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
 		}
 
-		if !hasPresetRef(got, ref) {
-			t.Errorf("%s: the result does not satisfy the check", c.name)
+		cfg.setPresetRef(want)
+
+		if !cfg.hasPresetRef(want) {
+			t.Errorf("%s: not set", name)
+		}
+
+		refs, _ := cfg.strings(extendsKey)
+		if got := slices.Contains(refs, want); !got {
+			t.Errorf("%s: extends = %v", name, refs)
+		}
+
+		// Unrelated presets survive, and the stale reference does not.
+		for _, ref := range refs {
+			if ref != want && presetRefPattern.MatchString(ref) {
+				t.Errorf("%s: stale reference kept: %q", name, ref)
+			}
 		}
 	}
 
-	if _, ok := ensurePresetRef("not json at all\n", ref); ok {
-		t.Error("a file without an opening brace must not be edited")
+	// An unrelated preset is preserved alongside.
+	cfg, _ := parseConfig([]byte(`{"extends":["config:recommended"]}`))
+	cfg.setPresetRef(want)
+
+	if refs, _ := cfg.strings(extendsKey); !slices.Contains(refs, "config:recommended") {
+		t.Errorf("an unrelated preset was dropped: %v", refs)
+	}
+}
+
+// TestAddIgnoredAuthor: the new address goes first, existing entries keep
+// their order, and adding twice does not duplicate.
+func TestAddIgnoredAuthor(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := parseConfig([]byte(`{"gitIgnoredAuthors":["a@example.com","b@example.com"]}`))
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	// Two references, one stale: not satisfied; the edit moves both.
-	two := "{\n  extends: [\"" + ref + "\", \"local>farcloser/limen\"],\n}\n"
-	if hasPresetRef(two, ref) {
-		t.Error("a stale second reference must not pass")
+	cfg.addIgnoredAuthor(testIdentity)
+
+	got, _ := cfg.strings(ignoredAuthorsKey)
+	if want := []string{testIdentity, "a@example.com", "b@example.com"}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if got, _ := ensurePresetRef(two, ref); !hasPresetRef(got, ref) {
-		t.Errorf("both references must be moved:\n%s", got)
+	cfg.addIgnoredAuthor(testIdentity)
+
+	if got, _ := cfg.strings(ignoredAuthorsKey); len(got) != 3 {
+		t.Errorf("adding twice duplicated: %v", got)
+	}
+
+	// Absent key: the array is created.
+	empty, _ := parseConfig([]byte(`{}`))
+	empty.addIgnoredAuthor(testIdentity)
+
+	if got, _ := empty.strings(ignoredAuthorsKey); !slices.Equal(got, []string{testIdentity}) {
+		t.Errorf("absent key: %v", got)
+	}
+}
+
+// TestCanonicalSeed: the seed limen ships must itself satisfy the rule's
+// non-negotiable key — a seed that skipped forkProcessing would silently
+// disable Renovate on every fork it lands in.
+func TestCanonicalSeed(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := parseConfig([]byte(limen.CanonicalRenovate))
+	if err != nil {
+		t.Fatalf("the canonical seed is not valid JSON: %v", err)
+	}
+
+	if !cfg.hasForkProcessing() {
+		t.Errorf("the seed must set %s to %q", forkProcessingKey, forkProcessingValue)
+	}
+
+	if !cfg.hasPresetRef(presetLocalRef) {
+		t.Errorf("the seed must extend %q", presetLocalRef)
 	}
 }
 
@@ -221,13 +218,8 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("fix: %s (%s), want merged", o.Action, o.Message)
 	}
 
-	data, err := os.ReadFile(filepath.Join(root, pathRenovate))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !strings.Contains(string(data), "\""+testIdentity+"\",\n") {
-		t.Errorf("fix did not write the identity:\n%s", data)
+	if !slices.Contains(ignoredAuthorsOf(t, root), testIdentity) {
+		t.Error("fix did not write the identity")
 	}
 
 	if f := findingByRule(Check(root, known), ruleRenovate); !f.OK() {
@@ -255,7 +247,7 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("fix on the raw seed: %s (%s), want merged", o.Action, o.Message)
 	}
 
-	data, err = os.ReadFile(filepath.Join(root, pathRenovate))
+	data, err := os.ReadFile(filepath.Join(root, pathRenovate))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,18 +260,53 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("after pinning: %s", f.Message)
 	}
 
-	// A project that rewrote renovate.json5 without the key: advisory, and the
-	// message names the address to add.
-	custom := compliantFiles()
-	custom[pathRenovate] = "{ extends: [\"config:recommended\"] }\n"
-	root = writeRepo(t, custom)
+	// forkProcessing is not inheritable: a config that drops it fails, and
+	// fix puts it back. This is the whole reason the file is renovate.json.
+	noForks := compliantFiles()
+	noForks[pathRenovate] = `{"extends":["` + want + `"]}` + "\n"
+	root = writeRepo(t, noForks)
 
-	if o := outcomeByRule(Fix(root, FixOptions{Policy: known}), ruleRenovate); o.Action != ActionAdvisory ||
-		!strings.Contains(o.Message, testIdentity) {
-		t.Errorf("no key: %s (%s), want advisory naming the address", o.Action, o.Message)
+	if f := findingByRule(Check(root, DefaultPolicy()), ruleRenovate); f.OK() ||
+		!strings.Contains(f.Message, forkProcessingKey) {
+		t.Errorf("a config without %s must fail naming it, got: %+v", forkProcessingKey, f)
 	}
 
-	// No renovate.json5 at all: the workflows rule owns that verdict; this
+	if o := outcomeByRule(Fix(root, FixOptions{Policy: DefaultPolicy()}), ruleRenovate); o.Action != ActionMerged {
+		t.Errorf("fix must set %s: %s (%s)", forkProcessingKey, o.Action, o.Message)
+	}
+
+	if f := findingByRule(Check(root, DefaultPolicy()), ruleRenovate); !f.OK() {
+		t.Errorf("after setting %s: %s", forkProcessingKey, f.Message)
+	}
+
+	// A project that rewrote the file without the identity's key: fix creates
+	// the array rather than giving up, which the regex editor could not do.
+	custom := compliantFiles()
+	custom[pathRenovate] = `{"extends":["config:recommended"]}` + "\n"
+	root = writeRepo(t, custom)
+
+	if o := outcomeByRule(Fix(root, FixOptions{Policy: known}), ruleRenovate); o.Action != ActionMerged {
+		t.Errorf("no key: %s (%s), want merged", o.Action, o.Message)
+	}
+
+	if !slices.Contains(ignoredAuthorsOf(t, root), testIdentity) {
+		t.Error("fix did not create gitIgnoredAuthors")
+	}
+
+	// Invalid JSON is the one thing fix will not guess at.
+	broken := compliantFiles()
+	broken[pathRenovate] = "{ extends: [\"config:recommended\"] }\n" // JSON5, not JSON
+	root = writeRepo(t, broken)
+
+	if f := findingByRule(Check(root, known), ruleRenovate); f.OK() {
+		t.Error("invalid JSON must fail check")
+	}
+
+	if o := outcomeByRule(Fix(root, FixOptions{Policy: known}), ruleRenovate); o.Action != ActionAdvisory {
+		t.Errorf("invalid JSON: %s (%s), want advisory", o.Action, o.Message)
+	}
+
+	// No renovate.json at all: the workflows rule owns that verdict; this
 	// rule stays quiet on both sides.
 	missing := compliantFiles()
 	delete(missing, pathRenovate)
@@ -290,30 +317,24 @@ func TestRenovateRule(t *testing.T) {
 	}
 }
 
-// ignoredAuthorsOf extracts the quoted entries of the file's gitIgnoredAuthors
-// array, in order.
-func ignoredAuthorsOf(t *testing.T, content string) []string {
+// ignoredAuthorsOf reads the repository's gitIgnoredAuthors array, in order.
+func ignoredAuthorsOf(t *testing.T, root string) []string {
 	t.Helper()
 
-	loc := ignoredAuthorsKeyPattern.FindStringIndex(content)
-	if loc == nil {
-		t.Fatal("no gitIgnoredAuthors array")
+	data, err := os.ReadFile(filepath.Join(root, pathRenovate))
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	open := loc[1] - 1
-
-	closeIdx := closingBracket(content, open)
-	if closeIdx < 0 {
-		t.Fatal("unterminated gitIgnoredAuthors array")
+	var cfg struct {
+		GitIgnoredAuthors []string `json:"gitIgnoredAuthors"`
 	}
 
-	var entries []string
-
-	for _, quoted := range regexp.MustCompile(`"([^"]*)"`).FindAllStringSubmatch(content[open+1:closeIdx], -1) {
-		entries = append(entries, quoted[1])
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("renovate.json is not valid JSON: %v", err)
 	}
 
-	return entries
+	return cfg.GitIgnoredAuthors
 }
 
 func outcomeByRule(outcomes []Outcome, rule string) Outcome {

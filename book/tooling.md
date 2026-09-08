@@ -247,7 +247,7 @@ repo/
 ├── aqua-checksums.json                    # GENERATED — commit it
 ├── aqua-policy.yaml                       # authorizes the local registry
 ├── .limen/aqua-registry.yaml                     # local registry: non-Go-source go_install tools + farcloser/limen
-├── renovate.json5                         # automated version bumps
+├── renovate.json                         # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
 
@@ -285,7 +285,7 @@ aqua update-checksum      # generate aqua-checksums.json for the binary tools
 aqua install --only-link  # link every pinned tool (each downloads lazily on first use)
 
 git add aqua.yaml .limen/aqua-registry.yaml aqua-policy.yaml aqua-checksums.json \
-        renovate.json5 .github/workflows/update-aqua-checksum.yaml
+        renovate.json .github/workflows/update-aqua-checksum.yaml
 git commit --message "tooling: pin project CLIs via aqua"
 ```
 

@@ -114,10 +114,12 @@ var CanonicalWorkflowCI string
 //go:embed .github/workflows/release.yaml
 var CanonicalWorkflowRelease string
 
-// CanonicalRenovate seeds renovate.json5 once; projects may tune cooldowns
-// and managers afterwards.
+// CanonicalRenovate seeds renovate.json once; projects may tune cooldowns and
+// managers afterwards. Plain JSON, not JSON5: Renovate reads forkProcessing
+// only from this exact filename, and prose goes in the `description` array
+// the schema provides for it.
 //
-//go:embed renovate.json5
+//go:embed renovate.json
 var CanonicalRenovate string
 
 // CanonicalAgents is the repository's AGENTS.md — the working agreement for a

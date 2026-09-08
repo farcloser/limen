@@ -328,7 +328,7 @@ canonically the org's `.github` repository). The catalog:
   created without the grant, and `fix -org` grants them in one run. A missing
   team or an empty one is reported, never created or filled — people.
 - **Renovate installed** — the one GitHub App the baseline depends on. Every
-  governed repository carries a seeded `renovate.json5` and the content-pinned
+  governed repository carries a seeded `renovate.json` and the content-pinned
   checksum-refresh workflow that serves Renovate's branches; without the app on
   the organization none of it runs, and every pin (tool versions in
   `aqua.yaml`, action SHAs in the workflows) silently stops moving. A failing

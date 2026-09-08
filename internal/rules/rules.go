@@ -33,7 +33,7 @@ const (
 	pathActionSetupAqua  = ".github/actions/setup-aqua/action.yaml"
 	pathWorkflowCI       = ".github/workflows/ci.yaml"
 	pathWorkflowRelease  = ".github/workflows/release.yaml"
-	pathRenovate         = "renovate.json5"
+	pathRenovate         = "renovate.json"
 )
 
 // matchesCanonicalMsg suffixes the OK message of every content-pinned rule.

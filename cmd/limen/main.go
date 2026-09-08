@@ -346,7 +346,7 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 	ensureUpdateApp(*org, root, stderr)
 
 	// The App may have just been registered: only now can its commit identity
-	// be resolved and written into the seeded renovate.json5. A second, narrow
+	// be resolved and written into the seeded renovate.json. A second, narrow
 	// remediation pass — every other rule is already resolved and reports none.
 	if identity := updateAppIdentity(*org, root, discoverIdentity); identity != "" {
 		policy := rules.DefaultPolicy()
