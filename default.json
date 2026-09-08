@@ -7,9 +7,8 @@
     "packageRules, own releases: the cooldown guards against third parties (a tag whose assets are still uploading, a release pulled the next day). A release cut by one of our organizations carries no risk we do not already own, and its assets are published by the release workflow within minutes \u2014 so farcloser, forkcloser and mycophonic packages, in aqua's owner/repo form and Go's github.com/owner/repo form alike, are proposed as soon as they exist. A repository that wants the cooldown back on one of them adds a later packageRule in its own renovate.json; rules merge in order and the last match wins.",
     "vulnerabilityAlerts: fix PRs from GitHub's Dependabot alerts (the baseline keeps the alerts on for exactly this; Dependabot's own update PRs are off, Renovate is the one bot). Stated explicitly because enabled: true here is what reaches // indirect Go modules, which the gomod manager skips by default. Fix PRs skip the cooldown and take the lowest fixed version, both Renovate defaults for this object.",
     "postUpdateOptions gomodTidy: a Go module bump rewrites go.mod; without tidy, go.sum keeps the old module's lines and `just do lint go mod` (go mod tidy, diffed) fails every gomod PR.",
-    "customManagers: the go_install tools pinned as github.com/<owner>/<repo>[/<pkg>]@vX.Y.Z in aqua.yaml (local registry). aqua's generic manager cannot read a dotted owner, and its _go/ hook needs the two-line version: form that `aqua update` refuses to bump, so these one-line pins get their own manager on the go datasource (module tags, /vN aware, a package path below the module root resolves to the module's tags). Only plain vX.Y.Z: a pseudo-version has nothing to order against and is left alone.",
     "packageRules, content-pinned files: the checksum-update workflow, the setup-aqua action and everything under .limen/ are limen's byte for byte; a bump Renovate makes inside one is drift the next `limen check` rejects. Their pins move in limen's own repository, the one place Renovate keeps touching them, and reach every other repository through a limen release.",
-    "packageRules, Go-source analyzers: go.mod tool directives (deadcode, govulncheck, go-licenses), which Go lists as // indirect and the gomod manager would skip; re-enabled exactly.",
+    "packageRules, Go-built tools: the tools/go.mod tool directives (git-validation, godolint, dot, and the Go-source analyzers deadcode, govulncheck, go-licenses), which Go lists as // indirect and the gomod manager would skip; re-enabled exactly, by module. cmd/dot is a nested module without tags: Renovate offers its default-branch commit as a digest update, under the cooldown like any other.",
     "packageRules, go toolchain: golangci-lint embeds Go's type checker, so a golang/go bump can only land with (or after) a golangci release built with that Go; one grouped PR keeps the two in lockstep and the lint recipe's toolchain check names the fix when they still disagree.",
     "packageRules, lychee: releases are tagged lychee-vX.Y.Z next to lychee-lib-vX.Y.Z and nightly; regex versioning that carries the prefix parses the pin and the candidates alike and excludes the others by construction.",
     "commitBody: `just do lint commits` enforces DCO on every PR range, bot commits included."
@@ -24,18 +23,6 @@
   },
   "postUpdateOptions": [
     "gomodTidy"
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/(^|/)aqua\\.ya?ml$/"
-      ],
-      "matchStrings": [
-        " +- +name: +(?<depName>github\\.com/[^@'\" \\n]+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\n]"
-      ],
-      "datasourceTemplate": "go"
-    }
   ],
   "packageRules": [
     {
@@ -60,6 +47,9 @@
         "gomod"
       ],
       "matchDepNames": [
+        "github.com/vbatts/git-validation",
+        "github.com/farcloser/godolint",
+        "github.com/goccy/go-graphviz/cmd/dot",
         "golang.org/x/tools",
         "golang.org/x/vuln",
         "github.com/google/go-licenses/v2"
