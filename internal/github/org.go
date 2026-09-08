@@ -28,6 +28,7 @@ const (
 	checkOrgForkPRApproval      = "org-actions-fork-pr-approval"
 	checkOrgSelfHostedRunners   = "org-actions-self-hosted-runners"
 	checkOrgSecurityConfig      = "org-code-security-configuration"
+	checkOrgDependabotFixes     = "org-dependabot-security-updates"
 	checkOrgInstalledApps       = "org-installed-apps"
 	checkOrgRenovateInstalled   = "org-renovate-installed"
 	checkOrgWebhooks            = "org-webhooks"
@@ -39,6 +40,10 @@ const (
 	checkOrgCommunityHealthSet  = "org-community-health-content"
 	checkOrgAgentsTeam          = "org-agents-team"
 )
+
+// securityConfigOrgTarget is the target_type of a configuration this
+// organization owns, and so the only one it may PATCH.
+const securityConfigOrgTarget = "organization"
 
 // knownOrgChecks is every org-level identifier, merged into knownChecks for
 // override-file validation.
@@ -61,6 +66,7 @@ func knownOrgChecks() map[string]bool {
 		checkOrgForkPRApproval:      true,
 		checkOrgSelfHostedRunners:   true,
 		checkOrgSecurityConfig:      true,
+		checkOrgDependabotFixes:     true,
 		checkOrgInstalledApps:       true,
 		checkOrgRenovateInstalled:   true,
 		checkOrgWebhooks:            true,
@@ -135,6 +141,17 @@ type orgSecurityDefault struct {
 	Configuration      orgNamed `json:"configuration"`
 }
 
+type orgSecurityConfiguration struct {
+	Name string `json:"name"`
+	// TargetType is "organization" for a configuration this org owns,
+	// "global" for the GitHub-provided ones, "enterprise" for inherited.
+	// Only the first is writable: the others answer PATCH with 403.
+	TargetType                string `json:"target_type"`
+	Enforcement               string `json:"enforcement"`
+	DependabotSecurityUpdates string `json:"dependabot_security_updates"`
+	ID                        int    `json:"id"`
+}
+
 // AuditOrg checks the organization's settings against the baseline (O1–O7 of
 // design/LIMEN-GITHUB.md). overrides maps exempted check identifiers to reasons,
 // exactly as for Audit — org runs read the same override file, from wherever
@@ -157,6 +174,7 @@ func AuditOrg(org string, overrides map[string]string) ([]Finding, []Change) {
 	aud.auditOrgAdmins()
 	aud.auditOrgActions()
 	aud.auditOrgSecurityConfiguration()
+	aud.auditOrgDependabotSecurityUpdates()
 	aud.auditOrgSurface()
 	aud.auditOrgAgentsTeam(org)
 	aud.auditOrgCommunityHealth(org)
@@ -694,6 +712,102 @@ func (a *auditor) auditOrgSecurityConfiguration() {
 		a.flag(checkOrgSecurityConfig, StatusOK, "", "",
 			"default code security configuration: "+strings.Join(described, listSeparator), nil)
 	}
+}
+
+// auditOrgDependabotSecurityUpdates is the organization half of R1's "one
+// dependency bot". A code security configuration that turns Dependabot
+// security updates on overrides the repository toggle outright: while such a
+// configuration is enforced, GitHub answers the repository-level DELETE with
+// 422, so the repository check can never reach the baseline on its own and
+// the org object is the only place the setting can be moved.
+//
+// The target is "disabled", not "not_set": leaving it unset merely unlocks
+// the repository toggle, handing the setting back to per-repository
+// reconciliation and to every repository created after this run. Disabled at
+// the org is the floor asserted once, where new repositories inherit it.
+func (a *auditor) auditOrgDependabotSecurityUpdates() {
+	var configurations []orgSecurityConfiguration
+
+	outcome := a.client.getJSON("/code-security/configurations", &configurations)
+	if outcome.err != nil || outcome.notFound {
+		a.unverifiable(orNotFound(outcome), checkOrgDependabotFixes)
+
+		return
+	}
+
+	var writable, frozen []orgSecurityConfiguration
+
+	for _, configuration := range configurations {
+		if configuration.DependabotSecurityUpdates != enabledValue {
+			continue
+		}
+
+		if configuration.TargetType == securityConfigOrgTarget {
+			writable = append(writable, configuration)
+		} else {
+			frozen = append(frozen, configuration)
+		}
+	}
+
+	switch {
+	case len(writable) > 0:
+		a.flag(checkOrgDependabotFixes, StatusFail,
+			describeConfigurations(append(writable, frozen...)), disabledValue,
+			"code security configuration(s) enable Dependabot security updates, which overrides the "+
+				"repository setting — Renovate is the one dependency bot"+describeFrozen(frozen),
+			&Change{
+				Check: checkOrgDependabotFixes,
+				Summary: "dependabot security updates in " + describeConfigurations(writable) +
+					": enabled → disabled",
+				apply: func(c client) error { return disableDependabotFixes(c, writable) },
+			})
+	case len(frozen) > 0:
+		// Advisory, never a fix: a global or enterprise configuration is not
+		// this organization's to edit. Detaching the repositories from it is
+		// the human's call.
+		a.flag(checkOrgDependabotFixes, StatusAdvisory,
+			describeConfigurations(frozen), disabledValue,
+			"configuration(s) not owned by this organization enable Dependabot security updates"+
+				describeFrozen(frozen), nil)
+	default:
+		a.flag(checkOrgDependabotFixes, StatusOK, "", "",
+			"no code security configuration enables Dependabot security updates", nil)
+	}
+}
+
+// disableDependabotFixes patches every offending configuration; the first
+// failure stops the run, so a partial apply is reported rather than hidden.
+func disableDependabotFixes(c client, configurations []orgSecurityConfiguration) error {
+	for _, configuration := range configurations {
+		path := "/code-security/configurations/" + strconv.Itoa(configuration.ID)
+		if err := c.writeJSON("PATCH", path, map[string]any{
+			"dependabot_security_updates": disabledValue,
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// describeConfigurations names configurations the way a finding reads them:
+// the name a human sees in the settings UI, not the numeric id.
+func describeConfigurations(configurations []orgSecurityConfiguration) string {
+	names := make([]string, 0, len(configurations))
+	for _, configuration := range configurations {
+		names = append(names, configuration.Name)
+	}
+
+	return strings.Join(names, listSeparator)
+}
+
+// describeFrozen appends the unfixable tail to a message, when there is one.
+func describeFrozen(frozen []orgSecurityConfiguration) string {
+	if len(frozen) == 0 {
+		return ""
+	}
+
+	return " (" + describeConfigurations(frozen) + " is not owned by this organization: detach by hand)"
 }
 
 // auditOrgSurface is O4: standing inventories, reviewable rather than

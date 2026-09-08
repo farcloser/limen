@@ -285,6 +285,7 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 |---|---|---|---|
 | Security configurations (the new mechanism: named bundles of dependabot/secret-scanning/code-scanning settings, attachable to repos incl. by default for new ones) | one canonical config, enforced + default for new repos | ✓ | `/orgs/{o}/code-security/configurations` |
 | Dependabot alerts default for new repos | enabled | ✓ | `PATCH /orgs/{o}` (legacy fields) or security configurations |
+| Dependabot security updates in every org-owned configuration | **disabled** — the org half of R1: while a configuration says `enabled`, the repository-level `DELETE /automated-security-fixes` answers 422, so the repo check cannot reach the floor on its own. Disabled at the org, not `not_set`: unsetting merely unlocks the repo toggle and every repository created later is born enabled again. Configurations this org does not own (`target_type` `global`/`enterprise`) are advisory — detaching is a human act | ✓ | `PATCH /orgs/{o}/code-security/configurations/{id}` |
 | Security manager team | defined if org grows beyond one human | adv | `PUT /orgs/{o}/security-managers/teams/{t}` |
 
 ### O4 — Org surface audits (advisory, v3)
@@ -353,7 +354,7 @@ is immediate. Only the *automated checks* of it wait for phase 3.
 |---|---|---|
 | 1 | `limen github check --repo`: R1 + R2 + R3 + R5 (read-only), verdict classes, `gh` transport + fixtures | first |
 | 2 | `limen github fix --repo` (plan/apply) for R1/R2/R3/R5 ✓-items; R4 rulesets check+fix; R6 audits | after 1 settles |
-| 3 | `-org`: O1–O7, incl. the `.github` repo work and community-profile resolution | **shipped 2026-07-06** (O3 advisory-only in v1 — the legacy org security fields are closing down, so the check verifies a default code-security configuration exists; O5 stays in phase 4 per this table; the visibility/deletion member floors are read-only in the REST API and report as advisories) |
+| 3 | `-org`: O1–O7, incl. the `.github` repo work and community-profile resolution | **shipped 2026-07-06** (O3 partly fixable — one check verifies a default code-security configuration exists, advisory because creating one is a human act; a second asserts that no org-owned configuration enables Dependabot security updates, with the PATCH as its fix; O5 stays in phase 4 per this table; the visibility/deletion member floors are read-only in the REST API and report as advisories) |
 | 4 | Scheduled drift audit (weekly workflow running `limen github check`, failing loudly); org rulesets migration (O5); PR-time dry-run à la safe-settings | last |
 
 ## Auth & scopes

@@ -44,6 +44,10 @@ func compliantOrgResponses() map[string]stubResponse {
 		"GET orgs/test-org/code-security/configurations/defaults": {
 			Body: `[{"default_for_new_repos": "all", "configuration": {"name": "canonical"}}]`,
 		},
+		"GET orgs/test-org/code-security/configurations": {
+			Body: `[{"id": 1, "name": "canonical", "target_type": "organization", ` +
+				`"enforcement": "enforced", "dependabot_security_updates": "disabled"}]`,
+		},
 		"GET orgs/test-org/installations": {
 			Body: `{"total_count": 1, "installations": [{"app_slug": "renovate"}]}`,
 		},
@@ -414,5 +418,109 @@ func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 
 	if strings.Contains(calls, "selected-actions") {
 		t.Error("an already-restricted policy must keep its allowlist — no selected-actions PUT")
+	}
+}
+
+// configurationsResponse is the code-security configuration list an org audit
+// reads, with one configuration in the given state.
+func configurationsResponse(targetType, securityUpdates string) stubResponse {
+	return stubResponse{Body: `[{"id": 264288, "name": "org-config-1", "target_type": "` + targetType +
+		`", "enforcement": "enforced", "dependabot_security_updates": "` + securityUpdates + `"}]`}
+}
+
+// TestAuditOrgDependabotSecurityUpdatesFixed: an organization-owned
+// configuration that enables Dependabot security updates fails and is
+// patched back to disabled. This is the setting the REPOSITORY check cannot
+// reach — GitHub answers the repo-level DELETE with 422 while the
+// configuration says enabled — so the fix must land on the org object.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditOrgDependabotSecurityUpdatesFixed(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/code-security/configurations"] = configurationsResponse(
+		"organization", "enabled",
+	)
+
+	logPath := stubGH(t, responses)
+
+	findings, changes := AuditOrg(testOrg, nil)
+
+	finding, found := findingByCheck(findings, checkOrgDependabotFixes)
+	if !found || finding.Status != StatusFail {
+		t.Fatalf("an enabling configuration must fail, got %v", finding.Status)
+	}
+
+	var planned *Change
+
+	for index, change := range changes {
+		if change.Check == checkOrgDependabotFixes {
+			planned = &changes[index]
+		}
+	}
+
+	if planned == nil {
+		t.Fatal("no change planned for the offending configuration")
+	}
+
+	if err := planned.Apply(); err != nil {
+		t.Fatalf("applying: %v", err)
+	}
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading call log: %v", err)
+	}
+
+	calls := string(log)
+	if !strings.Contains(calls, "PATCH orgs/test-org/code-security/configurations/264288") {
+		t.Error("expected the offending configuration to be patched by id")
+	}
+
+	if !strings.Contains(calls, `"dependabot_security_updates":"disabled"`) {
+		t.Error("expected the patch to disable Dependabot security updates")
+	}
+}
+
+// TestAuditOrgDependabotSecurityUpdatesNotOurs: a configuration this
+// organization does not own is advisory — PATCH would be refused, and
+// detaching repositories from it is a human decision.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditOrgDependabotSecurityUpdatesNotOurs(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/code-security/configurations"] = configurationsResponse("global", "enabled")
+
+	stubGH(t, responses)
+
+	findings, changes := AuditOrg(testOrg, nil)
+
+	finding, found := findingByCheck(findings, checkOrgDependabotFixes)
+	if !found || finding.Status != StatusAdvisory {
+		t.Fatalf("a configuration we do not own must be advisory, got %v", finding.Status)
+	}
+
+	for _, change := range changes {
+		if change.Check == checkOrgDependabotFixes {
+			t.Error("an unowned configuration must never plan a change")
+		}
+	}
+}
+
+// TestAuditOrgDependabotSecurityUpdatesUnverifiable: a token that cannot read
+// the configurations reports unverifiable, never ok — what cannot be verified
+// does not pass.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditOrgDependabotSecurityUpdatesUnverifiable(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/code-security/configurations"] = stubResponse{Fail: true}
+
+	stubGH(t, responses)
+
+	findings, _ := AuditOrg(testOrg, nil)
+
+	finding, found := findingByCheck(findings, checkOrgDependabotFixes)
+	if !found || finding.Status != StatusUnverifiable {
+		t.Fatalf("an unreadable configuration list must be unverifiable, got %v", finding.Status)
 	}
 }
