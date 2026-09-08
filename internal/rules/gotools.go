@@ -5,26 +5,29 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
 
-// The gotools rule: a Go module must declare the Go-source analyzers the
-// shared recipes run — deadcode, govulncheck, go-licenses — as `tool`
-// directives in tools/go.mod, a module of its own, so each is compiled by the
-// repository's pinned toolchain (see book/tooling.md, "Go-source analyzers are
-// go.mod tools"). These were aqua go_install packages once; aqua builds such a
-// package one time per tool version, with whichever project's pinned go ran it
-// first, and then shares the binary across projects — and an analyzer that
-// embeds Go's source loader cannot read a module newer than the go that built
-// it. The tool directive is the only pin that makes that skew impossible.
+// The gotools rule: every repository declares the Go-built tools the shared
+// recipes run as `tool` directives in tools/go.mod, a module of its own, so
+// each is compiled by the repository's pinned toolchain (see book/tooling.md,
+// "Go-built tools are go.mod tools"). These were aqua go_install packages
+// once; aqua builds such a package one time per tool version, with whichever
+// project's pinned go ran it first, and then shares the binary across
+// projects — nothing pins the compiler behind the binary that runs, and an
+// analyzer that embeds Go's source loader cannot even read a module newer
+// than the go that built it. The tool directive is the only pin that makes
+// that impossible.
 //
 // The directives live in tools/go.mod and never in the project's go.mod: a
-// tool directive drags the analyzer's dependency graph into the declaring
-// module as indirect requirements, and everything a module requires is
-// inherited by every consumer's module graph and go.sum. The rule applies
-// exactly when the repository root carries a go.mod; every other repository
-// is silent.
+// tool directive drags the tool's dependency graph into the declaring module
+// as indirect requirements, and everything a module requires is inherited by
+// every consumer's module graph and go.sum. Three tools are required
+// everywhere (git-validation, godolint, dot: the lint and test recipes of
+// every repository run them); a repository whose root carries a go.mod adds
+// the Go-source analyzers.
 const (
 	ruleGoTools    = "gotools"
 	goModFile      = "go.mod"
@@ -34,65 +37,114 @@ const (
 	// go.mod directive keywords, as they open a line.
 	toolDirective   = "tool "
 	moduleDirective = "module "
+
+	// The tools module of a repository without a root go.mod: no module path
+	// to derive from, and the module is never imported, so a bare name.
+	bareToolsModule = "tools"
+
+	// The go directive seeded when neither a root go.mod nor an aqua golang/go
+	// pin says otherwise: the first release with tool directives.
+	fallbackGoDirective = "go 1.24"
 )
 
-// goModTools are the tool packages every Go module must declare, in the order
-// the message lists them. They are exactly the retired aqua packages
-// (retiredCanonicalPkgs): one doctrine, two rules enforcing its two halves.
+// goToolsEverywhere are the tool packages every repository must declare, in
+// the order the message lists them: the shared recipes run them regardless
+// of language.
 //
 //nolint:gochecknoglobals // immutable baseline data.
-var goModTools = []string{
+var goToolsEverywhere = []string{
+	"github.com/vbatts/git-validation",
+	"github.com/farcloser/godolint/cmd/godolint",
+	"github.com/goccy/go-graphviz/cmd/dot",
+}
+
+// goSourceAnalyzers are the tool packages a Go module must declare on top:
+// the analyzers that load the project's source.
+//
+//nolint:gochecknoglobals // immutable baseline data.
+var goSourceAnalyzers = []string{
 	"golang.org/x/tools/cmd/deadcode",
 	"golang.org/x/vuln/cmd/govulncheck",
 	"github.com/google/go-licenses/v2",
 }
 
+// aquaGoPin finds the golang/go pin of an aqua manifest (`golang/go@go1.N.M`,
+// one-line form, which the aqua rule enforces) and captures its version.
+var aquaGoPin = regexp.MustCompile(
+	`(?m)^\s*-\s*name:\s*['"]?golang/go@go(\S+?)['"]?\s*(#.*)?$`,
+)
+
 // goBin is the go executable remediation shells out to when adding tool
 // directives. A package-level seam so tests can substitute a stub.
 var goBin = "go" //nolint:gochecknoglobals // test seam: tests substitute a stub binary.
 
-// checkGoTools evaluates the rule. The bool is false when the repository has
-// no go.mod (the rule does not apply), true otherwise.
-func checkGoTools(root string) (Finding, bool) {
-	rootMod, err := readRepoFile(root, goModFile)
-	if err != nil {
-		return Finding{}, false
+// requiredGoTools lists the tool packages a repository must declare: the
+// everywhere set, plus the analyzers when the root carries a go.mod (rootMod
+// is its text, nil when there is none). The union is exactly the retired
+// aqua packages (retiredCanonicalPkgs): one doctrine, two rules enforcing its
+// two halves.
+func requiredGoTools(rootMod []byte) []string {
+	if rootMod == nil {
+		return slices.Clone(goToolsEverywhere)
 	}
 
-	if stray := sortedKeys(goModToolDirectives(string(rootMod))); len(stray) > 0 {
-		return fail(ruleGoTools, goModFile, goModFile+": "+strayGoModToolsMessage(stray)), true
+	return slices.Concat(goToolsEverywhere, goSourceAnalyzers)
+}
+
+// rootGoMod reads the project's go.mod: its text, or nil when the repository
+// is not a Go module.
+func rootGoMod(root string) []byte {
+	rootMod, err := readRepoFile(root, goModFile)
+	if err != nil {
+		return nil
 	}
+
+	return rootMod
+}
+
+// checkGoTools evaluates the rule.
+func checkGoTools(root string) Finding {
+	rootMod := rootGoMod(root)
+
+	if stray := sortedKeys(goModToolDirectives(string(rootMod))); len(stray) > 0 {
+		return fail(ruleGoTools, goModFile, goModFile+": "+strayGoModToolsMessage(stray))
+	}
+
+	required := requiredGoTools(rootMod)
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
 	if err != nil {
 		return fail(
 			ruleGoTools,
 			goToolsModFile,
-			goToolsModFile+": missing; "+missingGoModToolsMessage(goModTools),
-		), true
+			goToolsModFile+": missing; "+missingGoModToolsMessage(required),
+		)
 	}
 
-	missing := missingGoModTools(string(toolsMod))
+	missing := missingGoModTools(string(toolsMod), required)
 	if len(missing) == 0 {
 		return Finding{
 			Rule:    ruleGoTools,
 			Status:  StatusOK,
 			Path:    goToolsModFile,
-			Message: goToolsModFile + " declares the Go-source analyzers as tool directives",
-		}, true
+			Message: goToolsPassMessage,
+		}
 	}
 
-	return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+missingGoModToolsMessage(missing)), true
+	return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+missingGoModToolsMessage(missing))
 }
 
+// goToolsPassMessage is the check and fix wording for a complete module.
+const goToolsPassMessage = goToolsModFile + " declares the Go-built tools as tool directives"
+
 // missingGoModTools returns the required tool packages the go.mod text does
-// not declare, in goModTools order.
-func missingGoModTools(gomod string) []string {
+// not declare, in required order.
+func missingGoModTools(gomod string, required []string) []string {
 	declared := goModToolDirectives(gomod)
 
 	var missing []string
 
-	for _, pkg := range goModTools {
+	for _, pkg := range required {
 		if !declared[pkg] {
 			missing = append(missing, pkg)
 		}
@@ -140,7 +192,7 @@ func goModToolDirectives(gomod string) map[string]bool {
 // appends what it tried.
 func missingGoModToolsMessage(missing []string) string {
 	return "missing tool directive(s) for " + strings.Join(missing, ", ") +
-		" (see book/tooling.md, \"Go-source analyzers are go.mod tools\")"
+		" (see book/tooling.md, \"Go-built tools are go.mod tools\")"
 }
 
 // strayGoModToolsMessage names tool directives found in the project's go.mod,
@@ -148,7 +200,7 @@ func missingGoModToolsMessage(missing []string) string {
 func strayGoModToolsMessage(stray []string) string {
 	return "tool directive(s) for " + strings.Join(stray, ", ") +
 		" belong in " + goToolsModFile + ", not in the module consumers import" +
-		" (see book/tooling.md, \"Go-source analyzers are go.mod tools\")"
+		" (see book/tooling.md, \"Go-built tools are go.mod tools\")"
 }
 
 // sortedKeys returns a set's keys in order, for stable messages.
@@ -193,25 +245,19 @@ func stripGoModToolDirectives(gomod string) string {
 	return strings.Join(out, "\n")
 }
 
-// remediateGoTools makes tools/go.mod carry the analyzers and the project's
-// go.mod carry none: it writes a bare tools/go.mod when there is none (module
-// path <root>/tools, the root's go directive), adds the missing directives
-// there with `go get -tool` at the latest version (the resolved version is
-// then pinned, exactly as `just do tools add` pins an aqua tool at its latest,
-// and Renovate bumps it from there) followed by `go mod tidy`, and strips any
-// tool directive out of the root go.mod, tidying it too. The go steps need the
-// pinned go on PATH and the network — when either is unavailable the rule ends
-// as an advisory carrying the exact command to run by hand.
+// remediateGoTools makes tools/go.mod carry the required tools and the
+// project's go.mod (when there is one) carry none: it writes a bare
+// tools/go.mod when there is none (module path <root>/tools and the root's
+// go directive in a Go repository; `tools` and the aqua-pinned go elsewhere),
+// adds the missing directives there with `go get -tool` at the latest version
+// (the resolved version is then pinned, exactly as `just do tools add` pins
+// an aqua tool at its latest, and Renovate bumps it from there) followed by
+// `go mod tidy`, and strips any tool directive out of the root go.mod, tidying
+// it too. The go steps need the pinned go on PATH and the network — when
+// either is unavailable the rule ends as an advisory carrying the exact
+// command to run by hand.
 func remediateGoTools(root string) Outcome {
-	rootMod, err := readRepoFile(root, goModFile)
-	if err != nil {
-		return Outcome{
-			Rule:    ruleGoTools,
-			Action:  ActionNone,
-			Path:    goModFile,
-			Message: "not applicable: no go.mod (not a Go module)",
-		}
-	}
+	rootMod := rootGoMod(root)
 
 	var done []string
 
@@ -229,7 +275,7 @@ func remediateGoTools(root string) Outcome {
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
 	if err != nil {
-		toolsMod = []byte(bareToolsGoMod(string(rootMod)))
+		toolsMod = []byte(bareToolsGoMod(string(rootMod), aquaGoDirective(root)))
 		if err := writeFile(root, goToolsModFile, string(toolsMod)); err != nil {
 			return goToolsAdvisory(goToolsModFile, "could not write "+goToolsModFile+": "+err.Error(), nil)
 		}
@@ -237,13 +283,13 @@ func remediateGoTools(root string) Outcome {
 		done = append(done, "created "+goToolsModFile)
 	}
 
-	missing := missingGoModTools(string(toolsMod))
+	missing := missingGoModTools(string(toolsMod), requiredGoTools(rootMod))
 	if len(missing) == 0 && len(done) == 0 {
 		return Outcome{
 			Rule:    ruleGoTools,
 			Action:  ActionNone,
 			Path:    goToolsModFile,
-			Message: goToolsModFile + " declares the Go-source analyzers as tool directives",
+			Message: goToolsPassMessage,
 		}
 	}
 
@@ -277,11 +323,13 @@ func remediateGoTools(root string) Outcome {
 	}
 }
 
-// bareToolsGoMod is the tools module before any directive: the root module's
-// path with /tools appended and the root's go directive, so the analyzers are
-// built for the same language version as the project.
-func bareToolsGoMod(rootMod string) string {
-	module, goLine := "tools", "go 1.24"
+// bareToolsGoMod is the tools module before any directive. In a Go repository
+// (rootMod non-empty) the module path is the root's with /tools appended and
+// the go directive is the root's, so the tools are built for the same
+// language version as the project; elsewhere the module is `tools` and the
+// go directive is the caller's (the aqua-pinned go, see aquaGoDirective).
+func bareToolsGoMod(rootMod, goDirective string) string {
+	module, goLine := bareToolsModule, goDirective
 
 	for raw := range strings.SplitSeq(rootMod, "\n") {
 		line := strings.TrimSpace(raw)
@@ -295,10 +343,28 @@ func bareToolsGoMod(rootMod string) string {
 		}
 	}
 
-	return "// The Go-source analyzers the shared recipes run, pinned as tool\n" +
-		"// directives in a module of their own so their dependency graph never\n" +
-		"// reaches the project's go.mod (book/tooling.md).\n" +
+	return "// The Go-built tools the shared recipes run, pinned as tool directives\n" +
+		"// in a module of their own so their dependency graph never reaches the\n" +
+		"// project's go.mod (book/tooling.md).\n" +
 		moduleDirective + module + "\n\n" + goLine + "\n"
+}
+
+// aquaGoDirective is the go directive matching the repository's aqua golang/go
+// pin — the toolchain that will build the tools, so the seeded module can
+// never ask for a newer go than the one on the hermetic PATH. Without a
+// manifest or a pin, the fallback.
+func aquaGoDirective(root string) string {
+	manifest, err := readRepoFile(root, "aqua.yaml")
+	if err != nil {
+		return fallbackGoDirective
+	}
+
+	m := aquaGoPin.FindStringSubmatch(string(manifest))
+	if m == nil {
+		return fallbackGoDirective
+	}
+
+	return "go " + m[1]
 }
 
 // runGo runs the pinned go with args in dir and returns "" on success, or a

@@ -178,9 +178,7 @@ func Check(root string, policy Policy) []Finding {
 		checkShellcheck(root),
 	}
 
-	if f, ok := checkGoTools(root); ok {
-		findings = append(findings, f)
-	}
+	findings = append(findings, checkGoTools(root))
 
 	if f, ok := checkYamlfmt(root); ok {
 		findings = append(findings, f)

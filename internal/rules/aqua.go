@@ -293,20 +293,23 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 }
 
 // retiredCanonicalPkgs are packages the baseline once required and now
-// forbids: the Go-source analyzers (deadcode, govulncheck, go-licenses) moved
-// to go.mod `tool` directives — see book/tooling.md, "Go-source analyzers are
-// go.mod tools", and the gotools rule. aqua compiles a go_install package once
-// per tool version, with whichever project's pinned go ran it first, and then
-// shares that binary across projects; an analyzer embeds Go's own source
-// loader, so it must be compiled by the project's toolchain, which only the
-// module's tool directive guarantees. A manifest still pinning one fails check
-// (the recipes no longer look for it on PATH), and fix removes the entry.
+// forbids: every Go-built tool moved to tools/go.mod `tool` directives — see
+// book/tooling.md, "Go-built tools are go.mod tools", and the gotools rule.
+// aqua compiles a go_install package once per tool version, with whichever
+// project's pinned go ran it first, and then shares that binary across
+// projects; nothing pins the compiler behind the binary that runs, which only
+// the module's tool directive guarantees. A manifest still pinning one fails
+// check (the recipes no longer look for it on PATH), and fix removes the
+// entry.
 //
 //nolint:gochecknoglobals // immutable baseline data, like canonicalAqua.
 var retiredCanonicalPkgs = []string{
 	"github.com/google/go-licenses/v2",
 	"golang.org/x/vuln/cmd/govulncheck",
 	"golang.org/x/tools/cmd/deadcode",
+	"github.com/vbatts/git-validation",
+	"github.com/farcloser/godolint/cmd/godolint",
+	"github.com/goccy/go-graphviz/cmd/dot",
 }
 
 // retiredPkgs returns the retired canonical packages the manifest still
