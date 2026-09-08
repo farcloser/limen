@@ -20,19 +20,11 @@ packages:
   # Every pin is the one-line name@version form and stays so (limen fix
   # collapses a two-line `version:` pin): `aqua update` rewrites only that form
   # and treats a separate `version:` key as hand-held, and Renovate reads only
-  # that form (renovate.json carries the manager for the github.com/… module
-  # pins).
-  # --- go install tools (local registry, GOSUMDB-verified) ---
-  # Only tools that never load Go source; the Go-source analyzers are go.mod
-  # tools (book/tooling.md).
-  - name: github.com/vbatts/git-validation@v1.2.2
-    registry: local
-  # Pseudo-version: the nested cmd/dot module carries no tags upstream, so
-  # nothing for Renovate to propose either — bumped by hand, deliberately.
-  - name: github.com/goccy/go-graphviz/cmd/dot@v0.0.0-20251129032125-76e04975df88
-    registry: local
-  - name: github.com/farcloser/godolint/cmd/godolint@v0.1.0
-    registry: local
+  # that form.
+  # No Go-built tool is pinned here: every one is a `tool` directive in
+  # tools/go.mod, built by the pinned go (book/tooling.md, "Go-built tools
+  # are go.mod tools"). aqua's go_install would build it once per tool
+  # version, with whichever go ran first, and share that binary.
   # --- farcloser tools (local registry; standard once registered upstream) ---
   - name: farcloser/limen@v0.2.1 # renovate: depName=farcloser/limen
     registry: local

@@ -54,7 +54,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	// on the version line.
 	goLine, _ := canonicalPin(t, "golang/go")
 	jqLine, jqVersion := canonicalPin(t, "jqlang/jq")
-	gvLine, gvVersion := canonicalPin(t, "github.com/vbatts/git-validation")
+	cuLine, cuVersion := canonicalPin(t, "uutils/coreutils")
 	cliLine, cliVersion := canonicalPin(t, "cli/cli")
 
 	const heldBackGo = "go1.0.0" // any version but the canonical: the project's, kept as is
@@ -64,9 +64,9 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		"  - name: golang/go\n    version: "+heldBackGo+" # renovate: depName=golang/go\n", 1)
 	manifest = strings.Replace(manifest, jqLine,
 		"  - name: \"jqlang/jq\"\n    version: \""+jqVersion+"\"\n", 1)
-	manifest = strings.Replace(manifest, gvLine+"    registry: local\n",
-		"  - name: github.com/vbatts/git-validation\n"+
-			"    version: "+gvVersion+" # renovate: depName=_go/github.com/vbatts/git-validation\n"+
+	manifest = strings.Replace(manifest, cuLine+"    registry: local\n",
+		"  - name: uutils/coreutils\n"+
+			"    version: "+cuVersion+" # renovate: depName=uutils/coreutils\n"+
 			"    registry: local\n", 1)
 	manifest = strings.Replace(manifest, cliLine,
 		"  - name: cli/cli\n    version: "+cliVersion+" # held back on purpose\n", 1)
@@ -82,7 +82,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 
 	if f := checkAquaManifest("aqua.yaml", parsed); f == nil ||
 		!strings.Contains(f.Message, "version: line") || !strings.Contains(f.Message, "golang/go") ||
-		!strings.Contains(f.Message, "jqlang/jq") || !strings.Contains(f.Message, "git-validation") ||
+		!strings.Contains(f.Message, "jqlang/jq") || !strings.Contains(f.Message, "uutils/coreutils") ||
 		!strings.Contains(f.Message, "cli/cli") {
 		t.Errorf("check must name every two-line pin, got: %+v", f)
 	}
@@ -95,7 +95,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	for _, want := range []string{
 		"  - name: golang/go@" + heldBackGo + "\n",
 		"  - name: \"jqlang/jq@" + jqVersion + "\"\n",
-		gvLine + "    registry: local\n",
+		cuLine + "    registry: local\n",
 		"  - name: cli/cli@" + cliVersion + " # held back on purpose\n",
 	} {
 		if !strings.Contains(out, want) {
@@ -104,7 +104,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	}
 
 	if strings.Contains(out, "\n    version:") || strings.Contains(out, "depName=golang/go") ||
-		strings.Contains(out, "depName=_go/") {
+		strings.Contains(out, "depName=uutils/coreutils") {
 		t.Errorf("a version: line or renovate hook survived the collapse:\n%s", out)
 	}
 
