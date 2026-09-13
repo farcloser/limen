@@ -165,7 +165,7 @@ must be chosen deliberately, not by whatever the registry happens to carry:
 
 The baseline needs a curl with dependable TLS 1.3 on every platform, and no single
 trustworthy upstream channel covers them all — so curl is packaged first-party by
-`farcloser/build-curl`, one package for every platform
+`forkcloser/curl`, one package for every platform
 (rung 3 carrying a rung-2 import): the windows binaries are curl-for-win's own official
 builds, sigstore-verified against a vendored, cross-checked key and repackaged; the
 linux (static musl) and macOS (arm64) legs are built in our CI by curl-for-win's
@@ -180,13 +180,13 @@ that shaped this:
   (`win64` = amd64, `win64a` = arm64; a `.txt` sidecar carries the artifact's SHA256; the
   archive root is `curl-<version>_<rev>-<cpu>-mingw/` with `bin/curl.exe`). Consuming it
   *directly* — an `http`-type local-registry entry with a manual verified-bump ritual —
-  was the design until the other platforms forced rung 3; `build-curl` imports these same
+  was the design until the other platforms forced rung 3; `forkcloser/curl` imports these same
   artifacts instead (sigstore-verified in CI), which is strictly stronger: the
   verification is a workflow step, not a human ritual, and Renovate watches the curl.se
   index for bumps.
 - **Linux / macOS**: no rung-2 channel — curl-for-win *builds* these but does not
   distribute them (its deploy lane is windows-only; verified, not assumed). Hence rung 3:
-  `build-curl` runs curl-for-win's own build scripts at an audited commit pin for the
+  `forkcloser/curl` runs curl-for-win's own build scripts at an audited commit pin for the
   linux (static musl) and macOS (arm64) legs — the same lineage as the imported
   windows binaries, one build system across every platform.
 
