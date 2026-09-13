@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,10 +49,46 @@ const compliantRepoJSON = `{
 // stubResponse is one canned gh api answer: a body (exit 0), a 404, or a
 // generic error. Fields are exported for the JSON round trip to the stub
 // process; the type stays test-internal.
+//
+// Pages, when set, is the endpoint's answer page by page, and the stub then
+// mirrors gh's pagination: without --paginate only the first page is served;
+// with --paginate the pages, all JSON arrays, are merged into one array; with
+// --paginate --slurp the pages come back as one array of page bodies. A test
+// that puts what it looks for on a later page thereby proves the code under
+// test asked for every page.
 type stubResponse struct {
-	Body     string `json:"body"`
-	NotFound bool   `json:"notFound"`
-	Fail     bool   `json:"fail"`
+	Body     string   `json:"body"`
+	Pages    []string `json:"pages,omitempty"`
+	NotFound bool     `json:"notFound"`
+	Fail     bool     `json:"fail"`
+}
+
+// render is the body the stub writes for the flags gh was invoked with.
+func (r stubResponse) render(paginate, slurp bool) string {
+	pages := r.Pages
+	if len(pages) == 0 {
+		pages = []string{r.Body}
+	}
+
+	switch {
+	case !paginate:
+		return pages[0]
+	case slurp:
+		return "[" + strings.Join(pages, ",") + "]"
+	default:
+		elements := make([]string, 0, len(pages))
+
+		for _, page := range pages {
+			inner := strings.TrimSpace(page)
+			inner = strings.TrimSuffix(strings.TrimPrefix(inner, "["), "]")
+
+			if strings.TrimSpace(inner) != "" {
+				elements = append(elements, inner)
+			}
+		}
+
+		return "[" + strings.Join(elements, ",") + "]"
+	}
 }
 
 // ghStubEnv carries the stub directory to the re-executed test binary. When
@@ -137,11 +174,19 @@ func runGHStub(dir string) int {
 	defer logFile.Close()
 
 	// Log first, respond second — unlisted writes are logged too. The
-	// response lookup keys on method and path alone; --paginate rides along
-	// in the log so a test can assert the sweep asked for every page.
+	// response lookup keys on method and path alone; --paginate and --slurp
+	// ride along in the log so a test can assert a listing asked for every
+	// page.
+	paginate := slices.Contains(args, "--paginate")
+	slurp := slices.Contains(args, "--slurp")
+
 	logged := key
-	if slices.Contains(args, "--paginate") {
+	if paginate {
 		logged += " --paginate"
+	}
+
+	if slurp {
+		logged += " --slurp"
 	}
 
 	fmt.Fprintln(logFile, logged)
@@ -190,7 +235,7 @@ func runGHStub(dir string) int {
 
 		return 1
 	default:
-		fmt.Fprint(os.Stdout, response.Body)
+		fmt.Fprint(os.Stdout, response.render(paginate, slurp))
 
 		return 0
 	}
@@ -499,32 +544,92 @@ func TestWorkflowFixPreservesExemptedField(t *testing.T) { //nolint:paralleltest
 	}
 }
 
-// TestRulesetsFullPageUnverifiable: a full page of 100 rulesets cannot prove
-// absence — the canonical ruleset may sit on a later page, and creating it
-// blind would duplicate it. Absence goes unverifiable; nothing is planned.
-func TestRulesetsFullPageUnverifiable(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+// TestRulesetsBeyondFirstPage: the canonical rulesets sit on the second page
+// of the listing, behind a full page of others. The listing is read whole,
+// so both are found and reconciled — never reported absent and re-created.
+func TestRulesetsBeyondFirstPage(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
 	entries := make([]string, 100)
 	for i := range entries {
 		entries[i] = fmt.Sprintf(`{"id":%d,"name":"other-%d","target":"branch","enforcement":"active"}`, i+10, i)
 	}
 
 	responses := compliantResponses()
+	canonical := responses["GET repos/test/repo/rulesets?per_page=100"].Body
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
-		Body: "[" + strings.Join(entries, ",") + "]",
+		Pages: []string{"[" + strings.Join(entries, ",") + "]", canonical},
 	}
 	stubGH(t, responses)
 
 	findings, changes := Audit(testRepo, nil)
 
 	for _, check := range []string{checkRulesetDefaultBranch, checkRulesetVersionTags} {
-		if finding, found := findingByCheck(findings, check); !found || finding.Status != StatusUnverifiable {
-			t.Errorf("%s on a full page: %v, want unverifiable", check, finding.Status)
+		if finding, found := findingByCheck(findings, check); !found || finding.Status != StatusOK {
+			t.Errorf("%s on the second page: %v (%s), want ok", check, finding.Status, finding.Message)
 		}
 	}
 
 	for _, planned := range changes {
 		if planned.Check == checkRulesetDefaultBranch || planned.Check == checkRulesetVersionTags {
-			t.Errorf("%s: a create was planned on unprovable absence", planned.Check)
+			t.Errorf("%s: a change was planned for a ruleset that exists on a later page", planned.Check)
+		}
+	}
+}
+
+// listPaths are the list endpoints an audit of one repository and its
+// organization reads, as the stub logs them. Every one must be read whole:
+// a page is not an inventory.
+var listPaths = []string{ //nolint:gochecknoglobals // test table.
+	"GET repos/test/repo/rulesets?per_page=100",
+	"GET repos/test/repo/collaborators?affiliation=outside&per_page=100",
+	"GET repos/test/repo/hooks?per_page=100",
+	"GET repos/test/repo/keys?per_page=100",
+	"GET repos/test/repo/teams?per_page=100",
+	"GET orgs/test/teams?per_page=100",
+	"GET orgs/test-org/members?role=admin&per_page=100",
+	"GET orgs/test-org/hooks?per_page=100",
+	"GET orgs/test-org/teams?per_page=100",
+	"GET orgs/test-org/teams/agents/members?per_page=100",
+	"GET orgs/test-org/teams/agents/repos?per_page=100",
+	"GET orgs/test-org/repos?per_page=100&type=all",
+	"GET orgs/test-org/personal-access-tokens?per_page=100",
+	"GET orgs/test-org/code-security/configurations?per_page=100",
+	"GET orgs/test-org/actions/runners?per_page=100 --paginate --slurp",
+	"GET orgs/test-org/actions/secrets?per_page=100 --paginate --slurp",
+	"GET orgs/test-org/installations?per_page=100 --paginate --slurp",
+}
+
+// TestEveryListingPaginates: an audit of a repository and of its organization
+// asks gh for every page of every list it reads — arrays with --paginate,
+// object-wrapped lists with --paginate --slurp — and no list is fetched as
+// a single page. The call log is the evidence.
+func TestEveryListingPaginates(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	maps.Copy(responses, compliantOrgResponses())
+	logPath := stubGH(t, responses)
+
+	Audit(testRepo, nil)
+	AuditOrg(testOrg, map[string]string{checkOrgAdmins: "alice is the org"})
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading call log: %v", err)
+	}
+
+	calls := strings.Split(strings.TrimSpace(string(log)), "\n")
+
+	for _, want := range listPaths {
+		if !strings.HasSuffix(want, "--slurp") {
+			want += " --paginate"
+		}
+
+		if !slices.Contains(calls, want) {
+			t.Errorf("listing not read whole: want a call %q", want)
+		}
+	}
+
+	for _, call := range calls {
+		if strings.Contains(call, "per_page=") && !strings.Contains(call, "--paginate") {
+			t.Errorf("a list fetched as one page: %q", call)
 		}
 	}
 }

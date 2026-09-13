@@ -43,8 +43,10 @@ limen github fix   [--repo owner/name | --org name [--all-repos]] [-json] [--yes
   repository dependencies it did not have before (farcloser/godolint, 2026-09-08 —
   the tools/go.mod rollout gave it vulnerable pins and its repo-level Dependabot
   security updates, on since creation and until then harmless, opened PRs).
-  The sweep paginates (`gh api --paginate`); the one-page inventories elsewhere
-  in the package still truncate at 100 and say so in their finding.
+  Every list the package reads — the sweep's repositories, and every inventory
+  and lookup behind a check — is read whole (`gh api --paginate`, `--slurp` for
+  the object-wrapped lists): a page is not an inventory, and a ruleset, owner,
+  team, or App on a later page is exactly as real as one on the first.
 - `check` is read-only and needs only read scopes. `fix` prints the full plan (current →
   desired, one line per change) and applies only with `--yes` or interactive consent.
 - Output reuses the existing `Finding`/`Outcome` machinery and exit codes (0/1/2), plus

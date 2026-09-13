@@ -40,26 +40,26 @@ func compliantOrgResponses() map[string]stubResponse {
 		"GET orgs/test-org/actions/permissions/fork-pr-contributor-approval": {
 			Body: `{"approval_policy": "first_time_contributors"}`,
 		},
-		"GET orgs/test-org/actions/runners": {Body: `{"total_count": 0, "runners": []}`},
+		"GET orgs/test-org/actions/runners?per_page=100": {Body: `{"total_count": 0, "runners": []}`},
 		"GET orgs/test-org/code-security/configurations/defaults": {
 			Body: `[{"default_for_new_repos": "all", "configuration": {"name": "canonical"}}]`,
 		},
-		"GET orgs/test-org/code-security/configurations": {
+		"GET orgs/test-org/code-security/configurations?per_page=100": {
 			Body: `[{"id": 1, "name": "canonical", "target_type": "organization", ` +
 				`"enforcement": "enforced", "dependabot_security_updates": "disabled"}]`,
 		},
-		"GET orgs/test-org/installations": {
+		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"total_count": 1, "installations": [{"app_slug": "renovate"}]}`,
 		},
 		"GET orgs/test-org/hooks?per_page=100":                {Body: `[]`},
-		"GET orgs/test-org/actions/secrets":                   {Body: `{"total_count": 0, "secrets": []}`},
+		"GET orgs/test-org/actions/secrets?per_page=100":      {Body: `{"total_count": 0, "secrets": []}`},
 		"GET orgs/test-org/teams?per_page=100":                {Body: `[{"slug":"agents"}]`},
 		"GET orgs/test-org/teams/agents/members?per_page=100": {Body: `[{"login":"bot"}]`},
 		"GET orgs/test-org/teams/agents/repos?per_page=100": {
 			Body: `[{"name":"alpha","permissions":{"push":true}}]`,
 		},
 		"GET orgs/test-org/repos?per_page=100&type=all":         {Body: `[{"name":"alpha"}]`},
-		"GET orgs/test-org/personal-access-tokens":              {Body: `[]`},
+		"GET orgs/test-org/personal-access-tokens?per_page=100": {Body: `[]`},
 		"GET repos/test-org/.github":                            {Body: `{"private": false}`},
 		"GET repos/test-org/.github/contents/SECURITY.md":       {Body: `{}`},
 		"GET repos/test-org/.github/contents/CONTRIBUTING.md":   {Body: `{}`},
@@ -237,7 +237,7 @@ func TestAuditOrgCommunityHealthSubdirectory(t *testing.T) {
 func TestAuditOrgRenovateInstalled(t *testing.T) {
 	// Present, among others: ok, and the inventory lists every slug.
 	responses := compliantOrgResponses()
-	responses["GET orgs/test-org/installations"] = stubResponse{
+	responses["GET orgs/test-org/installations?per_page=100"] = stubResponse{
 		Body: `{"total_count": 2, "installations": [{"app_slug": "some-app"}, {"app_slug": "renovate"}]}`,
 	}
 	stubGH(t, responses)
@@ -254,7 +254,7 @@ func TestAuditOrgRenovateInstalled(t *testing.T) {
 	}
 
 	// Absent (other apps installed): fail, no fix planned.
-	responses["GET orgs/test-org/installations"] = stubResponse{
+	responses["GET orgs/test-org/installations?per_page=100"] = stubResponse{
 		Body: `{"total_count": 1, "installations": [{"app_slug": "some-app"}]}`,
 	}
 	stubGH(t, responses)
@@ -276,7 +276,9 @@ func TestAuditOrgRenovateInstalled(t *testing.T) {
 	}
 
 	// No apps at all: the inventory is ok ("none"), the floor still fails.
-	responses["GET orgs/test-org/installations"] = stubResponse{Body: `{"total_count": 0, "installations": []}`}
+	responses["GET orgs/test-org/installations?per_page=100"] = stubResponse{
+		Body: `{"total_count": 0, "installations": []}`,
+	}
 	stubGH(t, responses)
 
 	findings, _ = AuditOrg(testOrg, nil)
@@ -295,6 +297,42 @@ func TestAuditOrgRenovateInstalled(t *testing.T) {
 
 	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusOK {
 		t.Errorf("exempted renovate: %v, want ok", finding.Status)
+	}
+}
+
+// TestAuditOrgSecondPage: an owner on the second page of the member listing
+// is as much an owner as one on the first, and an App installed past the
+// first page of installations is installed. Both listings are read whole,
+// so the undeclared owner surfaces and Renovate is found.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditOrgSecondPage(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/members?role=admin&per_page=100"] = stubResponse{
+		Pages: []string{`[{"login": "alice"}]`, `[{"login": "mallory"}]`},
+	}
+	responses["GET orgs/test-org/installations?per_page=100"] = stubResponse{
+		Pages: []string{
+			`{"total_count": 2, "installations": [{"app_slug": "some-app"}]}`,
+			`{"total_count": 2, "installations": [{"app_slug": "renovate"}]}`,
+		},
+	}
+	stubGH(t, responses)
+
+	findings, _ := AuditOrg(testOrg, map[string]string{checkOrgAdmins: "alice is the org"})
+
+	if finding, found := findingByCheck(findings, checkOrgAdmins); !found || finding.Status != StatusAdvisory ||
+		!strings.Contains(finding.Message, "mallory") {
+		t.Errorf("an owner on the second page must surface: %v (%s)", finding.Status, finding.Message)
+	}
+
+	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusOK {
+		t.Errorf("renovate on the second page of installations: %v (%s), want ok", finding.Status, finding.Message)
+	}
+
+	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found ||
+		!strings.Contains(finding.Message, "some-app") || !strings.Contains(finding.Message, "renovate") {
+		t.Errorf("the app inventory must list both pages: %s", finding.Message)
 	}
 }
 
@@ -437,7 +475,7 @@ func configurationsResponse(targetType, securityUpdates string) stubResponse {
 //nolint:paralleltest // serial by design: mutates the package-level ghBin.
 func TestAuditOrgDependabotSecurityUpdatesFixed(t *testing.T) {
 	responses := compliantOrgResponses()
-	responses["GET orgs/test-org/code-security/configurations"] = configurationsResponse(
+	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = configurationsResponse(
 		"organization", "enabled",
 	)
 
@@ -488,7 +526,10 @@ func TestAuditOrgDependabotSecurityUpdatesFixed(t *testing.T) {
 //nolint:paralleltest // serial by design: mutates the package-level ghBin.
 func TestAuditOrgDependabotSecurityUpdatesNotOurs(t *testing.T) {
 	responses := compliantOrgResponses()
-	responses["GET orgs/test-org/code-security/configurations"] = configurationsResponse("global", "enabled")
+	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = configurationsResponse(
+		"global",
+		"enabled",
+	)
 
 	stubGH(t, responses)
 
@@ -513,7 +554,7 @@ func TestAuditOrgDependabotSecurityUpdatesNotOurs(t *testing.T) {
 //nolint:paralleltest // serial by design: mutates the package-level ghBin.
 func TestAuditOrgDependabotSecurityUpdatesUnverifiable(t *testing.T) {
 	responses := compliantOrgResponses()
-	responses["GET orgs/test-org/code-security/configurations"] = stubResponse{Fail: true}
+	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = stubResponse{Fail: true}
 
 	stubGH(t, responses)
 

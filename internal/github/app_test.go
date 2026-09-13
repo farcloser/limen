@@ -61,7 +61,7 @@ func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 		"GET orgs/test-org": {Body: `{}`},
 		testVariablePath:    {Body: `{"name":"` + updateAppVariable + `","value":"42"}`},
 		testSecretPath:      {Body: `{"name":"` + updateAppSecret + `"}`},
-		"GET orgs/test-org/installations": {
+		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"installations":[{"app_id":42,"permissions":{"contents":"write","workflows":"write"}}]}`,
 		},
 	})
@@ -94,7 +94,7 @@ func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
 		"GET orgs/test-org": {Body: `{}`},
 		testVariablePath:    {Body: `{"value":"42"}`},
 		testSecretPath:      {Body: `{}`},
-		"GET orgs/test-org/installations": {
+		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"installations":[{"app_id":42,"permissions":{"contents":"write"}}]}`,
 		},
 	})
@@ -135,10 +135,10 @@ func TestEnsureUpdateAppUnverifiable(t *testing.T) {
 //nolint:paralleltest // serial by design: mutates package seams.
 func TestEnsureUpdateAppInstallationUnverifiable(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
-		"GET orgs/test-org":               {Body: `{}`},
-		testVariablePath:                  {Body: `{"value":"42"}`},
-		testSecretPath:                    {Body: `{}`},
-		"GET orgs/test-org/installations": {Fail: true},
+		"GET orgs/test-org": {Body: `{}`},
+		testVariablePath:    {Body: `{"value":"42"}`},
+		testSecretPath:      {Body: `{}`},
+		"GET orgs/test-org/installations?per_page=100": {Fail: true},
 	})
 	appSeams(t, nil, nil)
 
@@ -242,7 +242,7 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 			Body: `{"id":7,"slug":"limen-test-org","pem":"PRIVATE-KEY-PEM","html_url":"https://github.com/apps/limen-test-org"}`,
 		},
 		"POST orgs/test-org/actions/variables": {Body: `{}`},
-		"GET orgs/test-org/installations": {
+		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"installations":[{"app_id":7,"permissions":{"contents":"write","workflows":"write"}}]}`,
 		},
 	})

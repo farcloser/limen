@@ -72,7 +72,7 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 		"GET orgs/test-org/actions/variables/UPDATE_AQUA_CHECKSUM_APP_ID": {
 			Body: `{"name": "UPDATE_AQUA_CHECKSUM_APP_ID", "value": "4242"}`,
 		},
-		"GET orgs/test-org/installations": {
+		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"total_count": 2, "installations": [
 				{"app_id": 1, "app_slug": "renovate"},
 				{"app_id": 4242, "app_slug": "our-ci-pusher"}]}`,
