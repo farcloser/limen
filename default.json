@@ -7,7 +7,8 @@
     "packageRules, own releases: the cooldown guards against third parties (a tag whose assets are still uploading, a release pulled the next day). A release cut by one of our organizations carries no risk we do not already own, and its assets are published by the release workflow within minutes \u2014 so farcloser, forkcloser and mycophonic packages, in aqua's owner/repo form and Go's github.com/owner/repo form alike, are proposed as soon as they exist. A repository that wants the cooldown back on one of them adds a later packageRule in its own renovate.json; rules merge in order and the last match wins.",
     "dependencyDashboard: the one issue Renovate keeps open on every repository it processes, updates pending or not. `limen github check` reads it as the proof that Renovate is running at all (it skips forks by default, before any preset resolves, and every configuration check stays green while it does). Stated explicitly, like vulnerabilityAlerts, so a project cannot switch it off and defeat the check unseen.",
     "vulnerabilityAlerts: fix PRs from GitHub's Dependabot alerts (the baseline keeps the alerts on for exactly this; Dependabot's own update PRs are off, Renovate is the one bot). Stated explicitly because enabled: true here is what reaches // indirect Go modules, which the gomod manager skips by default. Fix PRs skip the cooldown and take the lowest fixed version, both Renovate defaults for this object.",
-    "postUpdateOptions gomodTidy: a Go module bump rewrites go.mod; without tidy, go.sum keeps the old module's lines and `just do lint go mod` (go mod tidy, diffed) fails every gomod PR.",
+    "postUpdateOptions gomodTidy: a Go module bump rewrites go.mod; without tidy, go.sum keeps the old module's lines and `just do lint go mod` (go mod tidy, diffed) fails every gomod PR. gomodUpdateImportPaths is what keeps tidy running on a MAJOR bump: without it Renovate skips tidy on every major (its guard for the /vN import-path rewrite, which must precede tidy), and a v0 to v1 bump is major while changing no path, so the PR landed a go.sum with the new go.mod hash, no h1 line and the old pseudo-version lines still in it, green for Renovate and red on the tidy diff. With the option, v0 to v1 does no path rewrite and tidies; a real /vN bump rewrites the imports with marwan-at-work/mod (which Renovate go-installs at run time, no image support needed) and then tidies.",
+    "constraints gomodMod: the version Renovate go-installs marwan-at-work/mod at for that rewrite; without it the install is @latest, a third-party binary that rewrites import paths across the tree fetched at whatever is newest the day a /vN bump lands. Pinned means by digest, and this lever takes only a v-prefixed tag, so this is the nearest the lever allows: a version pin, its content fixed and transparency-logged by the checksum database that go install verifies against. Named here as that exception rather than left implicit. Renovate's own config manager marks this constraint unsupported and never scans a preset, so limen's renovate.json watches the value with a custom manager and proposes its bumps there.",
     "packageRules, content-pinned files: the checksum-update workflow, the setup-aqua action and everything under .limen/ are limen's byte for byte; a bump Renovate makes inside one is drift the next `limen check` rejects. Their pins move in limen's own repository, the one place Renovate keeps touching them, and reach every other repository through a limen release.",
     "packageRules, Go-built tools: the tools/go.mod tool directives (git-validation, godolint, dot, and the Go-source analyzers deadcode, govulncheck, go-licenses), which Go lists as // indirect and the gomod manager would skip; re-enabled exactly, by module. dot is forkcloser's own tagged module (upstream's cmd/dot is a nested module without tags), so it moves like the others, and as one of ours it is proposed without the cooldown.",
     "packageRules, go toolchain: golangci-lint embeds Go's type checker, so a golang/go bump can only land with (or after) a golangci release built with that Go; one grouped PR keeps the two in lockstep and the lint recipe's toolchain check names the fix when they still disagree.",
@@ -24,8 +25,12 @@
     "enabled": true
   },
   "postUpdateOptions": [
-    "gomodTidy"
+    "gomodTidy",
+    "gomodUpdateImportPaths"
   ],
+  "constraints": {
+    "gomodMod": "v0.10.0"
+  },
   "packageRules": [
     {
       "matchDepNames": [
