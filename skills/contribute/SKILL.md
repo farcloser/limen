@@ -66,7 +66,7 @@ are what prevents it.
 3. **Verify in the same command as the commit, before anything is pushed:**
    ```
    git -C <path> log -1 --format=%B | grep -c '^Signed-off-by:'   # 1
-   git -C <path> log -1 --format=%B | grep -ciE '<vendor>\.|generated with|-Session:'   # 0 (AGENTS.md, "No links to your tooling")
+   git -C <path> log -1 --format=%B | grep -ciE 'https?://[^[:space:]]*(anthropic|claude)|generated with|-Session:'   # 0 (AGENTS.md, "No links to your tooling"): a link, a banner, a session footer. Every domain the tooling links to is listed — the vendor's and its products' differ — and never the bare domain alone, which the mandated trailer's address carries
    git -C <path> log -1 --format='%G?'                             # G — signed; anything else means the identity or key is wrong: stop and say so
    just do lint commits                                            # passes
    ```
