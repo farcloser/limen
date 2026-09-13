@@ -215,6 +215,49 @@ func TestCheckReadmeVariantAccepted(t *testing.T) {
 	}
 }
 
+// TestCheckReadmeAndLicenseCaseInsensitive: readme.md and license.md are the
+// canonical files under another spelling, found by their on-disk name. The
+// exact lookup used to miss them on a case-sensitive filesystem, and the fixer
+// then planted a second README beside the real one.
+func TestCheckReadmeAndLicenseCaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	dir := writeRepo(t, map[string]string{
+		"readme.md":     "# lower case",
+		"license.md":    mitText,
+		".editorconfig": CanonicalEditorconfig,
+		".gitignore":    "*.log",
+	})
+
+	findings := Check(dir, DefaultPolicy())
+
+	readme := findingByRule(findings, "readme")
+	if !readme.OK() {
+		t.Errorf("readme.md should be accepted, got: %s", readme.Message)
+	}
+
+	if readme.Path != "readme.md" {
+		t.Errorf("readme path = %q, want readme.md", readme.Path)
+	}
+
+	if !strings.Contains(readme.Message, "README.md is the canonical name") {
+		t.Errorf("readme message should name the canonical spelling, got: %s", readme.Message)
+	}
+
+	lic := findingByRule(findings, "license")
+	if !lic.OK() {
+		t.Errorf("license.md should be accepted, got: %s", lic.Message)
+	}
+
+	if lic.Path != "license.md" {
+		t.Errorf("license path = %q, want license.md", lic.Path)
+	}
+
+	if lic.Message != "license MIT" {
+		t.Errorf("license message = %q, want %q", lic.Message, "license MIT")
+	}
+}
+
 func TestEditorconfigMustMatchExactly(t *testing.T) {
 	t.Parallel()
 

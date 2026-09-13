@@ -248,6 +248,37 @@ func TestFixOverwritesDriftedShellcheck(t *testing.T) {
 	}
 }
 
+// TestFixKeepsLowercaseReadme: a readme.md is the README; the fixer leaves it
+// alone and never writes README.md beside it. (On a case-insensitive
+// filesystem the two names are one file, so the check is on the directory
+// listing, not on a Stat of README.md.)
+func TestFixKeepsLowercaseReadme(t *testing.T) {
+	t.Parallel()
+
+	const body = "# the real readme\n"
+
+	dir := writeRepo(t, map[string]string{"readme.md": body})
+
+	if o := outcomeFor(Fix(dir, bootstrapOpts()), "readme"); o.Action != ActionNone {
+		t.Fatalf("readme action = %s (%s), want none", o.Action, o.Message)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, e := range entries {
+		if e.Name() == readmeFileName {
+			t.Fatalf("fix planted %s beside readme.md", readmeFileName)
+		}
+	}
+
+	if data, _ := os.ReadFile(filepath.Join(dir, "readme.md")); string(data) != body {
+		t.Errorf("readme.md was rewritten:\n%s", data)
+	}
+}
+
 func TestShellcheckrcIsUnconditional(t *testing.T) {
 	t.Parallel()
 
