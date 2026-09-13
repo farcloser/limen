@@ -84,9 +84,15 @@ func orgClient(org string) client { return client{base: "orgs/" + org} }
 // endpoints that answer through their status code (HTTP 404 = feature off)
 // from real errors, which land in err.
 type apiOutcome struct {
-	err      error
-	body     []byte
+	err  error
+	body []byte
+	// notFound is the endpoints that answer through their status code
+	// (HTTP 404 = feature off).
 	notFound bool
+	// orgEnforced is the write GitHub refused because an organization code
+	// security configuration owns the setting: not a failure to apply, but a
+	// statement that the repository endpoint is the wrong place to apply it.
+	orgEnforced bool
 }
 
 // httpNotFoundMarker is how gh reports a 404 on stderr.
@@ -99,6 +105,31 @@ const methodGet = "GET"
 // field the caller collects — a shape the API does not answer with.
 var errPageWithoutField = errors.New("a page carries no such field")
 
+// The markers of the one write refusal that is not a failure to fix but a
+// statement about who owns the setting: an organization code security
+// configuration governs it, and the repository endpoint will refuse every
+// attempt until the organization's own object changes. Matched on GitHub's
+// prose because the status code alone does not distinguish it from the other
+// 422s the settings endpoints return.
+const (
+	httpUnprocessableMarker = "(HTTP 422)"
+	enforcedConfigMarker    = "enforced security configuration"
+)
+
+// errOrgEnforced marks a write the repository cannot win: the setting belongs
+// to an enforced organization code security configuration.
+var errOrgEnforced = errors.New("setting is owned by an enforced organization code security configuration")
+
+// orgOf returns the organization a client's base path belongs to, for
+// phrasing an error that has to point somewhere else.
+func (c client) orgOf() string {
+	base := strings.TrimPrefix(c.base, "repos/")
+	base = strings.TrimPrefix(base, "orgs/")
+	owner, _, _ := strings.Cut(base, "/")
+
+	return owner
+}
+
 // api runs `gh api` with the given method, repo-relative path, and optional
 // JSON payload (sent via --input -), and classifies the outcome.
 func (c client) api(method, path string, payload []byte) apiOutcome {
@@ -109,7 +140,24 @@ func (c client) api(method, path string, payload []byte) apiOutcome {
 		args = append(args, "--input", "-")
 	}
 
-	return runGH(args, method, fullPath, payload)
+	return c.classify(runGH(args, method, fullPath, payload))
+}
+
+// classify phrases the refusals that need to name where the setting actually
+// lives — runGH only detects them, having no client to ask.
+func (c client) classify(outcome apiOutcome) apiOutcome {
+	if !outcome.orgEnforced {
+		return outcome
+	}
+
+	org := c.orgOf()
+	outcome.err = fmt.Errorf(
+		"%w: run `limen github fix -org %s` — the repository endpoint refuses every attempt while the configuration stands", //nolint:lll // one sentence of guidance.
+		errOrgEnforced,
+		org,
+	)
+
+	return outcome
 }
 
 // Every list endpoint is read whole. The REST API pages its lists (30 entries
@@ -134,7 +182,7 @@ func (c client) apiAllPages(path string, flags ...string) apiOutcome {
 
 	args := append([]string{"api", "--method", methodGet, fullPath, "--paginate"}, flags...)
 
-	return runGH(args, methodGet, fullPath, nil)
+	return c.classify(runGH(args, methodGet, fullPath, nil))
 }
 
 // runGH executes one gh invocation and classifies the outcome; method and
@@ -158,12 +206,22 @@ func runGH(args []string, method, fullPath string, payload []byte) apiOutcome {
 			return apiOutcome{notFound: true}
 		}
 
+		if isOrgEnforced(stderr.String()) {
+			return apiOutcome{orgEnforced: true}
+		}
+
 		return apiOutcome{
 			err: fmt.Errorf("gh api %s %s: %w: %s", method, fullPath, err, condenseStderr(stderr.String())),
 		}
 	}
 
 	return apiOutcome{body: stdout.Bytes()}
+}
+
+// isOrgEnforced reports whether gh refused a write because an organization
+// code security configuration owns the setting.
+func isOrgEnforced(stderr string) bool {
+	return strings.Contains(stderr, httpUnprocessableMarker) && strings.Contains(stderr, enforcedConfigMarker)
 }
 
 // condenseStderr reduces gh's stderr to a single readable line: aqua's

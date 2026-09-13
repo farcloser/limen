@@ -57,10 +57,13 @@ const compliantRepoJSON = `{
 // that puts what it looks for on a later page thereby proves the code under
 // test asked for every page.
 type stubResponse struct {
-	Body     string   `json:"body"`
-	Pages    []string `json:"pages,omitempty"`
-	NotFound bool     `json:"notFound"`
-	Fail     bool     `json:"fail"`
+	Body  string   `json:"body"`
+	Pages []string `json:"pages,omitempty"`
+	// Stderr is a verbatim gh failure line, for the refusals limen classifies
+	// by GitHub's prose rather than by status code alone.
+	Stderr   string `json:"stderr"`
+	NotFound bool   `json:"notFound"`
+	Fail     bool   `json:"fail"`
 }
 
 // render is the body the stub writes for the flags gh was invoked with.
@@ -228,6 +231,10 @@ func runGHStub(dir string) int {
 		return 0
 	case response.NotFound:
 		fmt.Fprintln(os.Stderr, "gh: Not Found (HTTP 404)")
+
+		return 1
+	case response.Stderr != "":
+		fmt.Fprintln(os.Stderr, response.Stderr)
 
 		return 1
 	case response.Fail:
