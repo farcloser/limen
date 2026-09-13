@@ -51,6 +51,7 @@ github:
 #   webhooks: <reason>
 #   deploy-keys: <reason>
 #   agents-team: <reason>
+#   renovate-processing: <reason>  # (self-hosted Renovate without a dashboard, say)
 # --- Organization (only read by `limen github … -org <name>`) ---
 #   org-two-factor-requirement: <reason>
 #   org-default-repository-permission: <reason>

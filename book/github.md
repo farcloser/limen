@@ -86,6 +86,22 @@ setup).
   indirect deps alone) — so nothing Dependabot would have caught goes
   unraised. A repository that wants Dependabot's PRs anyway declares
   `dependabot-security-updates` as an exception.
+- **Renovate is processing the repository**, not merely installed on the
+  organization. Every configuration check can be green while Renovate skips
+  a repository: it skips forks by default under an all-repositories
+  installation, and decides so from `renovate.json` before any preset
+  resolves — four forks once sat silent for three weeks with every audit
+  passing. The proof is the open **Dependency Dashboard** issue the app keeps
+  on every repository it manages, present whether or not anything is pending
+  (a count of its pull requests would go quiet on a repository with nothing
+  to update); the shared preset turns the dashboard on explicitly so no
+  project can switch it off underneath the check. A failing verdict with no
+  fix: nothing in the API starts a Renovate job, so the message carries the
+  remedy — trigger one from the Mend Developer Portal, and for a fork confirm
+  `forkProcessing` and that the job is not stuck disabled. A repository whose
+  first run has not happened yet fails too; not yet true and false deserve
+  the same red. A self-hosted Renovate that keeps no dashboard declares
+  `renovate-processing` as an exception.
 - **Actions hardened.** The default workflow token is read-only, workflows
   cannot approve pull requests, and the allowed-actions policy is restricted —
   GitHub-owned actions plus an explicitly pinned allowlist, never "all". This

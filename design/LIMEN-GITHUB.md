@@ -213,6 +213,7 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Squash commit message default | PR title + body | ✓ | same |
 | Delete branch on merge | true | ✓ | same |
 | Auto-merge allowed | true (pairs with Renovate) | ✓ | same |
+| Renovate processing | an open issue titled `Dependency Dashboard` authored by the `renovate` app — the execution-layer twin of O4's "Renovate installed": the app skips forks by default, before any preset resolves, and every configuration check stays green while it does. Fail, no fix: no API starts a job; the message says to trigger one in the Mend portal and, for a fork, to confirm `forkProcessing` | — | `GET /repos/{o}/{r}/issues?state=open&creator=app%2Frenovate` |
 | Always suggest updating branches | true | ✓ | same |
 | Default branch name | `main` | adv (rename is disruptive) | `PATCH /repos/{o}/{r}` / rename endpoint |
 | Web commit sign-off required | true (DCO enforcement for UI edits — complements `lint commits`) | ✓ | `PATCH /repos/{o}/{r}` (`web_commit_signoff_required`) |
