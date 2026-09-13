@@ -4,6 +4,7 @@
 package github //nolint:testpackage // white-box (see audit_test.go).
 
 import (
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -115,5 +116,48 @@ func TestAuditManyTagsTargets(t *testing.T) {
 	want := "org test-org test-org/alpha test-org/beta"
 	if got := strings.Join(seen, " "); got != want {
 		t.Errorf("target order = %q, want %q", got, want)
+	}
+}
+
+// enforcedConfig422 is gh's verbatim refusal when an organization code
+// security configuration owns the setting a repository write tried to change.
+const enforcedConfig422 = "gh: An enforced security configuration prevented modifying dependabot " +
+	"security updates enablement. Contact your organization owner for details. (HTTP 422)"
+
+// TestOrgEnforcedWriteNamesTheOrg: this refusal is not a failure to apply, it
+// is a statement that the repository endpoint is the wrong place — every
+// attempt will fail identically while the configuration stands. Reported as a
+// generic apply error it reads like a token or outage problem, which is how it
+// went unexplained on forkcloser.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestOrgEnforcedWriteNamesTheOrg(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
+	responses["DELETE repos/test/repo/automated-security-fixes"] = stubResponse{Stderr: enforcedConfig422}
+
+	stubGH(t, responses)
+
+	_, changes := Audit("test/repo", nil)
+
+	var planned *Change
+
+	for index, change := range changes {
+		if change.Check == checkDependabotFixes {
+			planned = &changes[index]
+		}
+	}
+
+	if planned == nil {
+		t.Fatal("no change planned for the enabled setting")
+	}
+
+	err := planned.Apply()
+	if !errors.Is(err, errOrgEnforced) {
+		t.Fatalf("Apply = %v, want an org-enforced refusal", err)
+	}
+
+	if !strings.Contains(err.Error(), "-org test") {
+		t.Errorf("the error must point at the organization that owns the setting, got: %v", err)
 	}
 }
