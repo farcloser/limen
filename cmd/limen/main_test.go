@@ -47,7 +47,7 @@ func compliantRepo(t *testing.T) string {
 		"tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
 			"\tgithub.com/vbatts/git-validation\n" +
 			"\tgithub.com/farcloser/godolint/cmd/godolint\n" +
-			"\tgithub.com/goccy/go-graphviz/cmd/dot\n)\n",
+			"\tgithub.com/forkcloser/dot/cmd/dot\n)\n",
 	}
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
