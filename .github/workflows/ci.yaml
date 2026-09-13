@@ -53,15 +53,10 @@ jobs:
       - name: Install aqua (pinned, checksum-verified)
         uses: ./.github/actions/setup-aqua
 
-      # Defender's real-time scan inspects every file the caches extract and
-      # every object go writes; it was most of what made the windows legs two
-      # to three times slower than linux. Off for the job: the scanner proves
-      # nothing this leg exists to prove, and the runner is discarded at the
-      # end. Before the caches, so the extraction is unscanned too.
-      - name: Disable Defender real-time scanning (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: Set-MpPreference -DisableRealtimeMonitoring $true
+      # Not here: turning Defender's real-time scan off. Tried on the windows
+      # legs, before the caches, and measured neutral twice against the same
+      # commit without it — the slowness is process creation and small-file
+      # writes under git-bash, not the scanner.
 
       # aqua's package store, keyed on the exact pins and per architecture
       # (the store holds native binaries). A warm store turns every lazy first
