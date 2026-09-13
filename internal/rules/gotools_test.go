@@ -11,7 +11,8 @@ import (
 
 // The fake go (see TestMain and installGoStub): `go get -tool a@latest
 // b@latest` appends the directives to the go.mod in the working directory,
-// `go mod tidy` and anything else succeed silently.
+// `go get -tool a@none` strips them, `go mod tidy` and anything else succeed
+// silently.
 
 const goModBare = "module example.com/proj\n\ngo 1.26\n"
 
@@ -25,7 +26,7 @@ go 1.26
 tool (
 	github.com/vbatts/git-validation
 	github.com/farcloser/godolint/cmd/godolint
-	github.com/goccy/go-graphviz/cmd/dot
+	github.com/forkcloser/dot/cmd/dot
 )
 `
 
@@ -41,7 +42,7 @@ tool (
 	golang.org/x/vuln/cmd/govulncheck
 	github.com/vbatts/git-validation
 	github.com/farcloser/godolint/cmd/godolint
-	github.com/goccy/go-graphviz/cmd/dot
+	github.com/forkcloser/dot/cmd/dot
 	example.com/other/cmd/thing
 )
 
@@ -57,8 +58,20 @@ func runGoStub() int {
 	var lines []string
 
 	for _, arg := range args[2:] {
-		pkg, _, _ := strings.Cut(arg, "@")
+		pkg, version, _ := strings.Cut(arg, "@")
+		if version == "none" {
+			if !stripGoModToolDirective(pkg) {
+				return 1
+			}
+
+			continue
+		}
+
 		lines = append(lines, "tool "+pkg)
+	}
+
+	if len(lines) == 0 {
+		return 0
 	}
 
 	file, err := os.OpenFile(goModFile, os.O_APPEND|os.O_WRONLY, 0o600)
@@ -73,6 +86,29 @@ func runGoStub() int {
 	}
 
 	return 0
+}
+
+// stripGoModToolDirective removes one package's directive lines from the
+// go.mod in the working directory, both forms, the way `go get -tool
+// pkg@none` does.
+func stripGoModToolDirective(pkg string) bool {
+	data, err := os.ReadFile(goModFile)
+	if err != nil {
+		return false
+	}
+
+	var kept []string
+
+	for line := range strings.SplitSeq(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == pkg || trimmed == "tool "+pkg {
+			continue
+		}
+
+		kept = append(kept, line)
+	}
+
+	return os.WriteFile(goModFile, []byte(strings.Join(kept, "\n")), 0o600) == nil
 }
 
 // installGoStub points goBin at the test binary under the name `go`, which
@@ -132,7 +168,7 @@ func TestGoModToolDirectives(t *testing.T) {
 			want: []string{
 				"github.com/google/go-licenses/v2", "golang.org/x/tools/cmd/deadcode",
 				"golang.org/x/vuln/cmd/govulncheck", "github.com/vbatts/git-validation",
-				"github.com/farcloser/godolint/cmd/godolint", "github.com/goccy/go-graphviz/cmd/dot",
+				"github.com/farcloser/godolint/cmd/godolint", "github.com/forkcloser/dot/cmd/dot",
 				"example.com/other/cmd/thing",
 			},
 		},
@@ -257,26 +293,68 @@ func TestStripGoModToolDirectives(t *testing.T) {
 	}
 }
 
-// The two halves of one doctrine: what tools/go.mod must declare is exactly
-// what aqua.yaml must no longer pin, and the canonical manifest pins none of
-// it.
+// The two halves of one doctrine: every tool tools/go.mod must declare is a
+// package aqua.yaml must no longer pin, or the replacement of a directive
+// that was; every retired aqua package is a required tool or a retired
+// directive; and the canonical manifest pins none of it.
 func TestGoToolsMatchRetiredAquaPackages(t *testing.T) {
 	t.Parallel()
 
-	want := requiredGoTools([]byte(goModBare))
-	got := slices.Clone(retiredCanonicalPkgs)
+	required := requiredGoTools([]byte(goModBare))
 
-	slices.Sort(want)
-	slices.Sort(got)
+	var replacements []string
+	for _, replacement := range retiredGoTools {
+		replacements = append(replacements, replacement)
+	}
 
-	if !slices.Equal(want, got) {
-		t.Fatalf("required tools %v and retiredCanonicalPkgs %v must be the same set", want, got)
+	for _, pkg := range required {
+		if !slices.Contains(retiredCanonicalPkgs, pkg) && !slices.Contains(replacements, pkg) {
+			t.Errorf(
+				"required tool %s is neither a retired aqua package nor the replacement of a retired directive",
+				pkg,
+			)
+		}
+	}
+
+	for _, pkg := range retiredCanonicalPkgs {
+		if _, retired := retiredGoTools[pkg]; !slices.Contains(required, pkg) && !retired {
+			t.Errorf("retired aqua package %s is neither a required tool nor a retired directive", pkg)
+		}
 	}
 
 	for _, p := range canonicalAqua.pkgs {
 		if slices.Contains(retiredCanonicalPkgs, p.name) {
 			t.Errorf("canonical aqua.yaml still pins retired package %s", p.name)
 		}
+	}
+}
+
+// TestGoToolsRetiredDirective: a tools/go.mod that still carries a retired
+// directive beside its replacement fails naming both, and fix removes it
+// through `go get -tool pkg@none` (the fake go) and then passes.
+func TestGoToolsRetiredDirective(t *testing.T) {
+	t.Parallel()
+
+	const retired = "github.com/goccy/go-graphviz/cmd/dot"
+
+	files := compliantFiles()
+	files[goToolsModFile] = goModToolsEverywhere + "\ntool " + retired + "\n"
+	dir := writeRepo(t, files)
+
+	f := checkGoTools(dir)
+	if f.OK() || !strings.Contains(f.Message, retired) || !strings.Contains(f.Message, retiredGoTools[retired]) {
+		t.Fatalf("a retired directive should fail naming it and its replacement: ok=%v %s", f.OK(), f.Message)
+	}
+
+	outcome := remediateGoTools(dir)
+
+	removed := strings.Contains(outcome.Message, "removed retired tool directive(s) for "+retired)
+	if outcome.Action != ActionMerged || !removed {
+		t.Fatalf("got %s (%s), want merged with the directive removed", outcome.Action, outcome.Message)
+	}
+
+	if f := checkGoTools(dir); !f.OK() {
+		t.Fatalf("rule does not pass after fix: %s", f.Message)
 	}
 }
 

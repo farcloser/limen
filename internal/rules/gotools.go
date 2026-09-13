@@ -55,7 +55,20 @@ const (
 var goToolsEverywhere = []string{
 	"github.com/vbatts/git-validation",
 	"github.com/farcloser/godolint/cmd/godolint",
-	"github.com/goccy/go-graphviz/cmd/dot",
+	"github.com/forkcloser/dot/cmd/dot",
+}
+
+// retiredGoTools are tool directives a repository must no longer carry, each
+// with the package that replaced it. A directive that stays beside its
+// replacement builds nothing the recipes run but keeps its dependency graph
+// in tools/go.mod and go.sum. Check fails while one is declared; fix removes
+// it with `go get -tool <pkg>@none`, which go accepts even when the package's
+// module no longer provides it.
+//
+//nolint:gochecknoglobals // immutable baseline data.
+var retiredGoTools = map[string]string{
+	// Upstream's cmd/dot lost its tags and its library moved on without it.
+	"github.com/goccy/go-graphviz/cmd/dot": "github.com/forkcloser/dot/cmd/dot",
 }
 
 // goSourceAnalyzers are the tool packages a Go module must declare on top:
@@ -80,9 +93,10 @@ var goBin = "go" //nolint:gochecknoglobals // test seam: tests substitute a stub
 
 // requiredGoTools lists the tool packages a repository must declare: the
 // everywhere set, plus the analyzers when the root carries a go.mod (rootMod
-// is its text, nil when there is none). The union is exactly the retired
-// aqua packages (retiredCanonicalPkgs): one doctrine, two rules enforcing its
-// two halves.
+// is its text, nil when there is none). Every entry is either a retired aqua
+// package (retiredCanonicalPkgs) or the replacement of a retired directive
+// (retiredGoTools): one doctrine, two rules enforcing its two halves, and a
+// test pinning the correspondence.
 func requiredGoTools(rootMod []byte) []string {
 	if rootMod == nil {
 		return slices.Clone(goToolsEverywhere)
@@ -122,16 +136,64 @@ func checkGoTools(root string) Finding {
 	}
 
 	missing := missingGoModTools(string(toolsMod), required)
-	if len(missing) == 0 {
-		return Finding{
-			Rule:    ruleGoTools,
-			Status:  StatusOK,
-			Path:    goToolsModFile,
-			Message: goToolsPassMessage,
+	if len(missing) > 0 {
+		return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+missingGoModToolsMessage(missing))
+	}
+
+	if retired := retiredGoModTools(string(toolsMod)); len(retired) > 0 {
+		return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+retiredGoModToolsMessage(retired))
+	}
+
+	return Finding{
+		Rule:    ruleGoTools,
+		Status:  StatusOK,
+		Path:    goToolsModFile,
+		Message: goToolsPassMessage,
+	}
+}
+
+// retiredGoModTools returns the retired tool packages the go.mod text still
+// declares, sorted.
+func retiredGoModTools(gomod string) []string {
+	declared := goModToolDirectives(gomod)
+
+	var retired []string
+
+	for pkg := range retiredGoTools {
+		if declared[pkg] {
+			retired = append(retired, pkg)
 		}
 	}
 
-	return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+missingGoModToolsMessage(missing))
+	slices.Sort(retired)
+
+	return retired
+}
+
+// listSeparator joins package lists in messages.
+const listSeparator = ", "
+
+// retiredGoModToolsMessage names each retired directive and its replacement.
+func retiredGoModToolsMessage(retired []string) string {
+	pairs := make([]string, 0, len(retired))
+	for _, pkg := range retired {
+		pairs = append(pairs, pkg+" (replaced by "+retiredGoTools[pkg]+")")
+	}
+
+	return "retired tool directive(s) for " + strings.Join(pairs, listSeparator) +
+		"; remove with go -C tools get -tool <pkg>@none && go -C tools mod tidy"
+}
+
+// goGetThenTidy runs one `go get` in the tools module followed by `go mod
+// tidy`, and returns the first failure's output, or "" when both succeeded.
+func goGetThenTidy(toolsRoot string, getArgs []string) string {
+	for _, args := range [][]string{getArgs, {"mod", "tidy"}} {
+		if out := runGo(toolsRoot, args...); out != "" {
+			return out
+		}
+	}
+
+	return ""
 }
 
 // goToolsPassMessage is the check and fix wording for a complete module.
@@ -284,7 +346,9 @@ func remediateGoTools(root string) Outcome {
 	}
 
 	missing := missingGoModTools(string(toolsMod), requiredGoTools(rootMod))
-	if len(missing) == 0 && len(done) == 0 {
+	retired := retiredGoModTools(string(toolsMod))
+
+	if len(missing) == 0 && len(retired) == 0 && len(done) == 0 {
 		return Outcome{
 			Rule:    ruleGoTools,
 			Action:  ActionNone,
@@ -293,25 +357,39 @@ func remediateGoTools(root string) Outcome {
 		}
 	}
 
+	toolsRoot := filepath.Join(root, goToolsDir)
+
 	if len(missing) > 0 {
 		getArgs := []string{"get", "-tool"}
 		for _, pkg := range missing {
 			getArgs = append(getArgs, pkg+"@latest")
 		}
 
-		toolsRoot := filepath.Join(root, goToolsDir)
-		for _, args := range [][]string{getArgs, {"mod", "tidy"}} {
-			if out := runGo(toolsRoot, args...); out != "" {
-				return goToolsAdvisory(goToolsModFile, missingGoModToolsMessage(missing)+"; "+out, getArgs)
-			}
+		if out := goGetThenTidy(toolsRoot, getArgs); out != "" {
+			return goToolsAdvisory(goToolsModFile, missingGoModToolsMessage(missing)+"; "+out, getArgs)
 		}
 
 		done = append(
 			done,
-			"added tool directive(s) for "+strings.Join(
-				missing,
-				", ",
-			)+" (go -C tools get -tool, then go -C tools mod tidy)",
+			"added tool directive(s) for "+strings.Join(missing, listSeparator)+
+				" (go -C tools get -tool, then go -C tools mod tidy)",
+		)
+	}
+
+	if len(retired) > 0 {
+		getArgs := []string{"get", "-tool"}
+		for _, pkg := range retired {
+			getArgs = append(getArgs, pkg+"@none")
+		}
+
+		if out := goGetThenTidy(toolsRoot, getArgs); out != "" {
+			return goToolsAdvisory(goToolsModFile, retiredGoModToolsMessage(retired)+"; "+out, getArgs)
+		}
+
+		done = append(
+			done,
+			"removed retired tool directive(s) for "+strings.Join(retired, listSeparator)+
+				" (go -C tools get -tool <pkg>@none, then go -C tools mod tidy)",
 		)
 	}
 

@@ -95,7 +95,7 @@ that binary — per platform for the analyzers — because `go tool` itself hono
 `GOOS`/`GOARCH` and would cross-compile the tool.
 
 Every repository carries the module, not only Go ones: `git-validation` (commit hygiene),
-`godolint` (Dockerfiles) and `dot` (profile graphs; graphviz compiled to WASM, a single Go
+`godolint` (Dockerfiles) and `dot` (profile graphs; `forkcloser/dot`, graphviz compiled to WASM, a single Go
 binary) run everywhere, and every repository already pins `golang/go` in aqua to build them.
 A Go repository adds the three source analyzers.
 
