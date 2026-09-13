@@ -14,14 +14,31 @@ human's request, and never commit on `main`.
 
 ```
 git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_COMMAND, which outranks the rig's core.sshCommand
-git -C <clone> worktree add -b claudio/$(date +%Y%m%d)-<topic> ../<repo>-<date>-<topic> origin/main   # or the harness's worktree tool
-cd ../<repo>-<date>-<topic>
-aqua policy allow aqua-policy.yaml && aqua install --only-link
+grep -qx '.claude/' <clone>/.git/info/exclude || echo '.claude/' >> <clone>/.git/info/exclude   # once per clone
+git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/main
+test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
+cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow aqua-policy.yaml && aqua install --only-link
 ```
 
 One topic per branch and per pull request. The bot's login is the branch
 prefix, the day it was cut comes next (`claudio/20260906-<topic>`), so a
 branch listing reads in date order and a stale one shows its age.
+
+The worktree lives under `.claude/worktrees/` in the clone, where the
+harness's own worktree tool puts its worktrees, so the harness can switch the
+session into it by path. Nothing ignores `.claude/`, and a nested checkout
+shows up in the human's `git status` as an untracked directory; the exclude
+line keeps it out, per clone, without a commit.
+
+`--no-track`, because a remote-tracking start point records an upstream, and
+that writes `.git/config`, which the sandbox denies (the same denial as `-u`
+on a push): the ref lands, the command fails, and the worktree is never
+created. Name the branch right at creation for the same reason — `git branch
+-m` rewrites the config section and fails the same way. Run the `worktree
+add` on its own, with nothing piped after it: a `| tail` makes the pipeline's
+status the pipe's, and a `cd` chained on that once fell through into the
+human's clone, where the next command rebased `main`. The `test -d` is what
+stops the chain when the add did not land.
 
 ## 2. Commit
 
@@ -113,7 +130,7 @@ gh pr edit claudio/<date>-<topic> --add-reviewer "$owner"
 ```
 git -C <clone> c fetch --prune origin
 git -C <clone> merge --ff-only origin/main   # the clone has main checked out, so a main:main refspec is refused there; on any other branch, `c fetch origin main:main`
-git -C <clone> worktree remove ../<repo>-<date>-<topic> && git -C <clone> branch -d claudio/<date>-<topic>
+git -C <clone> worktree remove .claude/worktrees/<date>-<topic> && git -C <clone> branch -d claudio/<date>-<topic>
 ```
 
 Rebase every open branch of yours onto the fresh `main`, so the human and you
