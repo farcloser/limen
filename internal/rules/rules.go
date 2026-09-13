@@ -212,12 +212,17 @@ func checkGit(root string) Finding {
 func checkReadme(root string) Finding {
 	const rule = "readme"
 
-	name, ok := findFirst(root, readmeFileName, "README", "README.txt")
+	name, ok := findFirstFold(root, readmeFileName, "README", "README.txt")
 	if !ok {
 		return fail(rule, "", "no README found (expected README.md)")
 	}
 
-	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: "README present"}
+	msg := "README present"
+	if name != readmeFileName {
+		msg = fmt.Sprintf("README present as %s (README.md is the canonical name)", name)
+	}
+
+	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: msg}
 }
 
 // checkEditorconfig content-pins the .editorconfig: it must equal the canonical
@@ -638,7 +643,7 @@ func findYAMLSource(root string) (string, bool) {
 func checkLicense(root string, policy Policy) Finding {
 	const rule = "license"
 
-	name, ok := findFirst(root, licenseFileName, "LICENSE.md", "LICENSE.txt", "COPYING")
+	name, ok := findFirstFold(root, licenseFileName, "LICENSE.md", "LICENSE.txt", "COPYING")
 	if !ok {
 		return fail(rule, "", "no LICENSE found")
 	}
@@ -692,6 +697,47 @@ func findFirst(root string, names ...string) (string, bool) {
 	for _, name := range names {
 		if exists(filepath.Join(root, name)) {
 			return name, true
+		}
+	}
+
+	return "", false
+}
+
+// findFirstFold is findFirst matched case-insensitively, returning the name as
+// it is on disk. Only for files whose readers do not care about case (a
+// README, a LICENSE) — never for one a tool looks up by exact name (aqua.yaml,
+// .goreleaser.yaml), where a folded match would pass a file the tool ignores.
+// The on-disk name comes from the directory listing, not from a Stat of the
+// wanted name: on a case-insensitive filesystem that Stat succeeds for
+// readme.md too and would report README.md. The exact spelling wins when a
+// case-sensitive filesystem holds both.
+func findFirstFold(root string, names ...string) (string, bool) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", false
+	}
+
+	for _, name := range names {
+		found := ""
+
+		for _, entry := range entries {
+			if !strings.EqualFold(entry.Name(), name) || !exists(filepath.Join(root, entry.Name())) {
+				continue
+			}
+
+			if entry.Name() == name {
+				found = name
+
+				break
+			}
+
+			if found == "" {
+				found = entry.Name()
+			}
+		}
+
+		if found != "" {
+			return found, true
 		}
 	}
 
