@@ -176,12 +176,12 @@ afterward, the `type=docker` tarball is the bridge.
    needs to build a container image, the entry point is `build-container` — the
    provider-selecting wrapper (macOS→Lima, Linux→bare buildkitd) over the pinned
    `buildctl`. Callers depend on that name, not on Lima or the socket dance. Open:
-   whether `build-container` is a first-party repo (like `build-curl`) or a `just`
+   whether `build-container` is a first-party repo (like `forkcloser/curl`) or a `just`
    recipe living here — see the questions at the end.
 
-## Adequacy test: build-curl (the chosen proof case)
+## Adequacy test: forkcloser/curl (the chosen proof case)
 
-build-curl is the right stress test because it "requires Docker" — so if the
+forkcloser/curl is the right stress test because it "requires Docker" — so if the
 BuildKit-only stack can do it, it can do the org's real work. Findings from
 reading the upstream machinery (curl/curl-for-win, live on 2026-07-07):
 
@@ -192,7 +192,7 @@ reading the upstream machinery (curl/curl-for-win, live on 2026-07-07):
   downloads and compiles curl + its TLS/HTTP deps and emits release archives.
 - **BuildKit cannot `docker run`** — it builds images, it does not execute
   containers as a runtime. So a literal lift of curl-for-win's invocation fails.
-- **But it reframes cleanly, and build-curl is ours to author.** Wrap the build in
+- **But it reframes cleanly, and forkcloser/curl is ours to author.** Wrap the build in
   a Dockerfile whose `RUN` executes the compile, and export the artifacts:
 
   ```dockerfile
@@ -210,7 +210,7 @@ reading the upstream machinery (curl/curl-for-win, live on 2026-07-07):
   final filesystem (the artifacts) to the host. This is a standard "BuildKit as a
   hermetic build sandbox" pattern.
 
-**Verdict: adequate for build-curl, conditionally.** It works iff build-curl is
+**Verdict: adequate for forkcloser/curl, conditionally.** It works iff forkcloser/curl is
 authored as a Dockerfile-wrapped build exporting via `type=local` (the natural
 `build-*` output shape — artifacts, not a pushed image), **and** the build needs
 nothing runtime-only: no `--privileged`, no loop/block devices, no cross-arch
