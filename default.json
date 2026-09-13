@@ -5,6 +5,7 @@
     "extends: config:recommended, plus aqua's preset, which detects owner/repo@ver and go-module packages in aqua.yaml, updates the standard-registry ref, and bumps aqua_version in CI too.",
     "minimumReleaseAge: supply-chain cooldown before proposing a bump; doubles as protection against a release tag whose assets are not uploaded yet.",
     "packageRules, own releases: the cooldown guards against third parties (a tag whose assets are still uploading, a release pulled the next day). A release cut by one of our organizations carries no risk we do not already own, and its assets are published by the release workflow within minutes \u2014 so farcloser, forkcloser and mycophonic packages, in aqua's owner/repo form and Go's github.com/owner/repo form alike, are proposed as soon as they exist. A repository that wants the cooldown back on one of them adds a later packageRule in its own renovate.json; rules merge in order and the last match wins.",
+    "dependencyDashboard: the one issue Renovate keeps open on every repository it processes, updates pending or not. `limen github check` reads it as the proof that Renovate is running at all (it skips forks by default, before any preset resolves, and every configuration check stays green while it does). Stated explicitly, like vulnerabilityAlerts, so a project cannot switch it off and defeat the check unseen.",
     "vulnerabilityAlerts: fix PRs from GitHub's Dependabot alerts (the baseline keeps the alerts on for exactly this; Dependabot's own update PRs are off, Renovate is the one bot). Stated explicitly because enabled: true here is what reaches // indirect Go modules, which the gomod manager skips by default. Fix PRs skip the cooldown and take the lowest fixed version, both Renovate defaults for this object.",
     "postUpdateOptions gomodTidy: a Go module bump rewrites go.mod; without tidy, go.sum keeps the old module's lines and `just do lint go mod` (go mod tidy, diffed) fails every gomod PR.",
     "packageRules, content-pinned files: the checksum-update workflow, the setup-aqua action and everything under .limen/ are limen's byte for byte; a bump Renovate makes inside one is drift the next `limen check` rejects. Their pins move in limen's own repository, the one place Renovate keeps touching them, and reach every other repository through a limen release.",
@@ -18,6 +19,7 @@
     "github>aquaproj/aqua-renovate-config#2.13.0"
   ],
   "minimumReleaseAge": "3 days",
+  "dependencyDashboard": true,
   "vulnerabilityAlerts": {
     "enabled": true
   },

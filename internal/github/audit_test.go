@@ -301,8 +301,13 @@ func compliantResponses() map[string]stubResponse {
 		"GET repos/test/repo/hooks?per_page=100":                             {Body: `[]`},
 		"GET repos/test/repo/keys?per_page=100":                              {Body: `[]`},
 		"GET repos/test/repo/pages":                                          {NotFound: true},
-		"GET orgs/test":                                                      {Body: `{"login":"test"}`},
-		"GET orgs/test/teams?per_page=100":                                   {Body: `[{"slug":"agents"}]`},
+		// The dashboard beside one of Renovate's own pull requests, which the
+		// issues listing returns too: only the issue counts.
+		"GET repos/test/repo/issues?state=open&creator=app%2Frenovate&per_page=100": {
+			Body: `[{"number":12,"title":"chore(deps): update x","pull_request":{"url":"…"}},{"number":9,"title":"Dependency Dashboard"}]`,
+		},
+		"GET orgs/test":                    {Body: `{"login":"test"}`},
+		"GET orgs/test/teams?per_page=100": {Body: `[{"slug":"agents"}]`},
 		"GET repos/test/repo/teams?per_page=100": {
 			Body: `[{"slug":"agents","permission":"push"}]`,
 		},
@@ -367,6 +372,11 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	// Dependabot's own PRs on: a second dependency bot beside Renovate.
 	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{Body: `[]`}
+	// Renovate has pull requests open but no dashboard: a PR count would pass,
+	// the processing check must not.
+	responses["GET repos/test/repo/issues?state=open&creator=app%2Frenovate&per_page=100"] = stubResponse{
+		Body: `[{"number":12,"title":"chore(deps): update x","pull_request":{"url":"…"}}]`,
+	}
 	stubGH(t, responses)
 
 	findings, changes := Audit(testRepo, nil)
@@ -375,7 +385,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 		checkMergeMethods, checkSquashDefaults, checkDeleteBranchOnMerge, checkAutoMerge,
 		checkWebCommitSignoff, checkIssues, checkWiki, checkForking, checkSecretScanning,
 		checkPushProtection, checkDependabotAlerts, checkDependabotFixes,
-		checkRulesetDefaultBranch, checkRulesetVersionTags,
+		checkRulesetDefaultBranch, checkRulesetVersionTags, checkRenovateProcessing,
 	}
 	for _, check := range wantFail {
 		finding, found := findingByCheck(findings, check)
@@ -615,6 +625,7 @@ var listPaths = []string{ //nolint:gochecknoglobals // test table.
 	"GET repos/test/repo/collaborators?affiliation=outside&per_page=100",
 	"GET repos/test/repo/hooks?per_page=100",
 	"GET repos/test/repo/keys?per_page=100",
+	"GET repos/test/repo/issues?state=open&creator=app%2Frenovate&per_page=100",
 	"GET repos/test/repo/teams?per_page=100",
 	"GET orgs/test/teams?per_page=100",
 	"GET orgs/test-org/members?role=admin&per_page=100",

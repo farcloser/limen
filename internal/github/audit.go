@@ -58,6 +58,7 @@ const (
 	checkWebhooks             = "webhooks"
 	checkDeployKeys           = "deploy-keys"
 	checkAgentsTeam           = "agents-team"
+	checkRenovateProcessing   = "renovate-processing"
 )
 
 // knownChecks is every check identifier — repository and organization level
@@ -97,6 +98,7 @@ func knownChecks() map[string]bool {
 		checkWebhooks:             true,
 		checkDeployKeys:           true,
 		checkAgentsTeam:           true,
+		checkRenovateProcessing:   true,
 	})
 
 	return checks
@@ -207,6 +209,7 @@ func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
 	aud.auditCodeScanning()
 	aud.auditRulesets()
 	aud.auditSurface()
+	aud.auditRenovateProcessing()
 
 	owner, name, _ := strings.Cut(repo, "/")
 	aud.auditAgentsTeam(owner, name)
@@ -1455,6 +1458,61 @@ type deployKey struct {
 	Title    string `json:"title"`
 	ID       int64  `json:"id"`
 	ReadOnly bool   `json:"read_only"`
+}
+
+// The Dependency Dashboard is the one issue a repository Renovate processes
+// always carries, updates pending or not: the shared preset turns it on
+// explicitly so no project can switch it off underneath this check.
+const (
+	renovateAppCreator        = "app%2Frenovate"
+	dependencyDashboardTitle  = "Dependency Dashboard"
+	renovateProcessingMessage = "Renovate is not processing this repository: no open \"Dependency Dashboard\" " +
+		"issue by the renovate app. Renovate cannot be run through the API — trigger a job from the " +
+		"Mend Developer Portal; if the repository is a fork, confirm renovate.json says " +
+		"\"forkProcessing\": \"enabled\" and that the job is not sitting in a stale disabled state"
+)
+
+// issueSummary is one entry of GET /repos/{owner}/{repo}/issues. The listing
+// includes pull requests; PullRequest is non-nil for those (its content is
+// irrelevant, only its presence).
+type issueSummary struct {
+	PullRequest map[string]any `json:"pull_request"`
+	Title       string         `json:"title"`
+	Number      int64          `json:"number"`
+}
+
+// auditRenovateProcessing asserts Renovate is PROCESSING the repository, not
+// merely installed on the organization: every configuration check can be
+// green while Renovate skips the repository — it skips forks by default under
+// an all-repositories installation, and decides so before any preset resolves.
+// The signal is the open "Dependency Dashboard" issue the renovate app keeps
+// on every repository it manages, present whether or not anything is pending;
+// a pull-request count would go quiet on a repository with nothing to update.
+// Fail, no fix: nothing in the API starts a Renovate job, so the message
+// carries the remedy. A repository whose first run has not happened yet fails
+// too — "not yet true" and "false" get the same red. A repository with issues
+// off cannot answer; the issues check names that cause.
+func (a *auditor) auditRenovateProcessing() {
+	var issues []issueSummary
+
+	outcome := a.client.getJSONAllPages("/issues?state=open&creator="+renovateAppCreator+"&per_page=100", &issues)
+	if outcome.err != nil || outcome.notFound {
+		a.unverifiable(orNotFound(outcome), checkRenovateProcessing)
+
+		return
+	}
+
+	for _, issue := range issues {
+		if issue.PullRequest == nil && issue.Title == dependencyDashboardTitle {
+			a.flag(checkRenovateProcessing, StatusOK, "#"+strconv.FormatInt(issue.Number, decimalBase),
+				dependencyDashboardTitle, "Renovate is processing this repository (Dependency Dashboard open)", nil)
+
+			return
+		}
+	}
+
+	a.flag(checkRenovateProcessing, StatusFail, "(no Dependency Dashboard issue)",
+		"an open Dependency Dashboard issue by the renovate app", renovateProcessingMessage, nil)
 }
 
 // outsideCollaborator is one entry of the collaborators listing (outside
