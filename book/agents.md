@@ -48,9 +48,21 @@ is theater — worse than no gate, because it feels like control. The human's ow
 YubiKey keeps its touch, where a touch is rare and means something.
 
 What is the veto, then? **The rulesets.** `limen:main` requires a pull request
-with signed commits; the bot can push branches and open pull requests, and
-cannot land anything on `main`. Merging stays a human act — one deliberate
-gesture per pull request, with the diff in front of the human.
+with signed commits *and one approving review*; the bot can push branches and
+open pull requests, and cannot land anything on `main`. Merging stays a human
+act — one deliberate gesture per pull request, with the diff in front of the
+human.
+
+The approval is what makes that a capability and not a convention, and it was
+missing for a long time. Signed commits, no force pushes, no direct pushes to
+`main` — the rulesets always enforced those against everyone. Merging was
+different: the bot holds write, a write-level identity can call GitHub's merge
+endpoint, and nothing but `AGENTS.md` said not to. The same was true of every
+installed App, which is the sharper case: a GitHub App's permissions are taken
+wholesale, `contents: write` covers both pushing a branch and merging a pull
+request, and an app that raises dependency pull requests necessarily has it.
+Requiring an approval closes it for all of them at once, because GitHub will
+not let an author approve their own pull request.
 
 The key is ECDSA P-256 because that is the only curve the Secure Enclave
 implements. Ed25519 is the better algorithm (deterministic, transparent curve);
