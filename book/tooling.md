@@ -106,12 +106,14 @@ tools mod tidy`, and moves any directive out of the root), and the `aqua` rule r
 `go_install` pins (`limen fix` removes them). The local registry carries no `go_install`
 entry, and never will again.
 
-Adding or bumping one by hand:
-
-```bash
-go -C tools get -tool golang.org/x/tools/cmd/deadcode@<version>   # add, or move the pin
-go -C tools mod tidy
-```
+Adding, pinning, bumping or removing one goes through the same recipes as an aqua package,
+never by hand (`AGENTS.md`): `just do tools add|set|remove` take the package path as it
+stands in `tools/go.mod`, `just do tools update` the command it builds as, and the recipes
+tell a Go package from an aqua slug by the first path element — a module root is a host and
+carries a dot, a GitHub owner cannot. Underneath they run `go -C tools get -tool <pkg>@<version>`
+(`@latest`, `@none`) and `go -C tools mod tidy`, then build the tool natively into
+`build/tools/`, the Go counterpart of the full `aqua install` the aqua recipes end with: a
+bad pin fails in the recipe, not at first use.
 
 ## Tools without upstream binaries: the sourcing ladder
 
