@@ -46,6 +46,31 @@ const compliantRepoJSON = `{
   }
 }`
 
+// repoWithoutSecurityBlock is the repository object as a token WITHOUT
+// administration read receives it: no security_and_analysis at all.
+const repoWithoutSecurityBlock = `{
+  "private": false,
+  "default_branch": "main",
+  "description": "a description",
+  "topics": [
+    "tooling"
+  ],
+  "has_issues": true,
+  "has_wiki": false,
+  "has_projects": false,
+  "has_discussions": false,
+  "allow_merge_commit": true,
+  "allow_squash_merge": true,
+  "allow_rebase_merge": true,
+  "allow_auto_merge": true,
+  "allow_update_branch": true,
+  "allow_forking": true,
+  "delete_branch_on_merge": true,
+  "web_commit_signoff_required": true,
+  "squash_merge_commit_title": "PR_TITLE",
+  "squash_merge_commit_message": "PR_BODY"
+}`
+
 // stubResponse is one canned gh api answer: a body (exit 0), a 404, or a
 // generic error. Fields are exported for the JSON round trip to the stub
 // process; the type stays test-internal.
@@ -1226,5 +1251,55 @@ func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // s
 
 	if !planned {
 		t.Error("merge-method drift must plan a reconcile")
+	}
+}
+
+// TestDependabotAlerts404WithoutAdmin: GET /vulnerability-alerts answers
+// 204/404 rather than 200/403, so "alerts are off" and "this token may not
+// ask" arrive identically. Read as off, limen told a repository with seven
+// open alerts that it had none enabled — a confident fail where the doctrine
+// requires "what cannot be verified does not pass" to hold in both directions.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestDependabotAlerts404WithoutAdmin(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
+	// No security_and_analysis: exactly what a token without administration
+	// read receives on the repository object.
+	responses["GET repos/test/repo"] = stubResponse{Body: repoWithoutSecurityBlock}
+
+	stubGH(t, responses)
+
+	findings, changes := Audit("test/repo", nil)
+
+	finding, found := findingByCheck(findings, checkDependabotAlerts)
+	if !found || finding.Status != StatusUnverifiable {
+		t.Fatalf("an unreadable alerts endpoint must be unverifiable, got %v (%s)",
+			finding.Status, finding.Message)
+	}
+
+	for _, change := range changes {
+		if change.Check == checkDependabotAlerts {
+			t.Error("a verdict limen could not reach must plan no write")
+		}
+	}
+}
+
+// TestDependabotAlerts404WithAdmin: the same 404, corroborated by a repository
+// object that DID carry security_and_analysis, is a genuine "off" — the check
+// must still fail there, or the fix would never run for anyone.
+//
+//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestDependabotAlerts404WithAdmin(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
+
+	stubGH(t, responses)
+
+	findings, _ := Audit("test/repo", nil)
+
+	finding, found := findingByCheck(findings, checkDependabotAlerts)
+	if !found || finding.Status != StatusFail {
+		t.Fatalf("alerts genuinely off must still fail, got %v (%s)", finding.Status, finding.Message)
 	}
 }
