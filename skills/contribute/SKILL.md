@@ -165,6 +165,10 @@ then it is ready, and then the review request goes out.
   it; a file the human is editing on `work` is left alone.
 - Keep a queue of the human's instructions across the session; none is
   dropped because another arrived.
+- No GitHub issues unless the human asks for one. What belongs to another
+  repository goes to the session that owns it, as a message (what, why,
+  where, the run or pull request URL); it fixes and opens the pull request.
+  A limen defect goes to the limen session the same way.
 
 ## Never
 

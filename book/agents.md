@@ -214,6 +214,15 @@ The human sets the priorities; the agent measures scope before it moves.
   agent addresses them when the human points it there, or when it next
   checks its open pull requests. If a requested pull request turns red, the
   request is withdrawn until it is green again.
+- **No GitHub issues unless the human asks for one.** The issue tracker is
+  the human's: an issue is a lookup for them and a ticket nobody owns for
+  the sessions. When a session finds a defect or wants a change in a
+  repository another session owns, it sends that session a message — what,
+  why, where, the run or pull request URL — and the owning session
+  confirms, fixes, and opens the pull request, which is how the human hears
+  about it. A limen defect goes to the limen session the same way. An issue
+  a session opened on its own is closed once the owning session has the
+  work, with the handoff recorded on it.
 - **Answers, not menus.** Lead with the conclusion; give one recommendation,
   not a survey; a fix that cuts against recorded doctrine is named as such
   and argued, never slipped in. When something is either the right call or

@@ -72,6 +72,11 @@ chapter; the procedure is limen's `skills/contribute`.
   came about.
 - **Lead with the answer.** Short sentences; no preamble; no narration of your own
   reasoning.
+- **No GitHub issues unless the human asks for one.** The issue tracker is the human's.
+  A defect or a request that belongs to another repository goes to the session that owns
+  that repository, as a message with what, why, and where; that session fixes it, and
+  the human hears about it as a pull request. An issue you opened on your own is closed
+  once the owning session has the work.
 
 ## Code
 
