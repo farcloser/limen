@@ -225,6 +225,45 @@ The decided merge model, enforced by both the repository settings and the
   green PRs), and web-UI commits require sign-off — DCO holds even for edits
   made in a browser.
 
+### Which Renovate pull requests merge themselves
+
+The repository half of this has always been in place — auto-merge allowed, the
+`gate` check required — so what decided whether a dependency bump waited for a
+human was the shared preset, which said nothing. It now automerges **minor,
+patch and digest** updates, and nothing else.
+
+The argument is that `gate` is the same evidence a human merge rests on. It
+`needs` every matrix leg, the fuzz job and the tools job, and fails unless all
+of them succeeded; a person merging a patch bump is reading that one green
+tick and clicking. Automating the click changes who waits, not what is
+checked. `platformAutomerge` hands the merge to GitHub rather than to
+Renovate's own polling, so the `limen:main` ruleset is what holds the pull
+request, and a red gate simply never merges — the same gate that stops a hasty
+human.
+
+Three things stay manual, each for its own reason:
+
+- **Majors.** A major is where a bump changes behaviour rather than fixing it,
+  and where a green test suite proves least — the suite tests what the code
+  does today, not what the new API expects of it.
+- **The go toolchain and golangci-lint.** The preset already groups them,
+  because a golangci-lint release can only land with the Go it was built
+  against; the same rule opts the pair out of automerge. A green gate does
+  prove the pairing builds, but this is the one bump that moves the floor
+  under every repository at once, and it is worth a human who meant to.
+- **Anything the cooldown is still holding.** `minimumReleaseAge` applies
+  first, so automerge never lands a release on the day it is published; the
+  two compose rather than compete. Our own organizations' releases are exempt
+  from the cooldown and therefore reach automerge immediately, which is the
+  intended shape: a limen release should propagate without ceremony.
+
+Vulnerability fixes are deliberately *not* automerged yet. They already skip
+the cooldown, and the case for merging them fastest is strong — but
+`vulnerabilityAlerts` takes the lowest fixed version, which can be a major,
+and a major is exactly what the rules above hold back. Deciding that one
+needs a look at what those fixes have actually proposed, not a rule written
+in advance.
+
 Requiring signatures has two sharp edges worth knowing before they bite:
 
 - **GitHub refuses a squash merge of a pull request you did not author** into

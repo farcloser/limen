@@ -4,14 +4,16 @@
     "The canonical Renovate configuration of every farcloser repository, as a shared preset: each repository's renovate.json extends it by reference, pinned to the repository's own limen version, so a fix here reaches every repository at its next limen bump instead of waiting for a file nobody re-seeds. Reasoning: limen's book, mandatory files (CI workflows).",
     "extends: config:recommended, plus aqua's preset, which detects owner/repo@ver and go-module packages in aqua.yaml, updates the standard-registry ref, and bumps aqua_version in CI too.",
     "minimumReleaseAge: supply-chain cooldown before proposing a bump; doubles as protection against a release tag whose assets are not uploaded yet.",
-    "packageRules, own releases: the cooldown guards against third parties (a tag whose assets are still uploading, a release pulled the next day). A release cut by one of our organizations carries no risk we do not already own, and its assets are published by the release workflow within minutes \u2014 so farcloser, forkcloser and mycophonic packages, in aqua's owner/repo form and Go's github.com/owner/repo form alike, are proposed as soon as they exist. A repository that wants the cooldown back on one of them adds a later packageRule in its own renovate.json; rules merge in order and the last match wins.",
+    "packageRules, own releases: the cooldown guards against third parties (a tag whose assets are still uploading, a release pulled the next day). A release cut by one of our organizations carries no risk we do not already own, and its assets are published by the release workflow within minutes — so farcloser, forkcloser and mycophonic packages, in aqua's owner/repo form and Go's github.com/owner/repo form alike, are proposed as soon as they exist. A repository that wants the cooldown back on one of them adds a later packageRule in its own renovate.json; rules merge in order and the last match wins.",
     "vulnerabilityAlerts: fix PRs from GitHub's Dependabot alerts (the baseline keeps the alerts on for exactly this; Dependabot's own update PRs are off, Renovate is the one bot). Stated explicitly because enabled: true here is what reaches // indirect Go modules, which the gomod manager skips by default. Fix PRs skip the cooldown and take the lowest fixed version, both Renovate defaults for this object.",
     "postUpdateOptions gomodTidy: a Go module bump rewrites go.mod; without tidy, go.sum keeps the old module's lines and `just do lint go mod` (go mod tidy, diffed) fails every gomod PR.",
     "packageRules, content-pinned files: the checksum-update workflow, the setup-aqua action and everything under .limen/ are limen's byte for byte; a bump Renovate makes inside one is drift the next `limen check` rejects. Their pins move in limen's own repository, the one place Renovate keeps touching them, and reach every other repository through a limen release.",
     "packageRules, Go-built tools: the tools/go.mod tool directives (git-validation, godolint, dot, and the Go-source analyzers deadcode, govulncheck, go-licenses), which Go lists as // indirect and the gomod manager would skip; re-enabled exactly, by module. cmd/dot is a nested module without tags: Renovate offers its default-branch commit as a digest update, under the cooldown like any other.",
     "packageRules, go toolchain: golangci-lint embeds Go's type checker, so a golang/go bump can only land with (or after) a golangci release built with that Go; one grouped PR keeps the two in lockstep and the lint recipe's toolchain check names the fix when they still disagree.",
     "packageRules, lychee: releases are tagged lychee-vX.Y.Z next to lychee-lib-vX.Y.Z and nightly; regex versioning that carries the prefix parses the pin and the candidates alike and excludes the others by construction.",
-    "commitBody: `just do lint commits` enforces DCO on every PR range, bot commits included."
+    "commitBody: `just do lint commits` enforces DCO on every PR range, bot commits included.",
+    "packageRules, automerge: a minor, patch or digest bump that passes the `gate` check has had every matrix leg, the fuzz job and the tools job succeed on it — which is the same evidence a human merge would rest on, arriving faster. platformAutomerge hands the merge to GitHub, so the limen:main ruleset's required check is what holds the pull request rather than Renovate's own polling, and a red gate simply never merges. Majors stay manual: that is where a bump changes behaviour rather than fixing it. The cooldown still applies first, so nothing lands the day it is published.",
+    "packageRules, go toolchain: the grouping keeps golang/go and golangci-lint in lockstep, and the same rule opts the pair out of automerge. A green gate proves the pairing builds, but this is the one bump that moves the floor under every repository at once, so it is merged by a human who meant to."
   ],
   "extends": [
     "config:recommended",
@@ -57,11 +59,22 @@
       "enabled": true
     },
     {
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
       "matchDepNames": [
         "golang/go",
         "golangci/golangci-lint"
       ],
-      "groupName": "go toolchain and golangci-lint"
+      "groupName": "go toolchain and golangci-lint",
+      "automerge": false
     },
     {
       "matchDepNames": [
