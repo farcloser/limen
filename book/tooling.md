@@ -427,6 +427,23 @@ This is the formal, auditable, low-toil update process that replaces the old han
 `Makefile`: every tool change is a reviewed PR with verified checksums, pinned exactly, per
 project.
 
+<a id="two-runs-per-renovate-bump"></a>
+**Two runs per bump, the first one red — by design.** Renovate's push is a bare commit:
+the pin has moved, the checksum has not. CI fires on it and `lint aqua` fails, truthfully —
+that tree *is* out of sync — and every tool that needs the new pin refuses to install.
+Minutes later the checksum workflow's fix-up commit lands and its run is the green one. A
+red run on a Renovate commit that touches `aqua.yaml`, followed by a green run on the bot's
+fix-up, is therefore the expected shape of such a pull request, and the red says what it
+is (aqua's reason is printed, never swallowed). It is not made to look otherwise: a job
+that skipped the run as "neutral" would add a checkout to every run of every repository
+and introduce a run that ends without linting, which is worse than a true red; and hosted
+Renovate cannot refresh the checksum inside its own commit (post-upgrade tasks are
+self-hosted only), so a second push is the only way the checksum lands. **Cancelled runs**
+are the other half of the noise and equally expected: both workflows cancel an in-progress
+run on the same ref when a newer push arrives, so a Renovate rebase or a burst of merges
+to `main` shows a cancelled run before the one that counts. Merges are still gated on a
+full run of the final tree, and that is the only run that matters.
+
 ### The push credential — one-time org setup
 
 The fix-up commit carries a credential subtlety. When the workflow pushes with the default
