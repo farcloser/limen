@@ -144,10 +144,18 @@ The decided merge model, enforced by both the repository settings and the
   `strict_required_status_checks_policy` — branches must be up to date before
   merging, which yields semi-linear history at the cost of serializing every
   merge behind a rebase. It is off by default for exactly that reason.
-- **Pull requests, always — no exceptions.** Zero required approvals is
-  acceptable while a project is solo: the pull request is the audit trail and
-  the CI gate, not (only) the review venue. Force pushes and branch deletion
-  on the default branch are blocked.
+- **Pull requests, always — no exceptions**, and **one required approval**.
+  The approval is not about review quality on a solo project; it is what makes
+  "a bot cannot land code on `main`" true rather than merely written down.
+  Every write-level identity — the agent account, and every GitHub App, since
+  `contents: write` is the permission GitHub's merge endpoint takes — can
+  otherwise open a pull request, wait for its own green gate, and merge it
+  with no second party involved. GitHub refuses to let an author approve their
+  own pull request, so requiring one approval means no single identity both
+  proposes and lands. The repository-admin bypass keeps the cost off the
+  human, who cannot get their own pull request approved by anyone on a solo
+  project; admin is a role no App and no write-only account holds. Force
+  pushes and branch deletion on the default branch are blocked.
 - **Merges wait for green CI.** The `limen:main` ruleset carries required
   status checks, without which auto-merge (and a hasty human) would merge on
   red. A fresh ruleset requires exactly **one** context, `gate` — the job in

@@ -879,8 +879,11 @@ type rulesetRule struct {
 }
 
 type rulesetRuleParameters struct {
-	RequiredStatusChecks []requiredStatusCheck `json:"required_status_checks"`
-	AllowedMergeMethods  []string              `json:"allowed_merge_methods"`
+	// A pointer: absent and zero are different answers, and only the first
+	// means "this ruleset does not say".
+	RequiredApprovingReviewCount *int                  `json:"required_approving_review_count"`
+	RequiredStatusChecks         []requiredStatusCheck `json:"required_status_checks"`
+	AllowedMergeMethods          []string              `json:"allowed_merge_methods"`
 }
 
 type requiredStatusCheck struct {
@@ -1162,6 +1165,15 @@ func rulesetDrift(target rulesetTarget, detail rulesetDetail, payload map[string
 		}, true
 	}
 
+	if current, want, short := approvalShortfall(detail, payload); short {
+		return rulesetProblem{
+			current: "required approving reviews: " + current,
+			desired: strconv.Itoa(want),
+			message: "requires fewer approving reviews than the baseline — an identity that can open a pull " +
+				"request and wait for its own green gate could then merge it unreviewed",
+		}, true
+	}
+
 	if have[ruleRequiredChecks] && len(detail.statusCheckContexts()) == 0 {
 		return rulesetProblem{
 			current: "required status checks name no contexts",
@@ -1171,6 +1183,60 @@ func rulesetDrift(target rulesetTarget, detail rulesetDetail, payload map[string
 	}
 
 	return rulesetProblem{}, false
+}
+
+// approvalShortfall compares the live ruleset's required approving review
+// count against the canonical payload's. Absence is a shortfall, not a pass: a
+// count that cannot be read cannot prove a second identity is required. A
+// canonical definition without a pull_request rule (limen:tags) has nothing to
+// compare and never reports one.
+func approvalShortfall(detail rulesetDetail, payload map[string]any) (string, int, bool) {
+	want, wanted := canonicalApprovalCount(payload)
+	if !wanted {
+		return "", 0, false
+	}
+
+	for _, rule := range detail.Rules {
+		if rule.Type != rulePullRequest || rule.Parameters == nil {
+			continue
+		}
+
+		if rule.Parameters.RequiredApprovingReviewCount == nil {
+			return "(not reported)", want, true
+		}
+
+		have := *rule.Parameters.RequiredApprovingReviewCount
+
+		return strconv.Itoa(have), want, have < want
+	}
+
+	return "(no pull request rule)", want, true
+}
+
+// canonicalApprovalCount extracts the required approving review count of the
+// canonical payload's pull_request rule.
+func canonicalApprovalCount(payload map[string]any) (int, bool) {
+	rules, isRuleList := payload[jsonRulesKey].([]map[string]any)
+	if !isRuleList {
+		return 0, false
+	}
+
+	for _, rule := range rules {
+		if rule[jsonTypeKey] != rulePullRequest {
+			continue
+		}
+
+		parameters, isObject := rule[jsonParametersKey].(map[string]any)
+		if !isObject {
+			return 0, false
+		}
+
+		count, isInt := parameters["required_approving_review_count"].(int)
+
+		return count, isInt
+	}
+
+	return 0, false
 }
 
 // missingMergeMethods compares the ruleset's allowed merge methods against the
@@ -1306,12 +1372,29 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 		"conditions": map[string]any{
 			"ref_name": map[string]any{"include": []string{"~DEFAULT_BRANCH"}, "exclude": []string{}},
 		},
+		// The same bypass the tags ruleset carries, for the same reason: a
+		// repository admin is the trust root, and a solo maintainer cannot get
+		// their own pull request approved by anyone else. The agent account and
+		// every App are write-level, not admin, so the approval requirement
+		// binds them and only them.
+		"bypass_actors": []map[string]any{
+			{"actor_type": "RepositoryRole", "actor_id": repositoryAdminRoleID, "bypass_mode": "always"},
+		},
 		jsonRulesKey: []map[string]any{
 			ruleOf(ruleDeletion),
 			ruleOf("non_fast_forward"),
 			ruleOf(ruleRequiredSigs),
 			{jsonTypeKey: rulePullRequest, jsonParametersKey: map[string]any{
-				"required_approving_review_count":   0,
+				// One approval is what makes "a bot cannot land code on main" a
+				// control rather than a convention. Write-level identities — the
+				// agent account, the Renovate App — hold contents:write, which is
+				// the permission GitHub's merge endpoint takes, and nothing but
+				// this stops one of them opening a pull request, waiting for its
+				// own green gate and merging it. GitHub refuses to let an author
+				// approve their own pull request, so requiring one approval means
+				// no single identity can both propose and land. The bypass below
+				// keeps the cost off the human.
+				"required_approving_review_count":   1,
 				"dismiss_stale_reviews_on_push":     false,
 				"require_code_owner_review":         false,
 				"require_last_push_approval":        false,

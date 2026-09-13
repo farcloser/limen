@@ -289,7 +289,7 @@ func compliantResponses() map[string]stubResponse {
 			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
 		"GET repos/test/repo/rulesets/1": {
-			Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
+			Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
 		},
 		"GET repos/test/repo/rulesets/2": {
 			Body: `{"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
@@ -978,7 +978,7 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 func TestRulesetMigratesLegacyContextsToGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":` +
 			`[{"context":"verify (ubuntu-24.04)"},{"context":"verify (windows-11-arm)"}]}}]}`,
@@ -1117,7 +1117,7 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 	// assertion, not proof of authorship. The reconcile must add the rule back.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
 	}
@@ -1151,7 +1151,7 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[]}}]}`,
 	}
@@ -1175,7 +1175,7 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	// own status-check context.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},` +
 			`{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
@@ -1217,6 +1217,62 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	}
 }
 
+func TestRulesetApprovalDriftFails(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	// Exactly the canonical rules, but no approval is required — the state
+	// every repository was in before this became canonical. A write-level
+	// identity could open a pull request, wait for its own green gate and
+	// merge it with no second party involved, which is the thing the count
+	// exists to prevent.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":0,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, changes := Audit(testRepo, nil)
+
+	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+	if finding.Status != StatusFail {
+		t.Fatalf("zero required approvals: %v, want fail", finding.Status)
+	}
+
+	if !strings.Contains(finding.Current, "0") || !strings.Contains(finding.Desired, "1") {
+		t.Errorf("the finding must name both counts, got current=%q desired=%q", finding.Current, finding.Desired)
+	}
+
+	planned := false
+
+	for _, change := range changes {
+		if change.Check == checkRulesetDefaultBranch {
+			planned = true
+		}
+	}
+
+	if !planned {
+		t.Error("approval drift must plan a reconcile")
+	}
+}
+
+// A pull_request rule that reports no count at all cannot prove a second
+// identity is required, so absence is drift rather than a pass.
+func TestRulesetApprovalAbsentFails(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, _ := Audit(testRepo, nil)
+
+	if finding, _ := findingByCheck(findings, checkRulesetDefaultBranch); finding.Status != StatusFail {
+		t.Fatalf("an unreported approval count: %v, want fail", finding.Status)
+	}
+}
+
 func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
 	// Exactly the canonical rules, but the pull_request rule does not allow
 	// merge commits: parameter drift the rule-presence test cannot see, and
@@ -1224,7 +1280,7 @@ func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // s
 	// the repository level.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
 	}
