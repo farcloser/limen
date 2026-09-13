@@ -9,12 +9,6 @@ import (
 // "owner/name" slugs, sorted. Archived repositories are skipped: their
 // settings are frozen by GitHub, so every fixable check would fail forever
 // with a write the API refuses.
-//
-// Paginated, unlike the inventories elsewhere in this package. Those stop at
-// one page and say so in the finding ("first 100 inspected"); a sweep cannot,
-// because it ends in one counts line that reads as a verdict on the whole
-// organization — auditing 100 of 400 repositories and reporting them clean
-// states something untrue about the 300.
 func OrgRepos(org string) ([]string, error) {
 	var repos []orgRepo
 

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -91,6 +92,13 @@ type apiOutcome struct {
 // httpNotFoundMarker is how gh reports a 404 on stderr.
 const httpNotFoundMarker = "(HTTP 404)"
 
+// methodGet is the one method every read shares.
+const methodGet = "GET"
+
+// errPageWithoutField is an object-wrapped listing whose page lacks the
+// field the caller collects — a shape the API does not answer with.
+var errPageWithoutField = errors.New("a page carries no such field")
+
 // api runs `gh api` with the given method, repo-relative path, and optional
 // JSON payload (sent via --input -), and classifies the outcome.
 func (c client) api(method, path string, payload []byte) apiOutcome {
@@ -104,16 +112,29 @@ func (c client) api(method, path string, payload []byte) apiOutcome {
 	return runGH(args, method, fullPath, payload)
 }
 
+// Every list endpoint is read whole. The REST API pages its lists (30 entries
+// by default, 100 at most), and a page is not an inventory: an owner, a team,
+// a ruleset, or an installed App on the second page is exactly as real as one
+// on the first, and an audit that judged the first page alone would report
+// the rest as absent — creating a ruleset that exists, flagging a grant that
+// was made, missing an owner nobody declared. So no list is fetched with
+// getJSON: arrays go through getJSONAllPages, object-wrapped lists through
+// listPages, and both ask for the largest page (per_page=100 in the path) so
+// gh follows as few Link headers as possible.
+
 // apiAllPages is api's paginating GET: gh follows the Link headers and merges
 // the pages of an array response into one array, so callers decode exactly
-// what they decode from a single page.
+// what they decode from a single page. Object-wrapped lists add --slurp (see
+// listPages).
 //
-// --paginate goes LAST. The test stub reads the method and path off fixed
-// argv positions, and a flag inserted ahead of them shifts every key.
-func (c client) apiAllPages(path string) apiOutcome {
+// --paginate and --slurp go LAST. The test stub reads the method and path off
+// fixed argv positions, and a flag inserted ahead of them shifts every key.
+func (c client) apiAllPages(path string, flags ...string) apiOutcome {
 	fullPath := c.base + path
 
-	return runGH([]string{"api", "--method", "GET", fullPath, "--paginate"}, "GET", fullPath, nil)
+	args := append([]string{"api", "--method", methodGet, fullPath, "--paginate"}, flags...)
+
+	return runGH(args, methodGet, fullPath, nil)
 }
 
 // runGH executes one gh invocation and classifies the outcome; method and
@@ -171,8 +192,8 @@ func condenseStderr(raw string) string {
 	return message
 }
 
-// getJSONAllPages fetches every page of a repo-relative list endpoint and
-// decodes the merged array into out.
+// getJSONAllPages fetches every page of a list endpoint whose response is a
+// JSON array and decodes the merged array into out.
 func (c client) getJSONAllPages(path string, out any) apiOutcome {
 	outcome := c.apiAllPages(path)
 	if outcome.err != nil || outcome.notFound {
@@ -186,9 +207,54 @@ func (c client) getJSONAllPages(path string, out any) apiOutcome {
 	return outcome
 }
 
+// listPages fetches every page of a list endpoint whose response is an object
+// wrapping the list — {"total_count": n, "<field>": [...]}, the shape of the
+// installations, Actions secrets, and runners endpoints — and returns the
+// field's entries from all pages, in order. gh merges array pages only;
+// --slurp hands object pages back as one array of page objects, and the
+// field is collected from each.
+func listPages[T any](c client, path, field string) ([]T, apiOutcome) {
+	outcome := c.apiAllPages(path, "--slurp")
+	if outcome.err != nil || outcome.notFound {
+		return nil, outcome
+	}
+
+	var pages []map[string]json.RawMessage
+
+	if err := json.Unmarshal(outcome.body, &pages); err != nil {
+		outcome.err = fmt.Errorf("gh api GET %s (paginated): decoding pages: %w", path, err)
+
+		return nil, outcome
+	}
+
+	var entries []T
+
+	for _, page := range pages {
+		raw, present := page[field]
+		if !present {
+			outcome.err = fmt.Errorf("gh api GET %s (paginated): %w: %q", path, errPageWithoutField, field)
+
+			return nil, outcome
+		}
+
+		var pageEntries []T
+
+		if err := json.Unmarshal(raw, &pageEntries); err != nil {
+			outcome.err = fmt.Errorf("gh api GET %s (paginated): decoding %q: %w", path, field, err)
+
+			return nil, outcome
+		}
+
+		entries = append(entries, pageEntries...)
+	}
+
+	return entries, outcome
+}
+
 // getJSON fetches a repo-relative path and decodes the JSON response into out.
+// For single objects only — never a list endpoint (see apiAllPages).
 func (c client) getJSON(path string, out any) apiOutcome {
-	outcome := c.api("GET", path, nil)
+	outcome := c.api(methodGet, path, nil)
 	if outcome.err != nil || outcome.notFound {
 		return outcome
 	}

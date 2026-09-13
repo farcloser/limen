@@ -295,11 +295,7 @@ func (installation appInstallation) missingPermissions() string {
 // findInstallation returns the org's installation of the App with the given
 // id, or nil when there is none.
 func findInstallation(orgAPI client, appID string) (*appInstallation, error) {
-	var response struct {
-		Installations []appInstallation `json:"installations"`
-	}
-
-	outcome := orgAPI.getJSON("/installations", &response)
+	installations, outcome := listPages[appInstallation](orgAPI, "/installations?per_page=100", "installations")
 	if outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
 			return nil, errEndpointNotFound
@@ -308,7 +304,7 @@ func findInstallation(orgAPI client, appID string) (*appInstallation, error) {
 		return nil, outcome.err
 	}
 
-	for _, installation := range response.Installations {
+	for _, installation := range installations {
 		if strconv.FormatInt(installation.AppID, decimalBase) == appID {
 			return &installation, nil
 		}

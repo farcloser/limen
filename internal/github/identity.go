@@ -121,15 +121,12 @@ func discoveredUpdateAppSlug(org string) string {
 		return updateAppName(org)
 	}
 
-	var installations struct {
-		Installations []orgAppInstallationRef `json:"installations"`
-	}
-
-	if outcome := orgAPI.getJSON("/installations", &installations); outcome.err != nil || outcome.notFound {
+	installations, outcome := listPages[orgAppInstallationRef](orgAPI, "/installations?per_page=100", "installations")
+	if outcome.err != nil || outcome.notFound {
 		return updateAppName(org)
 	}
 
-	for _, installation := range installations.Installations {
+	for _, installation := range installations {
 		if strconv.FormatInt(installation.AppID, decimalBase) == variable.Value && installation.AppSlug != "" {
 			return installation.AppSlug
 		}

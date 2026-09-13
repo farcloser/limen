@@ -28,9 +28,8 @@ const (
 	agentsTeamSlug = "agents"
 	// teamPermissionPush is GitHub's API name for the "Write" team role.
 	teamPermissionPush = "push"
-	// teamsListPath lists an organization's teams (one page of 100, the API
-	// maximum — see pageFullCaveat); teamPath is the prefix of one team's
-	// resources.
+	// teamsListPath lists an organization's teams, or a repository's team
+	// grants; teamPath is the prefix of one team's resources.
 	teamsListPath = "/teams?per_page=100"
 	teamPath      = "/teams/"
 )
@@ -114,7 +113,7 @@ func teamMissingMessage(owner string) string {
 func findAgentsTeam(org client) (found bool, outcome apiOutcome) {
 	var teams []teamSummary
 
-	outcome = org.getJSON(teamsListPath, &teams)
+	outcome = org.getJSONAllPages(teamsListPath, &teams)
 	if outcome.err != nil || outcome.notFound {
 		return false, outcome
 	}
@@ -167,7 +166,7 @@ func (a *auditor) auditAgentsTeam(owner, name string) {
 
 	var grants []repoTeamGrant
 
-	outcome = a.client.getJSON(teamsListPath, &grants)
+	outcome = a.client.getJSONAllPages(teamsListPath, &grants)
 
 	switch {
 	case outcome.err != nil:
@@ -236,7 +235,7 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 
 	var members []teamMember
 
-	outcome = a.client.getJSON(teamPath+agentsTeamSlug+"/members?per_page=100", &members)
+	outcome = a.client.getJSONAllPages(teamPath+agentsTeamSlug+"/members?per_page=100", &members)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
 
@@ -245,7 +244,7 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 
 	var granted []teamRepoGrant
 
-	outcome = a.client.getJSON(teamPath+agentsTeamSlug+"/repos?per_page=100", &granted)
+	outcome = a.client.getJSONAllPages(teamPath+agentsTeamSlug+"/repos?per_page=100", &granted)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
 
@@ -254,7 +253,7 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 
 	var repos []orgRepo
 
-	outcome = a.client.getJSON("/repos?per_page=100&type=all", &repos)
+	outcome = a.client.getJSONAllPages("/repos?per_page=100&type=all", &repos)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
 
@@ -279,7 +278,6 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 
 	slices.Sort(missing)
 
-	caveat := pageFullCaveat(len(repos))
 	noMembers := ""
 
 	if len(members) == 0 {
@@ -291,7 +289,7 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 	case len(missing) > 0:
 		a.flag(checkOrgAgentsTeam, StatusFail, strings.Join(missing, listSeparator),
 			teamPermissionPush+" on every repository",
-			"repositories the "+agentsTeamSlug+" team cannot push to"+caveat+noMembers,
+			"repositories the "+agentsTeamSlug+" team cannot push to"+noMembers,
 			&Change{
 				Check: checkOrgAgentsTeam,
 				Summary: agentsTeamSlug + " team: grant " + teamPermissionPush + " on " + strings.Join(
@@ -314,6 +312,6 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 			"the "+agentsTeamSlug+" team has write on every repository but no members"+noMembers, nil)
 	default:
 		a.flag(checkOrgAgentsTeam, StatusOK, "", "",
-			"the "+agentsTeamSlug+" team has write on every repository"+caveat, nil)
+			"the "+agentsTeamSlug+" team has write on every repository", nil)
 	}
 }

@@ -356,9 +356,7 @@ func (a *auditor) auditOrgAdmins() {
 		Login string `json:"login"`
 	}
 
-	// One page of 100 is beyond any realistic owner roster; per_page still
-	// beats the API's default page of 30.
-	outcome := a.client.getJSON("/members?role=admin&per_page=100", &admins)
+	outcome := a.client.getJSONAllPages("/members?role=admin&per_page=100", &admins)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAdmins)
 
@@ -655,12 +653,7 @@ func (a *auditor) auditOrgForkPRApproval() {
 // GROUPS: GitHub's built-in "Default" group always exists, so counting
 // groups flags every org forever. Plan-gated (404) counts as none.
 func (a *auditor) auditOrgSelfHostedRunners() {
-	var runners struct {
-		Runners    []orgNamed `json:"runners"`
-		TotalCount int        `json:"total_count"`
-	}
-
-	outcome := a.client.getJSON("/actions/runners", &runners)
+	runners, outcome := listPages[orgNamed](a.client, "/actions/runners?per_page=100", "runners")
 
 	switch {
 	case outcome.notFound:
@@ -668,11 +661,11 @@ func (a *auditor) auditOrgSelfHostedRunners() {
 			"no self-hosted runners (unavailable on this plan)", nil)
 	case outcome.err != nil:
 		a.unverifiable(outcome.err, checkOrgSelfHostedRunners)
-	case runners.TotalCount == 0:
+	case len(runners) == 0:
 		a.flag(checkOrgSelfHostedRunners, StatusOK, "", "", "no self-hosted runners", nil)
 	default:
-		names := make([]string, 0, len(runners.Runners))
-		for _, runner := range runners.Runners {
+		names := make([]string, 0, len(runners))
+		for _, runner := range runners {
 			names = append(names, runner.Name)
 		}
 
@@ -728,7 +721,7 @@ func (a *auditor) auditOrgSecurityConfiguration() {
 func (a *auditor) auditOrgDependabotSecurityUpdates() {
 	var configurations []orgSecurityConfiguration
 
-	outcome := a.client.getJSON("/code-security/configurations", &configurations)
+	outcome := a.client.getJSONAllPages("/code-security/configurations?per_page=100", &configurations)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgDependabotFixes)
 
@@ -840,22 +833,17 @@ const renovateAppSlug = "renovate"
 // carries no fix. A self-hosted Renovate is a legitimate exemption: declare it
 // in limen.yaml.
 func (a *auditor) auditOrgInstalledApps() {
-	var installations struct {
-		Installations []orgAppInstallation `json:"installations"`
-		TotalCount    int                  `json:"total_count"`
-	}
-
-	outcome := a.client.getJSON("/installations", &installations)
+	installations, outcome := listPages[orgAppInstallation](a.client, "/installations?per_page=100", "installations")
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgInstalledApps, checkOrgRenovateInstalled)
 
 		return
 	}
 
-	slugs := make([]string, 0, len(installations.Installations))
+	slugs := make([]string, 0, len(installations))
 	renovateInstalled := false
 
-	for _, installation := range installations.Installations {
+	for _, installation := range installations {
 		slugs = append(slugs, installation.AppSlug)
 
 		if installation.AppSlug == renovateAppSlug {
@@ -890,7 +878,7 @@ func (a *auditor) auditOrgInstalledApps() {
 func (a *auditor) auditOrgWebhooks() {
 	var hooks []webhook
 
-	outcome := a.client.getJSON("/hooks?per_page=100", &hooks)
+	outcome := a.client.getJSONAllPages("/hooks?per_page=100", &hooks)
 	if outcome.err != nil || outcome.notFound {
 		// Org webhooks live behind their own classic scope, which admin:org
 		// does not cover — and GitHub answers 404, not 403, without it.
@@ -917,39 +905,32 @@ func (a *auditor) auditOrgWebhooks() {
 	if len(offenders) > 0 {
 		a.flag(checkOrgWebhooks, StatusAdvisory,
 			strings.Join(offenders, listSeparator), "https + secret + TLS verification",
-			"org webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand"+
-				pageFullCaveat(len(hooks)), nil)
+			"org webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand", nil)
 
 		return
 	}
 
-	a.flag(checkOrgWebhooks, StatusOK, "", "",
-		"org webhooks are compliant (or none exist)"+pageFullCaveat(len(hooks)), nil)
+	a.flag(checkOrgWebhooks, StatusOK, "", "", "org webhooks are compliant (or none exist)", nil)
 }
 
 // auditOrgActionsSecrets inventories org-level Actions secrets (names only —
 // the API never exposes values).
 func (a *auditor) auditOrgActionsSecrets() {
-	var secrets struct {
-		Secrets    []orgNamed `json:"secrets"`
-		TotalCount int        `json:"total_count"`
-	}
-
-	outcome := a.client.getJSON("/actions/secrets", &secrets)
+	secrets, outcome := listPages[orgNamed](a.client, "/actions/secrets?per_page=100", "secrets")
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgActionsSecrets)
 
 		return
 	}
 
-	if secrets.TotalCount == 0 {
+	if len(secrets) == 0 {
 		a.flag(checkOrgActionsSecrets, StatusOK, "", "", "no org-level Actions secrets", nil)
 
 		return
 	}
 
-	names := make([]string, 0, len(secrets.Secrets))
-	for _, secret := range secrets.Secrets {
+	names := make([]string, 0, len(secrets))
+	for _, secret := range secrets {
 		names = append(names, secret.Name)
 	}
 
@@ -964,7 +945,7 @@ func (a *auditor) auditOrgTeams() {
 		Slug string `json:"slug"`
 	}
 
-	outcome := a.client.getJSON("/teams?per_page=100", &teams)
+	outcome := a.client.getJSONAllPages("/teams?per_page=100", &teams)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgTeams)
 
@@ -983,7 +964,7 @@ func (a *auditor) auditOrgTeams() {
 	}
 
 	a.flag(checkOrgTeams, StatusOK, "", "",
-		"teams: "+strings.Join(slugs, listSeparator)+pageFullCaveat(len(teams)), nil)
+		"teams: "+strings.Join(slugs, listSeparator), nil)
 }
 
 // auditOrgPATGrants inventories fine-grained personal-access-token grants
@@ -996,7 +977,7 @@ func (a *auditor) auditOrgPATGrants() {
 		Owner orgLogin `json:"owner"`
 	}
 
-	outcome := a.client.getJSON("/personal-access-tokens", &grants)
+	outcome := a.client.getJSONAllPages("/personal-access-tokens?per_page=100", &grants)
 	if outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
 			a.unverifiable(errPATPolicyUnconfigured, checkOrgPATGrants)

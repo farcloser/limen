@@ -20,9 +20,6 @@ var (
 	errFieldNotVisible = errors.New(
 		"the field is absent from the response (owner-scoped — the token cannot see it)",
 	)
-	errRulesetPageFull = errors.New(
-		"the ruleset listing filled a whole page — absence cannot be proven, and creating the canonical ruleset blind could duplicate one on a later page",
-	)
 )
 
 // Check identifiers — one per audited setting, spelled out (the naming
@@ -907,22 +904,17 @@ func (d rulesetDetail) statusCheckContexts() []string {
 }
 
 // auditRulesets covers R4: the canonical default-branch and version-tag
-// rulesets, created if missing and reconciled if drifted. One page of 100 (the
-// API maximum): when the page comes back full, a ruleset not on it may still
-// exist on a later page, so absence is unverifiable — never a create.
+// rulesets, created if missing and reconciled if drifted. The listing is read
+// whole: a create happens only when the canonical name is on no page.
 func (a *auditor) auditRulesets() {
 	var summaries []rulesetSummary
 
-	const pageSize = 100
-
-	outcome := a.client.getJSON("/rulesets?per_page=100", &summaries)
+	outcome := a.client.getJSONAllPages("/rulesets?per_page=100", &summaries)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkRulesetDefaultBranch, checkRulesetVersionTags)
 
 		return
 	}
-
-	pageFull := len(summaries) == pageSize
 
 	byName := map[string]rulesetSummary{}
 	for _, summary := range summaries {
@@ -953,14 +945,6 @@ func (a *auditor) auditRulesets() {
 	}
 
 	for _, target := range targets {
-		// Guarded here, so auditRuleset only ever judges provable states: a
-		// ruleset missing from a full page may exist on the next one.
-		if _, present := byName[target.name]; !present && pageFull {
-			a.unverifiable(errRulesetPageFull, target.check)
-
-			continue
-		}
-
 		a.auditRuleset(target, byName)
 	}
 }
@@ -1391,13 +1375,11 @@ type collaboratorPermissions struct {
 
 // auditOutsideCollaborators inventories outside collaborators holding
 // elevated access — only organization members should (Allstar's check).
-// People are never auto-fixed: always advisory. One page of 100, stated in
-// the finding when hit — an org with more outside collaborators than that
-// has outgrown this audit.
+// People are never auto-fixed: always advisory.
 func (a *auditor) auditOutsideCollaborators() {
 	var collaborators []outsideCollaborator
 
-	outcome := a.client.getJSON("/collaborators?affiliation=outside&per_page=100", &collaborators)
+	outcome := a.client.getJSONAllPages("/collaborators?affiliation=outside&per_page=100", &collaborators)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOutsideCollaborators)
 
@@ -1418,34 +1400,18 @@ func (a *auditor) auditOutsideCollaborators() {
 		return
 	}
 
-	message := "outside collaborator(s) with elevated access — people are never auto-fixed, review by hand" +
-		pageFullCaveat(len(collaborators))
-
 	a.flag(checkOutsideCollaborators, StatusAdvisory,
-		strings.Join(elevated, listSeparator), "read-only or organization members", message, nil)
-}
-
-// pageFullCaveat annotates an inventory finding whose single page of 100 (the
-// API maximum) came back full: what lies beyond the page was not inspected.
-func pageFullCaveat(count int) string {
-	const pageSize = 100
-
-	if count < pageSize {
-		return ""
-	}
-
-	return " (first " + strconv.Itoa(pageSize) + " inspected)"
+		strings.Join(elevated, listSeparator), "read-only or organization members",
+		"outside collaborator(s) with elevated access — people are never auto-fixed, review by hand", nil)
 }
 
 // auditSurface covers the advisory-only credential surface of R6 (webhooks,
 // deploy keys) and the pages check of R5. All of it is inventory: nothing
-// here is ever auto-fixed. Inventories read one page of 100 (the API
-// maximum), stated in the finding when the page comes back full — same
-// doctrine as auditOutsideCollaborators.
+// here is ever auto-fixed.
 func (a *auditor) auditSurface() {
 	var hooks []webhook
 
-	hooksOutcome := a.client.getJSON("/hooks?per_page=100", &hooks)
+	hooksOutcome := a.client.getJSONAllPages("/hooks?per_page=100", &hooks)
 
 	switch {
 	case hooksOutcome.err != nil || hooksOutcome.notFound:
@@ -1466,19 +1432,17 @@ func (a *auditor) auditSurface() {
 				StatusAdvisory,
 				strings.Join(offenders, listSeparator),
 				"https + secret + TLS verification",
-				"webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand"+
-					pageFullCaveat(len(hooks)),
+				"webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand",
 				nil,
 			)
 		} else {
-			a.flag(checkWebhooks, StatusOK, "", "",
-				"webhooks are compliant (or none exist)"+pageFullCaveat(len(hooks)), nil)
+			a.flag(checkWebhooks, StatusOK, "", "", "webhooks are compliant (or none exist)", nil)
 		}
 	}
 
 	var keys []deployKey
 
-	keysOutcome := a.client.getJSON("/keys?per_page=100", &keys)
+	keysOutcome := a.client.getJSONAllPages("/keys?per_page=100", &keys)
 
 	switch {
 	case keysOutcome.err != nil || keysOutcome.notFound:
@@ -1496,8 +1460,7 @@ func (a *auditor) auditSurface() {
 			StatusAdvisory,
 			strings.Join(titles, listSeparator),
 			"(none, or named in the override file)",
-			"deploy key(s) present — credentials are never auto-fixed, review by hand"+
-				pageFullCaveat(len(keys)),
+			"deploy key(s) present — credentials are never auto-fixed, review by hand",
 			nil,
 		)
 	}
