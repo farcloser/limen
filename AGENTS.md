@@ -27,6 +27,9 @@ chapter; the procedure is limen's `skills/contribute`.
   there unless pairing interactively at their request, and never on `main`.
 - **Commits** are signed as you, with a DCO sign-off as you; when the change is the
   human's own work, the human is the author. No scratchpads (`AUDIT.md` and its kind).
+- **One commit per thing.** Different things get different commits; iteration on the
+  same thing — a review round, a fix to your own commit — is squashed into the commit it
+  amends before the review is requested. Never a stack of fix-ups for one change.
 - **No links to your tooling, anywhere.** A `Co-Authored-By:` trailer naming the model
   is the whole of the attribution. No vendor or product link, no "generated with"
   banner, and no session URL or session identifier — not in a commit message, a pull
