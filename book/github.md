@@ -227,6 +227,16 @@ The decided merge model, enforced by both the repository settings and the
   so a pin that does not install blocks a merge. (The Go-built tools are
   `tools/go.mod` directives; the verify legs build them.)
 
+  **Caches on the verify legs.** Each leg restores the same package store,
+  per architecture since it holds native binaries, and the Go build, module
+  and linter caches keyed on the pinned go's version and every `go.sum`. The
+  per-platform analysis legs otherwise compile the whole module graph five
+  times, cold, on every run — most of what made the windows legs twice as
+  slow as linux. Fallback keys are always taken: the build cache is
+  content-addressed, the module cache checksum-verified, and a pin a bump
+  moved still downloads and verifies at first use, so a stale restore only
+  costs what it cannot reuse.
+
   **Migration.** `ci.yaml` is seeded once and is the project's own afterwards,
   so repositories created before the gate job existed do not have it — and
   likewise repositories created before the fuzz and tools jobs existed. Their
