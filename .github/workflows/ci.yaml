@@ -108,9 +108,6 @@ jobs:
       - name: Test
         run: just test
 
-      - name: Cache sizes (measurement, to be removed)
-        run: du -sm "$(go env GOCACHE)" "$(go env GOMODCACHE)" build/cache
-
   # One linux leg, not the matrix: fuzzing explores the same corpus wherever
   # it runs, so more legs cost CPU and add nothing. The recipe passes on a
   # tree with no targets or no Go module, so this job is safe in every
