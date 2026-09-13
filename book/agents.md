@@ -143,6 +143,17 @@ branches are the human's.
   change is the human's work, the human is the author and the bot the
   committer. No scratchpads: `AUDIT.md` and its kind are transient notes
   whose surviving findings become code, tests, or book prose.
+- **One commit per thing.** The commit message is the record, so the
+  history has to read as decisions, not as a diary. Different things get
+  different commits: a fix and an unrelated doctrine paragraph are two.
+  Iteration on the same thing is not: a review round that pins what the
+  first commit added, a correction to the first commit's own message, is
+  squashed into the commit it amends before the review is requested, and
+  the message rewritten to tell the whole story once. A stack of fix-ups
+  for one change leaves a message that a later commit contradicts, and a
+  reader who has to replay the pull request to learn what was decided.
+  The bot's own branch may be rewritten for this (`--force-with-lease` on
+  the previous head); a shared branch never is.
 - **Green before pushing.** The full `just lint` and `just test`, not one
   lane: what CI runs on other platforms (a linux-only package, a windows leg)
   is what a single lane on one machine misses.

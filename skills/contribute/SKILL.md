@@ -75,6 +75,16 @@ are what prevents it.
    the bot's own branch, then the checks again.
 4. **Never commit scratchpads** (`AUDIT.md` and the like) or generated files
    the repository ignores.
+5. **One commit per thing.** Different things, different commits. Iteration
+   on the same thing — a review round on the lines you just added, a fix to
+   your own commit — is squashed into the commit it amends and the message
+   rewritten to tell the whole story once, before the review request:
+   ```
+   git -C <path> reset --soft origin/main && git -C <path> commit -s -F -   # one commit, whole message
+   git -C <path> c push --force-with-lease=<branch>:<old sha> origin <branch>
+   ```
+   Your own branch only; a shared branch is never rewritten. A stack of
+   fix-ups leaves a message a later commit contradicts.
 
 ## 3. Green before pushing
 
