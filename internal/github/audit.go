@@ -184,6 +184,11 @@ type auditor struct {
 	// auditRepoObject to the checks that only apply to private repositories.
 	private      bool
 	privateKnown bool
+	// securityVisible is whether the repository object answered with its
+	// security_and_analysis block, which only tokens with administration
+	// read receive. It is the admin probe the Dependabot-alerts check needs:
+	// that endpoint reports "off" and "you may not ask" with the same 404.
+	securityVisible bool
 }
 
 // Audit checks the repository's settings against the baseline. overrides maps
@@ -475,6 +480,8 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 
 	// R1 — the security_and_analysis block (nil for tokens without the
 	// necessary read access, which must not read as compliance).
+	a.securityVisible = settings.SecurityAndAnalysis != nil
+
 	a.auditSecretScanning(settings)
 }
 
@@ -567,6 +574,14 @@ func (a *auditor) auditSecurityToggles() {
 	switch {
 	case alertsOutcome.err != nil:
 		a.unverifiable(alertsOutcome.err, checkDependabotAlerts)
+	case alertsOutcome.notFound && !a.securityVisible:
+		// 404 is this endpoint's "off" AND its "you may not ask": it answers
+		// 204/404 rather than 200/403, so a token without administration read
+		// gets the same shape as a repository with alerts disabled. The
+		// repository object settles it — its security_and_analysis block is
+		// absent under exactly the tokens that cannot read this — and without
+		// that corroboration the honest verdict is that we do not know.
+		a.unverifiable(errFieldNotVisible, checkDependabotAlerts)
 	case alertsOutcome.notFound:
 		a.flag(checkDependabotAlerts, StatusFail, disabledValue, enabledValue,
 			"Dependabot alerts must be enabled",
