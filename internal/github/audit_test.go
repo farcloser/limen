@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -135,8 +136,15 @@ func runGHStub(dir string) int {
 	}
 	defer logFile.Close()
 
-	// Log first, respond second — unlisted writes are logged too.
-	fmt.Fprintln(logFile, key)
+	// Log first, respond second — unlisted writes are logged too. The
+	// response lookup keys on method and path alone; --paginate rides along
+	// in the log so a test can assert the sweep asked for every page.
+	logged := key
+	if slices.Contains(args, "--paginate") {
+		logged += " --paginate"
+	}
+
+	fmt.Fprintln(logFile, logged)
 
 	if len(args) >= 6 && args[4] == "--input" {
 		if _, err := io.Copy(logFile, os.Stdin); err != nil {

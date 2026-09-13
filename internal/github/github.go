@@ -39,6 +39,10 @@ const (
 
 // Finding is the result of one settings check against one repository.
 type Finding struct {
+	// Target names what was audited, and is set only by runs that audit
+	// more than one thing (AuditMany): a single-target report has nothing
+	// to disambiguate, and stamping it would change that report's JSON.
+	Target  string `json:"target,omitempty"`
 	Check   string `json:"check"`
 	Status  Status `json:"status"`
 	Current string `json:"current,omitempty"`
@@ -97,6 +101,24 @@ func (c client) api(method, path string, payload []byte) apiOutcome {
 		args = append(args, "--input", "-")
 	}
 
+	return runGH(args, method, fullPath, payload)
+}
+
+// apiAllPages is api's paginating GET: gh follows the Link headers and merges
+// the pages of an array response into one array, so callers decode exactly
+// what they decode from a single page.
+//
+// --paginate goes LAST. The test stub reads the method and path off fixed
+// argv positions, and a flag inserted ahead of them shifts every key.
+func (c client) apiAllPages(path string) apiOutcome {
+	fullPath := c.base + path
+
+	return runGH([]string{"api", "--method", "GET", fullPath, "--paginate"}, "GET", fullPath, nil)
+}
+
+// runGH executes one gh invocation and classifies the outcome; method and
+// fullPath are carried only to phrase the error.
+func runGH(args []string, method, fullPath string, payload []byte) apiOutcome {
 	// The rules API carries no context; Background is the honest choice.
 	// ghBin is "gh" outside tests (a package seam, not user input), and every
 	// argument is a fixed API path built above.
@@ -147,6 +169,21 @@ func condenseStderr(raw string) string {
 	}
 
 	return message
+}
+
+// getJSONAllPages fetches every page of a repo-relative list endpoint and
+// decodes the merged array into out.
+func (c client) getJSONAllPages(path string, out any) apiOutcome {
+	outcome := c.apiAllPages(path)
+	if outcome.err != nil || outcome.notFound {
+		return outcome
+	}
+
+	if err := json.Unmarshal(outcome.body, out); err != nil {
+		outcome.err = fmt.Errorf("gh api GET %s (paginated): decoding response: %w", path, err)
+	}
+
+	return outcome
 }
 
 // getJSON fetches a repo-relative path and decodes the JSON response into out.
