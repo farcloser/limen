@@ -10,25 +10,21 @@ import (
 // settings are frozen by GitHub, so every fixable check would fail forever
 // with a write the API refuses.
 //
-// One page of 100, like every other inventory in this package. A full page
-// means there may be more, which OrgRepos reports rather than silently
-// auditing a prefix of the organization — a sweep that quietly stopped at
-// 100 would read as "every repository is compliant".
+// Paginated, unlike the inventories elsewhere in this package. Those stop at
+// one page and say so in the finding ("first 100 inspected"); a sweep cannot,
+// because it ends in one counts line that reads as a verdict on the whole
+// organization — auditing 100 of 400 repositories and reporting them clean
+// states something untrue about the 300.
 func OrgRepos(org string) ([]string, error) {
 	var repos []orgRepo
 
-	outcome := orgClient(org).getJSON("/repos?per_page=100&type=all", &repos)
+	outcome := orgClient(org).getJSONAllPages("/repos?per_page=100&type=all", &repos)
 	if outcome.err != nil {
 		return nil, fmt.Errorf("listing the repositories of %s: %w", org, outcome.err)
 	}
 
 	if outcome.notFound {
 		return nil, fmt.Errorf("listing the repositories of %s: %w", org, errEndpointNotFound)
-	}
-
-	if caveat := pageFullCaveat(len(repos)); caveat != "" {
-		return nil, fmt.Errorf("%w: %s has at least 100 repositories%s — sweep them in smaller sets",
-			errTooManyRepos, org, caveat)
 	}
 
 	slugs := make([]string, 0, len(repos))

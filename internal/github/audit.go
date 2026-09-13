@@ -13,7 +13,6 @@ import (
 // Static errors (err113: no dynamic error comparisons).
 var (
 	errEndpointNotFound  = errors.New("endpoint not found")
-	errTooManyRepos      = errors.New("too many repositories to sweep in one run")
 	errNoRepo            = errors.New("no repository given and none could be inferred from git")
 	errVisibilityUnknown = errors.New(
 		"repository visibility could not be determined (the repository object was unreadable)",

@@ -4,7 +4,7 @@
 package github //nolint:testpackage // white-box (see audit_test.go).
 
 import (
-	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,23 +33,41 @@ func TestOrgReposSkipsArchived(t *testing.T) {
 	}
 }
 
-// TestOrgReposRefusesFullPage: a full page means there may be more. Auditing
-// the first 100 and reporting a clean sweep would read as "every repository is
-// compliant" — so the run refuses instead.
+// TestOrgReposPaginates: the sweep reads every page, not the first. gh
+// --paginate merges the array pages, so a stub answering the one request with
+// 140 entries stands in for the merged result — what this pins is that the
+// request asks for pagination at all, and that nothing truncates after.
 //
 //nolint:paralleltest // serial by design: mutates the package-level ghBin.
-func TestOrgReposRefusesFullPage(t *testing.T) {
-	entries := make([]string, 0, 100)
-	for index := range 100 {
+func TestOrgReposPaginates(t *testing.T) {
+	const total = 140
+
+	entries := make([]string, 0, total)
+	for index := range total {
 		entries = append(entries, `{"name": "repo`+strconv.Itoa(index)+`", "archived": false}`)
 	}
 
-	stubGH(t, map[string]stubResponse{
+	logPath := stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org/repos?per_page=100&type=all": {Body: "[" + strings.Join(entries, ",") + "]"},
 	})
 
-	if _, err := OrgRepos(testOrg); !errors.Is(err, errTooManyRepos) {
-		t.Errorf("a full page must refuse the sweep, got %v", err)
+	repos, err := OrgRepos(testOrg)
+	if err != nil {
+		t.Fatalf("OrgRepos: %v", err)
+	}
+
+	if len(repos) != total {
+		t.Errorf("OrgRepos returned %d repositories, want all %d — a sweep must not stop at a page",
+			len(repos), total)
+	}
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading call log: %v", err)
+	}
+
+	if !strings.Contains(string(log), "--paginate") {
+		t.Error("the repository listing must ask gh to follow every page")
 	}
 }
 
