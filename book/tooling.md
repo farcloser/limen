@@ -73,6 +73,25 @@ tool; the Go that built it — its standard library, its fixes — is decided by
 Nothing in the manifest describes the binary that actually runs, which is the opposite of
 what a pin is for. So **no Go-built tool is an aqua package**.
 
+**The line is who compiles it, not what language it is written in.** Most of what `aqua.yaml`
+pins is a Go program — `golangci-lint`, `yamlfmt`, `gotestsum`, `goreleaser`, `gh`, `cosign`,
+`just`'s neighbours, `limen` itself — and none of that is "Go-built" in the sense above: nothing
+on your machine compiles it. Each is upstream's prebuilt release binary, checksum-verified and,
+where upstream signs, attestation-verified, the same artifact on every machine. What goes in
+`tools/go.mod` is what limen compiles from source: the analyzers, because their correctness
+depends on the compiler matching the pinned toolchain, and the tools whose upstream ships no
+binary to pin — `git-validation`, `godolint`, and `dot` (`forkcloser/dot` publishes a tag, not
+binaries, which is exactly what a tool directive needs). A tool that ships trustworthy release
+binaries stays in aqua even when it is written in Go.
+
+**`golangci-lint` is the one deliberate exception to the correctness half.** It embeds Go's
+type checker, so it has the same skew as the analyzers: built with go1.N it cannot analyze a
+go1.N+1 module. Building it from source would cost minutes per platform on every leg, so the
+baseline keeps the prebuilt binary and enforces lockstep instead: the lint recipe's toolchain
+check refuses a golangci built with an older Go than the pinned toolchain and names the
+fix, and the shared Renovate preset groups the `golang/go` and `golangci-lint` bumps into one
+pull request so the two pins move together.
+
 For a tool that **loads Go source** — `deadcode`, `govulncheck`, `go-licenses`, anything built
 on `go/packages` — the gap is a correctness failure, not only a provenance one: such a tool
 embeds the source loader of the Go that compiled *it*, and compiled by go1.N it cannot read a
