@@ -13,7 +13,10 @@ type Change struct {
 	// PATCH (see patchSettings). It rides on the change and is staged into
 	// the payload by flag() only when the change is actually planned — an
 	// exempted check's fields must never reach a PATCH another check carries.
-	fields  map[string]any
+	fields map[string]any
+	// Target names what this change applies to; set only by AuditMany, for
+	// the same reason as Finding.Target.
+	Target  string
 	Check   string
 	Summary string
 }

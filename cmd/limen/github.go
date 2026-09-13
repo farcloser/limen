@@ -37,13 +37,18 @@ func runGithub(args []string, stdout, stderr io.Writer) int {
 
 func githubUsage(writer io.Writer) {
 	_, _ = fmt.Fprint(writer, `Usage:
-  limen github check [-repo owner/name] [-org name] [-json]         Audit GitHub settings
-  limen github fix   [-repo owner/name] [-org name] [-yes] [-json]  Repair what is safe to repair
+  limen github check [-repo owner/name] [-org name] [-all-repos] [-json]
+  limen github fix   [-repo owner/name] [-org name] [-all-repos] [-yes] [-json]
 
 Without -org, the target is a repository (-repo, or inferred from the origin
 remote). With -org, the organization's own settings are audited instead
 (membership floor, org-wide Actions policy, security configuration, standing
 inventories, and the org .github community-health repository).
+
+-all-repos sweeps: the organization AND every non-archived repository in it,
+reported one target at a time. It is what keeps a repository correct after the
+day someone last pointed limen at it — settings drift, and a baseline rollout
+can hand a compliant repository dependencies it did not have before.
 
 The baseline is a floor: stricter than it passes, looser fails. Exceptions are
 declared, with reasons, in `+github.OverridePath+` (org runs read it from the
@@ -56,26 +61,40 @@ Verdicts: ok · fail (auto-fixable) · advisory (never auto-fixed) · unverifiab
 // auditRunner is the audit a command run performs, bound to its target.
 type auditRunner func(overrides map[string]string) ([]github.Finding, []github.Change)
 
+// githubScope is the target one github run was asked for, as the flags named
+// it. A struct rather than three parameters: the audit the run performs is
+// chosen by the combination, not by any one of them.
+type githubScope struct {
+	repo     string
+	org      string
+	allRepos bool
+}
+
 // githubAudit resolves the audit target from the mutually exclusive -repo and
-// -org flags: the named organization when -org is given, a repository (named
-// or inferred from origin) otherwise. It returns the audit to run and the
-// label findings are reported under.
-func githubAudit(repoFlag, orgFlag string, stderr io.Writer) (auditRunner, string, bool) {
-	if orgFlag != "" && repoFlag != "" {
+// -org flags: every repository in the organization under -all-repos, the named
+// organization when -org is given, a repository (named or inferred from
+// origin) otherwise. It returns the audit to run and the label findings are
+// reported under.
+func githubAudit(scope githubScope, stderr io.Writer) (auditRunner, string, bool) {
+	if scope.org != "" && scope.repo != "" {
 		_, _ = fmt.Fprintln(stderr, "limen: -repo and -org are mutually exclusive — audit one target per run")
 
 		return nil, "", false
 	}
 
-	if orgFlag != "" {
-		runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
-			return github.AuditOrg(orgFlag, overrides)
-		}
-
-		return runner, "org " + orgFlag, true
+	if scope.allRepos {
+		return githubSweep(scope.org, stderr)
 	}
 
-	repo, resolved := githubTarget(repoFlag, stderr)
+	if scope.org != "" {
+		runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
+			return github.AuditOrg(scope.org, overrides)
+		}
+
+		return runner, "org " + scope.org, true
+	}
+
+	repo, resolved := githubTarget(scope.repo, stderr)
 	if !resolved {
 		return nil, "", false
 	}
@@ -85,6 +104,31 @@ func githubAudit(repoFlag, orgFlag string, stderr io.Writer) (auditRunner, strin
 	}
 
 	return runner, repo, true
+}
+
+// githubSweep resolves the -all-repos target: the organization AND every
+// non-archived repository in it. The repository list is read once, here, and
+// captured by the runner — fix audits twice, and both passes must judge the
+// same set.
+func githubSweep(orgFlag string, stderr io.Writer) (auditRunner, string, bool) {
+	if orgFlag == "" {
+		_, _ = fmt.Fprintln(stderr, "limen: -all-repos sweeps an organization — name it with -org")
+
+		return nil, "", false
+	}
+
+	repos, err := github.OrgRepos(orgFlag)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, errFormat, err)
+
+		return nil, "", false
+	}
+
+	runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
+		return github.AuditMany(orgFlag, repos, overrides)
+	}
+
+	return runner, fmt.Sprintf("org %s and its %d repositories", orgFlag, len(repos)), true
 }
 
 // githubNoPositional rejects positional arguments: the github subcommands
@@ -127,6 +171,8 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 	flagSet.SetOutput(stderr)
 	repoFlag := flagSet.String("repo", "", "repository slug (owner/name); default: inferred from origin")
 	orgFlag := flagSet.String("org", "", "organization name; audits the org's own settings instead of a repository")
+	allRepos := flagSet.Bool("all-repos", false,
+		"with -org: also audit every non-archived repository in the organization")
 	asJSON := flagSet.Bool(flagJSON, false, "emit findings as JSON")
 
 	if err := flagSet.Parse(args); err != nil {
@@ -137,7 +183,9 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	audit, label, resolved := githubAudit(*repoFlag, *orgFlag, stderr)
+	audit, label, resolved := githubAudit(
+		githubScope{repo: *repoFlag, org: *orgFlag, allRepos: *allRepos}, stderr,
+	)
 	if !resolved {
 		return 2
 	}
@@ -164,6 +212,8 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	flagSet.SetOutput(stderr)
 	repoFlag := flagSet.String("repo", "", "repository slug (owner/name); default: inferred from origin")
 	orgFlag := flagSet.String("org", "", "organization name; repairs the org's own settings instead of a repository")
+	allRepos := flagSet.Bool("all-repos", false,
+		"with -org: also repair every non-archived repository in the organization")
 	asJSON := flagSet.Bool(flagJSON, false, "emit the post-fix findings as JSON")
 	yes := flagSet.Bool("yes", false, "apply the plan without prompting")
 
@@ -175,7 +225,9 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	audit, label, resolved := githubAudit(*repoFlag, *orgFlag, stderr)
+	audit, label, resolved := githubAudit(
+		githubScope{repo: *repoFlag, org: *orgFlag, allRepos: *allRepos}, stderr,
+	)
 	if !resolved {
 		return 2
 	}
@@ -208,7 +260,15 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 
 	_, _ = fmt.Fprintf(progress, "limen github fix %s — plan:\n", label)
 
+	planTarget := ""
+
 	for _, planned := range changes {
+		if planned.Target != "" && planned.Target != planTarget {
+			planTarget = planned.Target
+
+			_, _ = fmt.Fprintf(progress, "%s\n", planTarget)
+		}
+
 		_, _ = fmt.Fprintf(progress, "  ✎  %-32s %s\n", planned.Check, planned.Summary)
 	}
 
@@ -225,7 +285,7 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 		if applyErr := planned.Apply(); applyErr != nil {
 			failed++
 
-			_, _ = fmt.Fprintf(stderr, "limen: %s: %v\n", planned.Check, applyErr)
+			_, _ = fmt.Fprintf(stderr, "limen: %s%s: %v\n", targetPrefix(planned.Target), planned.Check, applyErr)
 
 			continue
 		}
@@ -268,6 +328,16 @@ func confirm(writer io.Writer) bool {
 	return answer == "y" || answer == "yes"
 }
 
+// targetPrefix labels a message with its target when there is one to
+// disambiguate — a sweep reports many, a single-target run none.
+func targetPrefix(target string) string {
+	if target == "" {
+		return ""
+	}
+
+	return target + ": "
+}
+
 // findingsPrinter renders findings to the output stream. The -json flag picks
 // the printer where it is parsed, so no output-mode boolean travels through
 // the call graph (and no linter suppression has to, either).
@@ -305,9 +375,18 @@ func printGithubFindingsText(writer io.Writer, repo string, findings []github.Fi
 	_, _ = fmt.Fprintf(writer, "limen github check %s\n", repo)
 
 	counts := map[github.Status]int{}
+	target := ""
 
 	for _, finding := range findings {
 		counts[finding.Status]++
+
+		// A sweep names each target once, where its findings start. A
+		// single-target report sets no Target and so prints exactly as before.
+		if finding.Target != "" && finding.Target != target {
+			target = finding.Target
+
+			_, _ = fmt.Fprintf(writer, "%s\n", target)
+		}
 
 		var mark string
 

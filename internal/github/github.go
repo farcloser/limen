@@ -39,6 +39,10 @@ const (
 
 // Finding is the result of one settings check against one repository.
 type Finding struct {
+	// Target names what was audited, and is set only by runs that audit
+	// more than one thing (AuditMany): a single-target report has nothing
+	// to disambiguate, and stamping it would change that report's JSON.
+	Target  string `json:"target,omitempty"`
 	Check   string `json:"check"`
 	Status  Status `json:"status"`
 	Current string `json:"current,omitempty"`

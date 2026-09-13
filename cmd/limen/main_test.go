@@ -250,6 +250,27 @@ func TestGithubRejectsPositionalArgs(t *testing.T) {
 	}
 }
 
+// TestGithubAllReposNeedsOrg: -all-repos sweeps an organization, so it has no
+// meaning without -org. Accepting it silently would audit the origin
+// repository alone and report a sweep.
+func TestGithubAllReposNeedsOrg(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"github", "check", "-all-repos"},
+		{"github", "fix", "-all-repos", "-yes"},
+	} {
+		var errOut strings.Builder
+		if code := run(args, io.Discard, &errOut); code != 2 {
+			t.Errorf("run(%v) = %d, want 2", args, code)
+		}
+
+		if !strings.Contains(errOut.String(), "-org") {
+			t.Errorf("run(%v) stderr should point at -org, got: %s", args, errOut.String())
+		}
+	}
+}
+
 // TestReleaseVersion: only an exact release stamp may rewrite the seeded limen
 // pin — every ambiguous form (dev, bare sha, describe suffixes, dirty trees,
 // goreleaser snapshots) must classify as a dev build, whose safe fallback is

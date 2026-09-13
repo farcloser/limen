@@ -31,13 +31,18 @@ embedded baseline; repair what is safe to repair; report the rest as advisories.
 ### Command surface
 
 ```
-limen github check [--repo owner/name | --org name] [-json]
-limen github fix   [--repo owner/name | --org name] [-json] [--yes]
+limen github check [--repo owner/name | --org name [--all-repos]] [-json]
+limen github fix   [--repo owner/name | --org name [--all-repos]] [-json] [--yes]
 ```
 
 - Defaults: `--repo` inferred from the current checkout's `origin`. `--org` audits the
-  organization itself (not every repo in it — iterating repos is the caller's loop or a
-  later `--all-repos` flag).
+  organization itself; `--org X --all-repos` sweeps — the organization AND every
+  non-archived repository in it, each finding tagged with its target. The sweep is
+  what keeps a repository correct after the day someone last pointed limen at it:
+  settings drift when humans click, and a baseline rollout can hand a compliant
+  repository dependencies it did not have before (farcloser/godolint, 2026-09-08 —
+  the tools/go.mod rollout gave it vulnerable pins and its repo-level Dependabot
+  security updates, on since creation and until then harmless, opened PRs).
 - `check` is read-only and needs only read scopes. `fix` prints the full plan (current →
   desired, one line per change) and applies only with `--yes` or interactive consent.
 - Output reuses the existing `Finding`/`Outcome` machinery and exit codes (0/1/2), plus
