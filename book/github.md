@@ -407,3 +407,42 @@ the recipe surface, `just do lint github [args]` and `just do fix github
 finding. It is the same command on a laptop and in CI. Settings drift *back*
 when humans click, so the end state (also in the design plan) is a scheduled
 audit. See [`../cmd/limen/`](../cmd/limen).
+
+<a id="creating-a-repository"></a>
+## Creating a repository
+
+The order matters, because two of the rules above are traps for whoever goes
+first. Both were hit, in this order, on the two repositories created in one
+day; the sequence below is what avoids them.
+
+1. **Create it empty.** `gh repo create <org>/<name> --private` (or public),
+   no README, no license: the files come from `limen bootstrap`, not from
+   GitHub's templates.
+2. **Run the fixer before anything is pushed:** `limen github fix -repo
+   <org>/<name>`, as the human. A fresh repository grants the `agents` team
+   nothing — the bot's effective permission is *pull*, and its first push is
+   refused with "correct access rights" — and the fixer is what grants it,
+   together with the feature toggles, vulnerability reporting, and the two
+   rulesets. It is step one, not a follow-up to the first push.
+3. **The human pushes the initial `main`**, signed, from the bootstrap tree
+   (or from the bot's branch, once the bot has pushed one). The fixer's
+   `limen:main` ruleset requires a pull request into `main`, and on an empty
+   repository there is no `main` to open one against: the bot's push of the
+   initial commit is "declined due to repository rule violations". Only the
+   ruleset's bypass actor, a repository admin, can create `main`. After that
+   first push everything is pull requests, as everywhere.
+4. **Push `main` before any other branch.** Whatever branch reaches GitHub
+   first becomes the default branch. A bot branch pushed before `main` exists
+   becomes the default, has to be moved off with `gh repo edit
+   --default-branch main`, and cannot be deleted until it is.
+5. **Description and topics are the human's.** `gh repo edit` answers 404 to
+   the bot (no admin), and the fixer reports them as advisories rather than
+   inventing them. Set them right after the first push; the `description` and
+   `topics` checks go green.
+6. **`.allowed_signers` is the human's enrollment commit.** `limen bootstrap`
+   does not seed it: the human's key is theirs to publish. It lands with the
+   first push, with the bot's key beside it (see [agents](./agents.md)), or is
+   copied from a sibling repository at the owner's instruction.
+
+Then the bot works as everywhere: its own branches, pull requests, the
+fixer's rulesets in force from the first one.
