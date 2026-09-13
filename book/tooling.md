@@ -108,7 +108,8 @@ entry, and never will again.
 
 Adding, pinning, bumping or removing one goes through the same recipes as an aqua package,
 never by hand (`AGENTS.md`): `just do tools add|set|remove` take the package path as it
-stands in `tools/go.mod`, `just do tools update` the command it builds as, and the recipes
+stands in `tools/go.mod`, `just do tools update` the command it builds as (or nothing, to move
+every tool, aqua packages included, in one run), and the recipes
 tell a Go package from an aqua slug by the first path element — a module root is a host and
 carries a dot, a GitHub owner cannot. Underneath they run `go -C tools get -tool <pkg>@<version>`
 (`@latest`, `@none`) and `go -C tools mod tidy`, then build the tool natively into
