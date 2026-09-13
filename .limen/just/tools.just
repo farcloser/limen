@@ -85,33 +85,52 @@ set pkg version: (_banner "tools" "set")
 
 # Takes the COMMAND name (`just`, `limen`, `deadcode`), not the package: `aqua
 # update` resolves a command to its pinned package, local registry included,
-# and a tool directive is found by the command it builds as. (The blank line
-# below keeps this paragraph out of `just --list`; only the line right above
-# the recipe is its doc.)
+# and a tool directive is found by the command it builds as. With no argument
+# every tool moves: each aqua package and the registries (`aqua update`), then
+# each directive at its latest — one `go get` for all of them, so the module
+# graph is solved once — and every directive is rebuilt. Renovate does this
+# one tool at a time; the no-argument form is for moving everything by hand
+# and reading one diff. (The blank line below keeps this paragraph out of
+# `just --list`; only the line right above the recipe is its doc.)
 
-# Update an existing tool to its latest version, e.g. `just do tools update golangci-lint`.
-update command: (_banner "tools" "update")
+# Update one tool to its latest version (`just do tools update golangci-lint`), or every tool with no argument.
+update command="": (_banner "tools" "update")
     #!/usr/bin/env bash
     set -euo pipefail
-    # A directive builds as its last path element, except that go strips a /vN
-    # major suffix (github.com/google/go-licenses/v2 builds as go-licenses —
-    # see _go-tool). A `tool` line and a `tool (…)` block are both walked;
-    # a `//` comment line inside the block is not a directive.
-    pkg=$(awk -v cmd='{{ command }}' '
-        function name(p,  n, a) { n = split(p, a, "/"); if (n > 1 && a[n] ~ /^v[0-9]+$/) return a[n - 1]; return a[n] }
-        { p = "" }
+    # Every directive in tools/go.mod: a `tool` line and a `tool (…)` block are
+    # both walked; a `//` comment line inside the block is not a directive.
+    # (A read loop, not mapfile: macOS ships bash 3.)
+    pkgs=()
+    while IFS= read -r p; do pkgs+=("$p"); done < <(awk '
         /^tool[[:blank:]]*\(/ { block = 1; next }
         block && /^\)/ { block = 0; next }
-        /^tool[[:blank:]]/ { p = $2 }
-        block && NF && $1 !~ /^\/\// { p = $1 }
-        p != "" && name(p) == cmd { print p; exit }
+        /^tool[[:blank:]]/ { print $2 }
+        block && NF && $1 !~ /^\/\// { print $1 }
     ' tools/go.mod 2>/dev/null || true)
-    if [ -n "$pkg" ]; then
-        go -C tools get -tool "${pkg}@latest"   # bump tools/go.mod to the latest release
-        go -C tools mod tidy
-        {{ go_tool_build }} "$pkg"              # REAL build: a bad pin fails here, not at first use
+    # A directive builds as its last path element, except that go strips a /vN
+    # major suffix (github.com/google/go-licenses/v2 builds as go-licenses —
+    # see _go-tool).
+    name_of() { local n=${1##*/}; if [[ $n =~ ^v[0-9]+$ ]]; then n=${1%/*}; n=${n##*/}; fi; printf '%s' "$n"; }
+    if [ -z '{{ command }}' ]; then
+        aqua update                       # every package and the registries, to the latest
+        aqua update-checksum --prune      # new checksums in, replaced versions' out
+        aqua install                      # REAL install: a bad pin fails here, not at first use
+        if [ ${#pkgs[@]} -gt 0 ]; then
+            go -C tools get -tool "${pkgs[@]/%/@latest}"   # one solve for all of them
+            go -C tools mod tidy
+            {{ go_tool_build }} "${pkgs[@]}"              # REAL build of every directive
+        fi
         exit 0
     fi
+    # ${pkgs[@]+…}: under set -u, bash 3 treats an empty array as unset.
+    for p in ${pkgs[@]+"${pkgs[@]}"}; do
+        if [ "$(name_of "$p")" = '{{ command }}' ]; then
+            go -C tools get -tool "${p}@latest"   # bump tools/go.mod to the latest release
+            go -C tools mod tidy
+            {{ go_tool_build }} "$p"              # REAL build: a bad pin fails here, not at first use
+            exit 0
+        fi
+    done
     aqua update "{{ command }}"       # bump aqua.yaml to the latest release
     aqua update-checksum --prune      # new checksum in, replaced version's out
     aqua install                      # REAL install: a bad pin fails here, not at first use
