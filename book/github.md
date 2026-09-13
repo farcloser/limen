@@ -202,6 +202,21 @@ The decided merge model, enforced by both the repository settings and the
   skipped required check does not block a merge — branch protection that has
   quietly stopped protecting.
 
+  <a id="what-the-matrix-proves"></a>
+  **What the matrix proves.** CI is there to verify one thing: everything
+  works on every platform. That is two things. The *code* is verified for
+  every platform — the per-platform analysis legs cross-compile every
+  GOOS/GOARCH pair from whichever host runs them, so that half is
+  host-independent and one leg would cover it. And the *commands* that do
+  the verifying work on every platform: `just lint` and `just test`, whole,
+  under git-bash on windows, on arm64 and x64, with the tools aqua pins
+  resolving natively. That half is what the matrix exists for, and it is why
+  a lane is never skipped on a host where its tool is slow, emulated, or
+  awkward — a windows leg that runs shellcheck emulated at six times linux's
+  speed is proving that the developer environment works there, which is the
+  point; a windows leg that skips it has stopped proving anything about
+  windows. Speed comes from caches (below), never from proving less.
+
   <a id="fuzz"></a>
   **Fuzz.** The canonical `ci.yaml` also carries a `fuzz` job: one linux leg
   running `just do test go fuzz`, a short coverage-guided fuzz of every
@@ -226,6 +241,16 @@ The decided merge model, enforced by both the repository settings and the
   costs seconds and a changed one is always a real install; it feeds `gate`,
   so a pin that does not install blocks a merge. (The Go-built tools are
   `tools/go.mod` directives; the verify legs build them.)
+
+  **Caches on the verify legs.** Each leg restores the same package store,
+  per architecture since it holds native binaries, and the Go build, module
+  and linter caches keyed on the pinned go's version and every `go.sum`. The
+  per-platform analysis legs otherwise compile the whole module graph five
+  times, cold, on every run — most of what made the windows legs twice as
+  slow as linux. Fallback keys are always taken: the build cache is
+  content-addressed, the module cache checksum-verified, and a pin a bump
+  moved still downloads and verifies at first use, so a stale restore only
+  costs what it cannot reuse.
 
   **Migration.** `ci.yaml` is seeded once and is the project's own afterwards,
   so repositories created before the gate job existed do not have it — and
