@@ -13,8 +13,8 @@ human's request, and never commit on `main`.
 ## 1. Start from a fresh main, in a worktree
 
 ```
-git fetch --prune origin main:main
-git worktree add -b claudio/$(date +%Y%m%d)-<topic> ../<repo>-<date>-<topic> main   # or the harness's worktree tool
+git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_COMMAND, which outranks the rig's core.sshCommand
+git -C <clone> worktree add -b claudio/$(date +%Y%m%d)-<topic> ../<repo>-<date>-<topic> origin/main   # or the harness's worktree tool
 cd ../<repo>-<date>-<topic>
 aqua policy allow aqua-policy.yaml && aqua install --only-link
 ```
@@ -111,8 +111,9 @@ gh pr edit claudio/<date>-<topic> --add-reviewer "$owner"
 ## 5. After a merge
 
 ```
-git fetch --prune origin main:main
-git worktree remove ../<repo>-<date>-<topic> && git branch -d claudio/<date>-<topic>
+git -C <clone> c fetch --prune origin
+git -C <clone> merge --ff-only origin/main   # the clone has main checked out, so a main:main refspec is refused there; on any other branch, `c fetch origin main:main`
+git -C <clone> worktree remove ../<repo>-<date>-<topic> && git -C <clone> branch -d claudio/<date>-<topic>
 ```
 
 Rebase every open branch of yours onto the fresh `main`, so the human and you
