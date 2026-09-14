@@ -88,6 +88,19 @@ chapter; the procedure is limen's `skills/contribute`.
   bare `#nosec`, or a bare `//nolint`; `just do lint go` rejects them. See the book's
   [per-language rules](https://github.com/farcloser/limen/blob/main/book/per-language.md).
 - **Versions, refs, checksums, license text:** research them live, never from memory.
+- **Consumers get the contract, and only the contract.** A consumer demands a property; a
+  bug or a contract violation is the owner's to resolve, by clarifying the contract or
+  fixing the implementation, and nothing else is the consumer's business. A comment in
+  package A states A's guarantee, never what B does with it; a wrapper with a stated
+  contract grows no export outside it because a caller wanted a home for a helper. A bug
+  reported to the owning session earns the guarantee and the version that carries it, not
+  a say in the owner's tests.
+- **Tests are black-box, never bought with indirection.** External test package
+  (`package foo_test`), no reach into private state, and no interface, function field, or
+  other indirection in production code whose only purpose is a test's fake: that is bad
+  design, not testability. A property no unit test can observe (a power loss, a
+  filesystem failure) gets none; a mock that asserts it was called proves only that the
+  code calls itself.
 - **A comment names a trap, not a story.** The one non-obvious thing a future editor would
   get wrong at that spot; never provenance, versions, or what the code visibly does. The
   reasoning goes in the commit message. See the book's
