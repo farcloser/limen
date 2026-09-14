@@ -184,7 +184,13 @@ The decided merge model, enforced by both the repository settings and the
   `ci.yaml` now carries the gate job is drift, and `limen github fix` moves it
   onto `gate`: a leg the matrix dropped or never ran is a check nothing
   reports, and the pull request waits on it forever. A repository without the
-  gate job keeps its legs until it has one.
+  gate job keeps its legs until it has one — and gets no fresh `limen:main`
+  until it has one either: on a repository with no `limen:main` yet and no
+  gate job in its `ci.yaml` on the default branch (an empty repository
+  included), the fixer reports the missing job and creates nothing, because
+  the only ruleset it could create is one that requires a check nothing
+  reports. A pre-gate repository reached by the `-all-repos` sweep for the
+  first time was exactly that, and every pull request on it waited forever.
 
   The single gate is deliberate. Branch protection names contexts as *strings*,
   so requiring the matrix legs directly (`verify (macos-15)` and friends) would
@@ -422,24 +428,30 @@ day; the sequence below is what avoids them.
    <org>/<name>`, as the human. A fresh repository grants the `agents` team
    nothing — the bot's effective permission is *pull*, and its first push is
    refused with "correct access rights" — and the fixer is what grants it,
-   together with the feature toggles, vulnerability reporting, and the two
-   rulesets. It is step one, not a follow-up to the first push.
-3. **The human pushes the initial `main`**, signed, from the bootstrap tree
-   (or from the bot's branch, once the bot has pushed one). The fixer's
-   `limen:main` ruleset requires a pull request into `main`, and on an empty
-   repository there is no `main` to open one against: the bot's push of the
-   initial commit is "declined due to repository rule violations". Only the
-   ruleset's bypass actor, a repository admin, can create `main`. After that
-   first push everything is pull requests, as everywhere.
-4. **Push `main` before any other branch.** Whatever branch reaches GitHub
+   together with the feature toggles, vulnerability reporting, and the
+   `limen:tags` ruleset. It is step one, not a follow-up to the first push.
+   `limen:main` is the one thing it defers: the ruleset requires the `gate`
+   check, an empty repository has no workflow to report it, and the fixer
+   never requires a check nothing reports (see "Merges wait for green CI").
+3. **The human pushes the initial `main`**, signed, from the bootstrap tree.
+   The first commit is the human's, and whoever pushes first sets the
+   default branch (next step). Before the fixer deferred `limen:main`, a
+   ruleset created on the empty repository refused this very push as a rule
+   violation — a pull request into a `main` that did not exist — and only
+   the bypass actor, a repository admin, could create `main`.
+4. **Run the fixer again.** With the canonical `ci.yaml` on `main`, it now
+   creates `limen:main`, and from that point everything is pull requests, as
+   everywhere. Until this run, `main` is unprotected: do it right after the
+   first push, before any branch is opened against it.
+5. **Push `main` before any other branch.** Whatever branch reaches GitHub
    first becomes the default branch. A bot branch pushed before `main` exists
    becomes the default, has to be moved off with `gh repo edit
    --default-branch main`, and cannot be deleted until it is.
-5. **Description and topics are the human's.** `gh repo edit` answers 404 to
+6. **Description and topics are the human's.** `gh repo edit` answers 404 to
    the bot (no admin), and the fixer reports them as advisories rather than
    inventing them. Set them right after the first push; the `description` and
    `topics` checks go green.
-6. **`.allowed_signers` is the human's enrollment commit.** `limen bootstrap`
+7. **`.allowed_signers` is the human's enrollment commit.** `limen bootstrap`
    does not seed it: the human's key is theirs to publish. It lands with the
    first push, with the bot's key beside it (see [agents](./agents.md)), or is
    copied from a sibling repository at the owner's instruction.

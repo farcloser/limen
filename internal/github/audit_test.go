@@ -1032,6 +1032,65 @@ func TestRulesetMigratesLegacyContextsToGate(t *testing.T) { //nolint:parallelte
 	}
 }
 
+// gateWorkflowResponse is the contents-API answer for a ci.yaml that carries
+// the gate job, the shape every create-path test needs to read as canonical.
+func gateWorkflowResponse() stubResponse {
+	return stubResponse{
+		Body: `{"content":"` + base64.StdEncoding.EncodeToString(
+			[]byte("jobs:\n  verify:\n    runs-on: x\n  gate:\n    needs: verify\n"),
+		) + `"}`,
+	}
+}
+
+// No limen:main, and no gate job for it to require: the fixer must not create
+// one. A pre-gate repository reached by the sweep for the first time got a
+// ruleset requiring `gate` from a workflow that never reports it, and every
+// pull request waited forever on "Expected". An unreadable ci.yaml (an empty
+// repository) is the same case.
+func TestRulesetNotCreatedWithoutGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	noGate := `{"content":"` + base64.StdEncoding.EncodeToString(
+		[]byte("jobs:\n  verify:\n    runs-on: x\n"),
+	) + `"}`
+
+	// Serial by construction (the stub binary is a package global), so the
+	// cases share one test instead of t.Run.
+	cases := map[string]stubResponse{
+		"no gate job": {Body: noGate},
+		"no workflow": {NotFound: true},
+	}
+
+	for name, workflow := range cases {
+		responses := compliantResponses()
+		responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
+			Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
+		}
+		responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = workflow
+		logPath := stubGH(t, responses)
+
+		findings, changes := Audit(testRepo, nil)
+
+		finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
+		if finding.Status != StatusFail {
+			t.Fatalf("%s: absent limen:main: %v, want fail", name, finding.Status)
+		}
+
+		if !strings.Contains(finding.Message, "gate job") {
+			t.Errorf("%s: the finding must name the missing job, got: %s", name, finding.Message)
+		}
+
+		for _, planned := range changes {
+			if planned.Check == checkRulesetDefaultBranch {
+				t.Fatalf("%s: planned %q: nothing may be created without a gate job", name, planned.Summary)
+			}
+		}
+
+		log, _ := os.ReadFile(logPath)
+		if strings.Contains(string(log), "POST") {
+			t.Errorf("%s: no write may reach GitHub, got: %s", name, log)
+		}
+	}
+}
+
 // The same legacy contexts on a repository whose ci.yaml has NO gate job stay
 // preserved: moving them would require a check nothing reports.
 func TestRulesetKeepsLegacyContextsWithoutGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
@@ -1060,6 +1119,7 @@ func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // seri
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
 		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 	}
+	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
 	logPath := stubGH(t, responses)
 
 	_, changes := Audit(testRepo, nil)
@@ -1093,6 +1153,7 @@ func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest /
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
 		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 	}
+	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
 	logPath := stubGH(t, responses)
 
 	findings, changes := Audit(testRepo, nil)

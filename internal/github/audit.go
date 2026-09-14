@@ -984,6 +984,22 @@ type rulesetTarget struct {
 func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSummary) {
 	existing, present := byName[target.name]
 	if !present {
+		// The create path has no contexts to preserve, so the builder falls
+		// back to the gate — which only exists on a ci.yaml seeded after the
+		// gate job did. Creating it anyway is the failure the gate was
+		// introduced to end: a required check nothing reports, and every
+		// pull request waiting on it forever. An empty repository has no
+		// workflow either, so this also defers limen:main until main exists.
+		if target.check == checkRulesetDefaultBranch && !a.workflowHasGate() {
+			a.flag(target.check, StatusFail, "(absent)", target.name,
+				"the canonical ruleset "+target.name+" does not exist, and it is not created: ci.yaml on the "+
+					"default branch has no gate job (or no ci.yaml is readable) — a ruleset requiring the gate "+
+					"context now would wait forever on a check nothing reports. Add the gate job (copied from "+
+					"the canonical workflow) and fix again", nil)
+
+			return
+		}
+
 		canonical := target.build(nil)
 
 		a.flag(target.check, StatusFail, "(absent)", target.name,
