@@ -223,6 +223,15 @@ The human sets the priorities; the agent measures scope before it moves.
   about it. A limen defect goes to the limen session the same way. An issue
   a session opened on its own is closed once the owning session has the
   work, with the handoff recorded on it.
+- **A consumer session gets the contract, and only the contract.** When a
+  session that consumes a library or a system reports a bug, or a violation
+  of the contract, to the session that owns it, what comes back is the
+  guarantee and the version that carries it. The consumer has no say in how
+  the owner tests its internals, and the owner does not describe its test
+  design across the boundary. The rule is the book's
+  [generic principle](./index.md#generic-principles) applied to two sessions:
+  the boundary that keeps package A from narrating package B keeps one
+  session's report from reaching into another's implementation.
 - **Answers, not menus.** Lead with the conclusion; give one recommendation,
   not a survey; a fix that cuts against recorded doctrine is named as such
   and argued, never slipped in. When something is either the right call or
