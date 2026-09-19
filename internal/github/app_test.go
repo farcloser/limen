@@ -1,7 +1,7 @@
 // Tests for the update-App automation, through the gh stub. Serial by
 // design: they set the process environment (CI, BROWSER, the stub).
 
-package github //nolint:testpackage // white-box (see audit_test.go).
+package github_test
 
 import (
 	"context"
@@ -15,12 +15,14 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 const (
-	testVariablePath = "GET orgs/test-org/actions/variables/" + updateAppVariable
-	testSecretPath   = "GET orgs/test-org/actions/secrets/" + updateAppSecret
-	testSecretWrite  = "secret set " + updateAppSecret + " --org test-org"
+	testVariablePath = "GET orgs/test-org/actions/variables/" + "UPDATE_AQUA_CHECKSUM_APP_ID"
+	testSecretPath   = "GET orgs/test-org/actions/secrets/" + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY"
+	testSecretWrite  = "secret set " + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" + " --org test-org"
 )
 
 // interactiveRig makes the scenario interactive whatever the runner is (the
@@ -127,17 +129,17 @@ func (a *approver) approve(url string) {
 func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 	logPath := stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
-		testVariablePath:    {Body: `{"name":"` + updateAppVariable + `","value":"42"}`},
-		testSecretPath:      {Body: `{"name":"` + updateAppSecret + `"}`},
+		testVariablePath:    {Body: `{"name":"` + "UPDATE_AQUA_CHECKSUM_APP_ID" + `","value":"42"}`},
+		testSecretPath:      {Body: `{"name":"` + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" + `"}`},
 		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"installations":[{"app_id":42,"permissions":{"contents":"write","workflows":"write"}}]}`,
 		},
 	})
 	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusOK {
+	if finding.Status != github.StatusOK {
 		t.Fatalf("configured org: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
@@ -168,9 +170,9 @@ func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("installation without workflows: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 
@@ -193,9 +195,9 @@ func TestEnsureUpdateAppUnverifiable(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusUnverifiable {
+	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable variables: %v (%s), want unverifiable", finding.Status, finding.Message)
 	}
 }
@@ -210,9 +212,9 @@ func TestEnsureUpdateAppInstallationUnverifiable(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusUnverifiable {
+	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable installations: %v (%s), want unverifiable", finding.Status, finding.Message)
 	}
 }
@@ -226,13 +228,13 @@ func TestEnsureUpdateAppHalfConfigured(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("half-configured org: %v, want advisory", finding.Status)
 	}
 
-	if !strings.Contains(finding.Message, updateAppSecret) {
+	if !strings.Contains(finding.Message, "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY") {
 		t.Errorf("advisory does not name the missing secret: %s", finding.Message)
 	}
 }
@@ -244,9 +246,9 @@ func TestEnsureUpdateAppNotAnOrg(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("user-account owner: %v, want advisory", finding.Status)
 	}
 }
@@ -259,9 +261,9 @@ func TestEnsureUpdateAppNonInteractive(t *testing.T) {
 	})
 	t.Setenv("CI", "1")
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("non-interactive environment: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 
@@ -282,9 +284,9 @@ func TestEnsureUpdateAppCallbackTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	finding := EnsureUpdateAquaChecksumApp(ctx, testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(ctx, testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("abandoned browser flow: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 
@@ -326,9 +328,9 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 	}}
 	defer human.wg.Wait()
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
 
-	if finding.Status != StatusOK {
+	if finding.Status != github.StatusOK {
 		t.Fatalf("full flow: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
@@ -367,9 +369,9 @@ func TestEnsureUpdateAppSecretFailure(t *testing.T) {
 	human := &approver{t: t, code: "test-code"}
 	defer human.wg.Wait()
 
-	finding := EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("failed secret write: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 

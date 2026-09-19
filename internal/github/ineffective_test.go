@@ -1,28 +1,32 @@
-package github //nolint:testpackage // white-box, like audit_test.go.
+package github_test
 
 import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 func TestMarkIneffective(t *testing.T) {
 	t.Parallel()
 
-	findings := []Finding{
-		{Check: checkAutoMerge, Status: StatusFail, Message: "auto-merge must be allowed"},
-		{Check: checkWiki, Status: StatusFail, Message: "wiki must be off"},
-		{Check: checkProjects, Status: StatusOK, Message: "projects are off"},
+	findings := []github.Finding{
+		{Check: "auto-merge", Status: github.StatusFail, Message: "auto-merge must be allowed"},
+		{Check: "wiki", Status: github.StatusFail, Message: "wiki must be off"},
+		{Check: "projects", Status: github.StatusOK, Message: "projects are off"},
 	}
 
 	// auto-merge and projects were applied; wiki was not planned at all.
-	MarkIneffective(findings, []string{checkAutoMerge, checkProjects})
+	github.MarkIneffective(findings, []string{"auto-merge", "projects"})
 
-	if got := findings[0].Message; !strings.HasPrefix(got, ineffectivePrefix) || !strings.Contains(got, "limen.yaml") {
+	const prefix = "the fix applied without error, but GitHub left the setting unchanged: "
+
+	if got := findings[0].Message; !strings.HasPrefix(got, prefix) || !strings.Contains(got, "limen.yaml") {
 		t.Errorf("applied and still failing: %q, want the ineffective verdict with the ways out", got)
 	}
 
-	if findings[0].Status != StatusFail {
+	if findings[0].Status != github.StatusFail {
 		t.Errorf("an ignored write is still a failure, got %v", findings[0].Status)
 	}
 
@@ -35,7 +39,7 @@ func TestMarkIneffective(t *testing.T) {
 	}
 }
 
-func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo"] = stubResponse{
 		Body: strings.NewReplacer(
@@ -45,10 +49,10 @@ func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // s
 	}
 	stubGH(t, responses)
 
-	findings, _ := Audit(testRepo, nil)
+	findings, _ := github.Audit(testRepo, nil)
 
-	finding, found := findingByCheck(findings, checkAutoMerge)
-	if !found || finding.Status != StatusFail {
+	finding, found := findingByCheck(findings, "auto-merge")
+	if !found || finding.Status != github.StatusFail {
 		t.Fatalf("auto-merge off: %v, want fail", finding.Status)
 	}
 
@@ -62,9 +66,9 @@ func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // s
 	}
 	stubGH(t, responses)
 
-	findings, _ = Audit(testRepo, nil)
+	findings, _ = github.Audit(testRepo, nil)
 
-	if finding, _ := findingByCheck(findings, checkAutoMerge); strings.Contains(finding.Message, "plan") {
+	if finding, _ := findingByCheck(findings, "auto-merge"); strings.Contains(finding.Message, "plan") {
 		t.Errorf("a public repository is not plan-gated, got %q", finding.Message)
 	}
 }
@@ -74,7 +78,7 @@ func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // s
 // plans nothing — the plan must not report "→ compliant" for a fix that
 // cannot take. Any other plan, or one the token cannot see, is planned as
 // before and judged by the re-audit.
-func TestAutoMergeNotPlannedOnFreePrivate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAutoMergeNotPlannedOnFreePrivate(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	private := strings.NewReplacer(
 		`"private": false`, `"private": true`,
 		`"allow_auto_merge": true`, `"allow_auto_merge": false`,
@@ -96,17 +100,17 @@ func TestAutoMergeNotPlannedOnFreePrivate(t *testing.T) { //nolint:paralleltest 
 		responses["GET orgs/test"] = plan.org
 		logPath := stubGH(t, responses)
 
-		findings, changes := Audit(testRepo, nil)
+		findings, changes := github.Audit(testRepo, nil)
 
-		finding, _ := findingByCheck(findings, checkAutoMerge)
-		if finding.Status != StatusFail {
+		finding, _ := findingByCheck(findings, "auto-merge")
+		if finding.Status != github.StatusFail {
 			t.Fatalf("%s: auto-merge off: %v, want fail", name, finding.Status)
 		}
 
 		planned := false
 
 		for _, change := range changes {
-			if change.Check == checkAutoMerge {
+			if change.Check == "auto-merge" {
 				planned = true
 			}
 

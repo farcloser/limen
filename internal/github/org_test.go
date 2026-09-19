@@ -1,12 +1,15 @@
-// White-box tests for the org-level audit (O1–O7), through the same gh stub
-// seam as the repository tests.
+// Tests for the org-level audit (O1–O7), through the same fake gh as the
+// repository tests.
 
-package github //nolint:testpackage // white-box (see audit_test.go).
+package github_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 const testOrg = "test-org"
@@ -25,7 +28,7 @@ const compliantOrgJSON = `{
   "web_commit_signoff_required": true
 }`
 
-// compliantOrgResponses answers every endpoint AuditOrg reads with a
+// compliantOrgResponses answers every endpoint github.AuditOrg reads with a
 // baseline-compliant state.
 func compliantOrgResponses() map[string]stubResponse {
 	return map[string]stubResponse{
@@ -71,48 +74,48 @@ func compliantOrgResponses() map[string]stubResponse {
 // except the owner roster, which is an advisory BY DESIGN — the roster is
 // declared by exempting it, which the second half of the test does.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgCompliant(t *testing.T) {
 	stubGH(t, compliantOrgResponses())
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
 	if len(changes) != 0 {
 		t.Errorf("a compliant organization planned %d change(s)", len(changes))
 	}
 
 	for _, finding := range findings {
-		if finding.Check == checkOrgAdmins {
-			if finding.Status != StatusAdvisory {
+		if finding.Check == "org-admins" {
+			if finding.Status != github.StatusAdvisory {
 				t.Errorf("org-admins: %v, want the by-design advisory", finding.Status)
 			}
 
 			continue
 		}
 
-		if finding.Status != StatusOK {
+		if finding.Status != github.StatusOK {
 			t.Errorf("%s: %v (%s), want ok", finding.Check, finding.Status, finding.Message)
 		}
 	}
 
 	// Declaring the roster via the override file is what makes a compliant
 	// org fully green.
-	findings, _ = AuditOrg(testOrg, map[string]string{checkOrgAdmins: "alice is the org"})
-	if !AllOK(findings) {
+	findings, _ = github.AuditOrg(testOrg, map[string]string{"org-admins": "alice is the org"})
+	if !github.AllOK(findings) {
 		t.Error("a compliant organization with a declared roster must pass entirely")
 	}
 
 	// The declaration is load-bearing: an owner the declaration does not name
 	// brings the advisory back — a blanket exemption would hide a new owner.
-	findings, _ = AuditOrg(testOrg, map[string]string{checkOrgAdmins: "bob is the org"})
-	if finding, found := findingByCheck(findings, checkOrgAdmins); !found || finding.Status != StatusAdvisory {
+	findings, _ = github.AuditOrg(testOrg, map[string]string{"org-admins": "bob is the org"})
+	if finding, found := findingByCheck(findings, "org-admins"); !found || finding.Status != github.StatusAdvisory {
 		t.Errorf("an undeclared owner must surface as an advisory, got %v", finding.Status)
 	}
 
 	// Whole-token matching: a login that appears only as a SUBSTRING of the
 	// declaration ("li" inside "alice") is not declared.
-	findings, _ = AuditOrg(testOrg, map[string]string{checkOrgAdmins: "malice is the org"})
-	if finding, found := findingByCheck(findings, checkOrgAdmins); !found || finding.Status != StatusAdvisory {
+	findings, _ = github.AuditOrg(testOrg, map[string]string{"org-admins": "malice is the org"})
+	if finding, found := findingByCheck(findings, "org-admins"); !found || finding.Status != github.StatusAdvisory {
 		t.Errorf("a substring-only match must not count as declared, got %v", finding.Status)
 	}
 }
@@ -121,7 +124,7 @@ func TestAuditOrgCompliant(t *testing.T) {
 // verdict class, and applying the planned changes issues the consolidated
 // org PATCH plus the Actions PUTs.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgNonCompliant(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET orgs/test-org"] = stubResponse{Body: `{
@@ -155,26 +158,27 @@ func TestAuditOrgNonCompliant(t *testing.T) {
 	responses["PUT orgs/test-org/actions/permissions/fork-pr-contributor-approval"] = stubResponse{Body: `{}`}
 	logPath := stubGH(t, responses)
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
 	wantFail := []string{
-		checkOrgDefaultRepoPerm, checkOrgCreatePublicRepos, checkOrgForkPrivateRepos,
-		checkOrgCreatePublicPages, checkOrgWebCommitSignoff,
-		checkOrgActionsAllowed, checkOrgActionsShaPinning,
-		checkOrgActionsWorkflow, checkOrgActionsApprovePRs, checkOrgForkPRApproval,
+		"org-default-repository-permission", "org-members-create-public-repositories",
+		"org-members-fork-private-repositories",
+		"org-members-create-public-pages", "org-web-commit-signoff",
+		"org-actions-allowed", "org-actions-sha-pinning",
+		"org-actions-workflow-permissions", "org-actions-approve-pull-requests", "org-actions-fork-pr-approval",
 	}
 	for _, check := range wantFail {
-		if finding, found := findingByCheck(findings, check); !found || finding.Status != StatusFail {
+		if finding, found := findingByCheck(findings, check); !found || finding.Status != github.StatusFail {
 			t.Errorf("%s: %v, want fail", check, finding.Status)
 		}
 	}
 
 	wantAdvisory := []string{
-		checkOrgTwoFactor, checkOrgChangeVisibility, checkOrgDeleteRepos,
-		checkOrgProfileDescription, checkOrgCommunityHealthRepo, checkOrgCommunityHealthSet,
+		"org-two-factor-requirement", "org-members-change-repository-visibility", "org-members-delete-repositories",
+		"org-profile-description", "org-community-health-repo", "org-community-health-content",
 	}
 	for _, check := range wantAdvisory {
-		if finding, found := findingByCheck(findings, check); !found || finding.Status != StatusAdvisory {
+		if finding, found := findingByCheck(findings, check); !found || finding.Status != github.StatusAdvisory {
 			t.Errorf("%s: %v, want advisory (never auto-fixed)", check, finding.Status)
 		}
 	}
@@ -212,16 +216,17 @@ func TestAuditOrgNonCompliant(t *testing.T) {
 // files from the root, .github/, or docs/ of the org .github repository —
 // a file under .github/ (a fully standard layout) must count as present.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgCommunityHealthSubdirectory(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET repos/test-org/.github/contents/SECURITY.md"] = stubResponse{NotFound: true}
 	responses["GET repos/test-org/.github/contents/.github/SECURITY.md"] = stubResponse{Body: "{}"}
 	stubGH(t, responses)
 
-	findings, _ := AuditOrg(testOrg, nil)
+	findings, _ := github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgCommunityHealthSet); !found || finding.Status != StatusOK {
+	finding, found := findingByCheck(findings, "org-community-health-content")
+	if !found || finding.Status != github.StatusOK {
 		t.Errorf("community-health set with .github/-located files: %v (%s), want ok",
 			finding.Status, finding.Message)
 	}
@@ -233,7 +238,7 @@ func TestAuditOrgCommunityHealthSubdirectory(t *testing.T) {
 // inventory, which stays ok with the list either way. An org with no apps at
 // all fails the floor too, and the exemption is the self-hosted escape hatch.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgRenovateInstalled(t *testing.T) {
 	// Present, among others: ok, and the inventory lists every slug.
 	responses := compliantOrgResponses()
@@ -242,14 +247,18 @@ func TestAuditOrgRenovateInstalled(t *testing.T) {
 	}
 	stubGH(t, responses)
 
-	findings, _ := AuditOrg(testOrg, nil)
+	findings, _ := github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(
+		findings,
+		"org-renovate-installed",
+	); !found ||
+		finding.Status != github.StatusOK {
 		t.Errorf("renovate installed: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
-	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found ||
-		finding.Status != StatusOK || !strings.Contains(finding.Message, "some-app") {
+	if finding, found := findingByCheck(findings, "org-installed-apps"); !found ||
+		finding.Status != github.StatusOK || !strings.Contains(finding.Message, "some-app") {
 		t.Errorf("app inventory: %v (%s), want ok listing every app", finding.Status, finding.Message)
 	}
 
@@ -259,19 +268,23 @@ func TestAuditOrgRenovateInstalled(t *testing.T) {
 	}
 	stubGH(t, responses)
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusFail {
+	if finding, found := findingByCheck(
+		findings,
+		"org-renovate-installed",
+	); !found ||
+		finding.Status != github.StatusFail {
 		t.Errorf("renovate missing: %v, want fail", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkOrgRenovateInstalled {
+		if planned.Check == "org-renovate-installed" {
 			t.Error("renovate installation planned a change; there is no API to install an app")
 		}
 	}
 
-	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(findings, "org-installed-apps"); !found || finding.Status != github.StatusOK {
 		t.Errorf("app inventory with renovate missing: %v, want ok (informational)", finding.Status)
 	}
 
@@ -281,21 +294,29 @@ func TestAuditOrgRenovateInstalled(t *testing.T) {
 	}
 	stubGH(t, responses)
 
-	findings, _ = AuditOrg(testOrg, nil)
+	findings, _ = github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusFail {
+	if finding, found := findingByCheck(
+		findings,
+		"org-renovate-installed",
+	); !found ||
+		finding.Status != github.StatusFail {
 		t.Errorf("no apps: renovate %v, want fail", finding.Status)
 	}
 
-	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(findings, "org-installed-apps"); !found || finding.Status != github.StatusOK {
 		t.Errorf("no apps: inventory %v, want ok", finding.Status)
 	}
 
 	// Self-hosted Renovate: the exemption turns the failure into an
 	// exempted-ok, as for any other check.
-	findings, _ = AuditOrg(testOrg, map[string]string{checkOrgRenovateInstalled: "self-hosted from ops/renovate"})
+	findings, _ = github.AuditOrg(testOrg, map[string]string{"org-renovate-installed": "self-hosted from ops/renovate"})
 
-	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(
+		findings,
+		"org-renovate-installed",
+	); !found ||
+		finding.Status != github.StatusOK {
 		t.Errorf("exempted renovate: %v, want ok", finding.Status)
 	}
 }
@@ -305,7 +326,7 @@ func TestAuditOrgRenovateInstalled(t *testing.T) {
 // first page of installations is installed. Both listings are read whole,
 // so the undeclared owner surfaces and Renovate is found.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgSecondPage(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET orgs/test-org/members?role=admin&per_page=100"] = stubResponse{
@@ -319,18 +340,22 @@ func TestAuditOrgSecondPage(t *testing.T) {
 	}
 	stubGH(t, responses)
 
-	findings, _ := AuditOrg(testOrg, map[string]string{checkOrgAdmins: "alice is the org"})
+	findings, _ := github.AuditOrg(testOrg, map[string]string{"org-admins": "alice is the org"})
 
-	if finding, found := findingByCheck(findings, checkOrgAdmins); !found || finding.Status != StatusAdvisory ||
+	if finding, found := findingByCheck(findings, "org-admins"); !found || finding.Status != github.StatusAdvisory ||
 		!strings.Contains(finding.Message, "mallory") {
 		t.Errorf("an owner on the second page must surface: %v (%s)", finding.Status, finding.Message)
 	}
 
-	if finding, found := findingByCheck(findings, checkOrgRenovateInstalled); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(
+		findings,
+		"org-renovate-installed",
+	); !found ||
+		finding.Status != github.StatusOK {
 		t.Errorf("renovate on the second page of installations: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
-	if finding, found := findingByCheck(findings, checkOrgInstalledApps); !found ||
+	if finding, found := findingByCheck(findings, "org-installed-apps"); !found ||
 		!strings.Contains(finding.Message, "some-app") || !strings.Contains(finding.Message, "renovate") {
 		t.Errorf("the app inventory must list both pages: %s", finding.Message)
 	}
@@ -339,23 +364,23 @@ func TestAuditOrgSecondPage(t *testing.T) {
 // TestAuditOrgUnverifiable: a token that can read nothing yields only
 // unverifiable verdicts — never a pass, never a planned change.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgUnverifiable(t *testing.T) {
 	stubGH(t, map[string]stubResponse{})
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
 	if len(changes) != 0 {
 		t.Errorf("an unverifiable org audit planned %d change(s)", len(changes))
 	}
 
 	for _, finding := range findings {
-		if finding.Status != StatusUnverifiable {
+		if finding.Status != github.StatusUnverifiable {
 			t.Errorf("%s: %v, want unverifiable", finding.Check, finding.Status)
 		}
 	}
 
-	if AllOK(findings) {
+	if github.AllOK(findings) {
 		t.Error("an entirely unverifiable org audit must not count as passing")
 	}
 }
@@ -364,31 +389,40 @@ func TestAuditOrgUnverifiable(t *testing.T) {
 // with the owner-scoped fields simply absent — those checks must classify
 // as unverifiable, never as compliant zero values.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgAnonymousObject(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET orgs/test-org"] = stubResponse{Body: `{"description": "an organization"}`}
 	stubGH(t, responses)
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
 	if len(changes) != 0 {
 		t.Errorf("absent fields planned %d change(s) — a zero value leaked through as a verdict", len(changes))
 	}
 
 	hidden := []string{
-		checkOrgTwoFactor, checkOrgDefaultRepoPerm, checkOrgCreatePublicRepos,
-		checkOrgForkPrivateRepos, checkOrgChangeVisibility, checkOrgDeleteRepos,
-		checkOrgCreatePublicPages, checkOrgWebCommitSignoff,
+		"org-two-factor-requirement",
+		"org-default-repository-permission",
+		"org-members-create-public-repositories",
+		"org-members-fork-private-repositories",
+		"org-members-change-repository-visibility",
+		"org-members-delete-repositories",
+		"org-members-create-public-pages",
+		"org-web-commit-signoff",
 	}
 	for _, check := range hidden {
-		if finding, found := findingByCheck(findings, check); !found || finding.Status != StatusUnverifiable {
+		if finding, found := findingByCheck(findings, check); !found || finding.Status != github.StatusUnverifiable {
 			t.Errorf("%s: %v, want unverifiable (the field is owner-scoped)", check, finding.Status)
 		}
 	}
 
 	// The public field still answers.
-	if finding, found := findingByCheck(findings, checkOrgProfileDescription); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(
+		findings,
+		"org-profile-description",
+	); !found ||
+		finding.Status != github.StatusOK {
 		t.Errorf("org-profile-description: %v, want ok", finding.Status)
 	}
 }
@@ -397,8 +431,15 @@ func TestAuditOrgAnonymousObject(t *testing.T) {
 func TestOrgOverridesValidate(t *testing.T) {
 	t.Parallel()
 
-	if !knownChecks()[checkOrgAdmins] || !knownChecks()[checkOrgActionsShaPinning] {
-		t.Error("org check identifiers must be valid override-file keys")
+	dir := t.TempDir()
+
+	file := "github:\n  org-admins: alice is the org\n  org-actions-sha-pinning: pinned by hand\n"
+	if err := os.WriteFile(filepath.Join(dir, github.OverridePath), []byte(file), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := github.LoadOverrides(dir); err != nil {
+		t.Errorf("org check identifiers must be valid override-file keys: %v", err)
 	}
 }
 
@@ -407,7 +448,7 @@ func TestOrgOverridesValidate(t *testing.T) {
 // write the compliant allowed-actions policy back unchanged — and must not
 // touch the selected-actions allowlist, which belongs to whoever curated it.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET orgs/test-org/actions/permissions"] = stubResponse{
@@ -415,16 +456,16 @@ func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgActionsAllowed); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(findings, "org-actions-allowed"); !found || finding.Status != github.StatusOK {
 		t.Fatalf("local_only policy: %v, want ok", finding.Status)
 	}
 
 	applied := false
 
 	for _, planned := range changes {
-		if planned.Check == checkOrgActionsShaPinning {
+		if planned.Check == "org-actions-sha-pinning" {
 			applied = true
 
 			if err := planned.Apply(); err != nil {
@@ -432,7 +473,7 @@ func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 			}
 		}
 
-		if planned.Check == checkOrgActionsAllowed || planned.Check == checkOrgActionsEnabledRepos {
+		if planned.Check == "org-actions-allowed" || planned.Check == "org-actions-enabled-repositories" {
 			t.Errorf("%s: compliant state planned a change", planned.Check)
 		}
 	}
@@ -472,7 +513,7 @@ func configurationsResponse(targetType, securityUpdates string) stubResponse {
 // reach — GitHub answers the repo-level DELETE with 422 while the
 // configuration says enabled — so the fix must land on the org object.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgDependabotSecurityUpdatesFixed(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = configurationsResponse(
@@ -481,17 +522,17 @@ func TestAuditOrgDependabotSecurityUpdatesFixed(t *testing.T) {
 
 	logPath := stubGH(t, responses)
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
-	finding, found := findingByCheck(findings, checkOrgDependabotFixes)
-	if !found || finding.Status != StatusFail {
+	finding, found := findingByCheck(findings, "org-dependabot-security-updates")
+	if !found || finding.Status != github.StatusFail {
 		t.Fatalf("an enabling configuration must fail, got %v", finding.Status)
 	}
 
-	var planned *Change
+	var planned *github.Change
 
 	for index, change := range changes {
-		if change.Check == checkOrgDependabotFixes {
+		if change.Check == "org-dependabot-security-updates" {
 			planned = &changes[index]
 		}
 	}
@@ -523,7 +564,7 @@ func TestAuditOrgDependabotSecurityUpdatesFixed(t *testing.T) {
 // organization does not own is advisory — PATCH would be refused, and
 // detaching repositories from it is a human decision.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgDependabotSecurityUpdatesNotOurs(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = configurationsResponse(
@@ -533,15 +574,15 @@ func TestAuditOrgDependabotSecurityUpdatesNotOurs(t *testing.T) {
 
 	stubGH(t, responses)
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
-	finding, found := findingByCheck(findings, checkOrgDependabotFixes)
-	if !found || finding.Status != StatusAdvisory {
+	finding, found := findingByCheck(findings, "org-dependabot-security-updates")
+	if !found || finding.Status != github.StatusAdvisory {
 		t.Fatalf("a configuration we do not own must be advisory, got %v", finding.Status)
 	}
 
 	for _, change := range changes {
-		if change.Check == checkOrgDependabotFixes {
+		if change.Check == "org-dependabot-security-updates" {
 			t.Error("an unowned configuration must never plan a change")
 		}
 	}
@@ -551,17 +592,17 @@ func TestAuditOrgDependabotSecurityUpdatesNotOurs(t *testing.T) {
 // the configurations reports unverifiable, never ok — what cannot be verified
 // does not pass.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgDependabotSecurityUpdatesUnverifiable(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = stubResponse{Fail: true}
 
 	stubGH(t, responses)
 
-	findings, _ := AuditOrg(testOrg, nil)
+	findings, _ := github.AuditOrg(testOrg, nil)
 
-	finding, found := findingByCheck(findings, checkOrgDependabotFixes)
-	if !found || finding.Status != StatusUnverifiable {
+	finding, found := findingByCheck(findings, "org-dependabot-security-updates")
+	if !found || finding.Status != github.StatusUnverifiable {
 		t.Fatalf("an unreadable configuration list must be unverifiable, got %v", finding.Status)
 	}
 }

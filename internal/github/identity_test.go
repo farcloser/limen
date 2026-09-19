@@ -2,13 +2,15 @@
 // through an httptest server named by GITHUB_API_URL, the authed slug lookup
 // through the gh stub.
 
-package github //nolint:testpackage // white-box (see audit_test.go).
+package github_test
 
 import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 // usersServer serves the public users endpoint for the given bot logins.
@@ -41,7 +43,7 @@ func TestResolveUpdateAppIdentityConvention(t *testing.T) {
 		"/users/limen-ci-test-org[bot]": `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`,
 	})
 
-	identity, err := ResolveUpdateAppIdentity("test-org")
+	identity, err := github.ResolveUpdateAppIdentity("test-org")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -78,7 +80,7 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 		"/users/our-ci-pusher[bot]": `{"id": 99, "login": "our-ci-pusher[bot]", "type": "Bot"}`,
 	})
 
-	identity, err := DiscoverUpdateAppIdentity("test-org")
+	identity, err := github.DiscoverUpdateAppIdentity("test-org")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -87,8 +89,8 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 		t.Errorf("identity = %+v, want the renamed App", identity)
 	}
 
-	if _, err := ResolveUpdateAppIdentity("test-org"); !errors.Is(err, ErrUpdateAppUnknown) {
-		t.Errorf("resolve with a renamed App: %v, want ErrUpdateAppUnknown (check stays credential-independent)",
+	if _, err := github.ResolveUpdateAppIdentity("test-org"); !errors.Is(err, github.ErrUpdateAppUnknown) {
+		t.Errorf("resolve with a renamed App: %v, want github.ErrUpdateAppUnknown (check stays credential-independent)",
 			err)
 	}
 }
@@ -103,12 +105,12 @@ func TestDiscoverUpdateAppIdentityFallsBack(t *testing.T) {
 		"/users/limen-ci-test-org[bot]": `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`,
 	})
 
-	discovered, err := DiscoverUpdateAppIdentity("test-org")
+	discovered, err := github.DiscoverUpdateAppIdentity("test-org")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
 
-	resolved, err := ResolveUpdateAppIdentity("test-org")
+	resolved, err := github.ResolveUpdateAppIdentity("test-org")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -119,7 +121,7 @@ func TestDiscoverUpdateAppIdentityFallsBack(t *testing.T) {
 }
 
 // TestResolveUpdateAppIdentityUnknown: no App under the expected name is
-// ErrUpdateAppUnknown — the callers' "not enforced" signal — and so is a
+// github.ErrUpdateAppUnknown — the callers' "not enforced" signal — and so is a
 // record that is not a Bot.
 //
 //nolint:paralleltest // serial by design: sets the process environment.
@@ -129,11 +131,11 @@ func TestResolveUpdateAppIdentityUnknown(t *testing.T) {
 		"/users/limen-ci-human[bot]": `{"id": 7, "login": "limen-ci-human[bot]", "type": "User"}`,
 	})
 
-	if _, err := ResolveUpdateAppIdentity("nobody"); !errors.Is(err, ErrUpdateAppUnknown) {
-		t.Errorf("unregistered App: %v, want ErrUpdateAppUnknown", err)
+	if _, err := github.ResolveUpdateAppIdentity("nobody"); !errors.Is(err, github.ErrUpdateAppUnknown) {
+		t.Errorf("unregistered App: %v, want github.ErrUpdateAppUnknown", err)
 	}
 
-	if _, err := ResolveUpdateAppIdentity("human"); !errors.Is(err, ErrUpdateAppUnknown) {
-		t.Errorf("non-bot record: %v, want ErrUpdateAppUnknown", err)
+	if _, err := github.ResolveUpdateAppIdentity("human"); !errors.Is(err, github.ErrUpdateAppUnknown) {
+		t.Errorf("non-bot record: %v, want github.ErrUpdateAppUnknown", err)
 	}
 }
