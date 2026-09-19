@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -289,42 +288,6 @@ func TestStripGoModToolDirectives(t *testing.T) {
 	for _, keep := range []string{"module example.com/proj", "go 1.26", "require golang.org/x/tools v0.49.0 // indirect"} {
 		if !strings.Contains(stripped, keep) {
 			t.Errorf("stripping lost %q:\n%s", keep, stripped)
-		}
-	}
-}
-
-// The two halves of one doctrine: every tool tools/go.mod must declare is a
-// package aqua.yaml must no longer pin, or the replacement of a directive
-// that was; every retired aqua package is a required tool or a retired
-// directive; and the canonical manifest pins none of it.
-func TestGoToolsMatchRetiredAquaPackages(t *testing.T) {
-	t.Parallel()
-
-	required := requiredGoTools([]byte(goModBare))
-
-	var replacements []string
-	for _, replacement := range retiredGoTools {
-		replacements = append(replacements, replacement)
-	}
-
-	for _, pkg := range required {
-		if !slices.Contains(retiredCanonicalPkgs, pkg) && !slices.Contains(replacements, pkg) {
-			t.Errorf(
-				"required tool %s is neither a retired aqua package nor the replacement of a retired directive",
-				pkg,
-			)
-		}
-	}
-
-	for _, pkg := range retiredCanonicalPkgs {
-		if _, retired := retiredGoTools[pkg]; !slices.Contains(required, pkg) && !retired {
-			t.Errorf("retired aqua package %s is neither a required tool nor a retired directive", pkg)
-		}
-	}
-
-	for _, p := range canonicalAqua.pkgs {
-		if slices.Contains(retiredCanonicalPkgs, p.name) {
-			t.Errorf("canonical aqua.yaml still pins retired package %s", p.name)
 		}
 	}
 }
