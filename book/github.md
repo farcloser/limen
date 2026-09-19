@@ -332,6 +332,15 @@ laptop and in CI (`GH_TOKEN`). Reading most of the security settings needs a
 token with repository administration read access; below that, findings degrade
 to `unverifiable` — which fails the check rather than faking compliance.
 
+One call is the exception, on purpose: the lookup of the update-App's bot
+user id, which `limen check` needs to verify `gitIgnoredAuthors` in
+`renovate.json`. It reads the public users endpoint directly, with no
+credential. `gh` refuses to run without a login, and the verify legs carry
+none, so a lookup through `gh` would resolve on a laptop that is logged in
+and not in CI — the same tree, red in one place and green in the other,
+which is the one thing `check` must never do. The endpoint honors
+`GITHUB_API_URL`, the variable Actions exports and an Enterprise host sets.
+
 ## Organization level
 
 `limen github check -org <name>` (and `fix -org <name>`) audits the
