@@ -231,6 +231,28 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("second fix: %s, want none", o.Action)
 	}
 
+	// A compliant file in the project's own serialization — keys in its
+	// order, an escaped non-ASCII character — is left byte for byte: fix
+	// decides on values, and a rewrite into limen's form on every run put a
+	// formatting diff into every branch the checksum workflow ran on.
+	handEdited := compliantFiles()
+	handEdited[pathRenovate] = `{"gitIgnoredAuthors":["` + testIdentity + `"],"forkProcessing":"enabled",` +
+		`"extends":["github>farcloser/limen#` + canonicalLimenVersion(t) + `"],"description":["\u2014 by hand"]}` + "\n"
+	root = writeRepo(t, handEdited)
+
+	if f := findingByRule(Check(root, known), ruleRenovate); !f.OK() {
+		t.Errorf("a compliant hand-edited file must pass: %s", f.Message)
+	}
+
+	if o := outcomeByRule(Fix(root, FixOptions{Policy: known}), ruleRenovate); o.Action != ActionNone {
+		t.Errorf("fix on a compliant hand-edited file: %s (%s), want none", o.Action, o.Message)
+	}
+
+	got, readErr := os.ReadFile(filepath.Join(root, pathRenovate))
+	if readErr != nil || string(got) != handEdited[pathRenovate] {
+		t.Errorf("fix must leave a value-identical file untouched, got:\n%s", got)
+	}
+
 	// The seed as seeded — extending limen's own default branch — is not what
 	// a repository must carry: check names the pinned reference, fix sets it
 	// (identity known or not), and the file is otherwise untouched.

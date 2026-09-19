@@ -374,16 +374,23 @@ func remediateRenovate(root string, opts FixOptions) Outcome {
 		}
 	}
 
-	var done []string
+	var (
+		done    []string
+		changed bool
+	)
 
 	if ref := canonicalPresetRef(root); ref != "" && !cfg.hasPresetRef(ref) {
 		cfg.setPresetRef(ref)
+
+		changed = true
 
 		done = append(done, "set extends to the shared preset "+ref)
 	}
 
 	if !cfg.hasForkProcessing() {
 		cfg[forkProcessingKey] = forkProcessingValue
+
+		changed = true
 
 		done = append(done, "set "+forkProcessingKey+" to \""+forkProcessingValue+"\"")
 	}
@@ -396,16 +403,22 @@ func remediateRenovate(root string, opts FixOptions) Outcome {
 	default:
 		cfg.addIgnoredAuthor(opts.Policy.UpdateAppIdentity)
 
+		changed = true
+
 		done = append(done, "added the update-App identity "+opts.Policy.UpdateAppIdentity+" to "+ignoredAuthorsKey)
+	}
+
+	// Decided on values, never on bytes: render is limen's serialization
+	// (sorted keys, raw UTF-8), not the project's, and comparing it to the
+	// file rewrote every hand-edited config on every run — the checksum
+	// workflow then carried that formatting diff into each Renovate branch.
+	if !changed {
+		return Outcome{Rule: ruleRenovate, Action: ActionNone, Path: pathRenovate, Message: strings.Join(done, "; ")}
 	}
 
 	content, err := render(cfg)
 	if err != nil {
 		return Outcome{Rule: ruleRenovate, Action: ActionFailed, Path: pathRenovate, Message: err.Error()}
-	}
-
-	if content == string(data) {
-		return Outcome{Rule: ruleRenovate, Action: ActionNone, Path: pathRenovate, Message: strings.Join(done, "; ")}
 	}
 
 	if err := writeFile(root, pathRenovate, content); err != nil {
