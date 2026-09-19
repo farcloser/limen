@@ -1,6 +1,6 @@
-// White-box tests for the update-App identity resolver: the public users
-// endpoint through an httptest server, the authed slug lookup through the gh
-// stub seam.
+// Tests for the update-App identity resolver: the public users endpoint
+// through an httptest server named by GITHUB_API_URL, the authed slug lookup
+// through the gh stub.
 
 package github //nolint:testpackage // white-box (see audit_test.go).
 
@@ -27,18 +27,14 @@ func usersServer(t *testing.T, users map[string]string) {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(server.Close)
-
-	previous := usersAPIBase
-	usersAPIBase = server.URL
-
-	t.Cleanup(func() { usersAPIBase = previous })
+	t.Setenv("GITHUB_API_URL", server.URL)
 }
 
 // TestResolveUpdateAppIdentityConvention: without an authed gh (every org
 // endpoint fails), the slug is limen's naming convention and the id comes
 // from the users endpoint. The email is the exact noreply form.
 //
-//nolint:paralleltest // serial by design: mutates package-level seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestResolveUpdateAppIdentityConvention(t *testing.T) {
 	stubGH(t, map[string]stubResponse{}) // nothing answers: unauthenticated laptop
 	usersServer(t, map[string]string{
@@ -66,7 +62,7 @@ func TestResolveUpdateAppIdentityConvention(t *testing.T) {
 // must not depend on who runs it, so it knows only the convention name (which
 // here does not exist) and reports unknown.
 //
-//nolint:paralleltest // serial by design: mutates package-level seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org/actions/variables/UPDATE_AQUA_CHECKSUM_APP_ID": {
@@ -100,7 +96,7 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 // TestDiscoverUpdateAppIdentityFallsBack: without a usable token, Discover
 // gives the same answer as Resolve — the convention.
 //
-//nolint:paralleltest // serial by design: mutates package-level seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestDiscoverUpdateAppIdentityFallsBack(t *testing.T) {
 	stubGH(t, map[string]stubResponse{})
 	usersServer(t, map[string]string{
@@ -126,7 +122,7 @@ func TestDiscoverUpdateAppIdentityFallsBack(t *testing.T) {
 // ErrUpdateAppUnknown — the callers' "not enforced" signal — and so is a
 // record that is not a Bot.
 //
-//nolint:paralleltest // serial by design: mutates package-level seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestResolveUpdateAppIdentityUnknown(t *testing.T) {
 	stubGH(t, map[string]stubResponse{})
 	usersServer(t, map[string]string{
