@@ -223,6 +223,13 @@ The decided merge model, enforced by both the repository settings and the
   point; a windows leg that skips it has stopped proving anything about
   windows. Speed comes from caches (below), never from proving less.
 
+  The runner images are part of what is proven, so they are not dependencies
+  to bump: the shared Renovate preset turns off the runner-image proposals
+  the github-actions manager would otherwise raise (`ubuntu-24.04` to
+  `26.04`, `macos-15` to `26`). The matrix moves when a platform target
+  moves, as a reviewed change to the canonical seed; the actions the
+  workflows call keep being bumped like any dependency.
+
   <a id="fuzz"></a>
   **Fuzz.** The canonical `ci.yaml` also carries a `fuzz` job: one linux leg
   running `just do test go fuzz`, a short coverage-guided fuzz of every
