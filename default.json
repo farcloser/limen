@@ -13,6 +13,7 @@
     "packageRules, Go-built tools: the tools/go.mod tool directives (git-validation, godolint, dot, and the Go-source analyzers deadcode, govulncheck, go-licenses), which Go lists as // indirect and the gomod manager would skip; re-enabled exactly, by module. dot is forkcloser's own tagged module (upstream's cmd/dot is a nested module without tags), so it moves like the others, and as one of ours it is proposed without the cooldown.",
     "packageRules, go toolchain: golangci-lint embeds Go's type checker, so a golang/go bump can only land with (or after) a golangci release built with that Go; one grouped PR keeps the two in lockstep and the lint recipe's toolchain check names the fix when they still disagree.",
     "packageRules, lychee: releases are tagged lychee-vX.Y.Z next to lychee-lib-vX.Y.Z and nightly; regex versioning that carries the prefix parses the pin and the candidates alike and excludes the others by construction.",
+    "packageRules, runner images: the github-actions manager, which config:recommended enables, also proposes the runs-on images (ubuntu-24.04 to 26.04, macos-15 to 26) from the github-runners datasource. Those are product targets, not dependencies: the matrix is the set of platforms the code and the commands are proven on, set by the canonical ci.yaml seed and moved deliberately, on purpose, as a reviewed change. Off for that datasource; the actions themselves keep moving.",
     "commitBody: `just do lint commits` enforces DCO on every PR range, bot commits included."
   ],
   "extends": [
@@ -75,6 +76,12 @@
         "lycheeverse/lychee"
       ],
       "versioning": "regex:^lychee-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
+    },
+    {
+      "matchDatasources": [
+        "github-runners"
+      ],
+      "enabled": false
     }
   ],
   "commitBody": "Signed-off-by: renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>"
