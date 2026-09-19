@@ -481,7 +481,9 @@ The workflow accepts two, in order of preference:
    the browser, one more to install it — and stores the id and key on the org. The step is
    idempotent (a configured org is verified and left alone), and anything it cannot do or
    verify under the current gh token — no org admin, no browser, a half-configured org —
-   is a printed warning, never a failed bootstrap. Rerun any time.
+   is a printed warning, never a failed bootstrap. Rerun any time. The browser is the
+   command `BROWSER` names when that variable is set, the platform opener otherwise; a
+   Ctrl-C while it waits for the click ends the step as a warning, not a killed bootstrap.
 
    The manual equivalent, one-time setup per org:
    - Register an App on the org (Settings → Developer settings → GitHub Apps): webhook

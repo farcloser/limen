@@ -59,66 +59,68 @@ var (
 	)
 )
 
-// Test seams, following the ghBin precedent: package vars a test substitutes.
-//
-//nolint:gochecknoglobals // test seams, like ghBin.
-var (
-	// openBrowser opens url in the user's browser.
-	openBrowser = func(url string) error {
-		var name string
-
-		var args []string
-
-		switch runtime.GOOS {
-		case "darwin":
-			name, args = "open", []string{url}
-		case "windows":
-			name, args = "rundll32", []string{"url.dll,FileProtocolHandler", url}
-		default:
-			name, args = "xdg-open", []string{url}
-		}
-
-		// name is from the fixed table above; url is built by this package.
-		cmd := exec.CommandContext(context.Background(), name, args...) // #nosec G204 -- see above.
-		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("opening the browser: %w", err)
-		}
-
-		return nil
-	}
-
-	// writeOrgSecret stores an org Actions secret through `gh secret set`,
-	// which owns the sealed-box encryption the raw API would demand of us.
-	// The one sanctioned deviation from the `gh api` shape — still the gh
-	// CLI, still gh's credential.
-	writeOrgSecret = func(org, name string, value []byte) error {
-		args := []string{"secret", "set", name, "--org", org, "--visibility", "all"}
-
-		// ghBin is "gh" outside tests; args are fixed flags plus the org.
-		cmd := exec.CommandContext(context.Background(), ghBin, args...) // #nosec G204 -- see above.
-		cmd.Stdin = strings.NewReader(string(value))
-
-		var stderr strings.Builder
-
-		cmd.Stderr = &stderr
-
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("gh secret set %s --org %s: %w: %s", name, org, err, condenseStderr(stderr.String()))
-		}
-
-		return nil
-	}
-
-	// interactiveEnvironment reports whether a browser ceremony can happen at
-	// all. CI covers GitHub Actions and every mainstream CI system.
-	interactiveEnvironment = func() bool { return os.Getenv("CI") == "" }
-
-	// callbackWait bounds the browser round-trip; installWait and installPoll
-	// bound the post-registration installation check.
+// callbackWait bounds the browser round-trip; installWait and installPoll
+// bound the post-registration installation check. The caller's context cuts
+// either short (Ctrl-C, a deadline).
+const (
 	callbackWait = 3 * time.Minute
 	installWait  = 3 * time.Minute
 	installPoll  = 5 * time.Second
 )
+
+// openBrowser opens url in the user's browser: the command BROWSER names when
+// the variable is set (the convention gh and git share), the platform opener
+// otherwise. The process is started, not awaited — a browser that stays open
+// is the normal case.
+func openBrowser(ctx context.Context, url string) error {
+	name, args := os.Getenv("BROWSER"), []string{url}
+
+	if name == "" {
+		switch runtime.GOOS {
+		case "darwin":
+			name = "open"
+		case "windows":
+			name, args = "rundll32", []string{"url.dll,FileProtocolHandler", url}
+		default:
+			name = "xdg-open"
+		}
+	}
+
+	// name is the user's own BROWSER or the fixed table above; url is built
+	// by this package.
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 G702 -- see above.
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("opening the browser: %w", err)
+	}
+
+	return nil
+}
+
+// writeOrgSecret stores an org Actions secret through `gh secret set`, which
+// owns the sealed-box encryption the raw API would demand of us. The one
+// sanctioned deviation from the `gh api` shape — still the gh CLI, still
+// gh's credential.
+func writeOrgSecret(ctx context.Context, org, name string, value []byte) error {
+	args := []string{"secret", "set", name, "--org", org, "--visibility", "all"}
+
+	// ghBin is "gh" outside tests; args are fixed flags plus the org.
+	cmd := exec.CommandContext(ctx, ghBin, args...) // #nosec G204 -- see above.
+	cmd.Stdin = strings.NewReader(string(value))
+
+	var stderr strings.Builder
+
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("gh secret set %s --org %s: %w: %s", name, org, err, condenseStderr(stderr.String()))
+	}
+
+	return nil
+}
+
+// interactive reports whether a browser ceremony can happen at all. CI
+// covers GitHub Actions and every mainstream CI system.
+func interactive() bool { return os.Getenv("CI") == "" }
 
 // EnsureUpdateAquaChecksumApp converges the org toward a configured push
 // credential and reports the resulting state as a single finding:
@@ -128,7 +130,11 @@ var (
 //	unverifiable — the token cannot answer; nothing was changed
 //
 // It never returns StatusFail: bootstrap treats every non-ok as a warning.
-func EnsureUpdateAquaChecksumApp(org string, progress io.Writer) Finding {
+// ctx bounds the two waits on the human (the browser approval and the
+// installation click); cancelling it turns the wait into an advisory.
+//
+//nolint:contextcheck // the gh client carries no context (see runGH); ctx bounds the waits on the human, not the API reads.
+func EnsureUpdateAquaChecksumApp(ctx context.Context, org string, progress io.Writer) Finding {
 	orgAPI := orgClient(org)
 
 	if outcome := orgAPI.api("GET", "", nil); outcome.err != nil || outcome.notFound {
@@ -162,14 +168,14 @@ func EnsureUpdateAquaChecksumApp(org string, progress io.Writer) Finding {
 		))
 	}
 
-	if !interactiveEnvironment() {
+	if !interactive() {
 		return updateAppFinding(
 			StatusAdvisory,
 			"App not configured, and registering one needs a browser — rerun `limen bootstrap` (or follow book/tooling.md) from a workstation",
 		)
 	}
 
-	return registerUpdateApp(org, orgAPI, progress)
+	return registerUpdateApp(ctx, org, orgAPI, progress)
 }
 
 // updateAppState is what the two idempotence probes found.
@@ -325,8 +331,10 @@ type appConversion struct {
 // registerUpdateApp runs the manifest flow end to end: browser approval,
 // code conversion, credential storage, installation. Each failure names the
 // step so the finding is actionable.
-func registerUpdateApp(org string, orgAPI client, progress io.Writer) Finding {
-	code, err := manifestApproval(org, progress)
+//
+//nolint:contextcheck // the gh client carries no context (see runGH); ctx bounds the waits on the human.
+func registerUpdateApp(ctx context.Context, org string, orgAPI client, progress io.Writer) Finding {
+	code, err := manifestApproval(ctx, org, progress)
 	if err != nil {
 		return updateAppFinding(StatusAdvisory, fmt.Sprintf("App registration did not complete: %v", err))
 	}
@@ -354,7 +362,7 @@ func registerUpdateApp(org string, orgAPI client, progress io.Writer) Finding {
 		)
 	}
 
-	if err := writeOrgSecret(org, updateAppSecret, []byte(conversion.PEM)); err != nil {
+	if err := writeOrgSecret(ctx, org, updateAppSecret, []byte(conversion.PEM)); err != nil {
 		return updateAppFinding(
 			StatusAdvisory,
 			fmt.Sprintf(
@@ -368,14 +376,14 @@ func registerUpdateApp(org string, orgAPI client, progress io.Writer) Finding {
 
 	_, _ = fmt.Fprintf(progress, "limen: %s and %s set on org %s\n", updateAppVariable, updateAppSecret, org)
 
-	return awaitInstallation(orgAPI, conversion, progress)
+	return awaitInstallation(ctx, orgAPI, conversion, progress)
 }
 
 // manifestApproval serves the pre-filled manifest form on localhost, sends
 // the user's browser to it, and waits for GitHub to redirect back with the
 // one-time code.
-func manifestApproval(org string, progress io.Writer) (string, error) {
-	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+func manifestApproval(ctx context.Context, org string, progress io.Writer) (string, error) {
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", fmt.Errorf("listening for the GitHub redirect: %w", err)
 	}
@@ -410,9 +418,12 @@ func manifestApproval(org string, progress io.Writer) (string, error) {
 		formURL,
 	)
 
-	if err := openBrowser(formURL); err != nil {
+	if err := openBrowser(ctx, formURL); err != nil {
 		_, _ = fmt.Fprintf(progress, "limen: %v — open the URL above manually\n", err)
 	}
+
+	wait, cancel := context.WithTimeout(ctx, callbackWait)
+	defer cancel()
 
 	select {
 	case code := <-codes:
@@ -421,8 +432,8 @@ func manifestApproval(org string, progress io.Writer) (string, error) {
 		}
 
 		return code, nil
-	case <-time.After(callbackWait):
-		return "", errCallbackTimeout
+	case <-wait.Done():
+		return "", fmt.Errorf("%w: %w", errCallbackTimeout, wait.Err())
 	}
 }
 
@@ -517,7 +528,9 @@ func convertManifestCode(code string) (appConversion, error) {
 // until the installation appears (installing is the one step GitHub reserves
 // for the UI). Timing out is an advisory, not a failure: the credential is
 // stored, only the click is missing.
-func awaitInstallation(orgAPI client, conversion appConversion, progress io.Writer) Finding {
+//
+//nolint:contextcheck // the gh client carries no context (see runGH); ctx bounds the wait on the human.
+func awaitInstallation(ctx context.Context, orgAPI client, conversion appConversion, progress io.Writer) Finding {
 	installURL := conversion.HTMLURL + "/installations/new"
 
 	_, _ = fmt.Fprintf(
@@ -526,12 +539,14 @@ func awaitInstallation(orgAPI client, conversion appConversion, progress io.Writ
 		installURL,
 	)
 
-	if err := openBrowser(installURL); err != nil {
+	if err := openBrowser(ctx, installURL); err != nil {
 		_, _ = fmt.Fprintf(progress, "limen: %v — open the URL above manually\n", err)
 	}
 
 	appID := strconv.FormatInt(conversion.ID, decimalBase)
-	deadline := time.Now().Add(installWait)
+
+	wait, cancel := context.WithTimeout(ctx, installWait)
+	defer cancel()
 
 	for {
 		installation, err := findInstallation(orgAPI, appID)
@@ -557,7 +572,8 @@ func awaitInstallation(orgAPI client, conversion appConversion, progress io.Writ
 				fmt.Sprintf("App %q registered, credentials stored, installed (id %s)", conversion.Slug, appID))
 		}
 
-		if time.Now().After(deadline) {
+		select {
+		case <-wait.Done():
 			return updateAppFinding(
 				StatusAdvisory,
 				fmt.Sprintf(
@@ -566,9 +582,8 @@ func awaitInstallation(orgAPI client, conversion appConversion, progress io.Writ
 					installURL,
 				),
 			)
+		case <-time.After(installPoll):
 		}
-
-		time.Sleep(installPoll)
 	}
 }
 
