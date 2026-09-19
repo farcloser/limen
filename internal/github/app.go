@@ -103,8 +103,8 @@ func openBrowser(ctx context.Context, url string) error {
 func writeOrgSecret(ctx context.Context, org, name string, value []byte) error {
 	args := []string{"secret", "set", name, "--org", org, "--visibility", "all"}
 
-	// ghBin is "gh" outside tests; args are fixed flags plus the org.
-	cmd := exec.CommandContext(ctx, ghBin, args...) // #nosec G204 -- see above.
+	// gh on the hermetic PATH; args are fixed flags plus the org.
+	cmd := exec.CommandContext(ctx, "gh", args...) // #nosec G204 -- see above.
 	cmd.Stdin = strings.NewReader(string(value))
 
 	var stderr strings.Builder
