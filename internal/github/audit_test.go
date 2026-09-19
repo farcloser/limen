@@ -186,6 +186,12 @@ func runGHStub(dir string) int {
 		return 1
 	}
 
+	// `gh secret set NAME --org ORG …`: keyed on those five words, and the
+	// secret's value (stdin) is logged like a write payload.
+	if args[0] == "secret" {
+		return runGHSecretStub(dir, args)
+	}
+
 	method, path := args[2], args[3]
 	key := method + " " + path
 
@@ -271,6 +277,60 @@ func runGHStub(dir string) int {
 
 		return 0
 	}
+}
+
+// runGHSecretStub plays `gh secret set`: it logs the invocation and the
+// value it was fed, then fails when the test listed the key as failing.
+func runGHSecretStub(dir string, args []string) int {
+	const keyWords = 5 // secret set NAME --org ORG
+
+	if len(args) < keyWords {
+		fmt.Fprintf(os.Stderr, "gh stub: unexpected secret argv %q\n", args)
+
+		return 1
+	}
+
+	key := strings.Join(args[:keyWords], " ")
+
+	logFile, err := os.OpenFile(filepath.Join(dir, "calls.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
+
+		return 1
+	}
+	defer logFile.Close()
+
+	fmt.Fprintln(logFile, key)
+
+	if _, err := io.Copy(logFile, os.Stdin); err != nil {
+		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
+
+		return 1
+	}
+
+	fmt.Fprintln(logFile)
+
+	raw, err := os.ReadFile(filepath.Join(dir, "responses.json"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
+
+		return 1
+	}
+
+	var responses map[string]stubResponse
+	if err := json.Unmarshal(raw, &responses); err != nil {
+		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
+
+		return 1
+	}
+
+	if responses[key].Fail {
+		fmt.Fprintln(os.Stderr, "gh: secret set refused (HTTP 403)")
+
+		return 1
+	}
+
+	return 0
 }
 
 // compliantResponses answers every audited endpoint with baseline-satisfying

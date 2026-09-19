@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"strings"
 	"time"
@@ -446,7 +447,12 @@ func ensureUpdateApp(org, root string, stderr io.Writer) {
 		return
 	}
 
-	finding := github.EnsureUpdateAquaChecksumApp(org, stderr)
+	// Ctrl-C ends the waits on the human (browser approval, installation
+	// click) as an advisory instead of a killed bootstrap.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	finding := github.EnsureUpdateAquaChecksumApp(ctx, org, stderr)
 	if finding.OK() {
 		_, _ = fmt.Fprintf(stderr, "limen: update-app: %s\n", finding.Message)
 
