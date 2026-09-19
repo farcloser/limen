@@ -1,25 +1,26 @@
 // Keeps limen-example.yaml honest: the reference file and the live check
 // catalog must never drift apart.
 
-package github //nolint:testpackage // white-box: needs knownChecks.
+package github_test
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/farcloser/limen"
+	"github.com/farcloser/limen/internal/github"
 )
 
 // exampleEntryRE matches one commented-out declaration entry in the example
 // file: `#   check-id: …`.
 var exampleEntryRE = regexp.MustCompile(`(?m)^#   ([a-z0-9-]+): `)
 
-// TestOverrideExampleCoversEveryCheck: every check identifier appears in
-// limen-example.yaml, and every entry the example shows is a real identifier —
-// adding a check without documenting it (or documenting a phantom) fails here.
-func TestOverrideExampleCoversEveryCheck(t *testing.T) {
-	t.Parallel()
+// documentedChecks returns every check identifier limen-example.yaml documents.
+func documentedChecks(t *testing.T) map[string]bool {
+	t.Helper()
 
 	documented := map[string]bool{}
 	for _, match := range exampleEntryRE.FindAllStringSubmatch(limen.CanonicalOverrideExample, -1) {
@@ -30,21 +31,58 @@ func TestOverrideExampleCoversEveryCheck(t *testing.T) {
 		t.Fatal("no declaration entries found in limen-example.yaml — did its format change?")
 	}
 
-	for check := range knownChecks() {
-		if !documented[check] {
-			t.Errorf("check %q is missing from limen-example.yaml", check)
-		}
+	return documented
+}
+
+// TestOverrideExampleEntriesAreChecks: every entry the example shows is a
+// real identifier — the override loader, which validates identifiers,
+// accepts a file declaring all of them. Documenting a phantom fails here.
+func TestOverrideExampleEntriesAreChecks(t *testing.T) {
+	t.Parallel()
+
+	var file strings.Builder
+
+	file.WriteString("github:\n")
+
+	for entry := range documentedChecks(t) {
+		file.WriteString("  " + entry + ": documented\n")
 	}
 
-	for entry := range documented {
-		if !knownChecks()[entry] {
-			t.Errorf("limen-example.yaml documents %q, which is not a known check", entry)
-		}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, github.OverridePath), []byte(file.String()), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
-	// And the example must itself parse as a valid limen.yaml once the
-	// entries are uncommented — prove it for a sample by materializing one.
+	if _, err := github.LoadOverrides(dir); err != nil {
+		t.Errorf("limen-example.yaml documents an entry that is not a known check: %v", err)
+	}
+
 	if !strings.Contains(limen.CanonicalOverrideExample, "github:") {
 		t.Error("the example lacks the github: section header")
+	}
+}
+
+// TestOverrideExampleCoversEveryCheck: every check a compliant audit reports,
+// repository and organization alike, appears in limen-example.yaml — adding
+// a check without documenting it fails here.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestOverrideExampleCoversEveryCheck(t *testing.T) {
+	documented := documentedChecks(t)
+
+	responses := compliantResponses()
+	for key, response := range compliantOrgResponses() {
+		responses[key] = response
+	}
+
+	stubGH(t, responses)
+
+	findings, _ := github.Audit(testRepo, nil)
+	orgFindings, _ := github.AuditOrg(testOrg, nil)
+
+	for _, finding := range append(findings, orgFindings...) {
+		if !documented[finding.Check] {
+			t.Errorf("check %q is missing from limen-example.yaml", finding.Check)
+		}
 	}
 }

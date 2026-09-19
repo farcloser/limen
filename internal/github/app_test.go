@@ -1,75 +1,145 @@
-// White-box tests for the update-App automation, through the same gh stub
-// seam as the audit tests. Serial by design: they mutate package seams.
+// Tests for the update-App automation, through the gh stub. Serial by
+// design: they set the process environment (CI, BROWSER, the stub).
 
-package github //nolint:testpackage // white-box (see audit_test.go).
+package github_test
 
 import (
-	"errors"
+	"context"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 const (
-	testVariablePath = "GET orgs/test-org/actions/variables/" + updateAppVariable
-	testSecretPath   = "GET orgs/test-org/actions/secrets/" + updateAppSecret
+	testVariablePath = "GET orgs/test-org/actions/variables/" + "UPDATE_AQUA_CHECKSUM_APP_ID"
+	testSecretPath   = "GET orgs/test-org/actions/secrets/" + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY"
+	testSecretWrite  = "secret set " + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" + " --org test-org"
 )
 
-// appSeams swaps every interactive seam for the given test doubles and
-// restores them on cleanup. Passing nil keeps a seam's previous value.
-func appSeams(t *testing.T, browser func(string) error, secret func(string, string, []byte) error) {
+// interactiveRig makes the scenario interactive whatever the runner is (the
+// suite itself may run under CI) and points BROWSER at a command that opens
+// nothing, so no test ever reaches a real browser.
+func interactiveRig(t *testing.T) {
 	t.Helper()
-
-	previousBrowser := openBrowser
-	previousSecret := writeOrgSecret
-	previousInteractive := interactiveEnvironment
-	previousCallbackWait := callbackWait
-	previousInstallWait := installWait
-	previousInstallPoll := installPoll
-
-	t.Cleanup(func() {
-		openBrowser = previousBrowser
-		writeOrgSecret = previousSecret
-		interactiveEnvironment = previousInteractive
-		callbackWait = previousCallbackWait
-		installWait = previousInstallWait
-		installPoll = previousInstallPoll
-	})
-
-	if browser != nil {
-		openBrowser = browser
-	}
-
-	if secret != nil {
-		writeOrgSecret = secret
-	}
-
-	// The suite itself may run under CI; the environment seam answers for
-	// the scenario, not for the runner.
-	interactiveEnvironment = func() bool { return true }
-	callbackWait = 2 * time.Second
-	installWait = 2 * time.Second
-	installPoll = 10 * time.Millisecond
+	t.Setenv("CI", "")
+	t.Setenv("BROWSER", noopBrowser(t))
 }
 
-//nolint:paralleltest // serial by design: mutates package seams.
+// noopBrowser writes a command that exits 0 without doing anything: a .cmd
+// on Windows (CreateProcess runs it through cmd.exe), a shell script elsewhere.
+func noopBrowser(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(dir, "browser.cmd")
+		if err := os.WriteFile(path, []byte("@exit /b 0\r\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		return path
+	}
+
+	path := filepath.Join(dir, "browser.sh")
+
+	// #nosec G306 -- an executable stub must be executable.
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	return path
+}
+
+// formURLRE finds the manifest form's URL in the progress text — the line
+// the code prints for a user without a browser is the contract the test
+// drives.
+var formURLRE = regexp.MustCompile(`open (http://127\.0\.0\.1:\d+/) yourself`)
+
+// approver is a progress writer that plays the human: when the manifest
+// form's URL is printed, it fetches the form (handing the page to check) and
+// then plays GitHub redirecting back with the code.
+type approver struct {
+	t     *testing.T
+	check func(page string)
+	code  string
+	once  sync.Once
+	wg    sync.WaitGroup
+}
+
+func (a *approver) Write(p []byte) (int, error) {
+	if match := formURLRE.FindSubmatch(p); match != nil {
+		url := string(match[1])
+
+		a.once.Do(func() {
+			a.wg.Add(1)
+
+			go func() {
+				defer a.wg.Done()
+
+				a.approve(url)
+			}()
+		})
+	}
+
+	return len(p), nil
+}
+
+func (a *approver) approve(url string) {
+	form, err := http.Get(url)
+	if err != nil {
+		a.t.Errorf("fetching the manifest form: %v", err)
+
+		return
+	}
+
+	page, err := io.ReadAll(form.Body)
+	_ = form.Body.Close()
+
+	if err != nil {
+		a.t.Errorf("reading the manifest form: %v", err)
+
+		return
+	}
+
+	if a.check != nil {
+		a.check(string(page))
+	}
+
+	redirect, err := http.Get(url + "callback?code=" + a.code)
+	if err != nil {
+		a.t.Errorf("playing the redirect: %v", err)
+
+		return
+	}
+
+	_ = redirect.Body.Close()
+}
+
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 	logPath := stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
-		testVariablePath:    {Body: `{"name":"` + updateAppVariable + `","value":"42"}`},
-		testSecretPath:      {Body: `{"name":"` + updateAppSecret + `"}`},
+		testVariablePath:    {Body: `{"name":"` + "UPDATE_AQUA_CHECKSUM_APP_ID" + `","value":"42"}`},
+		testSecretPath:      {Body: `{"name":"` + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" + `"}`},
 		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"installations":[{"app_id":42,"permissions":{"contents":"write","workflows":"write"}}]}`,
 		},
 	})
-	appSeams(t, nil, nil)
+	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusOK {
+	if finding.Status != github.StatusOK {
 		t.Fatalf("configured org: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
@@ -88,7 +158,7 @@ func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 // A limen bump's convergence then touches canonical workflow files and
 // GitHub refuses the whole commit; the audit must say so, and say how.
 //
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
@@ -98,11 +168,11 @@ func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
 			Body: `{"installations":[{"app_id":42,"permissions":{"contents":"write"}}]}`,
 		},
 	})
-	appSeams(t, nil, nil)
+	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("installation without workflows: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 
@@ -117,22 +187,22 @@ func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppUnverifiable(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
 		testVariablePath:    {Fail: true},
 	})
-	appSeams(t, nil, nil)
+	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusUnverifiable {
+	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable variables: %v (%s), want unverifiable", finding.Status, finding.Message)
 	}
 }
 
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppInstallationUnverifiable(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
@@ -140,63 +210,60 @@ func TestEnsureUpdateAppInstallationUnverifiable(t *testing.T) {
 		testSecretPath:      {Body: `{}`},
 		"GET orgs/test-org/installations?per_page=100": {Fail: true},
 	})
-	appSeams(t, nil, nil)
+	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusUnverifiable {
+	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable installations: %v (%s), want unverifiable", finding.Status, finding.Message)
 	}
 }
 
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppHalfConfigured(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
 		testVariablePath:    {Body: `{"value":"42"}`},
 		testSecretPath:      {NotFound: true},
 	})
-	appSeams(t, nil, nil)
+	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("half-configured org: %v, want advisory", finding.Status)
 	}
 
-	if !strings.Contains(finding.Message, updateAppSecret) {
+	if !strings.Contains(finding.Message, "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY") {
 		t.Errorf("advisory does not name the missing secret: %s", finding.Message)
 	}
 }
 
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppNotAnOrg(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {NotFound: true},
 	})
-	appSeams(t, nil, nil)
+	interactiveRig(t)
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("user-account owner: %v, want advisory", finding.Status)
 	}
 }
 
-//nolint:paralleltest // serial by design: mutates package seams.
 func TestEnsureUpdateAppNonInteractive(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
 		testVariablePath:    {NotFound: true},
 		testSecretPath:      {NotFound: true},
 	})
-	appSeams(t, nil, nil)
+	t.Setenv("CI", "1")
 
-	interactiveEnvironment = func() bool { return false }
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
-
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("non-interactive environment: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 
@@ -205,20 +272,21 @@ func TestEnsureUpdateAppNonInteractive(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppCallbackTimeout(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
 		testVariablePath:    {NotFound: true},
 		testSecretPath:      {NotFound: true},
 	})
-	appSeams(t, func(string) error { return nil }, nil) // browser "opens", user never approves
+	interactiveRig(t) // the browser "opens", the user never approves
 
-	callbackWait = 50 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
 
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(ctx, testOrg, io.Discard)
 
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("abandoned browser flow: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 
@@ -232,7 +300,7 @@ func TestEnsureUpdateAppCallbackTimeout(t *testing.T) {
 // plays GitHub redirecting back with the code; conversion, variable, secret,
 // and installation all resolve against the gh stub.
 //
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppRegisters(t *testing.T) {
 	logPath := stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
@@ -247,64 +315,32 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 		},
 	})
 
-	var storedOrg, storedName, storedValue string
+	interactiveRig(t)
 
-	browser := func(url string) error {
-		// The install-page call: not ours to answer.
-		if !strings.HasSuffix(url, "/") {
-			return nil
-		}
-
-		form, err := http.Get(url)
-		if err != nil {
-			return err
-		}
-
-		defer form.Body.Close()
-
-		page, err := io.ReadAll(form.Body)
-		if err != nil {
-			return err
-		}
-
-		if !strings.Contains(string(page), "organizations/test-org/settings/apps/new") {
+	human := &approver{t: t, code: "test-code", check: func(page string) {
+		if !strings.Contains(page, "organizations/test-org/settings/apps/new") {
 			t.Errorf("form does not target the org's app registration:\n%s", page)
 		}
 
-		if !strings.Contains(string(page), "contents") {
+		if !strings.Contains(page, "contents") {
 			t.Errorf("manifest does not carry the contents permission:\n%s", page)
 		}
+	}}
+	defer human.wg.Wait()
 
-		redirect, err := http.Get(url + "callback?code=test-code")
-		if err != nil {
-			return err
-		}
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
 
-		return redirect.Body.Close()
-	}
-
-	secret := func(org, name string, value []byte) error {
-		storedOrg, storedName, storedValue = org, name, string(value)
-
-		return nil
-	}
-
-	appSeams(t, browser, secret)
-
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
-
-	if finding.Status != StatusOK {
+	if finding.Status != github.StatusOK {
 		t.Fatalf("full flow: %v (%s), want ok", finding.Status, finding.Message)
-	}
-
-	if storedOrg != testOrg || storedName != updateAppSecret || storedValue != "PRIVATE-KEY-PEM" {
-		t.Errorf("secret stored as (%s, %s, %q), want (%s, %s, PRIVATE-KEY-PEM)",
-			storedOrg, storedName, storedValue, testOrg, updateAppSecret)
 	}
 
 	calls, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("reading the call log: %v", err)
+	}
+
+	if !strings.Contains(string(calls), testSecretWrite+"\nPRIVATE-KEY-PEM\n") {
+		t.Errorf("the secret was not stored on the org through gh:\n%s", calls)
 	}
 
 	if !strings.Contains(string(calls), `"value":"7"`) {
@@ -315,7 +351,7 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 // TestEnsureUpdateAppSecretFailure: the key is disclosed exactly once, so a
 // failed secret write must say so and point at the manual recovery.
 //
-//nolint:paralleltest // serial by design: mutates package seams.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestEnsureUpdateAppSecretFailure(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
@@ -325,28 +361,17 @@ func TestEnsureUpdateAppSecretFailure(t *testing.T) {
 			Body: `{"id":7,"slug":"limen-test-org","pem":"PRIVATE-KEY-PEM","html_url":"https://github.com/apps/limen-test-org"}`,
 		},
 		"POST orgs/test-org/actions/variables": {Body: `{}`},
+		testSecretWrite:                        {Fail: true},
 	})
 
-	browser := func(url string) error {
-		if !strings.HasSuffix(url, "/") {
-			return nil
-		}
+	interactiveRig(t)
 
-		redirect, err := http.Get(url + "callback?code=test-code")
-		if err != nil {
-			return err
-		}
+	human := &approver{t: t, code: "test-code"}
+	defer human.wg.Wait()
 
-		return redirect.Body.Close()
-	}
+	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
 
-	secret := func(string, string, []byte) error { return errors.New("no admin") }
-
-	appSeams(t, browser, secret)
-
-	finding := EnsureUpdateAquaChecksumApp(testOrg, io.Discard)
-
-	if finding.Status != StatusAdvisory {
+	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("failed secret write: %v (%s), want advisory", finding.Status, finding.Message)
 	}
 

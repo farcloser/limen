@@ -1,9 +1,11 @@
-package github //nolint:testpackage // white-box, like audit_test.go.
+package github_test
 
 import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 const (
@@ -15,26 +17,26 @@ const (
 	orgMembersKey   = "GET orgs/test-org/teams/agents/members?per_page=100"
 )
 
-func TestAgentsTeamGranted(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAgentsTeamGranted(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	// maintain nests write: still compliant.
 	responses[repoTeamsKey] = stubResponse{Body: `[{"slug":"agents","permission":"maintain"}]`}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	if finding, found := findingByCheck(findings, checkAgentsTeam); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(findings, "agents-team"); !found || finding.Status != github.StatusOK {
 		t.Errorf("agents team with maintain: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkAgentsTeam {
+		if planned.Check == "agents-team" {
 			t.Error("a granted team planned a change")
 		}
 	}
 }
 
-func TestAgentsTeamMissingGrant(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAgentsTeamMissingGrant(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses[repoTeamsKey] = stubResponse{
 		Body: `[{"slug":"agents","permission":"pull"},{"slug":"ops","permission":"admin"}]`,
@@ -42,10 +44,10 @@ func TestAgentsTeamMissingGrant(t *testing.T) { //nolint:paralleltest // serial:
 	responses[grantKey] = stubResponse{Body: `{}`}
 	logPath := stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, found := findingByCheck(findings, checkAgentsTeam)
-	if !found || finding.Status != StatusFail || finding.Current != "pull" {
+	finding, found := findingByCheck(findings, "agents-team")
+	if !found || finding.Status != github.StatusFail || finding.Current != "pull" {
 		t.Fatalf("agents team with pull: %v current=%q, want fail with current pull", finding.Status, finding.Current)
 	}
 
@@ -56,7 +58,7 @@ func TestAgentsTeamMissingGrant(t *testing.T) { //nolint:paralleltest // serial:
 	applied := 0
 
 	for _, planned := range changes {
-		if planned.Check != checkAgentsTeam {
+		if planned.Check != "agents-team" {
 			continue
 		}
 
@@ -81,22 +83,22 @@ func TestAgentsTeamMissingGrant(t *testing.T) { //nolint:paralleltest // serial:
 	}
 }
 
-func TestAgentsTeamAbsentFromRepo(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAgentsTeamAbsentFromRepo(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses[repoTeamsKey] = stubResponse{Body: `[]`}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, found := findingByCheck(findings, checkAgentsTeam)
-	if !found || finding.Status != StatusFail || finding.Current != "(no access)" {
+	finding, found := findingByCheck(findings, "agents-team")
+	if !found || finding.Status != github.StatusFail || finding.Current != "(no access)" {
 		t.Errorf("no grant at all: %v current=%q, want fail with no access", finding.Status, finding.Current)
 	}
 
 	planned := 0
 
 	for _, change := range changes {
-		if change.Check == checkAgentsTeam {
+		if change.Check == "agents-team" {
 			planned++
 		}
 	}
@@ -106,48 +108,49 @@ func TestAgentsTeamAbsentFromRepo(t *testing.T) { //nolint:paralleltest // seria
 	}
 }
 
-func TestAgentsTeamNoSuchTeam(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAgentsTeamNoSuchTeam(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses[orgTeamsKey] = stubResponse{Body: `[{"slug":"ops"}]`}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, found := findingByCheck(findings, checkAgentsTeam)
-	if !found || finding.Status != StatusFail || !strings.Contains(finding.Message, "no "+agentsTeamSlug+" team") {
+	finding, found := findingByCheck(findings, "agents-team")
+	if !found || finding.Status != github.StatusFail || !strings.Contains(finding.Message, "no "+"agents"+" team") {
 		t.Errorf("missing team: %v (%s), want fail naming the missing team", finding.Status, finding.Message)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkAgentsTeam {
+		if planned.Check == "agents-team" {
 			t.Error("a missing team planned a change; teams are never auto-fixed")
 		}
 	}
 }
 
-func TestAgentsTeamUserOwner(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAgentsTeamUserOwner(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses["GET orgs/test"] = stubResponse{NotFound: true}
 	stubGH(t, responses)
 
-	findings, _ := Audit(testRepo, nil)
+	findings, _ := github.Audit(testRepo, nil)
 
-	if finding, found := findingByCheck(findings, checkAgentsTeam); !found || finding.Status != StatusOK ||
+	if finding, found := findingByCheck(findings, "agents-team"); !found || finding.Status != github.StatusOK ||
 		!strings.Contains(finding.Message, "not applicable") {
 		t.Errorf("user-owned repository: %v (%s), want ok, not applicable", finding.Status, finding.Message)
 	}
 }
 
-func TestAgentsTeamUnreadable(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAgentsTeamUnreadable(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// The repository's team grants are admin-only: a 404 there is a scope
 	// problem, never a pass and never a finding.
 	responses := compliantResponses()
 	responses[repoTeamsKey] = stubResponse{NotFound: true}
 	stubGH(t, responses)
 
-	findings, _ := Audit(testRepo, nil)
+	findings, _ := github.Audit(testRepo, nil)
 
-	if finding, found := findingByCheck(findings, checkAgentsTeam); !found || finding.Status != StatusUnverifiable {
+	finding, found := findingByCheck(findings, "agents-team")
+	if !found || finding.Status != github.StatusUnverifiable {
 		t.Errorf("unreadable grants: %v, want unverifiable", finding.Status)
 	}
 
@@ -156,26 +159,27 @@ func TestAgentsTeamUnreadable(t *testing.T) { //nolint:paralleltest // serial: m
 	responses[orgTeamsKey] = stubResponse{NotFound: true}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	if finding, found := findingByCheck(findings, checkAgentsTeam); !found || finding.Status != StatusUnverifiable {
+	finding, found = findingByCheck(findings, "agents-team")
+	if !found || finding.Status != github.StatusUnverifiable {
 		t.Errorf("unreadable team list: %v, want unverifiable", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkAgentsTeam {
+		if planned.Check == "agents-team" {
 			t.Error("an unverifiable check planned a change")
 		}
 	}
 }
 
-func TestAuditOrgAgentsTeam(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestAuditOrgAgentsTeam(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// Compliant: every live repository granted, one member.
 	stubGH(t, compliantOrgResponses())
 
-	findings, _ := AuditOrg(testOrg, nil)
+	findings, _ := github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgAgentsTeam); !found || finding.Status != StatusOK {
+	if finding, found := findingByCheck(findings, "org-agents-team"); !found || finding.Status != github.StatusOK {
 		t.Errorf("all granted: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
@@ -193,15 +197,15 @@ func TestAuditOrgAgentsTeam(t *testing.T) { //nolint:paralleltest // serial: mut
 	responses["PUT orgs/test-org/teams/agents/repos/test-org/gamma"] = stubResponse{Body: `{}`}
 	logPath := stubGH(t, responses)
 
-	findings, changes := AuditOrg(testOrg, nil)
+	findings, changes := github.AuditOrg(testOrg, nil)
 
-	finding, found := findingByCheck(findings, checkOrgAgentsTeam)
-	if !found || finding.Status != StatusFail || finding.Current != "beta, gamma" {
+	finding, found := findingByCheck(findings, "org-agents-team")
+	if !found || finding.Status != github.StatusFail || finding.Current != "beta, gamma" {
 		t.Fatalf("missing grants: %v current=%q, want fail listing beta, gamma", finding.Status, finding.Current)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkOrgAgentsTeam {
+		if planned.Check == "org-agents-team" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -233,14 +237,18 @@ func TestAuditOrgAgentsTeam(t *testing.T) { //nolint:paralleltest // serial: mut
 	responses[orgMembersKey] = stubResponse{Body: `[]`}
 	stubGH(t, responses)
 
-	findings, changes = AuditOrg(testOrg, nil)
+	findings, changes = github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgAgentsTeam); !found || finding.Status != StatusAdvisory {
+	if finding, found := findingByCheck(
+		findings,
+		"org-agents-team",
+	); !found ||
+		finding.Status != github.StatusAdvisory {
 		t.Errorf("empty team: %v, want advisory", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkOrgAgentsTeam {
+		if planned.Check == "org-agents-team" {
 			t.Error("an empty team planned a change")
 		}
 	}
@@ -250,14 +258,14 @@ func TestAuditOrgAgentsTeam(t *testing.T) { //nolint:paralleltest // serial: mut
 	responses["GET orgs/test-org/teams?per_page=100"] = stubResponse{Body: `[]`}
 	stubGH(t, responses)
 
-	findings, changes = AuditOrg(testOrg, nil)
+	findings, changes = github.AuditOrg(testOrg, nil)
 
-	if finding, found := findingByCheck(findings, checkOrgAgentsTeam); !found || finding.Status != StatusFail {
+	if finding, found := findingByCheck(findings, "org-agents-team"); !found || finding.Status != github.StatusFail {
 		t.Errorf("no team: %v, want fail", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkOrgAgentsTeam {
+		if planned.Check == "org-agents-team" {
 			t.Error("a missing team planned a change")
 		}
 	}
