@@ -12,10 +12,17 @@
 package github
 
 const (
+	planFree          = "free"
 	ineffectivePrefix = "the fix applied without error, but GitHub left the setting unchanged: "
 	planGateHint      = " — a feature GitHub gates by plan on this target (a private repository in a Free" +
 		" organization, typically): change the visibility or the plan, or declare the exception in limen.yaml"
 )
+
+// autoMergeUnavailableMessage is the auto-merge finding when the write is
+// known up front to be ignored, so none is planned.
+const autoMergeUnavailableMessage = "auto-merge must be allowed (Renovate merges green PRs) and cannot be " +
+	"enabled here — a private repository in a Free organization: GitHub accepts the write and ignores it, " +
+	"so none is planned. Make the repository public, upgrade the plan, or declare the exception in limen.yaml"
 
 // MarkIneffective rewrites, in place, the failing findings among the checks
 // whose change applied without error: a check that was repaired and still
@@ -39,6 +46,31 @@ func MarkIneffective(findings []Finding, applied []string) {
 			findings[i].Message = ineffectivePrefix + findings[i].Message + planGateHint
 		}
 	}
+}
+
+// ownerPlan is the subset of GET /orgs/{org} the auto-merge check reads.
+type ownerPlan struct {
+	Plan *planSummary `json:"plan"`
+}
+
+type planSummary struct {
+	Name string `json:"name"`
+}
+
+// ownerPlanFree reports whether the repository's owner is an organization on
+// the Free plan, the case where GitHub accepts and ignores the write that
+// enables auto-merge on a private repository. Anything else — a user owner,
+// a plan the token cannot see, another plan — is false: the write is then
+// planned, and MarkIneffective names it if it was ignored.
+func (a *auditor) ownerPlanFree() bool {
+	var org ownerPlan
+
+	outcome := orgClient(a.owner).getJSON("", &org)
+	if outcome.err != nil || outcome.notFound || org.Plan == nil {
+		return false
+	}
+
+	return org.Plan.Name == planFree
 }
 
 // autoMergeFailMessage is the auto-merge finding's message, which on a
