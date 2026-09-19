@@ -1,7 +1,4 @@
-// White-box by necessity: these tests exercise unexported check*/remediate*
-// helpers and the aquaBin test seam, none of which are part of the package API.
-
-package rules //nolint:testpackage // white-box (see above)
+package rules_test
 
 import (
 	"os"
@@ -10,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/farcloser/limen"
+	"github.com/farcloser/limen/internal/rules"
 )
 
 const mitText = `Permission is hereby granted, free of charge, to any person.
@@ -60,33 +58,33 @@ func compliantFiles() map[string]string {
 	files := map[string]string{
 		"README.md":           "# Thing",
 		"LICENSE":             mitText,
-		".editorconfig":       CanonicalEditorconfig,
+		".editorconfig":       rules.CanonicalEditorconfig,
 		".gitignore":          "*.log\n", // any present .gitignore satisfies the rule
-		".gitattributes":      CanonicalGitattributes,
-		"AGENTS.md":           CanonicalAgents,
+		".gitattributes":      rules.CanonicalGitattributes,
+		"AGENTS.md":           rules.CanonicalAgents,
 		"CLAUDE.md":           limen.CanonicalClaudeSeed,
-		"Justfile":            CanonicalJustfileImport + "\n",
+		"Justfile":            rules.CanonicalJustfileImport + "\n",
 		"aqua.yaml":           limen.CanonicalAquaYAML,
 		"aqua-checksums.json": "{}\n",
 		// Every repository declares the Go-built tools the recipes run (the
 		// gotools rule); without a root go.mod, the everywhere set is enough.
-		goToolsModFile: goModToolsEverywhere,
+		"tools/go.mod": goModToolsEverywhere,
 		// The aqua policy, local registry, and lychee config are content-pinned exactly.
-		"aqua-policy.yaml":          CanonicalAquaPolicy,
-		".limen/aqua-registry.yaml": CanonicalAquaRegistry,
-		".limen/lychee.toml":        CanonicalLychee,
+		"aqua-policy.yaml":          rules.CanonicalAquaPolicy,
+		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
+		".limen/lychee.toml":        rules.CanonicalLychee,
 		// aqua.yaml is YAML, so the conditional yamlfmt rule fires; satisfy it
 		// with the canonical baseline. The shellcheck config is unconditional.
-		".limen/.yamlfmt":      CanonicalYamlfmt,
-		".limen/.shellcheckrc": CanonicalShellcheckrc,
+		".limen/.yamlfmt":      rules.CanonicalYamlfmt,
+		".limen/.shellcheckrc": rules.CanonicalShellcheckrc,
 		// The .github surface: two content-pinned pieces, two seeded ones
 		// (any content satisfies the seeded pair — canonical used here).
-		pathWorkflowChecksum: limen.CanonicalWorkflowUpdateAquaChecksum,
-		pathActionSetupAqua:  limen.CanonicalActionSetupAqua,
-		pathWorkflowCI:       limen.CanonicalWorkflowCI,
+		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
+		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
+		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
 		// The seed, with its preset reference pinned to this manifest's limen
 		// version — what `limen fix` leaves behind (the renovate rule).
-		pathRenovate: CanonicalRenovateFor(limen.CanonicalAquaYAML),
+		"renovate.json": rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
 	}
 	// Every shared just module (.limen/*.just) must be present.
 	for _, m := range limen.JustModules() {
@@ -96,14 +94,14 @@ func compliantFiles() map[string]string {
 	return files
 }
 
-func findingByRule(findings []Finding, rule string) Finding {
+func findingByRule(findings []rules.Finding, rule string) rules.Finding {
 	for _, f := range findings {
 		if f.Rule == rule {
 			return f
 		}
 	}
 
-	return Finding{Rule: rule, Status: StatusFail, Message: "rule not evaluated"}
+	return rules.Finding{Rule: rule, Status: rules.StatusFail, Message: "rule not evaluated"}
 }
 
 func TestCheckCompliantRepo(t *testing.T) {
@@ -111,8 +109,8 @@ func TestCheckCompliantRepo(t *testing.T) {
 
 	dir := writeRepo(t, compliantFiles())
 
-	findings := Check(dir, DefaultPolicy())
-	if !AllOK(findings) {
+	findings := rules.Check(dir, rules.DefaultPolicy())
+	if !rules.AllOK(findings) {
 		for _, f := range findings {
 			if !f.OK() {
 				t.Errorf("unexpected failure: %s -> %s", f.Rule, f.Message)
@@ -130,8 +128,8 @@ func TestCheckMissingEverything(t *testing.T) {
 
 	dir := t.TempDir()
 
-	findings := Check(dir, DefaultPolicy())
-	if AllOK(findings) {
+	findings := rules.Check(dir, rules.DefaultPolicy())
+	if rules.AllOK(findings) {
 		t.Fatal("expected failures for an empty repo")
 	}
 
@@ -150,11 +148,11 @@ func TestCheckDisallowedLicense(t *testing.T) {
 	dir := writeRepo(t, map[string]string{
 		"README.md":     "# Thing",
 		"LICENSE":       "GNU GENERAL PUBLIC LICENSE Version 3",
-		".editorconfig": CanonicalEditorconfig,
+		".editorconfig": rules.CanonicalEditorconfig,
 		".gitignore":    "*.log",
 	})
 
-	f := findingByRule(Check(dir, DefaultPolicy()), "license")
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "license")
 	if f.OK() {
 		t.Fatal("expected GPL LICENSE to fail")
 	}
@@ -181,11 +179,11 @@ modification, are permitted provided that the following conditions are met:
   derived from this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS".`,
-		".editorconfig": CanonicalEditorconfig,
+		".editorconfig": rules.CanonicalEditorconfig,
 		".gitignore":    "*.log",
 	})
 
-	f := findingByRule(Check(dir, DefaultPolicy()), "license")
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "license")
 	if !f.OK() {
 		t.Fatalf("inherited BSD-3-Clause LICENSE failed: %s", f.Message)
 	}
@@ -201,11 +199,11 @@ func TestCheckReadmeVariantAccepted(t *testing.T) {
 	dir := writeRepo(t, map[string]string{
 		"README":        "plain readme",
 		"LICENSE":       mitText,
-		".editorconfig": CanonicalEditorconfig,
+		".editorconfig": rules.CanonicalEditorconfig,
 		".gitignore":    "*.log",
 	})
 
-	f := findingByRule(Check(dir, DefaultPolicy()), "readme")
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "readme")
 	if !f.OK() {
 		t.Errorf("plain README should be accepted, got: %s", f.Message)
 	}
@@ -225,11 +223,11 @@ func TestCheckReadmeAndLicenseCaseInsensitive(t *testing.T) {
 	dir := writeRepo(t, map[string]string{
 		"readme.md":     "# lower case",
 		"license.md":    mitText,
-		".editorconfig": CanonicalEditorconfig,
+		".editorconfig": rules.CanonicalEditorconfig,
 		".gitignore":    "*.log",
 	})
 
-	findings := Check(dir, DefaultPolicy())
+	findings := rules.Check(dir, rules.DefaultPolicy())
 
 	readme := findingByRule(findings, "readme")
 	if !readme.OK() {
@@ -262,36 +260,36 @@ func TestEditorconfigMustMatchExactly(t *testing.T) {
 	t.Parallel()
 
 	// The exact canonical passes.
-	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "editorconfig"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()), "editorconfig"); !f.OK() {
 		t.Errorf("the exact canonical .editorconfig should pass: %s", f.Message)
 	}
 
 	// It is content-pinned: even the canonical plus an extra section fails.
 	extra := compliantFiles()
 
-	extra[".editorconfig"] = CanonicalEditorconfig + "\n[*.lua]\nindent_size = 2\n"
-	if f := findingByRule(Check(writeRepo(t, extra), DefaultPolicy()), "editorconfig"); f.OK() {
+	extra[".editorconfig"] = rules.CanonicalEditorconfig + "\n[*.lua]\nindent_size = 2\n"
+	if f := findingByRule(rules.Check(writeRepo(t, extra), rules.DefaultPolicy()), "editorconfig"); f.OK() {
 		t.Error("canonical + an extra section should fail (content-pinned, no extras)")
 	}
 
 	// A changed value fails.
 	changed := compliantFiles()
 
-	changed[".editorconfig"] = strings.Replace(CanonicalEditorconfig, "indent_size = 2", "indent_size = 4", 1)
-	if f := findingByRule(Check(writeRepo(t, changed), DefaultPolicy()), "editorconfig"); f.OK() {
+	changed[".editorconfig"] = strings.Replace(rules.CanonicalEditorconfig, "indent_size = 2", "indent_size = 4", 1)
+	if f := findingByRule(rules.Check(writeRepo(t, changed), rules.DefaultPolicy()), "editorconfig"); f.OK() {
 		t.Error("a changed indent_size should fail")
 	}
 
 	// A missing section (truncated canonical) fails.
 	partial := compliantFiles()
 
-	cut := strings.Index(CanonicalEditorconfig, "[*.md]")
+	cut := strings.Index(rules.CanonicalEditorconfig, "[*.md]")
 	if cut < 0 {
 		t.Fatal("canonical .editorconfig no longer contains a [*.md] section — update this test")
 	}
 
-	partial[".editorconfig"] = CanonicalEditorconfig[:cut]
-	if f := findingByRule(Check(writeRepo(t, partial), DefaultPolicy()), "editorconfig"); f.OK() {
+	partial[".editorconfig"] = rules.CanonicalEditorconfig[:cut]
+	if f := findingByRule(rules.Check(writeRepo(t, partial), rules.DefaultPolicy()), "editorconfig"); f.OK() {
 		t.Error("a truncated .editorconfig should fail")
 	}
 }
@@ -299,28 +297,28 @@ func TestEditorconfigMustMatchExactly(t *testing.T) {
 func TestAgentsPinnedAndClaudeSeeded(t *testing.T) {
 	t.Parallel()
 
-	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "agents"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()), "agents"); !f.OK() {
 		t.Errorf("the canonical AGENTS.md plus a CLAUDE.md should pass: %s", f.Message)
 	}
 
 	missing := compliantFiles()
 	delete(missing, "AGENTS.md")
 
-	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "agents"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, missing), rules.DefaultPolicy()), "agents"); f.OK() {
 		t.Error("a missing AGENTS.md should fail")
 	}
 
 	drifted := compliantFiles()
-	drifted["AGENTS.md"] = CanonicalAgents + "\n- my own rule\n"
+	drifted["AGENTS.md"] = rules.CanonicalAgents + "\n- my own rule\n"
 
-	if f := findingByRule(Check(writeRepo(t, drifted), DefaultPolicy()), "agents"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, drifted), rules.DefaultPolicy()), "agents"); f.OK() {
 		t.Error("a drifted AGENTS.md should fail (content-pinned)")
 	}
 
 	noClaude := compliantFiles()
 	delete(noClaude, "CLAUDE.md")
 
-	if f := findingByRule(Check(writeRepo(t, noClaude), DefaultPolicy()), "agents"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, noClaude), rules.DefaultPolicy()), "agents"); f.OK() {
 		t.Error("a missing CLAUDE.md should fail (the import is what makes AGENTS.md load)")
 	}
 
@@ -328,7 +326,7 @@ func TestAgentsPinnedAndClaudeSeeded(t *testing.T) {
 	own := compliantFiles()
 	own["CLAUDE.md"] = "@AGENTS.md\n\n## This repository\n\n- something specific\n"
 
-	if f := findingByRule(Check(writeRepo(t, own), DefaultPolicy()), "agents"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, own), rules.DefaultPolicy()), "agents"); !f.OK() {
 		t.Errorf("a project-owned CLAUDE.md should pass: %s", f.Message)
 	}
 }
@@ -337,24 +335,25 @@ func TestGitattributesMustMatchExactly(t *testing.T) {
 	t.Parallel()
 
 	// The exact canonical passes.
-	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "gitattributes"); !f.OK() {
-		t.Errorf("the exact canonical .gitattributes should pass: %s", f.Message)
+	canonical := findingByRule(rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()), "gitattributes")
+	if !canonical.OK() {
+		t.Errorf("the exact canonical .gitattributes should pass: %s", canonical.Message)
 	}
 
 	// Missing fails.
 	missing := compliantFiles()
 	delete(missing, ".gitattributes")
 
-	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "gitattributes"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, missing), rules.DefaultPolicy()), "gitattributes"); f.OK() {
 		t.Error("a missing .gitattributes should fail")
 	}
 
 	// Any drift fails: the file is content-pinned, extras included — an extra
 	// attribute line would reintroduce the line-ending magic the pin removes.
 	extra := compliantFiles()
-	extra[".gitattributes"] = CanonicalGitattributes + "\n*.md text\n"
+	extra[".gitattributes"] = rules.CanonicalGitattributes + "\n*.md text\n"
 
-	if f := findingByRule(Check(writeRepo(t, extra), DefaultPolicy()), "gitattributes"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, extra), rules.DefaultPolicy()), "gitattributes"); f.OK() {
 		t.Error("a drifted .gitattributes should fail (content-pinned)")
 	}
 }
@@ -363,7 +362,7 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 	t.Parallel()
 
 	// The exact canonical passes.
-	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "lychee"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()), "lychee"); !f.OK() {
 		t.Errorf("the exact canonical .limen/lychee.toml should pass: %s", f.Message)
 	}
 
@@ -371,7 +370,7 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 	missing := compliantFiles()
 	delete(missing, ".limen/lychee.toml")
 
-	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "lychee"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, missing), rules.DefaultPolicy()), "lychee"); f.OK() {
 		t.Error("a missing .limen/lychee.toml should fail")
 	}
 
@@ -379,8 +378,8 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 	// project's own exclusions belong in a root .lychee.toml.
 	extra := compliantFiles()
 
-	extra[".limen/lychee.toml"] = CanonicalLychee + "\ncache = true\n"
-	if f := findingByRule(Check(writeRepo(t, extra), DefaultPolicy()), "lychee"); f.OK() {
+	extra[".limen/lychee.toml"] = rules.CanonicalLychee + "\ncache = true\n"
+	if f := findingByRule(rules.Check(writeRepo(t, extra), rules.DefaultPolicy()), "lychee"); f.OK() {
 		t.Error("canonical + an extra setting should fail (content-pinned, no extras)")
 	}
 
@@ -388,7 +387,7 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 	own := compliantFiles()
 
 	own[".lychee.toml"] = "exclude = ['https://example\\.internal/']\n"
-	if f := findingByRule(Check(writeRepo(t, own), DefaultPolicy()), "lychee"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, own), rules.DefaultPolicy()), "lychee"); !f.OK() {
 		t.Errorf("a project's own root .lychee.toml should not affect the rule: %s", f.Message)
 	}
 }
@@ -409,13 +408,13 @@ func TestCheckGitRepoRequired(t *testing.T) {
 		}
 	}
 
-	if f := findingByRule(Check(dir, DefaultPolicy()), "git"); f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "git"); f.OK() {
 		t.Error("a non-git directory should fail the git rule")
 	}
 
 	// writeRepo seeds .git, so the same files now pass.
 	repo := writeRepo(t, compliantFiles())
-	if f := findingByRule(Check(repo, DefaultPolicy()), "git"); !f.OK() {
+	if f := findingByRule(rules.Check(repo, rules.DefaultPolicy()), "git"); !f.OK() {
 		t.Errorf("a directory with .git should pass: %s", f.Message)
 	}
 }
@@ -429,7 +428,7 @@ func TestGitRepoAcceptsGitFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if f := findingByRule(Check(dir, DefaultPolicy()), "git"); !f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "git"); !f.OK() {
 		t.Errorf("a .git file (worktree) should satisfy the git rule: %s", f.Message)
 	}
 }
@@ -442,7 +441,7 @@ func TestGitignoreAnyContentPasses(t *testing.T) {
 	files := compliantFiles()
 	files[".gitignore"] = "# the project's own\nbin/\n"
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "gitignore")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gitignore")
 	if !f.OK() {
 		t.Errorf("any present .gitignore should pass, got: %s", f.Message)
 	}
@@ -454,7 +453,7 @@ func TestGitignoreAbsentFails(t *testing.T) {
 	files := compliantFiles()
 	delete(files, ".gitignore")
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "gitignore")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gitignore")
 	if f.OK() {
 		t.Error("a repository with no .gitignore should fail")
 	}
@@ -467,7 +466,7 @@ func TestJustfileRequiresImport(t *testing.T) {
 	files := compliantFiles()
 	files["Justfile"] = "info:\n\t@echo hand-rolled\n"
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile")
 	if f.OK() {
 		t.Fatal("a Justfile without the shared-baseline import should fail")
 	}
@@ -476,8 +475,8 @@ func TestJustfileRequiresImport(t *testing.T) {
 	// root Justfile is the project's own.
 	files = compliantFiles()
 
-	files["Justfile"] = "# mine\n" + CanonicalJustfileImport + "\n\nstray:\n\t@echo x\n"
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile"); !f.OK() {
+	files["Justfile"] = "# mine\n" + rules.CanonicalJustfileImport + "\n\nstray:\n\t@echo x\n"
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
 		t.Errorf("a Justfile with the import and its own recipes should pass: %s", f.Message)
 	}
 }
@@ -496,7 +495,7 @@ func TestJustfileRequiresSharedModules(t *testing.T) {
 	files := compliantFiles()
 	delete(files, first.Path)
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile")
 	if f.OK() {
 		t.Fatalf("a missing %s should fail", first.Path)
 	}
@@ -509,7 +508,7 @@ func TestJustfileRequiresSharedModules(t *testing.T) {
 	files = compliantFiles()
 
 	files[first.Path] = first.Content + "\nextra:\n\t@echo x\n"
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); f.OK() {
 		t.Errorf("a drifted %s should fail: %s", first.Path, f.Message)
 	}
 }
@@ -519,9 +518,9 @@ func TestJustfileOwnRecipesNotJudged(t *testing.T) {
 
 	// Whatever the project puts around the import line is its own business.
 	files := compliantFiles()
-	files["Justfile"] = CanonicalJustfileImport + "\n\nwhatever:\n\t@echo project-specific\n"
+	files["Justfile"] = rules.CanonicalJustfileImport + "\n\nwhatever:\n\t@echo project-specific\n"
 
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "justfile"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
 		t.Errorf("project recipes in the root Justfile must not be judged: %s", f.Message)
 	}
 }
@@ -532,7 +531,7 @@ func TestAquaRequiresManifest(t *testing.T) {
 	files := compliantFiles()
 	delete(files, "aqua.yaml")
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("a repo without aqua.yaml should fail the aqua rule")
 	}
@@ -544,7 +543,7 @@ func TestAquaRequiresChecksumsFile(t *testing.T) {
 	files := compliantFiles()
 	delete(files, "aqua-checksums.json")
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("aqua.yaml without a committed aqua-checksums.json should fail")
 	}
@@ -562,7 +561,7 @@ func TestAquaRequiresCanonicalChecksumSection(t *testing.T) {
 	files := compliantFiles()
 	files["aqua.yaml"] = canonicalAquaWith(t, "  require_checksum: true\n", "")
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("aqua.yaml without require_checksum: true should fail")
 	}
@@ -579,7 +578,7 @@ func TestAquaAcceptsYmlVariant(t *testing.T) {
 	delete(files, "aqua.yaml")
 	files["aqua.yml"] = limen.CanonicalAquaYAML
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if !f.OK() {
 		t.Errorf("a canonical aqua.yml should pass: %s", f.Message)
 	}
@@ -618,7 +617,7 @@ func TestAquaProjectOwnedParts(t *testing.T) {
 	manifest = replaceRef(t, manifest, "v9.9.9") // Renovate-bumped registry ref
 
 	files["aqua.yaml"] = manifest
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua"); !f.OK() {
 		t.Errorf("project-owned versions/packages/ref should pass: %s", f.Message)
 	}
 }
@@ -648,7 +647,7 @@ func TestAquaRejectsMovingRegistryRef(t *testing.T) {
 	files := compliantFiles()
 	files["aqua.yaml"] = replaceRef(t, limen.CanonicalAquaYAML, "main")
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("a branch registry ref should fail (must be an exact pin)")
 	}
@@ -668,7 +667,7 @@ func TestAquaRejectsExtraRegistry(t *testing.T) {
 		"registries:",
 		"registries:\n  - name: rogue\n    type: github_content\n    repo_owner: evil\n    repo_name: registry\n    ref: v1.0.0\n    path: registry.yaml",
 	)
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("an extra registry should fail (registries section is canonical)")
 	}
 }
@@ -680,7 +679,7 @@ func TestAquaRequiresCanonicalPackages(t *testing.T) {
 	line := canonicalAquaLine(t, "koalaman/shellcheck@")
 	files["aqua.yaml"] = canonicalAquaWith(t, line+"\n", "")
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("a missing canonical package should fail")
 	}
@@ -697,7 +696,7 @@ func TestAquaRejectsDuplicatePackages(t *testing.T) {
 	line := canonicalAquaLine(t, "casey/just@")
 	files["aqua.yaml"] = canonicalAquaWith(t, line+"\n", line+"\n  - name: casey/just@v0.0.1\n")
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("duplicate package entries should fail")
 	}
@@ -714,7 +713,7 @@ func TestAquaRejectsUnparseableManifest(t *testing.T) {
 	// Flow-style sections are outside the shape the rule prescribes.
 	files["aqua.yaml"] = "checksum: {enabled: true, require_checksum: true}\nregistries: [{type: standard, ref: v4.530.0}]\npackages: []\n"
 
-	f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "aqua")
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("a flow-style manifest should fail (cannot be verified)")
 	}
@@ -750,16 +749,30 @@ func TestAquaParserRefusesUnboundedShapes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, ok := parseAquaManifest(tc.text); ok {
-				t.Error("parseAquaManifest accepted a shape it cannot bound")
+			files := compliantFiles()
+			files["aqua.yaml"] = tc.text
+
+			f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
+			if f.OK() || !strings.Contains(f.Message, "parsed") {
+				t.Errorf("a shape the parser cannot bound must fail as unparseable, got: %+v", f)
 			}
 		})
 	}
 
 	// The tolerated neighbors of those shapes stay parseable: comments and
 	// blanks at any level, and a flow-empty packages followed by only those.
-	if _, ok := parseAquaManifest("# c\n\npackages: []\n  # commented-out pins\n"); !ok {
-		t.Error("comments and blank lines must not fail the parse")
+	// The manifest fails for what it lacks, never for its shape.
+	files := compliantFiles()
+	files["aqua.yaml"] = "# c\n\npackages: []\n  # commented-out pins\n"
+
+	if f := findingByRule(
+		rules.Check(writeRepo(t, files), rules.DefaultPolicy()),
+		"aqua",
+	); strings.Contains(
+		f.Message,
+		"parsed",
+	) {
+		t.Errorf("comments and blank lines must not fail the parse: %s", f.Message)
 	}
 }
 
@@ -770,15 +783,15 @@ func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 	noPolicy := compliantFiles()
 	delete(noPolicy, "aqua-policy.yaml")
 
-	if f := findingByRule(Check(writeRepo(t, noPolicy), DefaultPolicy()), "aqua"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, noPolicy), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("a missing aqua-policy.yaml should fail the aqua rule")
 	}
 
 	// A drifted aqua-policy.yaml fails (content-pinned).
 	badPolicy := compliantFiles()
 
-	badPolicy["aqua-policy.yaml"] = CanonicalAquaPolicy + "\n# local edit\n"
-	if f := findingByRule(Check(writeRepo(t, badPolicy), DefaultPolicy()), "aqua"); f.OK() {
+	badPolicy["aqua-policy.yaml"] = rules.CanonicalAquaPolicy + "\n# local edit\n"
+	if f := findingByRule(rules.Check(writeRepo(t, badPolicy), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("a drifted aqua-policy.yaml should fail (content-pinned)")
 	}
 
@@ -786,15 +799,15 @@ func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 	noReg := compliantFiles()
 	delete(noReg, ".limen/aqua-registry.yaml")
 
-	if f := findingByRule(Check(writeRepo(t, noReg), DefaultPolicy()), "aqua"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, noReg), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("a missing .limen/aqua-registry.yaml should fail the aqua rule")
 	}
 
 	// A drifted registry fails.
 	badReg := compliantFiles()
 
-	badReg[".limen/aqua-registry.yaml"] = CanonicalAquaRegistry + "\n# local edit\n"
-	if f := findingByRule(Check(writeRepo(t, badReg), DefaultPolicy()), "aqua"); f.OK() {
+	badReg[".limen/aqua-registry.yaml"] = rules.CanonicalAquaRegistry + "\n# local edit\n"
+	if f := findingByRule(rules.Check(writeRepo(t, badReg), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("a drifted .limen/aqua-registry.yaml should fail (content-pinned)")
 	}
 }
@@ -806,12 +819,15 @@ func TestYamlfmtConditional(t *testing.T) {
 	noYAML := compliantFiles()
 	for _, y := range []string{
 		"aqua.yaml", "aqua-policy.yaml", ".limen/aqua-registry.yaml",
-		pathWorkflowChecksum, pathActionSetupAqua, pathWorkflowCI,
+		".github/workflows/update-aqua-checksum.yaml", ".github/actions/setup-aqua/action.yaml", ".github/workflows/ci.yaml",
 	} {
 		delete(noYAML, y) // remove every *.yaml/*.yml in the set
 	}
 
-	if findingByRule(Check(writeRepo(t, noYAML), DefaultPolicy()), "yamlfmt").Message != "rule not evaluated" {
+	if findingByRule(
+		rules.Check(writeRepo(t, noYAML), rules.DefaultPolicy()),
+		"yamlfmt",
+	).Message != "rule not evaluated" {
 		t.Error("yamlfmt rule should not appear when there is no YAML")
 	}
 
@@ -819,7 +835,7 @@ func TestYamlfmtConditional(t *testing.T) {
 	noConfig := compliantFiles()
 	delete(noConfig, ".limen/.yamlfmt")
 
-	if f := findingByRule(Check(writeRepo(t, noConfig), DefaultPolicy()), "yamlfmt"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, noConfig), rules.DefaultPolicy()), "yamlfmt"); f.OK() {
 		t.Errorf("YAML present without .limen/.yamlfmt should fail, got: %s", f.Message)
 	}
 
@@ -827,21 +843,21 @@ func TestYamlfmtConditional(t *testing.T) {
 	wrong := compliantFiles()
 
 	wrong[".limen/.yamlfmt"] = "formatter:\n  type: basic\n"
-	if f := findingByRule(Check(writeRepo(t, wrong), DefaultPolicy()), "yamlfmt"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, wrong), rules.DefaultPolicy()), "yamlfmt"); f.OK() {
 		t.Errorf("a .limen/.yamlfmt that differs from the canonical should fail, got: %s", f.Message)
 	}
 
 	// It is content-pinned: even the canonical plus an extra directive fails.
 	extra := compliantFiles()
 
-	extra[".limen/.yamlfmt"] = CanonicalYamlfmt + "\nline_ending: lf\n"
-	if f := findingByRule(Check(writeRepo(t, extra), DefaultPolicy()), "yamlfmt"); f.OK() {
+	extra[".limen/.yamlfmt"] = rules.CanonicalYamlfmt + "\nline_ending: lf\n"
+	if f := findingByRule(rules.Check(writeRepo(t, extra), rules.DefaultPolicy()), "yamlfmt"); f.OK() {
 		t.Error("a .limen/.yamlfmt with an extra directive should fail (content-pinned, no extras)")
 	}
 
 	// The exact canonical passes.
 	exact := compliantFiles() // compliantFiles seeds the canonical .limen/.yamlfmt
-	if f := findingByRule(Check(writeRepo(t, exact), DefaultPolicy()), "yamlfmt"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, exact), rules.DefaultPolicy()), "yamlfmt"); !f.OK() {
 		t.Errorf("the exact canonical .limen/.yamlfmt should pass: %s", f.Message)
 	}
 }
@@ -855,31 +871,31 @@ func TestShellcheckContentPinned(t *testing.T) {
 	files := compliantFiles()
 	delete(files, ".limen/.shellcheckrc")
 
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "shellcheck"); f.OK() {
 		t.Errorf("a missing .limen/.shellcheckrc must fail even with no shell, got: %s", f.Message)
 	}
 
 	// Shell present and still missing: same failure.
 	files["build.sh"] = "#!/bin/sh\necho hi\n"
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "shellcheck"); f.OK() {
 		t.Errorf("shell present without .limen/.shellcheckrc should fail, got: %s", f.Message)
 	}
 
 	// A .limen/.shellcheckrc that differs from the canonical fails.
 	files[".limen/.shellcheckrc"] = "disable=SC2034\n"
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "shellcheck"); f.OK() {
 		t.Errorf("a .limen/.shellcheckrc that differs from the canonical should fail, got: %s", f.Message)
 	}
 
 	// It is content-pinned: even the canonical plus an extra directive fails.
-	files[".limen/.shellcheckrc"] = CanonicalShellcheckrc + "\ndisable=SC2034\n"
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); f.OK() {
+	files[".limen/.shellcheckrc"] = rules.CanonicalShellcheckrc + "\ndisable=SC2034\n"
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "shellcheck"); f.OK() {
 		t.Error("a .limen/.shellcheckrc with an extra directive should fail (content-pinned, no extras)")
 	}
 
 	// The exact canonical passes.
-	files[".limen/.shellcheckrc"] = CanonicalShellcheckrc
-	if f := findingByRule(Check(writeRepo(t, files), DefaultPolicy()), "shellcheck"); !f.OK() {
+	files[".limen/.shellcheckrc"] = rules.CanonicalShellcheckrc
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "shellcheck"); !f.OK() {
 		t.Errorf("the exact canonical .limen/.shellcheckrc should pass: %s", f.Message)
 	}
 }
@@ -906,7 +922,7 @@ func TestSourceWalkIgnoresGit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if findingByRule(Check(dir, DefaultPolicy()), "yamlfmt").Message != "rule not evaluated" {
+	if findingByRule(rules.Check(dir, rules.DefaultPolicy()), "yamlfmt").Message != "rule not evaluated" {
 		t.Error("YAML under .git must not trigger the yamlfmt rule")
 	}
 }
@@ -919,7 +935,7 @@ func TestDirectoryNamedLikeFileIsNotAccepted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := findingByRule(Check(dir, DefaultPolicy()), "license")
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "license")
 	if f.OK() {
 		t.Error("a directory named LICENSE should not satisfy the license rule")
 	}
@@ -929,32 +945,32 @@ func TestWorkflowsRule(t *testing.T) {
 	t.Parallel()
 
 	// The compliant set passes (pinned pieces canonical, seeded pieces present).
-	if f := findingByRule(Check(writeRepo(t, compliantFiles()), DefaultPolicy()), "workflows"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()), "workflows"); !f.OK() {
 		t.Errorf("compliant workflows should pass, got: %s", f.Message)
 	}
 
 	// A drifted pinned piece fails — the write-capable workflow is machinery.
 	drifted := compliantFiles()
-	drifted[pathWorkflowChecksum] = limen.CanonicalWorkflowUpdateAquaChecksum + "\n# local edit\n"
+	drifted[".github/workflows/update-aqua-checksum.yaml"] = limen.CanonicalWorkflowUpdateAquaChecksum + "\n# local edit\n"
 
-	if f := findingByRule(Check(writeRepo(t, drifted), DefaultPolicy()), "workflows"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, drifted), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error("a drifted update-aqua-checksum workflow should fail (content-pinned)")
 	}
 
 	// Seeded pieces are presence-only: any content satisfies the rule.
 	custom := compliantFiles()
-	custom[pathWorkflowCI] = "name: my-own-ci\n"
-	custom[pathRenovate] = "{}\n"
+	custom[".github/workflows/ci.yaml"] = "name: my-own-ci\n"
+	custom["renovate.json"] = "{}\n"
 
-	if f := findingByRule(Check(writeRepo(t, custom), DefaultPolicy()), "workflows"); !f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, custom), rules.DefaultPolicy()), "workflows"); !f.OK() {
 		t.Errorf("customized seeded files should pass, got: %s", f.Message)
 	}
 
 	// A missing seeded piece fails.
 	missing := compliantFiles()
-	delete(missing, pathWorkflowCI)
+	delete(missing, ".github/workflows/ci.yaml")
 
-	if f := findingByRule(Check(writeRepo(t, missing), DefaultPolicy()), "workflows"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, missing), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error("a missing CI workflow should fail")
 	}
 
@@ -962,12 +978,12 @@ func TestWorkflowsRule(t *testing.T) {
 	releasing := compliantFiles()
 	releasing[".goreleaser.yaml"] = "version: 2\n"
 
-	if f := findingByRule(Check(writeRepo(t, releasing), DefaultPolicy()), "workflows"); f.OK() {
+	if f := findingByRule(rules.Check(writeRepo(t, releasing), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error(".goreleaser.yaml without a release workflow should fail")
 	}
 
-	releasing[pathWorkflowRelease] = limen.CanonicalWorkflowRelease
-	if f := findingByRule(Check(writeRepo(t, releasing), DefaultPolicy()), "workflows"); !f.OK() {
+	releasing[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
+	if f := findingByRule(rules.Check(writeRepo(t, releasing), rules.DefaultPolicy()), "workflows"); !f.OK() {
 		t.Errorf("goreleaser with a release workflow should pass, got: %s", f.Message)
 	}
 }

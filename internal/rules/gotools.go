@@ -87,10 +87,6 @@ var aquaGoPin = regexp.MustCompile(
 	`(?m)^\s*-\s*name:\s*['"]?golang/go@go(\S+?)['"]?\s*(#.*)?$`,
 )
 
-// goBin is the go executable remediation shells out to when adding tool
-// directives. A package-level seam so tests can substitute a stub.
-var goBin = "go" //nolint:gochecknoglobals // test seam: tests substitute a stub binary.
-
 // requiredGoTools lists the tool packages a repository must declare: the
 // everywhere set, plus the analyzers when the root carries a go.mod (rootMod
 // is its text, nil when there is none). The aqua rule's retired set is built
@@ -447,9 +443,9 @@ func aquaGoDirective(root string) string {
 // runGo runs the pinned go with args in dir and returns "" on success, or a
 // one-line description of the failure.
 func runGo(dir string, args ...string) string {
-	// goBin is "go" outside tests (a package-level seam, not user input), and
-	// args are fixed lists plus baseline package paths.
-	cmd := exec.CommandContext(context.Background(), goBin, args...) // #nosec G204 -- see above.
+	// The pinned go on the hermetic PATH; args are fixed lists plus baseline
+	// package paths.
+	cmd := exec.CommandContext(context.Background(), "go", args...) // #nosec G204 -- see above.
 	cmd.Dir = dir
 
 	combined, err := cmd.CombinedOutput()

@@ -408,10 +408,6 @@ func pinExact(root, rule, relPath, canonical string) Outcome {
 	}
 }
 
-// aquaBin is the aqua executable remediation shells out to when regenerating
-// aqua-checksums.json; a package var so tests can substitute a stub.
-var aquaBin = "aqua" //nolint:gochecknoglobals // test seam: tests substitute a stub binary.
-
 // remediateAqua brings a repo's aqua setup up to the baseline in
 // book/tooling.md. When no manifest exists it seeds limen's canonical
 // aqua.yaml and — only in that pristine case, where the two provably match —
@@ -576,9 +572,8 @@ func regenerateAquaChecksums(root string) error {
 		{"--log-level", "warn", "policy", "allow", "aqua-policy.yaml"},
 		{"--log-level", "warn", "update-checksum", "--prune"},
 	} {
-		// aquaBin is "aqua" outside tests (a package-level seam, not user
-		// input), and args come from the fixed lists above.
-		cmd := exec.CommandContext(context.Background(), aquaBin, args...) // #nosec G204 -- see above.
+		// aqua on the hermetic PATH; args come from the fixed lists above.
+		cmd := exec.CommandContext(context.Background(), "aqua", args...) // #nosec G204 -- see above.
 
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {
