@@ -1,7 +1,10 @@
-// White-box tests: the gh transport seam (ghBin) and the auditor's internals
-// are package-private by design — testing through them is the point.
+// Black-box tests of the repository audit, through the package's exported
+// API and a fake gh: this test binary, copied under the name gh into a
+// directory TestMain puts first on PATH, answering each test's canned
+// responses. The package under test resolves "gh" on PATH exactly as it does
+// for a user.
 
-package github //nolint:testpackage // white-box (see above).
+package github_test
 
 import (
 	"encoding/base64"
@@ -12,9 +15,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 const testRepo = "test/repo"
@@ -119,17 +125,17 @@ func (r stubResponse) render(paginate, slurp bool) string {
 	}
 }
 
-// ghStubEnv carries the stub directory to the re-executed test binary. When
-// set, TestMain acts as the fake gh instead of running the suite.
+// ghStubEnv carries the directory of one test's canned responses to the
+// fake gh (this binary, invoked under that name from PATH).
 const ghStubEnv = "LIMEN_TEST_GH_STUB_DIR"
 
-// stubGH points ghBin at THIS test binary in stub mode (the stdlib
-// helper-process pattern): re-executed by the code under test, TestMain sees
-// ghStubEnv and answers "METHOD path" keys from responses; anything unlisted
-// errors generically (the unverifiable path). Every invocation is logged to
-// the returned file, write payloads included. No shell is involved anywhere —
-// a generated script cannot be exec'd on Windows (no shebangs, PATHEXT), and
-// a .bat shim re-parses metacharacters like the '&' in query strings.
+// stubGH writes the test's canned responses where the fake gh finds them and
+// names that directory in the environment the code under test inherits: the
+// fake answers "METHOD path" keys from responses; anything unlisted errors
+// generically (the unverifiable path). Every invocation is logged to the
+// returned file, write payloads included. No shell is involved anywhere — a
+// generated script cannot be exec'd on Windows (no shebangs, PATHEXT), and a
+// .bat shim re-parses metacharacters like the '&' in query strings.
 func stubGH(t *testing.T, responses map[string]stubResponse) string {
 	t.Helper()
 
@@ -144,41 +150,93 @@ func stubGH(t *testing.T, responses map[string]stubResponse) string {
 		t.Fatalf("writing stub responses: %v", err)
 	}
 
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatalf("locating the test binary: %v", err)
-	}
-
 	// Inherited by the children the code under test spawns (it does not set
 	// cmd.Env). Setenv also restores on cleanup and forbids t.Parallel —
-	// these tests are serial by design already (they mutate ghBin).
+	// the responses are process-wide state, so these tests are serial.
 	t.Setenv(ghStubEnv, dir)
-
-	previous := ghBin
-	ghBin = self
-
-	t.Cleanup(func() { ghBin = previous })
 
 	return filepath.Join(dir, "calls.log")
 }
 
-// TestMain lets the binary play both roles: the test suite, and — when
-// re-executed by the code under test with ghStubEnv set — the fake gh.
+// TestMain lets the binary play both roles: the test suite, and — invoked
+// under the name gh by the code under test — the fake gh.
 func TestMain(m *testing.M) {
-	if dir := os.Getenv(ghStubEnv); dir != "" {
+	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "gh" {
 		// The stub's exit status IS its contract (gh exits 1 on API errors);
 		// this branch never reaches the test runner's own exit handling.
 		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(runGHStub(dir))
+		os.Exit(runGHStub(os.Getenv(ghStubEnv)))
 	}
 
+	dir, err := installGHStub()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "installing the gh stub:", err)
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(1)
+	}
+
+	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+		fmt.Fprintln(os.Stderr, "putting the gh stub on PATH:", err)
+		//revive:disable-next-line:redundant-test-main-exit
+		os.Exit(1)
+	}
+
+	// The runner exits with m.Run's status once TestMain returns; the stub
+	// directory is removed on the way out.
 	m.Run()
+
+	_ = os.RemoveAll(dir)
+}
+
+// installGHStub copies (or links) this binary into a fresh directory under
+// the name TestMain dispatches on — exactly gh, plus the extension Windows
+// needs to execute it. Not the test binary's own extension: `github.test`
+// would yield `gh.test`, which TestMain does not recognize, and every child
+// would then run the suite.
+func installGHStub() (string, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+
+	dir, err := os.MkdirTemp("", "limen-gh-stub")
+	if err != nil {
+		return "", err
+	}
+
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+
+	stub := filepath.Join(dir, "gh"+ext)
+	if err := os.Symlink(self, stub); err == nil {
+		return dir, nil
+	}
+
+	data, err := os.ReadFile(self)
+	if err != nil {
+		return "", err
+	}
+
+	// 0o700, not 0o600: the stub must be executable.
+	if err := os.WriteFile(stub, data, 0o700); err != nil {
+		return "", err
+	}
+
+	return dir, nil
 }
 
 // runGHStub is the fake gh. argv mirrors the production invocation:
 // api --method METHOD PATH [--input -]. Mirroring the real gh: bodies go to
 // stdout with exit 0, errors to stderr with exit 1.
 func runGHStub(dir string) int {
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "gh stub: no responses for this test (stubGH not called)")
+
+		return 1
+	}
+
 	args := os.Args[1:]
 	if len(args) < 4 {
 		fmt.Fprintf(os.Stderr, "gh stub: unexpected argv %q\n", args)
@@ -374,22 +432,22 @@ func compliantResponses() map[string]stubResponse {
 	}
 }
 
-func findingByCheck(findings []Finding, check string) (Finding, bool) {
+func findingByCheck(findings []github.Finding, check string) (github.Finding, bool) {
 	for _, finding := range findings {
 		if finding.Check == check {
 			return finding, true
 		}
 	}
 
-	return Finding{}, false
+	return github.Finding{}, false
 }
 
-func TestAuditCompliant(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditCompliant(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	stubGH(t, compliantResponses())
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	if !AllOK(findings) {
+	if !github.AllOK(findings) {
 		for _, finding := range findings {
 			if !finding.OK() {
 				t.Errorf("%s: %s (%s)", finding.Check, finding.Status, finding.Message)
@@ -402,7 +460,7 @@ func TestAuditCompliant(t *testing.T) { //nolint:paralleltest // serial by desig
 	}
 }
 
-func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo"] = stubResponse{Body: `{
 	  "private": true,
@@ -439,31 +497,31 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
 	wantFail := []string{
-		checkMergeMethods, checkSquashDefaults, checkDeleteBranchOnMerge, checkAutoMerge,
-		checkWebCommitSignoff, checkIssues, checkWiki, checkForking, checkSecretScanning,
-		checkPushProtection, checkDependabotAlerts, checkDependabotFixes,
-		checkRulesetDefaultBranch, checkRulesetVersionTags, checkRenovateProcessing,
+		"merge-methods", "squash-commit-defaults", "delete-branch-on-merge", "auto-merge",
+		"web-commit-signoff", "issues", "wiki", "forking", "secret-scanning",
+		"secret-scanning-push-protection", "dependabot-alerts", "dependabot-security-updates",
+		"ruleset-default-branch", "ruleset-version-tags", "renovate-processing",
 	}
 	for _, check := range wantFail {
 		finding, found := findingByCheck(findings, check)
-		if !found || finding.Status != StatusFail {
+		if !found || finding.Status != github.StatusFail {
 			t.Errorf("%s: status %v, want fail", check, finding.Status)
 		}
 	}
 
-	wantAdvisory := []string{checkDefaultBranch, checkDescription}
+	wantAdvisory := []string{"default-branch", "description"}
 	for _, check := range wantAdvisory {
 		finding, found := findingByCheck(findings, check)
-		if !found || finding.Status != StatusAdvisory {
+		if !found || finding.Status != github.StatusAdvisory {
 			t.Errorf("%s: status %v, want advisory", check, finding.Status)
 		}
 	}
 
 	// Private repository: topics do not apply.
-	if finding, _ := findingByCheck(findings, checkTopics); finding.Status != StatusOK {
+	if finding, _ := findingByCheck(findings, "topics"); finding.Status != github.StatusOK {
 		t.Errorf("topics on a private repository: %v, want ok", finding.Status)
 	}
 
@@ -472,33 +530,33 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	}
 }
 
-func TestAuditUnverifiable(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestAuditUnverifiable(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	// Everything errors (a token with no access at all).
 	stubGH(t, map[string]stubResponse{})
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
 	if len(changes) != 0 {
 		t.Errorf("unverifiable audit planned %d change(s)", len(changes))
 	}
 
 	for _, finding := range findings {
-		if finding.Check == checkCodeScanning {
+		if finding.Check == "code-scanning" {
 			// Opt-in and not opted in: reported ok without any API call.
 			continue
 		}
 
-		if finding.Status != StatusUnverifiable {
+		if finding.Status != github.StatusUnverifiable {
 			t.Errorf("%s: status %v, want unverifiable", finding.Check, finding.Status)
 		}
 	}
 
-	if AllOK(findings) {
+	if github.AllOK(findings) {
 		t.Error("an entirely unverifiable audit must not count as passing")
 	}
 }
 
-func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo"] = stubResponse{Body: strings.NewReplacer(
 		`"has_wiki": false`, `"has_wiki": true`,
@@ -508,7 +566,7 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
 	logPath := stubGH(t, responses)
 
-	_, changes := Audit(testRepo, nil)
+	_, changes := github.Audit(testRepo, nil)
 	if len(changes) == 0 {
 		t.Fatal("expected planned changes")
 	}
@@ -546,17 +604,17 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 	}
 }
 
-func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo"] = stubResponse{Body: strings.Replace(
 		compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1,
 	)}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, map[string]string{checkWiki: "hosts the operations runbook"})
+	findings, changes := github.Audit(testRepo, map[string]string{"wiki": "hosts the operations runbook"})
 
-	finding, found := findingByCheck(findings, checkWiki)
-	if !found || finding.Status != StatusOK {
+	finding, found := findingByCheck(findings, "wiki")
+	if !found || finding.Status != github.StatusOK {
 		t.Errorf("exempted wiki check: %v, want ok", finding.Status)
 	}
 
@@ -565,7 +623,7 @@ func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by desi
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkWiki {
+		if planned.Check == "wiki" {
 			t.Error("an exempted check must not plan a change")
 		}
 	}
@@ -576,17 +634,17 @@ func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by desi
 // are staged when a change is PLANNED, not when the check is evaluated.
 // (TestOverrideExempts alone cannot catch this: its exempted check is the
 // only failing toggle, so no other change carries the payload.)
-func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	body := strings.Replace(compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1)
 	body = strings.Replace(body, `"delete_branch_on_merge": true`, `"delete_branch_on_merge": false`, 1)
 	responses["GET repos/test/repo"] = stubResponse{Body: body}
 	logPath := stubGH(t, responses)
 
-	_, changes := Audit(testRepo, map[string]string{checkWiki: "hosts the operations runbook"})
+	_, changes := github.Audit(testRepo, map[string]string{"wiki": "hosts the operations runbook"})
 
 	for _, planned := range changes {
-		if planned.Check == checkWiki {
+		if planned.Check == "wiki" {
 			t.Fatal("an exempted check must not plan a change")
 		}
 
@@ -613,21 +671,25 @@ func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest //
 // TestWorkflowFixPreservesExemptedField: the workflow-permissions PUT
 // replaces both fields, so a fix triggered by one check must write the
 // exempted other field back at its CURRENT value, not at the baseline.
-func TestWorkflowFixPreservesExemptedField(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestWorkflowFixPreservesExemptedField(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/actions/permissions/workflow"] = stubResponse{
 		Body: `{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}`,
 	}
 	logPath := stubGH(t, responses)
 
-	_, changes := Audit(testRepo, map[string]string{checkActionsWorkflowPerms: "release automation pushes tags"})
+	_, changes := github.Audit(testRepo, map[string]string{
+		"actions-workflow-permissions": "release automation pushes tags",
+	})
 
 	for _, planned := range changes {
-		if planned.Check == checkActionsWorkflowPerms {
+		if planned.Check == "actions-workflow-permissions" {
 			t.Fatal("an exempted check must not plan a change")
 		}
 
-		if planned.Check == checkActionsApprovePRs {
+		if planned.Check == "actions-approve-pull-requests" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -649,7 +711,7 @@ func TestWorkflowFixPreservesExemptedField(t *testing.T) { //nolint:paralleltest
 // TestRulesetsBeyondFirstPage: the canonical rulesets sit on the second page
 // of the listing, behind a full page of others. The listing is read whole,
 // so both are found and reconciled — never reported absent and re-created.
-func TestRulesetsBeyondFirstPage(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetsBeyondFirstPage(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	entries := make([]string, 100)
 	for i := range entries {
 		entries[i] = fmt.Sprintf(`{"id":%d,"name":"other-%d","target":"branch","enforcement":"active"}`, i+10, i)
@@ -662,16 +724,16 @@ func TestRulesetsBeyondFirstPage(t *testing.T) { //nolint:paralleltest // serial
 	}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	for _, check := range []string{checkRulesetDefaultBranch, checkRulesetVersionTags} {
-		if finding, found := findingByCheck(findings, check); !found || finding.Status != StatusOK {
+	for _, check := range []string{"ruleset-default-branch", "ruleset-version-tags"} {
+		if finding, found := findingByCheck(findings, check); !found || finding.Status != github.StatusOK {
 			t.Errorf("%s on the second page: %v (%s), want ok", check, finding.Status, finding.Message)
 		}
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkRulesetDefaultBranch || planned.Check == checkRulesetVersionTags {
+		if planned.Check == "ruleset-default-branch" || planned.Check == "ruleset-version-tags" {
 			t.Errorf("%s: a change was planned for a ruleset that exists on a later page", planned.Check)
 		}
 	}
@@ -705,13 +767,13 @@ var listPaths = []string{ //nolint:gochecknoglobals // test table.
 // asks gh for every page of every list it reads — arrays with --paginate,
 // object-wrapped lists with --paginate --slurp — and no list is fetched as
 // a single page. The call log is the evidence.
-func TestEveryListingPaginates(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestEveryListingPaginates(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	maps.Copy(responses, compliantOrgResponses())
 	logPath := stubGH(t, responses)
 
-	Audit(testRepo, nil)
-	AuditOrg(testOrg, map[string]string{checkOrgAdmins: "alice is the org"})
+	github.Audit(testRepo, nil)
+	github.AuditOrg(testOrg, map[string]string{"org-admins": "alice is the org"})
 
 	log, err := os.ReadFile(logPath)
 	if err != nil {
@@ -742,7 +804,7 @@ func TestLoadOverrides(t *testing.T) {
 
 	dir := t.TempDir()
 
-	path := filepath.Join(dir, filepath.FromSlash(OverridePath))
+	path := filepath.Join(dir, filepath.FromSlash(github.OverridePath))
 
 	write := func(content string) {
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -751,31 +813,31 @@ func TestLoadOverrides(t *testing.T) {
 	}
 
 	// Missing file: no exceptions (an empty, non-nil map), no error.
-	missing, err := LoadOverrides(t.TempDir())
+	missing, err := github.LoadOverrides(t.TempDir())
 	if err != nil || len(missing) != 0 {
 		t.Errorf("missing file: overrides %v, err %v", missing, err)
 	}
 
 	write("# comment\n\ngithub:\n  wiki: hosts the runbook\n  pages: marketing site\n")
 
-	overrides, err := LoadOverrides(dir)
+	overrides, err := github.LoadOverrides(dir)
 	if err != nil {
 		t.Fatalf("valid file: %v", err)
 	}
 
-	if overrides[checkWiki] != "hosts the runbook" || overrides[checkPages] != "marketing site" {
+	if overrides["wiki"] != "hosts the runbook" || overrides["pages"] != "marketing site" {
 		t.Errorf("parsed overrides: %v", overrides)
 	}
 
 	write("github:\n  nonsense-check: because\n")
 
-	if _, err := LoadOverrides(dir); err == nil {
+	if _, err := github.LoadOverrides(dir); err == nil {
 		t.Error("unknown check identifier must fail the file")
 	}
 
 	write("github:\n  wiki:\n")
 
-	if _, err := LoadOverrides(dir); err == nil {
+	if _, err := github.LoadOverrides(dir); err == nil {
 		t.Error("an exception without a reason must fail the file")
 	}
 
@@ -784,14 +846,14 @@ func TestLoadOverrides(t *testing.T) {
 	// and a comment-only reason is still no reason.
 	write("github:  # settings-audit exceptions\n  wiki: hosts the runbook  # revisit\n")
 
-	overrides, err = LoadOverrides(dir)
-	if err != nil || overrides[checkWiki] != "hosts the runbook" {
+	overrides, err = github.LoadOverrides(dir)
+	if err != nil || overrides["wiki"] != "hosts the runbook" {
 		t.Errorf("inline comments: overrides %v, err %v", overrides, err)
 	}
 
 	write("github:\n  wiki: # todo write a reason\n")
 
-	if _, err := LoadOverrides(dir); err == nil {
+	if _, err := github.LoadOverrides(dir); err == nil {
 		t.Error("a comment-only reason must fail the file")
 	}
 
@@ -799,13 +861,13 @@ func TestLoadOverrides(t *testing.T) {
 	// loudly, not silently exempt nothing.
 	write("wiki: hosts the runbook\n")
 
-	if _, err := LoadOverrides(dir); err == nil {
+	if _, err := github.LoadOverrides(dir); err == nil {
 		t.Error("a sectionless entry must fail the file")
 	}
 
 	write("gitlab:\n  wiki: hosts the runbook\n")
 
-	if _, err := LoadOverrides(dir); err == nil {
+	if _, err := github.LoadOverrides(dir); err == nil {
 		t.Error("an unknown section must fail the file")
 	}
 }
@@ -848,7 +910,7 @@ func TestInferRepo(t *testing.T) {
 				}
 			}
 
-			slug, err := InferRepo(dir)
+			slug, err := github.InferRepo(dir)
 
 			if testCase.wantOK && (err != nil || slug != testCase.want) {
 				t.Errorf("InferRepo = %q, %v; want %q", slug, err, testCase.want)
@@ -861,22 +923,22 @@ func TestInferRepo(t *testing.T) {
 	}
 }
 
-func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/actions/permissions/fork-pr-contributor-approval"] = stubResponse{
 		Body: `{"approval_policy":"first_time_contributors_new_to_github"}`,
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, found := findingByCheck(findings, checkForkPRApproval)
-	if !found || finding.Status != StatusFail {
+	finding, found := findingByCheck(findings, "actions-fork-pr-approval")
+	if !found || finding.Status != github.StatusFail {
 		t.Errorf("weakest approval policy: %v, want fail", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkForkPRApproval {
+		if planned.Check == "actions-fork-pr-approval" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -897,12 +959,12 @@ func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by desig
 	}
 }
 
-func TestActionsAccessLevel(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestActionsAccessLevel(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	// Public repository: not applicable, and the endpoint is never queried.
 	stubGH(t, compliantResponses())
 
-	findings, _ := Audit(testRepo, nil)
-	if finding, _ := findingByCheck(findings, checkActionsAccessLevel); finding.Status != StatusOK {
+	findings, _ := github.Audit(testRepo, nil)
+	if finding, _ := findingByCheck(findings, "actions-access-level"); finding.Status != github.StatusOK {
 		t.Errorf("public repository access level: %v, want ok (not applicable)", finding.Status)
 	}
 
@@ -914,15 +976,15 @@ func TestActionsAccessLevel(t *testing.T) { //nolint:paralleltest // serial by d
 	responses["GET repos/test/repo/actions/permissions/access"] = stubResponse{Body: `{"access_level":"organization"}`}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
-	if finding, _ := findingByCheck(findings, checkActionsAccessLevel); finding.Status != StatusFail {
+	findings, changes := github.Audit(testRepo, nil)
+	if finding, _ := findingByCheck(findings, "actions-access-level"); finding.Status != github.StatusFail {
 		t.Errorf("private repository with organization access: %v, want fail", finding.Status)
 	}
 
 	planned := false
 
 	for _, change := range changes {
-		if change.Check == checkActionsAccessLevel {
+		if change.Check == "actions-access-level" {
 			planned = true
 		}
 	}
@@ -932,13 +994,13 @@ func TestActionsAccessLevel(t *testing.T) { //nolint:paralleltest // serial by d
 	}
 }
 
-func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by design: mutates the package-level ghBin.
+func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	// Not opted in: ok, and the endpoint is never queried (the stub would
 	// error, which would surface as unverifiable).
 	stubGH(t, compliantResponses())
 
-	findings, _ := Audit(testRepo, nil)
-	if finding, _ := findingByCheck(findings, checkCodeScanning); finding.Status != StatusOK {
+	findings, _ := github.Audit(testRepo, nil)
+	if finding, _ := findingByCheck(findings, "code-scanning"); finding.Status != github.StatusOK {
 		t.Errorf("not opted in: %v, want ok", finding.Status)
 	}
 
@@ -947,15 +1009,15 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 	responses["GET repos/test/repo/code-scanning/default-setup"] = stubResponse{Body: `{"state":"not-configured"}`}
 	logPath := stubGH(t, responses)
 
-	optIn := map[string]string{checkCodeScanning: "this repo parses untrusted input"}
+	optIn := map[string]string{"code-scanning": "this repo parses untrusted input"}
 
-	findings, changes := Audit(testRepo, optIn)
-	if finding, _ := findingByCheck(findings, checkCodeScanning); finding.Status != StatusFail {
+	findings, changes := github.Audit(testRepo, optIn)
+	if finding, _ := findingByCheck(findings, "code-scanning"); finding.Status != github.StatusFail {
 		t.Errorf("opted in and not configured: %v, want fail (opt-in must not read as exemption)", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkCodeScanning {
+		if planned.Check == "code-scanning" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -971,13 +1033,13 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 	responses["GET repos/test/repo/code-scanning/default-setup"] = stubResponse{Body: `{"state":"configured"}`}
 	stubGH(t, responses)
 
-	findings, _ = Audit(testRepo, optIn)
-	if finding, _ := findingByCheck(findings, checkCodeScanning); finding.Status != StatusOK {
+	findings, _ = github.Audit(testRepo, optIn)
+	if finding, _ := findingByCheck(findings, "code-scanning"); finding.Status != github.StatusOK {
 		t.Errorf("opted in and configured: %v, want ok", finding.Status)
 	}
 }
 
-func TestOutsideCollaborators(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestOutsideCollaborators(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/collaborators?affiliation=outside&per_page=100"] = stubResponse{
 		Body: `[{"login":"drifter","role_name":"admin","permissions":{"push":true,"maintain":true,"admin":true}},` +
@@ -985,10 +1047,10 @@ func TestOutsideCollaborators(t *testing.T) { //nolint:paralleltest // serial: m
 	}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, found := findingByCheck(findings, checkOutsideCollaborators)
-	if !found || finding.Status != StatusAdvisory {
+	finding, found := findingByCheck(findings, "outside-collaborators")
+	if !found || finding.Status != github.StatusAdvisory {
 		t.Errorf("outside collaborator with admin: %v, want advisory", finding.Status)
 	}
 
@@ -997,13 +1059,13 @@ func TestOutsideCollaborators(t *testing.T) { //nolint:paralleltest // serial: m
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkOutsideCollaborators {
+		if planned.Check == "outside-collaborators" {
 			t.Error("people are never auto-fixed: no change may be planned")
 		}
 	}
 }
 
-func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// limen:main is missing non_fast_forward but carries the project's own
 	// status-check context: the reconcile payload must preserve it and must not
 	// inject the canonical defaults.
@@ -1015,15 +1077,15 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Fatalf("ruleset missing a rule: %v, want fail", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkRulesetDefaultBranch {
+		if planned.Check == "ruleset-default-branch" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -1046,7 +1108,9 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 // the gate job, is the limen-install case: a required "verify (windows-11-arm)"
 // its four-leg matrix never reports, and a pull request that waits forever.
 // The audit must fail it and the reconcile must move it onto the gate.
-func TestRulesetMigratesLegacyContextsToGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetMigratesLegacyContextsToGate(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
@@ -1061,10 +1125,10 @@ func TestRulesetMigratesLegacyContextsToGate(t *testing.T) { //nolint:parallelte
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Fatalf("legacy matrix contexts with a gate job: %v (%s), want fail", finding.Status, finding.Message)
 	}
 
@@ -1073,7 +1137,7 @@ func TestRulesetMigratesLegacyContextsToGate(t *testing.T) { //nolint:parallelte
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkRulesetDefaultBranch {
+		if planned.Check == "ruleset-default-branch" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -1107,12 +1171,12 @@ func gateWorkflowResponse() stubResponse {
 // ruleset requiring `gate` from a workflow that never reports it, and every
 // pull request waited forever on "Expected". An unreadable ci.yaml (an empty
 // repository) is the same case.
-func TestRulesetNotCreatedWithoutGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetNotCreatedWithoutGate(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	noGate := `{"content":"` + base64.StdEncoding.EncodeToString(
 		[]byte("jobs:\n  verify:\n    runs-on: x\n"),
 	) + `"}`
 
-	// Serial by construction (the stub binary is a package global), so the
+	// Serial by construction (the responses are process-wide state), so the
 	// cases share one test instead of t.Run.
 	cases := map[string]stubResponse{
 		"no gate job": {Body: noGate},
@@ -1127,10 +1191,10 @@ func TestRulesetNotCreatedWithoutGate(t *testing.T) { //nolint:paralleltest // s
 		responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = workflow
 		logPath := stubGH(t, responses)
 
-		findings, changes := Audit(testRepo, nil)
+		findings, changes := github.Audit(testRepo, nil)
 
-		finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-		if finding.Status != StatusFail {
+		finding, _ := findingByCheck(findings, "ruleset-default-branch")
+		if finding.Status != github.StatusFail {
 			t.Fatalf("%s: absent limen:main: %v, want fail", name, finding.Status)
 		}
 
@@ -1139,7 +1203,7 @@ func TestRulesetNotCreatedWithoutGate(t *testing.T) { //nolint:paralleltest // s
 		}
 
 		for _, planned := range changes {
-			if planned.Check == checkRulesetDefaultBranch {
+			if planned.Check == "ruleset-default-branch" {
 				t.Fatalf("%s: planned %q: nothing may be created without a gate job", name, planned.Summary)
 			}
 		}
@@ -1153,22 +1217,24 @@ func TestRulesetNotCreatedWithoutGate(t *testing.T) { //nolint:paralleltest // s
 
 // The same legacy contexts on a repository whose ci.yaml has NO gate job stay
 // preserved: moving them would require a check nothing reports.
-func TestRulesetKeepsLegacyContextsWithoutGate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetKeepsLegacyContextsWithoutGate(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = stubResponse{
 		Body: `{"content":"` + base64.StdEncoding.EncodeToString([]byte("jobs:\n  verify:\n    runs-on: x\n")) + `"}`,
 	}
 	stubGH(t, responses)
 
-	findings, _ := Audit(testRepo, nil)
+	findings, _ := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusOK {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusOK {
 		t.Fatalf("legacy contexts without a gate job: %v (%s), want ok (preserved)", finding.Status, finding.Message)
 	}
 }
 
-func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// A created limen:main must allow merge commits and must NOT require linear
 	// history. The two together left squash as the only usable method — GitHub
 	// disables rebase merges on a signature-required branch (it cannot sign the
@@ -1182,10 +1248,10 @@ func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // seri
 	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
 	logPath := stubGH(t, responses)
 
-	_, changes := Audit(testRepo, nil)
+	_, changes := github.Audit(testRepo, nil)
 
 	for _, planned := range changes {
-		if planned.Check == checkRulesetDefaultBranch {
+		if planned.Check == "ruleset-default-branch" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -1204,7 +1270,7 @@ func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // seri
 	}
 }
 
-func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// Creating limen:main from nothing must require exactly one context — the
 	// aggregate gate. Requiring the matrix legs instead bakes one repository's
 	// runner list into every ruleset, and a project whose CI differs then waits
@@ -1216,15 +1282,15 @@ func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest /
 	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
 	logPath := stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Fatalf("absent limen:main: %v, want fail", finding.Status)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkRulesetDefaultBranch {
+		if planned.Check == "ruleset-default-branch" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -1243,7 +1309,7 @@ func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest /
 	}
 }
 
-func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// A limen:main that is otherwise canonical but does not require signed
 	// commits is drift: the DCO trailer git-validation checks is a typed
 	// assertion, not proof of authorship. The reconcile must add the rule back.
@@ -1255,19 +1321,19 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Fatalf("limen:main without required_signatures: %v, want fail", finding.Status)
 	}
 
-	if !strings.Contains(finding.Current, ruleRequiredSigs) {
+	if !strings.Contains(finding.Current, "required_signatures") {
 		t.Errorf("the finding must name the missing rule, got %q", finding.Current)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkRulesetDefaultBranch {
+		if planned.Check == "ruleset-default-branch" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -1275,12 +1341,12 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 	}
 
 	log, _ := os.ReadFile(logPath)
-	if !strings.Contains(string(log), ruleRequiredSigs) {
+	if !strings.Contains(string(log), "required_signatures") {
 		t.Error("the reconcile payload must carry required_signatures")
 	}
 }
 
-func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
@@ -1289,15 +1355,15 @@ func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // seria
 	}
 	stubGH(t, responses)
 
-	findings, _ := Audit(testRepo, nil)
+	findings, _ := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Errorf("required status checks with no contexts: %v, want fail", finding.Status)
 	}
 }
 
-func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// The pre-"Fix merging" canonical shape: every required rule present — the
 	// rule-presence test alone reads it as compliant — plus required_linear_history
 	// and a merge-method list without "merge". On a signature-required branch
@@ -1314,19 +1380,19 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Fatalf("stale canonical ruleset: %v, want fail", finding.Status)
 	}
 
-	if !strings.Contains(finding.Current, ruleLinearHistory) {
+	if !strings.Contains(finding.Current, "required_linear_history") {
 		t.Errorf("the finding must name the forbidden rule, got %q", finding.Current)
 	}
 
 	for _, planned := range changes {
-		if planned.Check == checkRulesetDefaultBranch {
+		if planned.Check == "ruleset-default-branch" {
 			if err := planned.Apply(); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
@@ -1336,7 +1402,7 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	log, _ := os.ReadFile(logPath)
 	payload := string(log)
 
-	if strings.Contains(payload, ruleLinearHistory) {
+	if strings.Contains(payload, "required_linear_history") {
 		t.Error("the reconcile payload must drop required_linear_history")
 	}
 
@@ -1349,7 +1415,7 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	}
 }
 
-func TestRulesetApprovalDriftFails(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetApprovalDriftFails(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// Exactly the canonical rules, but no approval is required — the state
 	// every repository was in before this became canonical. A write-level
 	// identity could open a pull request, wait for its own green gate and
@@ -1363,10 +1429,10 @@ func TestRulesetApprovalDriftFails(t *testing.T) { //nolint:paralleltest // seri
 	}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Fatalf("zero required approvals: %v, want fail", finding.Status)
 	}
 
@@ -1377,7 +1443,7 @@ func TestRulesetApprovalDriftFails(t *testing.T) { //nolint:paralleltest // seri
 	planned := false
 
 	for _, change := range changes {
-		if change.Check == checkRulesetDefaultBranch {
+		if change.Check == "ruleset-default-branch" {
 			planned = true
 		}
 	}
@@ -1389,7 +1455,7 @@ func TestRulesetApprovalDriftFails(t *testing.T) { //nolint:paralleltest // seri
 
 // A pull_request rule that reports no count at all cannot prove a second
 // identity is required, so absence is drift rather than a pass.
-func TestRulesetApprovalAbsentFails(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetApprovalAbsentFails(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"]}},` +
@@ -1398,17 +1464,17 @@ func TestRulesetApprovalAbsentFails(t *testing.T) { //nolint:paralleltest // ser
 	}
 	stubGH(t, responses)
 
-	findings, _ := Audit(testRepo, nil)
+	findings, _ := github.Audit(testRepo, nil)
 
-	if finding, _ := findingByCheck(findings, checkRulesetDefaultBranch); finding.Status != StatusFail {
+	if finding, _ := findingByCheck(findings, "ruleset-default-branch"); finding.Status != github.StatusFail {
 		t.Fatalf("an unreported approval count: %v, want fail", finding.Status)
 	}
 }
 
-func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// Exactly the canonical rules, but the pull_request rule does not allow
 	// merge commits: parameter drift the rule-presence test cannot see, and
-	// below the floor — checkMergeMethods mandates the same availability at
+	// below the floor — "merge-methods" mandates the same availability at
 	// the repository level.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
@@ -1418,10 +1484,10 @@ func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // s
 	}
 	stubGH(t, responses)
 
-	findings, changes := Audit(testRepo, nil)
+	findings, changes := github.Audit(testRepo, nil)
 
-	finding, _ := findingByCheck(findings, checkRulesetDefaultBranch)
-	if finding.Status != StatusFail {
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail {
 		t.Fatalf("merge-method drift: %v, want fail", finding.Status)
 	}
 
@@ -1432,7 +1498,7 @@ func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // s
 	planned := false
 
 	for _, change := range changes {
-		if change.Check == checkRulesetDefaultBranch {
+		if change.Check == "ruleset-default-branch" {
 			planned = true
 		}
 	}
@@ -1448,7 +1514,7 @@ func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // s
 // open alerts that it had none enabled — a confident fail where the doctrine
 // requires "what cannot be verified does not pass" to hold in both directions.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestDependabotAlerts404WithoutAdmin(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
@@ -1458,16 +1524,16 @@ func TestDependabotAlerts404WithoutAdmin(t *testing.T) {
 
 	stubGH(t, responses)
 
-	findings, changes := Audit("test/repo", nil)
+	findings, changes := github.Audit("test/repo", nil)
 
-	finding, found := findingByCheck(findings, checkDependabotAlerts)
-	if !found || finding.Status != StatusUnverifiable {
+	finding, found := findingByCheck(findings, "dependabot-alerts")
+	if !found || finding.Status != github.StatusUnverifiable {
 		t.Fatalf("an unreadable alerts endpoint must be unverifiable, got %v (%s)",
 			finding.Status, finding.Message)
 	}
 
 	for _, change := range changes {
-		if change.Check == checkDependabotAlerts {
+		if change.Check == "dependabot-alerts" {
 			t.Error("a verdict limen could not reach must plan no write")
 		}
 	}
@@ -1477,17 +1543,17 @@ func TestDependabotAlerts404WithoutAdmin(t *testing.T) {
 // object that DID carry security_and_analysis, is a genuine "off" — the check
 // must still fail there, or the fix would never run for anyone.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestDependabotAlerts404WithAdmin(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/vulnerability-alerts"] = stubResponse{NotFound: true}
 
 	stubGH(t, responses)
 
-	findings, _ := Audit("test/repo", nil)
+	findings, _ := github.Audit("test/repo", nil)
 
-	finding, found := findingByCheck(findings, checkDependabotAlerts)
-	if !found || finding.Status != StatusFail {
+	finding, found := findingByCheck(findings, "dependabot-alerts")
+	if !found || finding.Status != github.StatusFail {
 		t.Fatalf("alerts genuinely off must still fail, got %v (%s)", finding.Status, finding.Message)
 	}
 }

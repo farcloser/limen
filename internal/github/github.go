@@ -23,10 +23,6 @@ import (
 	"strings"
 )
 
-// ghBin is the GitHub CLI executable the package shells out to; a package var
-// so tests can substitute a stub.
-var ghBin = "gh" //nolint:gochecknoglobals // test seam: tests substitute a stub binary.
-
 // Status is the verdict of one settings check.
 type Status string
 
@@ -189,9 +185,8 @@ func (c client) apiAllPages(path string, flags ...string) apiOutcome {
 // fullPath are carried only to phrase the error.
 func runGH(args []string, method, fullPath string, payload []byte) apiOutcome {
 	// The rules API carries no context; Background is the honest choice.
-	// ghBin is "gh" outside tests (a package seam, not user input), and every
-	// argument is a fixed API path built above.
-	cmd := exec.CommandContext(context.Background(), ghBin, args...) // #nosec G204 -- see above.
+	// gh on the hermetic PATH; every argument is a fixed API path built above.
+	cmd := exec.CommandContext(context.Background(), "gh", args...) // #nosec G204 -- see above.
 	if payload != nil {
 		cmd.Stdin = bytes.NewReader(payload)
 	}

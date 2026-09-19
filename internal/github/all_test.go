@@ -1,21 +1,22 @@
-// White-box tests for the -all-repos sweep, through the same gh stub seam as
-// the repository and org audits.
+// Tests for the -all-repos sweep, through the same fake gh as the
+// repository and org audits.
 
-package github //nolint:testpackage // white-box (see audit_test.go).
+package github_test
 
 import (
-	"errors"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/farcloser/limen/internal/github"
 )
 
 // TestOrgReposSkipsArchived: archived repositories are left out — GitHub
 // freezes their settings, so every fixable check would fail forever against a
 // write the API refuses.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgReposSkipsArchived(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org/repos?per_page=100&type=all": {
@@ -24,7 +25,7 @@ func TestOrgReposSkipsArchived(t *testing.T) {
 		},
 	})
 
-	repos, err := OrgRepos(testOrg)
+	repos, err := github.OrgRepos(testOrg)
 	if err != nil {
 		t.Fatalf("OrgRepos: %v", err)
 	}
@@ -39,7 +40,7 @@ func TestOrgReposSkipsArchived(t *testing.T) {
 // 140 entries stands in for the merged result — what this pins is that the
 // request asks for pagination at all, and that nothing truncates after.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgReposPaginates(t *testing.T) {
 	const total = 140
 
@@ -52,7 +53,7 @@ func TestOrgReposPaginates(t *testing.T) {
 		"GET orgs/test-org/repos?per_page=100&type=all": {Body: "[" + strings.Join(entries, ",") + "]"},
 	})
 
-	repos, err := OrgRepos(testOrg)
+	repos, err := github.OrgRepos(testOrg)
 	if err != nil {
 		t.Fatalf("OrgRepos: %v", err)
 	}
@@ -76,13 +77,13 @@ func TestOrgReposPaginates(t *testing.T) {
 // repositories fails the run rather than sweeping an empty set — zero
 // repositories audited must never report as zero problems.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgReposUnreadable(t *testing.T) {
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org/repos?per_page=100&type=all": {Fail: true},
 	})
 
-	if _, err := OrgRepos(testOrg); err == nil {
+	if _, err := github.OrgRepos(testOrg); err == nil {
 		t.Error("an unreadable repository list must be an error, not an empty sweep")
 	}
 }
@@ -91,11 +92,11 @@ func TestOrgReposUnreadable(t *testing.T) {
 // came from, the organization first and the repositories in the order given.
 // Without the tag a sweep's report says which checks failed but not where.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditManyTagsTargets(t *testing.T) {
 	stubGH(t, compliantOrgResponses())
 
-	findings, _ := AuditMany(testOrg, []string{"test-org/alpha", "test-org/beta"}, nil)
+	findings, _ := github.AuditMany(testOrg, []string{"test-org/alpha", "test-org/beta"}, nil)
 
 	if len(findings) == 0 {
 		t.Fatal("no findings")
@@ -130,7 +131,7 @@ const enforcedConfig422 = "gh: An enforced security configuration prevented modi
 // generic apply error it reads like a token or outage problem, which is how it
 // went unexplained on forkcloser.
 //
-//nolint:paralleltest // serial by design: mutates the package-level ghBin.
+//nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgEnforcedWriteNamesTheOrg(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
@@ -138,12 +139,12 @@ func TestOrgEnforcedWriteNamesTheOrg(t *testing.T) {
 
 	stubGH(t, responses)
 
-	_, changes := Audit("test/repo", nil)
+	_, changes := github.Audit("test/repo", nil)
 
-	var planned *Change
+	var planned *github.Change
 
 	for index, change := range changes {
-		if change.Check == checkDependabotFixes {
+		if change.Check == "dependabot-security-updates" {
 			planned = &changes[index]
 		}
 	}
@@ -153,7 +154,7 @@ func TestOrgEnforcedWriteNamesTheOrg(t *testing.T) {
 	}
 
 	err := planned.Apply()
-	if !errors.Is(err, errOrgEnforced) {
+	if err == nil || !strings.Contains(err.Error(), "enforced organization code security configuration") {
 		t.Fatalf("Apply = %v, want an org-enforced refusal", err)
 	}
 
