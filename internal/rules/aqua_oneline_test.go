@@ -1,11 +1,14 @@
-package rules //nolint:testpackage // white-box: exercises the manifest merge directly.
+package rules_test
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/farcloser/limen"
+	"github.com/farcloser/limen/internal/rules"
 )
 
 // TestCanonicalAquaHasNoTwoLinePins: the canonical manifest is itself the
@@ -13,13 +16,24 @@ import (
 func TestCanonicalAquaHasNoTwoLinePins(t *testing.T) {
 	t.Parallel()
 
-	if pins := canonicalAqua.twoLinePins(); len(pins) > 0 {
-		t.Errorf("the canonical aqua.yaml carries two-line pins: %v", pins)
-	}
-
 	if strings.Contains(limen.CanonicalAquaYAML, "\n    version:") {
 		t.Error("the canonical aqua.yaml carries a version: line")
 	}
+
+	if o := outcomesFor(rules.Fix(writeRepo(t, compliantFiles()), bootstrapOpts()), "aqua"); !allNone(o) {
+		t.Errorf("fix on the canonical aqua.yaml has something to do: %v", o)
+	}
+}
+
+// allNone reports whether every outcome is a no-op.
+func allNone(outcomes []rules.Outcome) bool {
+	for _, o := range outcomes {
+		if o.Action != rules.ActionNone {
+			return false
+		}
+	}
+
+	return true
 }
 
 // canonicalPin returns a canonical package's one-line pin exactly as the
@@ -75,22 +89,23 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		t.Fatal("the fixture did not diverge from the canonical as intended — update the replacements")
 	}
 
-	parsed, ok := parseAquaManifest(manifest)
-	if !ok {
-		t.Fatal("fixture does not parse")
-	}
+	files := compliantFiles()
+	files["aqua.yaml"] = manifest
+	dir := writeRepo(t, files)
 
-	if f := checkAquaManifest("aqua.yaml", parsed); f == nil ||
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); f.OK() ||
 		!strings.Contains(f.Message, "version: line") || !strings.Contains(f.Message, "golang/go") ||
 		!strings.Contains(f.Message, "jqlang/jq") || !strings.Contains(f.Message, "uutils/coreutils") ||
 		!strings.Contains(f.Message, "cli/cli") {
 		t.Errorf("check must name every two-line pin, got: %+v", f)
 	}
 
-	out, summary := mergeAquaManifest(parsed, "")
-	if len(summary) == 0 {
-		t.Fatal("merge reported no edits")
+	if !allResolvedOutcomes(outcomesFor(rules.Fix(dir, bootstrapOpts()), "aqua")) {
+		t.Fatal("fix did not resolve the two-line pins")
 	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	out := string(data)
 
 	for _, want := range []string{
 		"  - name: golang/go@" + heldBackGo + "\n",
@@ -117,18 +132,24 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		t.Errorf("expected exactly four lines fewer, got %d vs %d", len(strings.Split(out, "\n")), want)
 	}
 
-	reparsed, ok := parseAquaManifest(out)
-	if !ok {
-		t.Fatalf("merged manifest does not parse:\n%s", out)
-	}
-
-	if f := checkAquaManifest("aqua.yaml", reparsed); f != nil {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
 		t.Errorf("merged manifest must pass check: %s", f.Message)
 	}
 
-	if again, summary := mergeAquaManifest(reparsed, ""); len(summary) != 0 || again != out {
-		t.Errorf("merge is not idempotent: %v", summary)
+	if o := outcomesFor(rules.Fix(dir, bootstrapOpts()), "aqua"); !allNone(o) {
+		t.Errorf("fix is not idempotent: %v", o)
 	}
+}
+
+// allResolvedOutcomes reports whether every outcome resolved its rule.
+func allResolvedOutcomes(outcomes []rules.Outcome) bool {
+	for _, o := range outcomes {
+		if !resolved(o.Action) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // TestAquaTwoLinePinsFoldIntoWholesaleReplacement: when the packages section
@@ -145,22 +166,23 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 		"  - name: golang/go\n    version: "+goVersion+" # renovate: depName=golang/go\n", 1)
 	manifest = strings.Replace(manifest, cliLine, "", 1) // now missing
 
-	parsed, ok := parseAquaManifest(manifest)
-	if !ok {
-		t.Fatal("fixture does not parse")
+	files := compliantFiles()
+	files["aqua.yaml"] = manifest
+	dir := writeRepo(t, files)
+
+	if !allResolvedOutcomes(outcomesFor(rules.Fix(dir, bootstrapOpts()), "aqua")) {
+		t.Fatal("fix did not resolve the manifest")
 	}
 
-	out, summary := mergeAquaManifest(parsed, "")
-	if len(summary) < 2 { //nolint:mnd // one summary line for the missing package, one for the collapse.
-		t.Fatalf("expected both a missing-package add and a collapse, got %v", summary)
-	}
+	data, _ := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
 
+	out := string(data)
 	if !strings.Contains(out, goLine) ||
 		!strings.Contains(out, cliLine) || strings.Contains(out, "\n    version:") {
 		t.Errorf("merged manifest:\n%s", out)
 	}
 
-	if reparsed, ok := parseAquaManifest(out); !ok || checkAquaManifest("aqua.yaml", reparsed) != nil {
-		t.Errorf("merged manifest must parse and pass:\n%s", out)
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
+		t.Errorf("merged manifest must pass: %s", f.Message)
 	}
 }

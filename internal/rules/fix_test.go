@@ -1,10 +1,6 @@
-// White-box by necessity: these tests exercise unexported check*/remediate*
-// helpers and the aquaBin test seam, none of which are part of the package API.
-
-package rules //nolint:testpackage // white-box (see above)
+package rules_test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,18 +8,19 @@ import (
 
 	"github.com/farcloser/limen"
 	"github.com/farcloser/limen/internal/license"
+	"github.com/farcloser/limen/internal/rules"
 )
 
 // bootstrapOpts remediates like `limen bootstrap`: a Closed-source LICENSE is
 // generated for a missing one.
-func bootstrapOpts() FixOptions {
-	return FixOptions{Policy: DefaultPolicy(), License: license.Closed, Holder: "Farcloser", Year: 2026}
+func bootstrapOpts() rules.FixOptions {
+	return rules.FixOptions{Policy: rules.DefaultPolicy(), License: license.Closed, Holder: "Farcloser", Year: 2026}
 }
 
 // outcomesFor returns every outcome a rule produced, in order, for rules that
 // remediate more than one file.
-func outcomesFor(outcomes []Outcome, rule string) []Outcome {
-	var got []Outcome
+func outcomesFor(outcomes []rules.Outcome, rule string) []rules.Outcome {
+	var got []rules.Outcome
 
 	for _, o := range outcomes {
 		if o.Rule == rule {
@@ -34,38 +31,38 @@ func outcomesFor(outcomes []Outcome, rule string) []Outcome {
 	return got
 }
 
-func outcomeFor(outcomes []Outcome, rule string) Outcome {
+func outcomeFor(outcomes []rules.Outcome, rule string) rules.Outcome {
 	for _, o := range outcomes {
 		if o.Rule == rule {
 			return o
 		}
 	}
 
-	return Outcome{Rule: rule, Action: ActionFailed, Message: "rule not remediated"}
+	return rules.Outcome{Rule: rule, Action: rules.ActionFailed, Message: "rule not remediated"}
 }
 
 // TestFixCreatesEverything is the bootstrap path minus `git init`: a repo that is
-// only a .git directory is remediated into a fully compliant one, and Check then
+// only a .git directory is remediated into a fully compliant one, and rules.Check then
 // passes every rule. (The .git is pre-seeded so the test does not shell out.)
 func TestFixCreatesEverything(t *testing.T) {
 	t.Parallel()
 
 	dir := writeRepo(t, nil) // just .git
 
-	outcomes := Fix(dir, bootstrapOpts())
-	if !AllResolved(outcomes) {
+	outcomes := rules.Fix(dir, bootstrapOpts())
+	if !rules.AllResolved(outcomes) {
 		for _, o := range outcomes {
-			if !o.Action.resolved() {
+			if !resolved(o.Action) {
 				t.Errorf("unresolved: %s -> %s (%s)", o.Rule, o.Action, o.Message)
 			}
 		}
 	}
 
-	if l := outcomeFor(outcomes, "license"); l.Action != ActionCreated {
+	if l := outcomeFor(outcomes, "license"); l.Action != rules.ActionCreated {
 		t.Errorf("license action = %s, want created", l.Action)
 	}
-	// The remediated tree must satisfy Check.
-	if findings := Check(dir, DefaultPolicy()); !AllOK(findings) {
+	// The remediated tree must satisfy rules.Check.
+	if findings := rules.Check(dir, rules.DefaultPolicy()); !rules.AllOK(findings) {
 		for _, f := range findings {
 			if !f.OK() {
 				t.Errorf("post-fix check failure: %s -> %s", f.Rule, f.Message)
@@ -79,11 +76,11 @@ func TestFixIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	dir := writeRepo(t, nil)
-	Fix(dir, bootstrapOpts())
+	rules.Fix(dir, bootstrapOpts())
 
-	second := Fix(dir, bootstrapOpts())
+	second := rules.Fix(dir, bootstrapOpts())
 	for _, o := range second {
-		if o.Action != ActionNone {
+		if o.Action != rules.ActionNone {
 			t.Errorf("second fix touched %s: %s (%s)", o.Rule, o.Action, o.Message)
 		}
 	}
@@ -96,8 +93,8 @@ func TestFixLeavesExistingGitignore(t *testing.T) {
 
 	dir := writeRepo(t, map[string]string{".gitignore": own})
 
-	o := outcomeFor(Fix(dir, bootstrapOpts()), "gitignore")
-	if o.Action != ActionNone {
+	o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "gitignore")
+	if o.Action != rules.ActionNone {
 		t.Fatalf("gitignore action = %s, want none (an existing file is left as-is)", o.Action)
 	}
 	// The existing file is untouched — not overwritten with the canonical.
@@ -106,7 +103,7 @@ func TestFixLeavesExistingGitignore(t *testing.T) {
 		t.Errorf("fix modified an existing .gitignore: %q", string(data))
 	}
 
-	if f := checkGitignore(dir); !f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gitignore"); !f.OK() {
 		t.Errorf("an existing .gitignore should pass: %s", f.Message)
 	}
 }
@@ -121,12 +118,12 @@ func TestFixJustfileRegimes(t *testing.T) {
 	// (just --fmt rejects a file without one — a fresh repo must not be born
 	// lint-red).
 	seeded := writeRepo(t, nil)
-	if o := justfileOutcome(Fix(seeded, bootstrapOpts())); o.Action != ActionCreated {
+	if o := justfileOutcome(rules.Fix(seeded, bootstrapOpts())); o.Action != rules.ActionCreated {
 		t.Fatalf("missing Justfile: %s, want created", o.Action)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(seeded, "Justfile"))
-	if !strings.Contains(string(data), CanonicalJustfileImport) || !strings.HasSuffix(string(data), "\n") {
+	if !strings.Contains(string(data), rules.CanonicalJustfileImport) || !strings.HasSuffix(string(data), "\n") {
 		t.Errorf("seed must carry the import and end in a newline, got: %q", data)
 	}
 
@@ -134,20 +131,21 @@ func TestFixJustfileRegimes(t *testing.T) {
 	ownRecipes := "greet:\n\t@echo hand-rolled\n"
 
 	merged := writeRepo(t, map[string]string{"Justfile": ownRecipes})
-	if o := justfileOutcome(Fix(merged, bootstrapOpts())); o.Action != ActionMerged {
+	if o := justfileOutcome(rules.Fix(merged, bootstrapOpts())); o.Action != rules.ActionMerged {
 		t.Fatalf("Justfile without the import: %s, want merged", o.Action)
 	}
 
 	data, _ = os.ReadFile(filepath.Join(merged, "Justfile"))
-	if !strings.Contains(string(data), "hand-rolled") || !strings.Contains(string(data), CanonicalJustfileImport) {
+	if !strings.Contains(string(data), "hand-rolled") ||
+		!strings.Contains(string(data), rules.CanonicalJustfileImport) {
 		t.Errorf("merge must keep the project's recipes and add the import, got: %q", data)
 	}
 
 	// Present with the import -> the project's own, untouched.
-	own := CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n"
+	own := rules.CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n"
 
 	untouched := writeRepo(t, map[string]string{"Justfile": own})
-	if o := justfileOutcome(Fix(untouched, bootstrapOpts())); o.Action != ActionNone {
+	if o := justfileOutcome(rules.Fix(untouched, bootstrapOpts())); o.Action != rules.ActionNone {
 		t.Fatalf("compliant Justfile: %s, want none", o.Action)
 	}
 
@@ -157,14 +155,14 @@ func TestFixJustfileRegimes(t *testing.T) {
 	}
 }
 
-func justfileOutcome(outcomes []Outcome) Outcome {
+func justfileOutcome(outcomes []rules.Outcome) rules.Outcome {
 	for _, o := range outcomes {
 		if o.Rule == "justfile" && (o.Path == "Justfile" || o.Path == "justfile" || o.Path == ".justfile") {
 			return o
 		}
 	}
 
-	return Outcome{Rule: "justfile", Action: ActionFailed, Message: "no root Justfile outcome"}
+	return rules.Outcome{Rule: "justfile", Action: rules.ActionFailed, Message: "no root Justfile outcome"}
 }
 
 func TestFixOverwritesDriftedEditorconfig(t *testing.T) {
@@ -172,20 +170,20 @@ func TestFixOverwritesDriftedEditorconfig(t *testing.T) {
 
 	// A drifted .editorconfig (extra section) is overwritten to the canonical
 	// exactly — content-pinned, no merge, no advisory.
-	drifted := CanonicalEditorconfig + "\n[*.lua]\nindent_size = 2\n"
+	drifted := rules.CanonicalEditorconfig + "\n[*.lua]\nindent_size = 2\n"
 	dir := writeRepo(t, map[string]string{".editorconfig": drifted})
 
-	o := outcomeFor(Fix(dir, bootstrapOpts()), "editorconfig")
-	if o.Action != ActionOverwrote {
+	o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "editorconfig")
+	if o.Action != rules.ActionOverwrote {
 		t.Fatalf("editorconfig action = %s, want overwrote", o.Action)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".editorconfig"))
-	if string(data) != CanonicalEditorconfig {
+	if string(data) != rules.CanonicalEditorconfig {
 		t.Error("editorconfig was not reset to the canonical exactly")
 	}
 
-	if f := checkEditorconfig(dir); !f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "editorconfig"); !f.OK() {
 		t.Errorf("editorconfig should pass after overwrite: %s", f.Message)
 	}
 }
@@ -198,7 +196,10 @@ func TestFixLicensePolicy(t *testing.T) {
 
 	// Missing + fix (no License) -> advisory, no file written.
 	dir := writeRepo(t, nil)
-	if o := outcomeFor(Fix(dir, FixOptions{Policy: DefaultPolicy()}), "license"); o.Action != ActionAdvisory {
+	if o := outcomeFor(
+		rules.Fix(dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		"license",
+	); o.Action != rules.ActionAdvisory {
 		t.Errorf("fix on missing LICENSE = %s, want advisory", o.Action)
 	}
 
@@ -208,17 +209,21 @@ func TestFixLicensePolicy(t *testing.T) {
 
 	// Missing + bootstrap (License=Closed) -> created and recognized.
 	dir2 := writeRepo(t, nil)
-	if o := outcomeFor(Fix(dir2, bootstrapOpts()), "license"); o.Action != ActionCreated {
+	if o := outcomeFor(rules.Fix(dir2, bootstrapOpts()), "license"); o.Action != rules.ActionCreated {
 		t.Fatalf("bootstrap on missing LICENSE = %s, want created", o.Action)
 	}
 
-	if f := checkLicense(dir2, DefaultPolicy()); !f.OK() || f.Message != "license Closed-source" {
+	if f := findingByRule(
+		rules.Check(dir2, rules.DefaultPolicy()),
+		"license",
+	); !f.OK() ||
+		f.Message != "license Closed-source" {
 		t.Errorf("generated LICENSE not recognized as Closed-source: %s", f.Message)
 	}
 
 	// Present-but-disallowed -> advisory, untouched.
 	dir3 := writeRepo(t, map[string]string{"LICENSE": "GNU GENERAL PUBLIC LICENSE Version 3\n"})
-	if o := outcomeFor(Fix(dir3, bootstrapOpts()), "license"); o.Action != ActionAdvisory {
+	if o := outcomeFor(rules.Fix(dir3, bootstrapOpts()), "license"); o.Action != rules.ActionAdvisory {
 		t.Errorf("disallowed LICENSE = %s, want advisory", o.Action)
 	}
 }
@@ -230,20 +235,20 @@ func TestFixOverwritesDriftedShellcheck(t *testing.T) {
 	// exactly (content-pinned: the repo's own directive is not preserved).
 	dir := writeRepo(t, map[string]string{
 		"build.sh":             "#!/bin/sh\necho hi\n",
-		".limen/.shellcheckrc": CanonicalShellcheckrc + "\ndisable=SC2034\n",
+		".limen/.shellcheckrc": rules.CanonicalShellcheckrc + "\ndisable=SC2034\n",
 	})
 
-	o := outcomeFor(Fix(dir, bootstrapOpts()), "shellcheck")
-	if o.Action != ActionOverwrote {
+	o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "shellcheck")
+	if o.Action != rules.ActionOverwrote {
 		t.Fatalf("shellcheck action = %s, want overwrote", o.Action)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".limen", ".shellcheckrc"))
-	if string(data) != CanonicalShellcheckrc {
+	if string(data) != rules.CanonicalShellcheckrc {
 		t.Errorf("shellcheck was not reset to the canonical exactly:\n%s", data)
 	}
 
-	if f := checkShellcheck(dir); !f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "shellcheck"); !f.OK() {
 		t.Errorf("shellcheck should pass after overwrite: %s", f.Message)
 	}
 }
@@ -259,7 +264,7 @@ func TestFixKeepsLowercaseReadme(t *testing.T) {
 
 	dir := writeRepo(t, map[string]string{"readme.md": body})
 
-	if o := outcomeFor(Fix(dir, bootstrapOpts()), "readme"); o.Action != ActionNone {
+	if o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "readme"); o.Action != rules.ActionNone {
 		t.Fatalf("readme action = %s (%s), want none", o.Action, o.Message)
 	}
 
@@ -269,8 +274,8 @@ func TestFixKeepsLowercaseReadme(t *testing.T) {
 	}
 
 	for _, e := range entries {
-		if e.Name() == readmeFileName {
-			t.Fatalf("fix planted %s beside readme.md", readmeFileName)
+		if e.Name() == "README.md" {
+			t.Fatalf("fix planted %s beside readme.md", "README.md")
 		}
 	}
 
@@ -288,20 +293,20 @@ func TestShellcheckrcIsUnconditional(t *testing.T) {
 	// breakage rather than an inapplicable rule.
 	dir := writeRepo(t, map[string]string{"README.md": "# no shell here\n"})
 
-	if f := checkShellcheck(dir); f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "shellcheck"); f.OK() {
 		t.Error("a repository missing .limen/.shellcheckrc must fail, shell or not")
 	}
 
-	if o := outcomeFor(Fix(dir, bootstrapOpts()), "shellcheck"); o.Action != ActionCreated {
+	if o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "shellcheck"); o.Action != rules.ActionCreated {
 		t.Fatalf("shellcheck action = %s, want created", o.Action)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".limen", ".shellcheckrc"))
-	if string(data) != CanonicalShellcheckrc {
+	if string(data) != rules.CanonicalShellcheckrc {
 		t.Errorf("seeded .shellcheckrc is not the canonical:\n%s", data)
 	}
 
-	if f := checkShellcheck(dir); !f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "shellcheck"); !f.OK() {
 		t.Errorf("shellcheck should pass after seeding: %s", f.Message)
 	}
 }
@@ -312,17 +317,17 @@ func TestFixAgents(t *testing.T) {
 	// Missing -> AGENTS.md created from the canonical, CLAUDE.md seeded.
 	dir := writeRepo(t, nil)
 
-	outcomes := Fix(dir, bootstrapOpts())
+	outcomes := rules.Fix(dir, bootstrapOpts())
 	if got := outcomesFor(
 		outcomes,
 		"agents",
-	); len(got) != 2 || got[0].Action != ActionCreated ||
-		got[1].Action != ActionCreated {
+	); len(got) != 2 || got[0].Action != rules.ActionCreated ||
+		got[1].Action != rules.ActionCreated {
 		t.Fatalf("agents outcomes = %v, want two creations", got)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
-	if string(data) != CanonicalAgents {
+	if string(data) != rules.CanonicalAgents {
 		t.Error("created AGENTS.md does not equal the canonical")
 	}
 
@@ -333,17 +338,17 @@ func TestFixAgents(t *testing.T) {
 
 	// Drifted AGENTS.md -> overwritten exactly; a project-owned CLAUDE.md -> untouched.
 	drifted := writeRepo(t, map[string]string{
-		"AGENTS.md": CanonicalAgents + "\n- my own rule\n",
+		"AGENTS.md": rules.CanonicalAgents + "\n- my own rule\n",
 		"CLAUDE.md": "@AGENTS.md\n\n## Mine\n",
 	})
 
-	got := outcomesFor(Fix(drifted, bootstrapOpts()), "agents")
-	if len(got) != 2 || got[0].Action != ActionOverwrote || got[1].Action != ActionNone {
+	got := outcomesFor(rules.Fix(drifted, bootstrapOpts()), "agents")
+	if len(got) != 2 || got[0].Action != rules.ActionOverwrote || got[1].Action != rules.ActionNone {
 		t.Fatalf("agents outcomes = %v, want overwrote + none", got)
 	}
 
 	data, _ = os.ReadFile(filepath.Join(drifted, "AGENTS.md"))
-	if string(data) != CanonicalAgents {
+	if string(data) != rules.CanonicalAgents {
 		t.Errorf("AGENTS.md was not reset to the canonical exactly:\n%s", data)
 	}
 
@@ -352,7 +357,7 @@ func TestFixAgents(t *testing.T) {
 		t.Errorf("a project-owned CLAUDE.md was touched:\n%s", data)
 	}
 
-	if f := checkAgents(drifted); !f.OK() {
+	if f := findingByRule(rules.Check(drifted, rules.DefaultPolicy()), "agents"); !f.OK() {
 		t.Errorf("agents should pass after fix: %s", f.Message)
 	}
 }
@@ -363,31 +368,31 @@ func TestFixGitattributes(t *testing.T) {
 	// Missing .gitattributes -> created from the canonical (unconditional rule).
 	dir := writeRepo(t, nil)
 
-	o := outcomeFor(Fix(dir, bootstrapOpts()), "gitattributes")
-	if o.Action != ActionCreated {
+	o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "gitattributes")
+	if o.Action != rules.ActionCreated {
 		t.Fatalf("gitattributes action = %s, want created", o.Action)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".gitattributes"))
-	if string(data) != CanonicalGitattributes {
+	if string(data) != rules.CanonicalGitattributes {
 		t.Error("created .gitattributes does not equal the canonical")
 	}
 
 	// Drifted -> overwritten to the canonical exactly (content-pinned: a local
 	// addition would reintroduce git's line-ending conversion).
 	drifted := writeRepo(t, map[string]string{
-		".gitattributes": CanonicalGitattributes + "\n*.md text\n",
+		".gitattributes": rules.CanonicalGitattributes + "\n*.md text\n",
 	})
-	if o := outcomeFor(Fix(drifted, bootstrapOpts()), "gitattributes"); o.Action != ActionOverwrote {
+	if o := outcomeFor(rules.Fix(drifted, bootstrapOpts()), "gitattributes"); o.Action != rules.ActionOverwrote {
 		t.Fatalf("gitattributes action = %s, want overwrote", o.Action)
 	}
 
 	data, _ = os.ReadFile(filepath.Join(drifted, ".gitattributes"))
-	if string(data) != CanonicalGitattributes {
+	if string(data) != rules.CanonicalGitattributes {
 		t.Errorf(".gitattributes was not reset to the canonical exactly:\n%s", data)
 	}
 
-	if f := checkGitattributes(drifted); !f.OK() {
+	if f := findingByRule(rules.Check(drifted, rules.DefaultPolicy()), "gitattributes"); !f.OK() {
 		t.Errorf("gitattributes should pass after overwrite: %s", f.Message)
 	}
 }
@@ -398,38 +403,38 @@ func TestFixLychee(t *testing.T) {
 	// Missing .limen/lychee.toml -> created from the canonical (unconditional rule).
 	dir := writeRepo(t, nil)
 
-	o := outcomeFor(Fix(dir, bootstrapOpts()), "lychee")
-	if o.Action != ActionCreated {
+	o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "lychee")
+	if o.Action != rules.ActionCreated {
 		t.Fatalf("lychee action = %s, want created", o.Action)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".limen", "lychee.toml"))
-	if string(data) != CanonicalLychee {
+	if string(data) != rules.CanonicalLychee {
 		t.Error("created .limen/lychee.toml does not equal the canonical")
 	}
 
 	// Drifted -> overwritten to the canonical exactly (content-pinned: a local
 	// addition is not preserved; project exclusions belong in a root lychee.toml).
 	drifted := writeRepo(t, map[string]string{
-		".limen/lychee.toml": CanonicalLychee + "\ncache = true\n",
+		".limen/lychee.toml": rules.CanonicalLychee + "\ncache = true\n",
 	})
-	if o := outcomeFor(Fix(drifted, bootstrapOpts()), "lychee"); o.Action != ActionOverwrote {
+	if o := outcomeFor(rules.Fix(drifted, bootstrapOpts()), "lychee"); o.Action != rules.ActionOverwrote {
 		t.Fatalf("lychee action = %s, want overwrote", o.Action)
 	}
 
 	data, _ = os.ReadFile(filepath.Join(drifted, ".limen", "lychee.toml"))
-	if string(data) != CanonicalLychee {
+	if string(data) != rules.CanonicalLychee {
 		t.Errorf("lychee config was not reset to the canonical exactly:\n%s", data)
 	}
 
-	if f := checkLychee(drifted); !f.OK() {
+	if f := findingByRule(rules.Check(drifted, rules.DefaultPolicy()), "lychee"); !f.OK() {
 		t.Errorf("lychee should pass after overwrite: %s", f.Message)
 	}
 
 	// A project's own root lychee.toml is never touched.
 	own := "exclude = ['https://example\\.internal/']\n"
 	withOwn := writeRepo(t, map[string]string{".lychee.toml": own})
-	Fix(withOwn, bootstrapOpts())
+	rules.Fix(withOwn, bootstrapOpts())
 
 	data, _ = os.ReadFile(filepath.Join(withOwn, ".lychee.toml"))
 	if string(data) != own {
@@ -443,131 +448,31 @@ func TestFixCreatesMissingShellcheck(t *testing.T) {
 	// Shell present, no .limen/.shellcheckrc -> created from the canonical.
 	dir := writeRepo(t, map[string]string{"build.sh": "#!/bin/sh\necho hi\n"})
 
-	o := outcomeFor(Fix(dir, bootstrapOpts()), "shellcheck")
-	if o.Action != ActionCreated {
+	o := outcomeFor(rules.Fix(dir, bootstrapOpts()), "shellcheck")
+	if o.Action != rules.ActionCreated {
 		t.Fatalf("shellcheck action = %s, want created", o.Action)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".limen", ".shellcheckrc"))
-	if string(data) != CanonicalShellcheckrc {
+	if string(data) != rules.CanonicalShellcheckrc {
 		t.Error("created .limen/.shellcheckrc does not equal the canonical")
 	}
-}
-
-// stubAqua points remediation at a stand-in aqua binary so tests exercise the
-// checksum-regeneration path without network or a real aqua. The stub records
-// a recognizable aqua-checksums.json — recognizably NOT limen's canonical one,
-// which is the whole point: regenerated, never copied.
-const stubChecksums = `{"stub":true}` + "\n"
-
-// aquaStubEnv flips the re-executed test binary into fake-aqua mode (see
-// TestMain). Helper-process pattern rather than a generated script: Windows
-// cannot exec a shebang script (CreateProcess knows no shebangs, LookPath
-// only recognizes PATHEXT extensions).
-const aquaStubEnv = "LIMEN_TEST_AQUA_STUB"
-
-func stubAqua(t *testing.T) {
-	t.Helper()
-
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatalf("locating the test binary: %v", err)
-	}
-
-	// Inherited by the children remediation spawns (it sets only cmd.Dir).
-	// Setenv also forbids t.Parallel — these tests are serial by design
-	// already (they mutate aquaBin).
-	t.Setenv(aquaStubEnv, "1")
-
-	prev := aquaBin
-	aquaBin = self
-
-	t.Cleanup(func() { aquaBin = prev })
-}
-
-// TestMain lets the binary double as the fake aqua (see stubAqua).
-// suiteGuardEnv marks the environment of the running suite. The test binary
-// doubles as two stubs (below), so a child that is this binary and matches
-// neither stub is a bug — and running the suite from inside the suite is a
-// fork bomb. The guard turns that into an immediate failure.
-const suiteGuardEnv = "LIMEN_TEST_SUITE_RUNNING"
-
-func TestMain(m *testing.M) {
-	// Invoked under the name `go`: the fake go (see installGoStub). Decided
-	// on the name, not an env var, so a test that also arms the aqua stub
-	// (env-triggered, below) can never make a go child run as aqua.
-	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "go" {
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(runGoStub())
-	}
-
-	if os.Getenv(aquaStubEnv) != "" {
-		// The stub's exit status IS its contract; this branch never reaches
-		// the test runner's own exit handling.
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(runAquaStub())
-	}
-
-	if os.Getenv(suiteGuardEnv) != "" {
-		fmt.Fprintf(os.Stderr, "test binary re-executed as %q from inside the suite: refusing to recurse\n", os.Args)
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(1)
-	}
-
-	if err := os.Setenv(suiteGuardEnv, "1"); err != nil {
-		fmt.Fprintln(os.Stderr, "arming the suite guard:", err)
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(1)
-	}
-
-	// Every test runs against the fake go: the gotools remediation shells
-	// out on any repository lacking a directive, which is most fixtures, and
-	// the real go would reach the network from dozens of parallel tests.
-	cleanup, err := installGoStub()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "installing the go stub:", err)
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(1)
-	}
-
-	// The runner exits with m.Run's status once TestMain returns; the stub
-	// directory is removed on the way out.
-	m.Run()
-	cleanup()
-}
-
-// runAquaStub mimics the two invocations remediation makes: `policy allow`
-// (silent success) and `update-checksum`, which writes the stub checksums
-// into the working directory (remediation sets cmd.Dir to the repo root).
-func runAquaStub() int {
-	for _, arg := range os.Args[1:] {
-		if arg == "update-checksum" {
-			if err := os.WriteFile(aquaChecksumsFile, []byte(stubChecksums), 0o600); err != nil {
-				fmt.Fprintf(os.Stderr, "aqua stub: %v\n", err)
-
-				return 1
-			}
-		}
-	}
-
-	return 0
 }
 
 // TestFixMergesAquaManifest: an existing manifest keeps its own packages and
 // versions, gains the canonical sections and missing canonical packages without
 // duplicates, and has its checksums regenerated — not copied from limen.
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
 func TestFixMergesAquaManifest(t *testing.T) {
-	stubAqua(t)
+	t.Parallel()
+
 	dir := writeRepo(t, map[string]string{
 		"aqua.yaml": "checksum:\n  enabled: false\npackages:\n  - name: junegunn/fzf@v0.60.0\n  - name: casey/just@v99.99.99\n",
 	})
 
-	outcomes := Fix(dir, bootstrapOpts())
-	if !AllResolved(outcomes) {
+	outcomes := rules.Fix(dir, bootstrapOpts())
+	if !rules.AllResolved(outcomes) {
 		for _, o := range outcomes {
-			if !o.Action.resolved() {
+			if !resolved(o.Action) {
 				t.Errorf("unresolved: %s -> %s (%s)", o.Rule, o.Action, o.Message)
 			}
 		}
@@ -605,12 +510,12 @@ func TestFixMergesAquaManifest(t *testing.T) {
 		t.Errorf("checksums were not regenerated by aqua, got:\n%s", sums)
 	}
 
-	if f := checkAqua(dir); !f.OK() {
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
 		t.Errorf("aqua rule should pass after merge: %s", f.Message)
 	}
 	// A second fix must find nothing left to do.
-	for _, o := range Fix(dir, bootstrapOpts()) {
-		if o.Rule == "aqua" && o.Action != ActionNone {
+	for _, o := range rules.Fix(dir, bootstrapOpts()) {
+		if o.Rule == "aqua" && o.Action != rules.ActionNone {
 			t.Errorf("second fix touched aqua again: %s (%s)", o.Action, o.Message)
 		}
 	}
@@ -621,19 +526,17 @@ func TestFixMergesAquaManifest(t *testing.T) {
 // necessarily lags one release, and seeding it verbatim would hand the repo to
 // an older limen than the one that wrote its files. The rewrite forfeits the
 // pristine shortcut, so checksums are regenerated, never copied.
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
 func TestBootstrapSelfPinRelease(t *testing.T) {
-	stubAqua(t)
+	t.Parallel()
 
 	opts := bootstrapOpts()
 	opts.SelfVersion = "v9.9.9"
 
 	dir := t.TempDir()
 
-	outcomes := Fix(dir, opts)
+	outcomes := rules.Fix(dir, opts)
 	for _, o := range outcomes {
-		if !o.Action.resolved() {
+		if !resolved(o.Action) {
 			t.Errorf("unresolved: %s -> %s (%s)", o.Rule, o.Action, o.Message)
 		}
 	}
@@ -656,7 +559,7 @@ func TestBootstrapSelfPinRelease(t *testing.T) {
 		t.Errorf("farcloser/limen appears %d times, want exactly 1", n)
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, aquaChecksumsFile))
+	sums, err := os.ReadFile(filepath.Join(dir, "aqua-checksums.json"))
 	if err != nil {
 		t.Fatalf("aqua-checksums.json not generated: %v", err)
 	}
@@ -674,7 +577,7 @@ func TestBootstrapSelfPinDev(t *testing.T) {
 
 	dir := t.TempDir()
 
-	Fix(dir, bootstrapOpts())
+	rules.Fix(dir, bootstrapOpts())
 
 	data, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
 	if err != nil {
@@ -685,7 +588,7 @@ func TestBootstrapSelfPinDev(t *testing.T) {
 		t.Error("a dev build must seed the embedded aqua.yaml verbatim")
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, aquaChecksumsFile))
+	sums, err := os.ReadFile(filepath.Join(dir, "aqua-checksums.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -699,10 +602,8 @@ func TestBootstrapSelfPinDev(t *testing.T) {
 // farcloser/limen pin to an existing manifest, a release build inserts it at
 // the running version — the same skew argument as seeding — while packages the
 // project already pins keep their own versions.
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
 func TestFixInsertsSelfPinAtRunningVersion(t *testing.T) {
-	stubAqua(t)
+	t.Parallel()
 
 	opts := bootstrapOpts()
 	opts.SelfVersion = "v9.9.9"
@@ -711,7 +612,7 @@ func TestFixInsertsSelfPinAtRunningVersion(t *testing.T) {
 		"aqua.yaml": "packages:\n  - name: casey/just@v99.99.99\n",
 	})
 
-	Fix(dir, opts)
+	rules.Fix(dir, opts)
 
 	data, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
 	if err != nil {
@@ -734,10 +635,8 @@ func TestFixInsertsSelfPinAtRunningVersion(t *testing.T) {
 // limen the repo pins (leaving it would hand the tree to an older limen that
 // flags the fresh files as drift and "repairs" them backwards). The renovate
 // comment survives the move, and checksums are regenerated in the same fix.
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
 func TestFixMovesExistingSelfPin(t *testing.T) {
-	stubAqua(t)
+	t.Parallel()
 
 	opts := bootstrapOpts()
 	opts.SelfVersion = "v9.9.9"
@@ -745,11 +644,11 @@ func TestFixMovesExistingSelfPin(t *testing.T) {
 	// The canonical manifest with the limen pin at an older release — the only
 	// drift is the pin itself, exercising the standalone one-line rewrite.
 	dir := writeRepo(t, map[string]string{
-		"aqua.yaml": strings.Join(rewriteSelfPin(strings.Split(limen.CanonicalAquaYAML, "\n"), "v0.0.1"), "\n"),
+		"aqua.yaml": withSelfPin(t, "v0.0.1"),
 	})
 
-	outcomes := Fix(dir, opts)
-	if !AllResolved(outcomes) {
+	outcomes := rules.Fix(dir, opts)
+	if !rules.AllResolved(outcomes) {
 		t.Error("fix should resolve a manifest whose only drift is the limen pin")
 	}
 
@@ -771,7 +670,7 @@ func TestFixMovesExistingSelfPin(t *testing.T) {
 		t.Errorf("farcloser/limen appears %d times, want exactly 1", n)
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, aquaChecksumsFile))
+	sums, err := os.ReadFile(filepath.Join(dir, "aqua-checksums.json"))
 	if err != nil {
 		t.Fatalf("aqua-checksums.json not generated: %v", err)
 	}
@@ -780,8 +679,8 @@ func TestFixMovesExistingSelfPin(t *testing.T) {
 		t.Errorf("checksums must be regenerated after the pin move:\n%s", sums)
 	}
 	// A second fix must find nothing left to move.
-	for _, o := range Fix(dir, opts) {
-		if o.Rule == "aqua" && o.Action != ActionNone {
+	for _, o := range rules.Fix(dir, opts) {
+		if o.Rule == "aqua" && o.Action != rules.ActionNone {
 			t.Errorf("second fix touched aqua again: %s (%s)", o.Action, o.Message)
 		}
 	}
@@ -790,10 +689,8 @@ func TestFixMovesExistingSelfPin(t *testing.T) {
 // TestFixMovesExistingSelfPinInReplacedPackages: the pin move folds into the
 // wholesale packages-section replacement when canonical packages are also
 // missing — the two edits must not produce overlapping replacements.
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
 func TestFixMovesExistingSelfPinInReplacedPackages(t *testing.T) {
-	stubAqua(t)
+	t.Parallel()
 
 	opts := bootstrapOpts()
 	opts.SelfVersion = "v9.9.9"
@@ -804,7 +701,7 @@ func TestFixMovesExistingSelfPinInReplacedPackages(t *testing.T) {
 			"  - name: casey/just@v99.99.99\n",
 	})
 
-	Fix(dir, opts)
+	rules.Fix(dir, opts)
 
 	data, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
 	if err != nil {
@@ -827,16 +724,14 @@ func TestFixMovesExistingSelfPinInReplacedPackages(t *testing.T) {
 
 // TestFixKeepsExistingSelfPinDev: a dev build has no version to stamp — an
 // existing limen pin, however stale, stays exactly where the project put it.
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
 func TestFixKeepsExistingSelfPinDev(t *testing.T) {
-	stubAqua(t)
+	t.Parallel()
 
 	dir := writeRepo(t, map[string]string{
-		"aqua.yaml": strings.Join(rewriteSelfPin(strings.Split(limen.CanonicalAquaYAML, "\n"), "v0.0.1"), "\n"),
+		"aqua.yaml": withSelfPin(t, "v0.0.1"),
 	})
 
-	Fix(dir, bootstrapOpts())
+	rules.Fix(dir, bootstrapOpts())
 
 	data, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
 	if err != nil {
@@ -851,14 +746,13 @@ func TestFixKeepsExistingSelfPinDev(t *testing.T) {
 // TestFixGeneratesChecksumsForExistingManifest: a pre-existing manifest with no
 // checksums file gets a generated one — limen's canonical checksums describe a
 // different package set and must never be copied in (audit finding A1).
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
 func TestFixGeneratesChecksumsForExistingManifest(t *testing.T) {
-	stubAqua(t)
+	t.Parallel()
+
 	dir := writeRepo(t, map[string]string{"aqua.yaml": limen.CanonicalAquaYAML})
 
-	outcomes := Fix(dir, bootstrapOpts())
-	if !AllResolved(outcomes) {
+	outcomes := rules.Fix(dir, bootstrapOpts())
+	if !rules.AllResolved(outcomes) {
 		t.Error("fix should resolve a canonical manifest with missing checksums")
 	}
 
@@ -874,24 +768,20 @@ func TestFixGeneratesChecksumsForExistingManifest(t *testing.T) {
 
 // TestFixAquaUnavailableIsAdvisory: when aqua cannot run, remediation must not
 // pretend — no checksums appear and the outcome is an advisory.
-//
-//nolint:paralleltest // serial by design: mutates the package-level aquaBin.
-func TestFixAquaUnavailableIsAdvisory(t *testing.T) {
-	prev := aquaBin
-	aquaBin = filepath.Join(t.TempDir(), "no-such-aqua")
-	t.Cleanup(func() { aquaBin = prev })
+func TestFixAquaUnavailableIsAdvisory(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
+	t.Setenv("PATH", t.TempDir()) // nothing on it: no aqua
 
 	dir := writeRepo(t, map[string]string{"aqua.yaml": limen.CanonicalAquaYAML})
 
-	outcomes := Fix(dir, bootstrapOpts())
-	if AllResolved(outcomes) {
+	outcomes := rules.Fix(dir, bootstrapOpts())
+	if rules.AllResolved(outcomes) {
 		t.Error("fix without a working aqua should leave the rule unresolved")
 	}
 
 	var advisory bool
 
 	for _, o := range outcomes {
-		if o.Rule == "aqua" && o.Action == ActionAdvisory {
+		if o.Rule == "aqua" && o.Action == rules.ActionAdvisory {
 			advisory = true
 		}
 	}
@@ -900,7 +790,7 @@ func TestFixAquaUnavailableIsAdvisory(t *testing.T) {
 		t.Error("expected an advisory telling the user to run aqua themselves")
 	}
 
-	if exists(filepath.Join(dir, "aqua-checksums.json")) {
+	if fileExists(filepath.Join(dir, "aqua-checksums.json")) {
 		t.Error("no checksums file should have been written")
 	}
 }
@@ -913,12 +803,12 @@ func TestFixLeavesUnparseableAquaAlone(t *testing.T) {
 	const flow = "checksum: {enabled: true, require_checksum: true}\npackages: []\n"
 
 	dir := writeRepo(t, map[string]string{"aqua.yaml": flow, "aqua-checksums.json": "{}\n"})
-	outcomes := Fix(dir, bootstrapOpts())
+	outcomes := rules.Fix(dir, bootstrapOpts())
 
 	var advisory bool
 
 	for _, o := range outcomes {
-		if o.Rule == "aqua" && o.Action == ActionAdvisory {
+		if o.Rule == "aqua" && o.Action == rules.ActionAdvisory {
 			advisory = true
 		}
 	}
@@ -947,8 +837,8 @@ func TestFixLeavesQuotedKeyAquaAlone(t *testing.T) {
 
 	var advisory bool
 
-	for _, o := range Fix(dir, bootstrapOpts()) {
-		if o.Rule == "aqua" && o.Action == ActionAdvisory {
+	for _, o := range rules.Fix(dir, bootstrapOpts()) {
+		if o.Rule == "aqua" && o.Action == rules.ActionAdvisory {
 			advisory = true
 		}
 	}
@@ -964,23 +854,22 @@ func TestFixLeavesQuotedKeyAquaAlone(t *testing.T) {
 }
 
 // TestAquaMergeMovesQuotedSelfPin: a quoted farcloser/limen pin satisfies the
-// package-presence check (parsePackages strips quotes), so the baseline-owned
-// version move must find it too — and keep the quotes it came with.
+// package-presence check (quotes are stripped for matching), so the
+// baseline-owned version move must find it too — and keep the quotes it came
+// with.
 func TestAquaMergeMovesQuotedSelfPin(t *testing.T) {
 	t.Parallel()
 
-	manifest, ok := parseAquaManifest("packages:\n  - name: \"farcloser/limen@v0.0.1\"\n")
-	if !ok {
-		t.Fatal("the quoted-pin fixture did not parse")
-	}
+	opts := bootstrapOpts()
+	opts.SelfVersion = "v9.9.9"
 
-	out, summary := mergeAquaManifest(manifest, "v9.9.9")
-	if !strings.Contains(out, `- name: "farcloser/limen@v9.9.9"`) {
-		t.Errorf("the quoted self-pin was not moved:\n%s", out)
-	}
+	dir := writeRepo(t, map[string]string{"aqua.yaml": "packages:\n  - name: \"farcloser/limen@v0.0.1\"\n"})
 
-	if len(summary) == 0 {
-		t.Error("expected the merge to report its edits")
+	rules.Fix(dir, opts)
+
+	data, _ := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	if !strings.Contains(string(data), `- name: "farcloser/limen@v9.9.9"`) {
+		t.Errorf("the quoted self-pin was not moved:\n%s", data)
 	}
 }
 
@@ -995,8 +884,8 @@ func TestFixAquaDuplicatesAdvisory(t *testing.T) {
 
 	var advisory bool
 
-	for _, o := range Fix(dir, bootstrapOpts()) {
-		if o.Rule == "aqua" && o.Action == ActionAdvisory {
+	for _, o := range rules.Fix(dir, bootstrapOpts()) {
+		if o.Rule == "aqua" && o.Action == rules.ActionAdvisory {
 			advisory = true
 
 			if !strings.Contains(o.Message, "duplicate") {
@@ -1023,7 +912,7 @@ func TestFixWorkflows(t *testing.T) {
 		".github/workflows/ci.yaml":                   "name: my-own-ci\n",
 	})
 
-	outcomes := Fix(dir, bootstrapOpts())
+	outcomes := rules.Fix(dir, bootstrapOpts())
 
 	for _, o := range outcomes {
 		if o.Rule != "workflows" {
@@ -1031,20 +920,20 @@ func TestFixWorkflows(t *testing.T) {
 		}
 
 		switch o.Path {
-		case pathWorkflowChecksum:
-			if o.Action != ActionOverwrote {
+		case ".github/workflows/update-aqua-checksum.yaml":
+			if o.Action != rules.ActionOverwrote {
 				t.Errorf("tampered checksum workflow: %s, want overwrote", o.Action)
 			}
-		case pathWorkflowCI:
-			if o.Action != ActionNone {
+		case ".github/workflows/ci.yaml":
+			if o.Action != rules.ActionNone {
 				t.Errorf("existing ci workflow: %s, want none (left untouched)", o.Action)
 			}
-		case pathActionSetupAqua, pathRenovate:
-			if o.Action != ActionCreated {
+		case ".github/actions/setup-aqua/action.yaml", "renovate.json":
+			if o.Action != rules.ActionCreated {
 				t.Errorf("%s: %s, want created", o.Path, o.Action)
 			}
-		case pathWorkflowRelease:
-			if o.Action != ActionNone {
+		case ".github/workflows/release.yaml":
+			if o.Action != rules.ActionNone {
 				t.Errorf("release workflow without goreleaser: %s, want none", o.Action)
 			}
 		default:
@@ -1052,20 +941,20 @@ func TestFixWorkflows(t *testing.T) {
 		}
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(pathWorkflowChecksum)))
+	data, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(".github/workflows/update-aqua-checksum.yaml")))
 	if string(data) != limen.CanonicalWorkflowUpdateAquaChecksum {
 		t.Error("checksum workflow was not reset to the canonical")
 	}
 
-	custom, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(pathWorkflowCI)))
+	custom, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(".github/workflows/ci.yaml")))
 	if string(custom) != "name: my-own-ci\n" {
 		t.Error("the project's own ci workflow was modified")
 	}
 
 	// goreleaser present -> the release workflow is seeded.
 	releasing := writeRepo(t, map[string]string{".goreleaser.yaml": "version: 2\n"})
-	for _, o := range Fix(releasing, bootstrapOpts()) {
-		if o.Rule == "workflows" && o.Path == pathWorkflowRelease && o.Action != ActionCreated {
+	for _, o := range rules.Fix(releasing, bootstrapOpts()) {
+		if o.Rule == "workflows" && o.Path == ".github/workflows/release.yaml" && o.Action != rules.ActionCreated {
 			t.Errorf("release workflow with goreleaser: %s, want created", o.Action)
 		}
 	}
@@ -1080,7 +969,7 @@ func TestBootstrapSeedsOverrideExample(t *testing.T) {
 
 	dir := t.TempDir()
 
-	Fix(dir, bootstrapOpts())
+	rules.Fix(dir, bootstrapOpts())
 
 	data, err := os.ReadFile(filepath.Join(dir, "limen-example.yaml"))
 	if err != nil {
@@ -1096,7 +985,7 @@ func TestBootstrapSeedsOverrideExample(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	Fix(dir, bootstrapOpts())
+	rules.Fix(dir, bootstrapOpts())
 
 	data, _ = os.ReadFile(filepath.Join(dir, "limen-example.yaml"))
 	if string(data) != "mine\n" {
@@ -1110,7 +999,7 @@ func TestFixDoesNotSeedOverrideExample(t *testing.T) {
 
 	dir := t.TempDir()
 
-	Fix(dir, FixOptions{Policy: DefaultPolicy()})
+	rules.Fix(dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
 
 	if _, err := os.Stat(filepath.Join(dir, "limen-example.yaml")); err == nil {
 		t.Error("fix must not seed limen-example.yaml")
