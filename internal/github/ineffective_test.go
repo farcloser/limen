@@ -1,6 +1,7 @@
 package github //nolint:testpackage // white-box, like audit_test.go.
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -65,5 +66,66 @@ func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // s
 
 	if finding, _ := findingByCheck(findings, checkAutoMerge); strings.Contains(finding.Message, "plan") {
 		t.Errorf("a public repository is not plan-gated, got %q", finding.Message)
+	}
+}
+
+// A private repository whose owner is known to be on the Free plan: the
+// write would be accepted and ignored, so the audit fails the check and
+// plans nothing — the plan must not report "→ compliant" for a fix that
+// cannot take. Any other plan, or one the token cannot see, is planned as
+// before and judged by the re-audit.
+func TestAutoMergeNotPlannedOnFreePrivate(t *testing.T) { //nolint:paralleltest // serial: mutates ghBin.
+	private := strings.NewReplacer(
+		`"private": false`, `"private": true`,
+		`"allow_auto_merge": true`, `"allow_auto_merge": false`,
+	).Replace(compliantRepoJSON)
+
+	plans := map[string]struct {
+		org     stubResponse
+		planned bool
+	}{
+		"free":    {org: stubResponse{Body: `{"plan":{"name":"free"}}`}, planned: false},
+		"team":    {org: stubResponse{Body: `{"plan":{"name":"team"}}`}, planned: true},
+		"unknown": {org: stubResponse{Body: `{"login":"test"}`}, planned: true},
+		"a user":  {org: stubResponse{NotFound: true}, planned: true},
+	}
+
+	for name, plan := range plans {
+		responses := compliantResponses()
+		responses["GET repos/test/repo"] = stubResponse{Body: private}
+		responses["GET orgs/test"] = plan.org
+		logPath := stubGH(t, responses)
+
+		findings, changes := Audit(testRepo, nil)
+
+		finding, _ := findingByCheck(findings, checkAutoMerge)
+		if finding.Status != StatusFail {
+			t.Fatalf("%s: auto-merge off: %v, want fail", name, finding.Status)
+		}
+
+		planned := false
+
+		for _, change := range changes {
+			if change.Check == checkAutoMerge {
+				planned = true
+			}
+
+			if err := change.Apply(); err != nil {
+				t.Fatalf("%s: apply %s: %v", name, change.Check, err)
+			}
+		}
+
+		if planned != plan.planned {
+			t.Errorf("%s: auto-merge planned %v, want %v (%s)", name, planned, plan.planned, finding.Message)
+		}
+
+		log, _ := os.ReadFile(logPath)
+		if wrote := strings.Contains(string(log), "allow_auto_merge"); wrote != plan.planned {
+			t.Errorf("%s: allow_auto_merge written %v, want %v", name, wrote, plan.planned)
+		}
+
+		if !plan.planned && !strings.Contains(finding.Message, "none is planned") {
+			t.Errorf("%s: the finding must say no fix is planned, got %q", name, finding.Message)
+		}
 	}
 }

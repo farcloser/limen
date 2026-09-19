@@ -322,7 +322,12 @@ GitHub accepted and ignored — a feature it gates by plan on that repository,
 such as auto-merge on a private repository in a Free organization — and the
 finding says so, with the ways out (visibility, plan, or a declared exception),
 rather than reading like a fix that never ran. It stays a failure: the setting
-really is non-compliant.
+really is non-compliant. When the gate is known before the write — the owner
+is an organization whose plan the token can read, and it is Free — the fixer
+does not plan the write at all: the check fails up front, says the fix cannot
+take and why, and the plan never promises "→ compliant" for it. Thirteen
+private repositories in one Free organization once got exactly that promise,
+and the same thirteen failures a second later.
 
 ## Authentication
 

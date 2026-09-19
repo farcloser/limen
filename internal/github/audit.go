@@ -178,6 +178,7 @@ func optInChecks() map[string]bool {
 // failing ones.
 type auditor struct {
 	client        client
+	owner         string
 	overrides     map[string]string
 	settingsPatch map[string]any
 	findings      []Finding
@@ -197,8 +198,11 @@ type auditor struct {
 // exempted check identifiers to their reasons (see LoadOverrides). It returns
 // the findings and the changes a fix run would apply.
 func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
+	owner, name, _ := strings.Cut(repo, "/")
+
 	aud := &auditor{
 		client:        repoClient(repo),
+		owner:         owner,
 		overrides:     overrides,
 		settingsPatch: map[string]any{},
 	}
@@ -210,8 +214,6 @@ func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
 	aud.auditRulesets()
 	aud.auditSurface()
 	aud.auditRenovateProcessing()
-
-	owner, name, _ := strings.Cut(repo, "/")
 	aud.auditAgentsTeam(owner, name)
 	aud.flushSettingsPatch()
 
@@ -389,13 +391,20 @@ func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catal
 		fields:      map[string]any{"delete_branch_on_merge": true},
 	})
 
-	a.flagToggle(toggle{
-		check:       checkAutoMerge,
-		compliant:   settings.AllowAutoMerge,
-		failMessage: autoMergeFailMessage(settings),
-		okMessage:   "auto-merge is allowed",
-		fields:      map[string]any{"allow_auto_merge": true},
-	})
+	// Not planned when the plan is known to drop it: a planned write that
+	// GitHub accepts and ignores reports "→ compliant" for a fix that cannot
+	// take, and the re-audit then contradicts the plan (see ineffective.go).
+	if settings.Private && !settings.AllowAutoMerge && a.ownerPlanFree() {
+		a.flag(checkAutoMerge, StatusFail, boolFalse, boolTrue, autoMergeUnavailableMessage, nil)
+	} else {
+		a.flagToggle(toggle{
+			check:       checkAutoMerge,
+			compliant:   settings.AllowAutoMerge,
+			failMessage: autoMergeFailMessage(settings),
+			okMessage:   "auto-merge is allowed",
+			fields:      map[string]any{"allow_auto_merge": true},
+		})
+	}
 
 	a.flagToggle(toggle{
 		check:       checkUpdateBranch,
