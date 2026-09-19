@@ -302,14 +302,16 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 // check (the recipes no longer look for it on PATH), and fix removes the
 // entry.
 //
-//nolint:gochecknoglobals // immutable baseline data, like canonicalAqua.
-var retiredCanonicalPkgs = []string{
-	"github.com/google/go-licenses/v2",
-	"golang.org/x/vuln/cmd/govulncheck",
-	"golang.org/x/tools/cmd/deadcode",
-	"github.com/vbatts/git-validation",
-	"github.com/farcloser/godolint/cmd/godolint",
-	"github.com/goccy/go-graphviz/cmd/dot",
+// The set is the gotools rule's own tables read from the other side — every
+// tool it requires, plus every directive it has retired — so the two rules
+// enforce one doctrine from one source and cannot drift apart.
+func retiredCanonicalPkgs() []string {
+	pkgs := slices.Concat(goToolsEverywhere, goSourceAnalyzers)
+	for pkg := range retiredGoTools {
+		pkgs = append(pkgs, pkg)
+	}
+
+	return pkgs
 }
 
 // retiredPkgs returns the retired canonical packages the manifest still
@@ -318,7 +320,7 @@ func (m *aquaManifest) retiredPkgs() []string {
 	var retired []string
 
 	for _, p := range m.pkgs {
-		if slices.Contains(retiredCanonicalPkgs, p.name) {
+		if slices.Contains(retiredCanonicalPkgs(), p.name) {
 			retired = append(retired, p.name)
 		}
 	}

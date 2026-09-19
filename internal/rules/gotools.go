@@ -93,10 +93,9 @@ var goBin = "go" //nolint:gochecknoglobals // test seam: tests substitute a stub
 
 // requiredGoTools lists the tool packages a repository must declare: the
 // everywhere set, plus the analyzers when the root carries a go.mod (rootMod
-// is its text, nil when there is none). Every entry is either a retired aqua
-// package (retiredCanonicalPkgs) or the replacement of a retired directive
-// (retiredGoTools): one doctrine, two rules enforcing its two halves, and a
-// test pinning the correspondence.
+// is its text, nil when there is none). The aqua rule's retired set is built
+// from these same tables (retiredCanonicalPkgs): one doctrine, two rules
+// enforcing its two halves from one source.
 func requiredGoTools(rootMod []byte) []string {
 	if rootMod == nil {
 		return slices.Clone(goToolsEverywhere)
