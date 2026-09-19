@@ -28,7 +28,11 @@
 //     reads as "unknown" to check rather than as a failure.
 //
 // Either way the bot user id comes from the public users endpoint, which
-// needs no token at all.
+// needs no token at all. This is the one GitHub call limen makes without gh
+// (book/github.md, "Authentication"): gh refuses to run unauthenticated, and
+// the verify legs carry no gh token, so a lookup through gh would resolve on
+// a laptop with a login and not in CI — the credential-dependent verdict
+// this file exists to avoid.
 
 package github
 
@@ -42,18 +46,24 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
-// Test seams, following the ghBin precedent.
-var (
-	// usersAPIBase is where the public users endpoint lives; tests point it at
-	// an httptest server.
-	usersAPIBase = "https://api.github.com" //nolint:gochecknoglobals // test seam.
-	// usersHTTPClient makes the one public request; short timeout so an
-	// offline `limen check` degrades to "unresolved" quickly rather than hang.
-	usersHTTPClient = &http.Client{Timeout: 5 * time.Second} //nolint:gochecknoglobals // test seam.
-)
+// usersTimeout bounds the one public request, so an offline `limen check`
+// degrades to "unresolved" quickly rather than hang.
+const usersTimeout = 5 * time.Second
+
+// usersAPIBase is where the public users endpoint lives: GITHUB_API_URL when
+// set — the variable GitHub Actions exports, and how a GitHub Enterprise
+// host is named — and api.github.com otherwise.
+func usersAPIBase() string {
+	if base := os.Getenv("GITHUB_API_URL"); base != "" {
+		return strings.TrimSuffix(base, "/")
+	}
+
+	return "https://api.github.com"
+}
 
 // ErrUpdateAppUnknown means the organization has no update-App identity that
 // could be resolved: no App registered under the expected name, or the
@@ -147,7 +157,7 @@ type orgAppInstallationRef struct {
 // GITHUB_TOKEN in the environment is sent when present, for the rate limit
 // only — the endpoint returns the same public record either way.
 func botUserID(slug string) (int64, error) {
-	endpoint := usersAPIBase + "/users/" + url.PathEscape(slug+"[bot]")
+	endpoint := usersAPIBase() + "/users/" + url.PathEscape(slug+"[bot]")
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -160,7 +170,7 @@ func botUserID(slug string) (int64, error) {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := usersHTTPClient.Do(req)
+	resp, err := (&http.Client{Timeout: usersTimeout}).Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %w", ErrUpdateAppUnknown, err)
 	}
