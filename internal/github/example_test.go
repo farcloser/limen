@@ -17,7 +17,7 @@ import (
 
 // exampleEntryRE matches one commented-out declaration entry in the example
 // file: `#   check-id: …`.
-var exampleEntryRE = regexp.MustCompile(`(?m)^#   ([a-z0-9-]+): `)
+var exampleEntryRE = regexp.MustCompile(`(?m)^# {3}([a-z0-9-]+): `)
 
 // documentedChecks returns every check identifier limen-example.yaml documents.
 func documentedChecks(t *testing.T) map[string]bool {

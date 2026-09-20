@@ -164,7 +164,7 @@ type orgAppInstallationRef struct {
 func botUserID(ctx context.Context, slug string) (int64, error) {
 	endpoint := usersAPIBase() + "/users/" + url.PathEscape(slug+"[bot]")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %w", ErrUpdateAppUnknown, err)
 	}

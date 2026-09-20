@@ -340,6 +340,35 @@ golangci:
         exclude-godoc-examples: true
         analyze-types: true
 
+      gocritic:
+        # Every checker, experimental ones included: measured across the
+        # enrolled repositories they report next to nothing and what they
+        # report is real. Off: the duplicates of checks made elsewhere, and
+        # three "performance" heuristics that push pointer passing without a
+        # profile.
+        enable-all: true
+        disabled-checks:
+          - whyNoLint # nolintlint require-explanation
+          - paramTypeCombine # gofumpt group-params rewrites it
+          - octalLiteral # gofumpt rewrites 0755 to 0o755
+          - importShadow # revive import-shadowing
+          - builtinShadow # revive redefines-builtin-id
+          - builtinShadowDecl # revive redefines-builtin-id
+          - dupImport # revive duplicated-imports
+          - commentFormatting # revive comment-spacings
+          - defaultCaseOrder # revive enforce-switch-style
+          - tooManyResultsChecker # revive function-result-limit
+          - unnamedResult # revive confusing-results
+          - nestingReduce # revive early-return, indent-error-flow, superfluous-else
+          - externalErrorReassign # reassign
+          - redundantSprint # perfsprint
+          - yodaStyleExpr # staticcheck ST1017
+          - exposedSyncMutex # embeddedstructfieldcheck forbid-mutex
+          - hugeParam # by-value passing of a large struct is a design choice, not a defect
+          - rangeValCopy # same
+          - ruleguard # no rule files
+          - todoCommentWithoutDetail # see godox
+
       revive:
         enable-all-rules: true
         rules:

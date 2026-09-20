@@ -158,7 +158,7 @@ func fileExists(path string) bool {
 
 // selfPinRE finds the canonical manifest's farcloser/limen pin line, version
 // and all, so a fixture can move it without hardcoding what Renovate bumps.
-var selfPinRE = regexp.MustCompile(`(?m)^(  - name: farcloser/limen@)\S+`)
+var selfPinRE = regexp.MustCompile(`(?m)^( {2}- name: farcloser/limen@)\S+`)
 
 // withSelfPin is the canonical aqua.yaml with the limen pin at version and
 // everything else, the renovate comment included, as it is.

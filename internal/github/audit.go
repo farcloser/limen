@@ -1148,7 +1148,7 @@ func (a *auditor) workflowHasGate() bool {
 
 // gateJobRE matches the gate job's key at the jobs level of the canonical
 // ci.yaml (two-space indent, the job name, nothing else on the line).
-var gateJobRE = regexp.MustCompile(`(?m)^  gate:\s*$`)
+var gateJobRE = regexp.MustCompile(`(?m)^ {2}gate:\s*$`)
 
 // rulesetProblem is one departure of a ruleset's rule content from the
 // canonical definition, phrased for the finding it becomes.

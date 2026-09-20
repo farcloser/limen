@@ -395,7 +395,7 @@ func TestFixGoToolsSeedsWithoutGoMod(t *testing.T) {
 		t.Fatalf("got %s (%s), want merged with the module created", outcome.Action, outcome.Message)
 	}
 
-	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools/go.mod"))
+	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 	if err != nil {
 		t.Fatalf("tools/go.mod not created: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 		t.Fatalf("got %s (%s), want merged", outcome.Action, outcome.Message)
 	}
 
-	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools/go.mod"))
+	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 	if err != nil {
 		t.Fatalf("tools/go.mod not created: %v", err)
 	}
@@ -452,7 +452,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 
 	// The isolated module is seeded too, with its own derived path and the
 	// one directive the fake go appended.
-	isolated, err := os.ReadFile(filepath.Join(dir, "tools/golangci-lint/go.mod"))
+	isolated, err := os.ReadFile(filepath.Join(dir, "tools", "golangci-lint", "go.mod"))
 	if err != nil {
 		t.Fatalf("tools/golangci-lint/go.mod not created: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestAquaGoDirective(t *testing.T) {
 
 			rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
 
-			toolsMod, err := os.ReadFile(filepath.Join(dir, "tools/go.mod"))
+			toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 			if err != nil {
 				t.Fatalf("tools/go.mod not created: %v", err)
 			}

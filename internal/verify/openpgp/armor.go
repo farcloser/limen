@@ -1,6 +1,7 @@
 package openpgp
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
@@ -91,7 +92,7 @@ func checkCRC(body []byte, encoded string) error {
 	}
 
 	got := binary.BigEndian.AppendUint32(nil, crc24(body))[1:]
-	if string(got) != string(want) {
+	if !bytes.Equal(got, want) {
 		return fmt.Errorf("%w: checksum mismatch", ErrArmor)
 	}
 

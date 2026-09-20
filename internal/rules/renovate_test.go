@@ -284,7 +284,7 @@ func TestCanonicalPresetRef(t *testing.T) {
 func canonicalLimenVersion(t *testing.T) string {
 	t.Helper()
 
-	m := regexp.MustCompile(`(?m)^  - name: farcloser/limen@(\S+)`).FindStringSubmatch(limen.CanonicalAquaYAML)
+	m := regexp.MustCompile(`(?m)^ {2}- name: farcloser/limen@(\S+)`).FindStringSubmatch(limen.CanonicalAquaYAML)
 	if m == nil {
 		t.Fatal("the canonical aqua.yaml carries no farcloser/limen pin")
 	}

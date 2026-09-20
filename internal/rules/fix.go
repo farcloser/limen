@@ -453,8 +453,10 @@ func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 	}
 
 	// Canonical everywhere: content-pinned exactly.
-	out = append(out, pinExact(root, ruleAqua, "aqua-policy.yaml", limen.CanonicalAquaPolicy))
-	out = append(out, pinExact(root, ruleAqua, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry))
+	out = append(out,
+		pinExact(root, ruleAqua, "aqua-policy.yaml", limen.CanonicalAquaPolicy),
+		pinExact(root, ruleAqua, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry),
+	)
 
 	if !advised && !pristine && (manifestWrote || !exists(filepath.Join(root, aquaChecksumsFile))) {
 		outcome := regenerateAquaChecksumsOutcome(ctx, root)

@@ -200,8 +200,9 @@ func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []st
 		return "", err
 	}
 
-	if err = run(ctx, root, "cosign", "verify-blob", "--bundle", bundle,
-		"--certificate-identity-regexp", identity, "--certificate-oidc-issuer", issuer, sums); err != nil {
+	err = run(ctx, root, "cosign", "verify-blob", "--bundle", bundle,
+		"--certificate-identity-regexp", identity, "--certificate-oidc-issuer", issuer, sums)
+	if err != nil {
 		return "", err
 	}
 
@@ -329,7 +330,7 @@ func download(ctx context.Context, url, file string) (string, error) {
 // downloadOnce is one attempt: a status worth retrying is errTransient, a
 // definitive refusal is ErrVerify.
 func downloadOnce(ctx context.Context, url, file string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf(errFormat, url, err)
 	}

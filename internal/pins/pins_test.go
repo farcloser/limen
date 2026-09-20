@@ -5,6 +5,7 @@
 package pins_test
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/sha256"
@@ -358,7 +359,7 @@ func TestRefreshDownload(t *testing.T) { // Serial by design: t.Setenv forbids t
 		t.Errorf("second refresh: %v, %v; want nothing", changed, err)
 	}
 
-	if again, _ := os.ReadFile(filepath.Join(root, pins.File)); string(again) != string(before) {
+	if again, _ := os.ReadFile(filepath.Join(root, pins.File)); !bytes.Equal(again, before) {
 		t.Error("a refresh with nothing to do rewrote the file")
 	}
 }
