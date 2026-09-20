@@ -435,107 +435,31 @@ func pinExact(root, rule, relPath, canonical string) Outcome {
 // regeneration, or anything merging cannot resolve (duplicate package entries)
 // ends as an advisory.
 func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
-	const rule = "aqua"
-
-	var out []Outcome
-
-	advised := false
-	manifestWrote := false
-	pristine := false
+	var (
+		out           []Outcome
+		advised       bool
+		manifestWrote bool
+		pristine      bool
+	)
 
 	name, had := findFirst(root, "aqua.yaml", "aqua.yml")
 	if !had {
+		// A seed that is not an advisory wrote the manifest.
 		name = "aqua.yaml"
-		seed, seedMsg := seededAquaManifest(selfVersion)
-
-		if err := writeFile(root, name, seed); err != nil {
-			out = append(out, failed(rule, name, err))
-			advised = true
-		} else {
-			out = append(
-				out,
-				Outcome{Rule: rule, Action: ActionCreated, Path: name, Message: seedMsg},
-			)
-			manifestWrote = true
-
-			// Only the untouched canonical pair provably matches; a rewritten
-			// pin means the checksums must be regenerated, not seeded.
-			if selfVersion == "" && !exists(filepath.Join(root, aquaChecksumsFile)) {
-				if err := writeFile(root, aquaChecksumsFile, limen.CanonicalAquaChecksums); err != nil {
-					out = append(out, failed(rule, aquaChecksumsFile, err))
-					advised = true
-				} else {
-					out = append(
-						out,
-						Outcome{
-							Rule:    rule,
-							Action:  ActionCreated,
-							Path:    aquaChecksumsFile,
-							Message: "wrote canonical aqua-checksums.json (matches the seeded aqua.yaml)",
-						},
-					)
-					pristine = true
-				}
-			}
-		}
+		out, pristine, advised = seedAqua(root, name, selfVersion)
+		manifestWrote = !advised
 	} else {
-		data, err := readRepoFile(root, name)
-		if err != nil {
-			out = append(out, failed(rule, name, err))
-			advised = true
-		} else if manifest, parsed := parseAquaManifest(string(data)); !parsed {
-			out = append(
-				out,
-				Outcome{
-					Rule:    rule,
-					Action:  ActionAdvisory,
-					Path:    name,
-					Message: name + " could not be parsed, so it was left untouched — restructure it into block-style checksum/registries/packages sections (see book/tooling.md)",
-				},
-			)
-			advised = true
-		} else if merged, edits := mergeAquaManifest(manifest, selfVersion); len(edits) > 0 {
-			if err := writeFile(root, name, merged); err != nil {
-				out = append(out, failed(rule, name, err))
-				advised = true
-			} else {
-				out = append(
-					out,
-					Outcome{Rule: rule, Action: ActionMerged, Path: name, Message: strings.Join(edits, "; ")},
-				)
-				manifestWrote = true
-			}
-		}
+		out, manifestWrote, advised = mergeAquaFile(root, name, selfVersion)
 	}
 
 	// Canonical everywhere: content-pinned exactly.
-	out = append(out, pinExact(root, rule, "aqua-policy.yaml", limen.CanonicalAquaPolicy))
-	out = append(out, pinExact(root, rule, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry))
+	out = append(out, pinExact(root, ruleAqua, "aqua-policy.yaml", limen.CanonicalAquaPolicy))
+	out = append(out, pinExact(root, ruleAqua, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry))
 
 	if !advised && !pristine && (manifestWrote || !exists(filepath.Join(root, aquaChecksumsFile))) {
-		existed := exists(filepath.Join(root, aquaChecksumsFile))
-		if err := regenerateAquaChecksums(ctx, root); err != nil {
-			out = append(
-				out,
-				Outcome{
-					Rule:   rule,
-					Action: ActionAdvisory,
-					Path:   aquaChecksumsFile,
-					Message: fmt.Sprintf(
-						"could not regenerate checksums (%v) — run `aqua policy allow aqua-policy.yaml && aqua update-checksum --prune` and commit the result",
-						err,
-					),
-				},
-			)
-			advised = true
-		} else {
-			action, msg := ActionCreated, "generated aqua-checksums.json (aqua update-checksum --prune)"
-			if existed {
-				action, msg = ActionOverwrote, "regenerated aqua-checksums.json (aqua update-checksum --prune)"
-			}
-
-			out = append(out, Outcome{Rule: rule, Action: action, Path: aquaChecksumsFile, Message: msg})
-		}
+		outcome := regenerateAquaChecksumsOutcome(ctx, root)
+		out = append(out, outcome)
+		advised = outcome.Action == ActionAdvisory
 	}
 
 	// Surface any residual failure (e.g. duplicate package entries, which
@@ -543,11 +467,103 @@ func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 	// as resolved. Skipped when an advisory was already issued above.
 	if !advised {
 		if f := checkAqua(root); !f.OK() {
-			out = append(out, Outcome{Rule: rule, Action: ActionAdvisory, Path: f.Path, Message: f.Message})
+			out = append(out, Outcome{Rule: ruleAqua, Action: ActionAdvisory, Path: f.Path, Message: f.Message})
 		}
 	}
 
 	return out
+}
+
+// seedAqua writes the canonical manifest a repository without one starts
+// from and, in the pristine case where the two provably match (a dev build,
+// no checksums file yet), the canonical checksums with it. Reports what was
+// written, whether the pair is pristine, and whether a write failed.
+func seedAqua(root, name, selfVersion string) (out []Outcome, pristine, advised bool) {
+	seed, seedMsg := seededAquaManifest(selfVersion)
+
+	if err := writeFile(root, name, seed); err != nil {
+		return []Outcome{failed(ruleAqua, name, err)}, false, true
+	}
+
+	out = []Outcome{{Rule: ruleAqua, Action: ActionCreated, Path: name, Message: seedMsg}}
+
+	// Only the untouched canonical pair provably matches; a rewritten pin
+	// means the checksums must be regenerated, not seeded.
+	if selfVersion != "" || exists(filepath.Join(root, aquaChecksumsFile)) {
+		return out, false, false
+	}
+
+	if err := writeFile(root, aquaChecksumsFile, limen.CanonicalAquaChecksums); err != nil {
+		return append(out, failed(ruleAqua, aquaChecksumsFile, err)), false, true
+	}
+
+	return append(out, Outcome{
+		Rule:    ruleAqua,
+		Action:  ActionCreated,
+		Path:    aquaChecksumsFile,
+		Message: "wrote canonical aqua-checksums.json (matches the seeded aqua.yaml)",
+	}), true, false
+}
+
+// mergeAquaFile merges the baseline into an existing manifest (see
+// mergeAquaManifest). Reports whether the file was rewritten and whether the
+// rule ends as an advisory: an unparseable manifest, or a failed write.
+func mergeAquaFile(root, name, selfVersion string) (out []Outcome, wrote, advised bool) {
+	data, err := readRepoFile(root, name)
+	if err != nil {
+		return []Outcome{failed(ruleAqua, name, err)}, false, true
+	}
+
+	manifest, parsed := parseAquaManifest(string(data))
+	if !parsed {
+		return []Outcome{
+			{
+				Rule:    ruleAqua,
+				Action:  ActionAdvisory,
+				Path:    name,
+				Message: name + " could not be parsed, so it was left untouched — restructure it into block-style checksum/registries/packages sections (see book/tooling.md)",
+			},
+		}, false, true
+	}
+
+	merged, edits := mergeAquaManifest(manifest, selfVersion)
+	if len(edits) == 0 {
+		return nil, false, false
+	}
+
+	if err := writeFile(root, name, merged); err != nil {
+		return []Outcome{failed(ruleAqua, name, err)}, false, true
+	}
+
+	return []Outcome{
+		{Rule: ruleAqua, Action: ActionMerged, Path: name, Message: strings.Join(edits, "; ")},
+	}, true, false
+}
+
+// regenerateAquaChecksumsOutcome rebuilds aqua-checksums.json with the real
+// tool and reports it as created or regenerated; when aqua cannot run, the
+// advisory carries the command to run by hand.
+func regenerateAquaChecksumsOutcome(ctx context.Context, root string) Outcome {
+	existed := exists(filepath.Join(root, aquaChecksumsFile))
+
+	if err := regenerateAquaChecksums(ctx, root); err != nil {
+		return Outcome{
+			Rule:   ruleAqua,
+			Action: ActionAdvisory,
+			Path:   aquaChecksumsFile,
+			Message: fmt.Sprintf(
+				"could not regenerate checksums (%v) — run `aqua policy allow aqua-policy.yaml && aqua update-checksum --prune` and commit the result",
+				err,
+			),
+		}
+	}
+
+	action, msg := ActionCreated, "generated aqua-checksums.json (aqua update-checksum --prune)"
+	if existed {
+		action, msg = ActionOverwrote, "regenerated aqua-checksums.json (aqua update-checksum --prune)"
+	}
+
+	return Outcome{Rule: ruleAqua, Action: action, Path: aquaChecksumsFile, Message: msg}
 }
 
 // seededAquaManifest renders the canonical aqua.yaml a pristine repo is seeded

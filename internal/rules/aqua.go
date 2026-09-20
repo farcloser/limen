@@ -125,9 +125,30 @@ func parseAquaManifest(text string) (aquaManifest, bool) {
 		"packages":   &manifest.packages,
 	}
 
+	if !manifest.scanSections(sections) {
+		return manifest, false
+	}
+
+	if manifest.packagesEmpty && !manifest.packagesBodyInert() {
+		return manifest, false
+	}
+
+	if manifest.packages.present && !manifest.packagesEmpty {
+		if !manifest.parsePackages() {
+			return manifest, false
+		}
+	}
+
+	return manifest, true
+}
+
+// scanSections bounds the governed sections by their top-level keys; false
+// when a top-level line is one this parser cannot bound, or a section opens
+// in a shape it refuses.
+func (m *aquaManifest) scanSections(sections map[string]*aquaSection) bool {
 	var open *aquaSection
 
-	for lineIndex, line := range manifest.lines {
+	for lineIndex, line := range m.lines {
 		match := aquaTopKeyRE.FindStringSubmatch(line)
 		if match == nil {
 			// Only shapes the line parser can bound may sit at the top level:
@@ -138,7 +159,7 @@ func parseAquaManifest(text string) (aquaManifest, bool) {
 			// section's range, it would be relocated, rewritten, or deleted by
 			// a merge that believes it owns those lines. Refuse instead.
 			if !aquaInertLine(line) && lineIndent(line) == 0 {
-				return manifest, false
+				return false
 			}
 
 			continue
@@ -154,44 +175,52 @@ func parseAquaManifest(text string) (aquaManifest, bool) {
 			continue
 		}
 
-		if sec.present {
-			return manifest, false // duplicated top-level key
+		if !m.openSection(sec, match[1], match[2], lineIndex) {
+			return false
 		}
 
-		if rest := strings.TrimSpace(stripAquaComment(match[2])); rest != "" {
-			if match[1] != "packages" || rest != "[]" {
-				return manifest, false // flow style
-			}
-
-			manifest.packagesEmpty = true
-		}
-
-		sec.present = true
-		sec.start = lineIndex
-		sec.end = len(manifest.lines)
 		open = sec
 	}
 
-	if manifest.packagesEmpty {
-		// "packages: []" already IS the whole section; an indented body after
-		// it is YAML aqua rejects, and the merge would replace the section
-		// wholesale while the self-pin scan still sees the body — the two
-		// edits overlap. Refuse the shape outright (comments and blanks are
-		// no body).
-		for i := manifest.packages.start + 1; i < manifest.packages.end; i++ {
-			if !aquaInertLine(manifest.lines[i]) {
-				return manifest, false
-			}
+	return true
+}
+
+// openSection starts the section keyed key at lineIndex, rest being what
+// follows the colon: nothing, or the one flow form accepted, an empty
+// packages list. A duplicated key or any other flow style is refused.
+func (m *aquaManifest) openSection(sec *aquaSection, key, rest string, lineIndex int) bool {
+	if sec.present {
+		return false // duplicated top-level key
+	}
+
+	if rest := strings.TrimSpace(stripAquaComment(rest)); rest != "" {
+		if key != "packages" || rest != "[]" {
+			return false // flow style
+		}
+
+		m.packagesEmpty = true
+	}
+
+	sec.present = true
+	sec.start = lineIndex
+	sec.end = len(m.lines)
+
+	return true
+}
+
+// packagesBodyInert reports whether nothing but comments and blanks follows
+// a "packages: []": that form already IS the whole section, an indented body
+// after it is YAML aqua rejects, and the merge would replace the section
+// wholesale while the self-pin scan still sees the body — the two edits
+// overlap, so the shape is refused outright.
+func (m *aquaManifest) packagesBodyInert() bool {
+	for i := m.packages.start + 1; i < m.packages.end; i++ {
+		if !aquaInertLine(m.lines[i]) {
+			return false
 		}
 	}
 
-	if manifest.packages.present && !manifest.packagesEmpty {
-		if !manifest.parsePackages() {
-			return manifest, false
-		}
-	}
-
-	return manifest, true
+	return true
 }
 
 // parsePackages extracts the "- name:" entries of the packages section. Only
@@ -459,11 +488,7 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 // bumps. It returns the new content and a summary of the edits; the summary
 // is empty when the manifest already carries the baseline.
 func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []string) {
-	var reps []aquaReplacement
-
-	var tail [][]string // sections to append at EOF, canonical order
-
-	var summary []string
+	var plan aquaPlan
 
 	// Retired packages go first, as a whole-text pass: every range planned
 	// below is then computed on the stripped manifest, so no replacement can
@@ -472,76 +497,97 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		if stripped, ok := manifest.withoutPkgs(retired); ok {
 			manifest = stripped
 
-			summary = append(summary, "removed "+retiredPkgsMessage(retired))
+			plan.summary = append(plan.summary, "removed "+retiredPkgsMessage(retired))
 		}
 	}
 
-	canonChecksum := trimBlankTail(canonicalAqua.section(canonicalAqua.checksum))
-	canonRegistries := trimBlankTail(canonicalAqua.section(canonicalAqua.registries))
+	plan.checksum(manifest)
+	plan.registries(manifest)
+	plan.packages(manifest, selfVersion)
 
-	if !manifest.checksum.present {
-		tail = append(tail, canonChecksum)
-		summary = append(summary, "added the canonical checksum section")
-	} else if normalizeAquaBlock(manifest.section(manifest.checksum)) != normalizeAquaBlock(canonChecksum) {
-		reps = append(
-			reps,
-			aquaReplacement{
-				start: manifest.checksum.start,
-				end:   manifest.checksum.end,
-				lines: withBlankTail(canonChecksum),
-			},
-		)
-		summary = append(summary, "reset the checksum section to the canonical baseline")
+	if len(plan.summary) == 0 {
+		return strings.Join(manifest.lines, "\n"), nil
 	}
+
+	return plan.stitch(manifest), plan.summary
+}
+
+// aquaPlan accumulates a merge: the line ranges to replace, the sections the
+// file lacks (appended at EOF in canonical order), and the summary of edits.
+type aquaPlan struct {
+	reps    []aquaReplacement
+	tail    [][]string
+	summary []string
+}
+
+// replace swaps a section's whole range for lines.
+func (p *aquaPlan) replace(sec aquaSection, lines []string, message string) {
+	p.reps = append(p.reps, aquaReplacement{start: sec.start, end: sec.end, lines: withBlankTail(lines)})
+	p.summary = append(p.summary, message)
+}
+
+// add appends a section the file did not have.
+func (p *aquaPlan) add(lines []string, message string) {
+	p.tail = append(p.tail, lines)
+	p.summary = append(p.summary, message)
+}
+
+// checksum resets the checksum section to the canonical, or adds it.
+func (p *aquaPlan) checksum(manifest aquaManifest) {
+	canon := trimBlankTail(canonicalAqua.section(canonicalAqua.checksum))
+
+	switch {
+	case !manifest.checksum.present:
+		p.add(canon, "added the canonical checksum section")
+	case normalizeAquaBlock(manifest.section(manifest.checksum)) != normalizeAquaBlock(canon):
+		p.replace(manifest.checksum, canon, "reset the checksum section to the canonical baseline")
+	default:
+		// Already canonical.
+	}
+}
+
+// registries resets the registries section to the canonical — keeping a
+// valid exact standard-registry ref of the project's — or pins a moving ref.
+func (p *aquaPlan) registries(manifest aquaManifest) {
+	canon := trimBlankTail(canonicalAqua.section(canonicalAqua.registries))
 
 	projRef := manifest.registriesRef()
 	refValid := aquaExactRefRE.MatchString(projRef)
 
-	newRegistries := canonRegistries
+	newRegistries := canon
 	if refValid && projRef != canonicalAqua.registriesRef() {
-		newRegistries = substituteAquaRef(canonRegistries, projRef)
+		newRegistries = substituteAquaRef(canon, projRef)
 	}
 
 	switch {
 	case !manifest.registries.present:
-		tail = append(tail, newRegistries)
-		summary = append(summary, "added the canonical registries section")
-	case normalizeAquaBlockMaskingRefs(manifest.section(manifest.registries)) != normalizeAquaBlockMaskingRefs(canonRegistries):
+		p.add(newRegistries, "added the canonical registries section")
+	case normalizeAquaBlockMaskingRefs(manifest.section(manifest.registries)) != normalizeAquaBlockMaskingRefs(canon):
 		msg := "reset the registries section to the canonical baseline"
 		if refValid {
 			msg += " (kept standard registry ref " + projRef + ")"
 		}
 
-		reps = append(
-			reps,
-			aquaReplacement{
-				start: manifest.registries.start,
-				end:   manifest.registries.end,
-				lines: withBlankTail(newRegistries),
-			},
-		)
-		summary = append(summary, msg)
+		p.replace(manifest.registries, newRegistries, msg)
 	case !refValid:
 		// Shape matches but the ref is a moving target: pin it to the canonical.
-		reps = append(
-			reps,
-			aquaReplacement{
-				start: manifest.registries.start,
-				end:   manifest.registries.end,
-				lines: withBlankTail(canonRegistries),
-			},
-		)
-		summary = append(summary, "pinned the standard registry ref to the canonical "+canonicalAqua.registriesRef())
+		p.replace(manifest.registries, canon,
+			"pinned the standard registry ref to the canonical "+canonicalAqua.registriesRef())
 	default:
 		// Registries already match the canonical and the ref is a valid exact
 		// pin — nothing to do.
 	}
+}
 
-	// Does an existing limen pin move to selfVersion (the baseline-owned
-	// exception in the doc above)? Detected up front: when the packages
-	// section is replaced wholesale below, the move must fold into that
-	// replacement — a second, one-line replacement over the same range would
-	// overlap it.
+// packages adds the missing canonical packages, moves an existing limen pin
+// to selfVersion (the baseline-owned exception in the doc above) and folds
+// two-line version: pins into one line. The last two are replacements of
+// their own unless the section is rebuilt wholesale, in which case they fold
+// into that rebuild: two replacements over one range would overlap, and the
+// stitch would panic on it.
+func (p *aquaPlan) packages(manifest aquaManifest, selfVersion string) {
+	// The self-pin move is detected up front, before the section may be
+	// replaced.
 	selfPinMoves := false
 
 	if selfVersion != "" && manifest.packages.present {
@@ -554,92 +600,98 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 		}
 	}
 
-	// Two-line version: pins (aqua_oneline.go): same folding rule as the
-	// self-pin move — into the wholesale replacement when the section is
-	// rebuilt, one replacement per pin otherwise.
 	twoLinePins := manifest.twoLinePins()
 
 	packagesReplaced := false
 
 	if missing := manifest.missingCanonicalPkgs(); len(missing) > 0 {
-		switch {
-		case !manifest.packages.present:
-			tail = append(
-				tail,
-				rewriteSelfPin(trimBlankTail(canonicalAqua.section(canonicalAqua.packages)), selfVersion),
-			)
-		case manifest.packagesEmpty:
-			lines := append([]string{"packages:"}, rewriteSelfPin(canonicalEntryLines(missing, 0), selfVersion)...)
-			reps = append(
-				reps,
-				aquaReplacement{
-					start: manifest.packages.start,
-					end:   manifest.packages.end,
-					lines: withBlankTail(lines),
-				},
-			)
-
-			// The whole section range is replaced here too: the self-pin move
-			// below must fold into this replacement, never add a second,
-			// overlapping one (the stitch loop would panic on it). Unreachable
-			// today — parse refuses a "packages: []" with a body, so no
-			// self-pin line can sit inside this range — but the invariant
-			// belongs to this branch, not to the parser.
-			packagesReplaced = true
-		default:
-			shift := manifest.pkgEntryIndent() - canonicalAqua.pkgs[0].indent
-			section := rewriteTwoLinePins(
-				trimBlankTail(manifest.section(manifest.packages)), twoLinePins, manifest.packages.start,
-			)
-			lines := append(
-				rewriteSelfPin(section, selfVersion),
-				rewriteSelfPin(canonicalEntryLines(missing, shift), selfVersion)...,
-			)
-			reps = append(
-				reps,
-				aquaReplacement{
-					start: manifest.packages.start,
-					end:   manifest.packages.end,
-					lines: withBlankTail(lines),
-				},
-			)
-
-			packagesReplaced = true
-		}
-
-		summary = append(summary, "added canonical package(s): "+strings.Join(missing, ", "))
+		packagesReplaced = p.addPackages(manifest, missing, twoLinePins, selfVersion)
+		p.summary = append(p.summary, "added canonical package(s): "+strings.Join(missing, ", "))
 	}
 
 	if selfPinMoves {
 		if !packagesReplaced {
-			reps = append(reps, selfPinReplacement(manifest, selfVersion)...)
+			p.reps = append(p.reps, selfPinReplacement(manifest, selfVersion)...)
 		}
 
-		summary = append(summary, "moved the farcloser/limen pin to "+selfVersion+" (the running limen's version)")
+		p.summary = append(p.summary, "moved the farcloser/limen pin to "+selfVersion+" (the running limen's version)")
 	}
 
 	if len(twoLinePins) > 0 {
 		if !packagesReplaced {
-			reps = append(reps, twoLineReplacements(twoLinePins)...)
+			p.reps = append(p.reps, twoLineReplacements(twoLinePins)...)
 		}
 
-		summary = append(summary, twoLineSummary(twoLinePins))
+		p.summary = append(p.summary, twoLineSummary(twoLinePins))
 	}
+}
 
-	if len(summary) == 0 {
-		return strings.Join(manifest.lines, "\n"), nil
+// addPackages plans the missing canonical packages in: the whole canonical
+// section appended when the file has none, the section rebuilt otherwise.
+// Reports whether the section's range was replaced.
+func (p *aquaPlan) addPackages(
+	manifest aquaManifest,
+	missing []string,
+	twoLinePins []twoLinePin,
+	selfVersion string,
+) bool {
+	switch {
+	case !manifest.packages.present:
+		p.tail = append(
+			p.tail,
+			rewriteSelfPin(trimBlankTail(canonicalAqua.section(canonicalAqua.packages)), selfVersion),
+		)
+
+		return false
+	case manifest.packagesEmpty:
+		lines := append([]string{"packages:"}, rewriteSelfPin(canonicalEntryLines(missing, 0), selfVersion)...)
+		p.reps = append(
+			p.reps,
+			aquaReplacement{
+				start: manifest.packages.start,
+				end:   manifest.packages.end,
+				lines: withBlankTail(lines),
+			},
+		)
+
+		// The whole section range is replaced here too, so the self-pin move
+		// folds into it. Unreachable today — parse refuses a "packages: []"
+		// with a body, so no self-pin line can sit inside this range — but
+		// the invariant belongs to this branch, not to the parser.
+		return true
+	default:
+		shift := manifest.pkgEntryIndent() - canonicalAqua.pkgs[0].indent
+		section := rewriteTwoLinePins(
+			trimBlankTail(manifest.section(manifest.packages)), twoLinePins, manifest.packages.start,
+		)
+		lines := append(
+			rewriteSelfPin(section, selfVersion),
+			rewriteSelfPin(canonicalEntryLines(missing, shift), selfVersion)...,
+		)
+		p.reps = append(
+			p.reps,
+			aquaReplacement{
+				start: manifest.packages.start,
+				end:   manifest.packages.end,
+				lines: withBlankTail(lines),
+			},
+		)
+
+		return true
 	}
+}
 
-	// Stitch: copy every line outside the replaced ranges, swap in the new
-	// blocks in place, then append the sections the file did not have at all.
-	// Sections may appear in any order in the file, so replacements are applied
-	// in position order, not the order they were planned in.
-	slices.SortFunc(reps, func(left, right aquaReplacement) int { return cmp.Compare(left.start, right.start) })
+// stitch copies every line outside the replaced ranges, swaps in the new
+// blocks in place, then appends the sections the file did not have at all.
+// Sections may appear in any order in the file, so replacements are applied
+// in position order, not the order they were planned in.
+func (p *aquaPlan) stitch(manifest aquaManifest) string {
+	slices.SortFunc(p.reps, func(left, right aquaReplacement) int { return cmp.Compare(left.start, right.start) })
 
 	var out []string
 
 	cursor := 0
-	for _, r := range reps {
+	for _, r := range p.reps {
 		out = append(out, manifest.lines[cursor:r.start]...)
 		out = append(out, r.lines...)
 		cursor = r.end
@@ -648,12 +700,12 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 	out = append(out, manifest.lines[cursor:]...)
 
 	out = trimBlankTail(out)
-	for _, block := range tail {
+	for _, block := range p.tail {
 		out = append(out, "")
 		out = append(out, block...)
 	}
 
-	return strings.Join(out, "\n") + "\n", summary
+	return strings.Join(out, "\n") + "\n"
 }
 
 // aquaReplacement swaps the line range [start, end) for the given lines when

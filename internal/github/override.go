@@ -76,55 +76,70 @@ func LoadOverrides(dir string) (map[string]string, error) {
 		return nil, fmt.Errorf("reading %s: %w", OverridePath, err)
 	}
 
-	known := knownChecks()
-	overrides := map[string]string{}
-	section := ""
+	parser := overrideParser{known: knownChecks(), overrides: map[string]string{}}
 
 	for lineNumber, raw := range strings.Split(string(data), "\n") {
-		line := strings.TrimSuffix(raw, "\r")
-		trimmed := strings.TrimSpace(line)
-
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
+		if err := parser.line(lineNumber+1, strings.TrimSuffix(raw, "\r")); err != nil {
+			return nil, err
 		}
-
-		trimmed = stripInlineComment(trimmed)
-
-		indented := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
-
-		key, value, found := strings.Cut(trimmed, ":")
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-
-		if !indented {
-			// A section header: a bare `name:` with nothing after the colon.
-			if !found || value != "" {
-				return nil, fmt.Errorf(overrideErrFormat, OverridePath, lineNumber+1, errNoSection)
-			}
-
-			if key != sectionGithub {
-				return nil, fmt.Errorf(overrideErrFormat+": %q", OverridePath, lineNumber+1, errUnknownSection, key)
-			}
-
-			section = key
-
-			continue
-		}
-
-		if section != sectionGithub {
-			return nil, fmt.Errorf(overrideErrFormat, OverridePath, lineNumber+1, errNoSection)
-		}
-
-		if !found || value == "" {
-			return nil, fmt.Errorf(overrideErrFormat, OverridePath, lineNumber+1, errEmptyReason)
-		}
-
-		if !known[key] {
-			return nil, fmt.Errorf(overrideErrFormat+": %q", OverridePath, lineNumber+1, errUnknownCheck, key)
-		}
-
-		overrides[key] = value
 	}
 
-	return overrides, nil
+	return parser.overrides, nil
+}
+
+// overrideParser walks the declarations file line by line: a section header
+// opens the one known section, an indented `check: reason` under it is an
+// override.
+type overrideParser struct {
+	known     map[string]bool
+	overrides map[string]string
+	section   string
+}
+
+// line consumes one line, numbered from one for the messages.
+func (p *overrideParser) line(lineNumber int, line string) error {
+	trimmed := strings.TrimSpace(line)
+
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return nil
+	}
+
+	trimmed = stripInlineComment(trimmed)
+
+	indented := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
+
+	key, value, found := strings.Cut(trimmed, ":")
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+
+	if !indented {
+		// A section header: a bare `name:` with nothing after the colon.
+		if !found || value != "" {
+			return fmt.Errorf(overrideErrFormat, OverridePath, lineNumber, errNoSection)
+		}
+
+		if key != sectionGithub {
+			return fmt.Errorf(overrideErrFormat+": %q", OverridePath, lineNumber, errUnknownSection, key)
+		}
+
+		p.section = key
+
+		return nil
+	}
+
+	if p.section != sectionGithub {
+		return fmt.Errorf(overrideErrFormat, OverridePath, lineNumber, errNoSection)
+	}
+
+	if !found || value == "" {
+		return fmt.Errorf(overrideErrFormat, OverridePath, lineNumber, errEmptyReason)
+	}
+
+	if !p.known[key] {
+		return fmt.Errorf(overrideErrFormat+": %q", OverridePath, lineNumber, errUnknownCheck, key)
+	}
+
+	p.overrides[key] = value
+
+	return nil
 }

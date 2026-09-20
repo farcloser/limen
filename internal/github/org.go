@@ -446,6 +446,44 @@ type orgActionsPermissions struct {
 // must survive a fix that only tightens another field. Sending the canonical
 // target for passing fields once wiped an org's pattern allowlist when only
 // SHA pinning was being fixed.
+// orgActionsFix is the PUT that moves the org's Actions permissions to the
+// computed targets, then defines the selected-actions allowlist only when
+// this fix is the one restricting the policy to "selected": an
+// already-restricted policy keeps whatever allowlist (or local_only
+// semantics) it has.
+func orgActionsFix(
+	permissions orgActionsPermissions,
+	targetScope, targetAllowed string,
+	shaFixes, allowedFixes bool,
+) func(context.Context, client) error {
+	return func(ctx context.Context, apiClient client) error {
+		payload := map[string]any{
+			"enabled_repositories": targetScope,
+			"allowed_actions":      targetAllowed,
+		}
+		// Written back only when the token could read it (nil means the field
+		// was invisible and its check went unverifiable — never guess a value
+		// into a whole-object PUT).
+		if permissions.ShaPinningRequired != nil {
+			payload["sha_pinning_required"] = shaFixes || *permissions.ShaPinningRequired
+		}
+
+		if err := apiClient.writeJSON(ctx, methodPut, "/actions/permissions", payload); err != nil {
+			return err
+		}
+
+		if !allowedFixes {
+			return nil
+		}
+
+		return apiClient.writeJSON(ctx, methodPut, "/actions/permissions/selected-actions", map[string]any{
+			"github_owned_allowed": true,
+			"verified_allowed":     false,
+			"patterns_allowed":     []string{},
+		})
+	}
+}
+
 func (a *auditor) auditOrgActionsPermissions() {
 	var permissions orgActionsPermissions
 
@@ -478,35 +516,7 @@ func (a *auditor) auditOrgActionsPermissions() {
 		targetAllowed = "selected"
 	}
 
-	fixPermissions := func(ctx context.Context, apiClient client) error {
-		payload := map[string]any{
-			"enabled_repositories": targetScope,
-			"allowed_actions":      targetAllowed,
-		}
-		// Written back only when the token could read it (nil means the field
-		// was invisible and its check went unverifiable — never guess a value
-		// into a whole-object PUT).
-		if permissions.ShaPinningRequired != nil {
-			payload["sha_pinning_required"] = shaFixes || *permissions.ShaPinningRequired
-		}
-
-		if err := apiClient.writeJSON(ctx, methodPut, "/actions/permissions", payload); err != nil {
-			return err
-		}
-
-		// The selected-actions allowlist is defined only when THIS fix is the
-		// one restricting the policy to "selected": an already-restricted
-		// policy keeps whatever allowlist (or local_only semantics) it has.
-		if !allowedFixes {
-			return nil
-		}
-
-		return apiClient.writeJSON(ctx, methodPut, "/actions/permissions/selected-actions", map[string]any{
-			"github_owned_allowed": true,
-			"verified_allowed":     false,
-			"patterns_allowed":     []string{},
-		})
-	}
+	fixPermissions := orgActionsFix(permissions, targetScope, targetAllowed, shaFixes, allowedFixes)
 
 	if permissions.EnabledRepositories == enabledReposNone {
 		a.flag(checkOrgActionsEnabledRepos, StatusFail, enabledReposNone, enabledReposAll,
@@ -1109,31 +1119,11 @@ func (a *auditor) auditOrgCommunityHealth(org string) {
 		a.flag(checkOrgCommunityHealthRepo, StatusOK, "", "", "the org .github repository exists and is public", nil)
 	}
 
-	var missing []string
+	missing, err := a.communityHealthMissing(healthRepo)
+	if err != nil {
+		a.unverifiable(err, checkOrgCommunityHealthSet)
 
-	for _, file := range communityHealthFiles() {
-		found := false
-
-		for _, location := range communityHealthLocations(file) {
-			fileOutcome := healthRepo.api(a.ctx, "GET", "/contents/"+location, nil)
-
-			switch {
-			case fileOutcome.notFound:
-				continue
-			case fileOutcome.err != nil:
-				a.unverifiable(fileOutcome.err, checkOrgCommunityHealthSet)
-
-				return
-			default:
-				found = true
-			}
-
-			break
-		}
-
-		if !found {
-			missing = append(missing, file)
-		}
+		return
 	}
 
 	if len(missing) > 0 {
@@ -1154,4 +1144,36 @@ func (a *auditor) auditOrgCommunityHealth(org string) {
 
 	a.flag(checkOrgCommunityHealthSet, StatusOK, "", "",
 		"the org .github repository carries the canonical community-health set", nil)
+}
+
+// communityHealthMissing is the canonical community-health files the org
+// .github repository lacks at every location GitHub resolves them from; the
+// first lookup that fails for a reason other than absence is the error.
+func (a *auditor) communityHealthMissing(healthRepo client) ([]string, error) {
+	var missing []string
+
+	for _, file := range communityHealthFiles() {
+		found := false
+
+		for _, location := range communityHealthLocations(file) {
+			fileOutcome := healthRepo.api(a.ctx, "GET", "/contents/"+location, nil)
+			if fileOutcome.notFound {
+				continue
+			}
+
+			if fileOutcome.err != nil {
+				return nil, fileOutcome.err
+			}
+
+			found = true
+
+			break
+		}
+
+		if !found {
+			missing = append(missing, file)
+		}
+	}
+
+	return missing, nil
 }

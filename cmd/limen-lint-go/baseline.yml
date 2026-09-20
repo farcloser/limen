@@ -174,17 +174,12 @@ golangci:
       - wsl # deprecated
 
       # Duplicates
-      - cyclop # provided by revive
-      - gocyclo # provided by revive
+      - cyclop # gocyclo, plus a package average nobody acts on
       - errname # provided by revive
       - forcetypeassert # provided by revive
-      - funlen # provided by revive
-      - gocognit # provided by revive
-      - goconst # provided by revive
       - gomodguard # we use depguard instead
       - lll # provided by golines
       - loggercheck # better dealt with by specialized libraries
-      - mnd # already provided by revive add-constant
       - nakedret # provided by revive
       - predeclared # provided by revive
       - unparam # provided by revive
@@ -203,8 +198,13 @@ golangci:
             - noctx
             - perfsprint
             - depguard
+            - gocognit # a table-driven test is one long, flat function by design
+            - gocyclo # same
+            - funlen # same
+            - mnd # fixture values
+            - goconst # fixture values
         - path: _test.go
-          text: "add-constant|cognitive-complexity|confusing-results|nested-structs|use-waitgroup-go|unchecked-type-assertion|unused-receiver"
+          text: "confusing-results|nested-structs|use-waitgroup-go|unchecked-type-assertion|unused-receiver"
           linters:
             - revive
 
@@ -227,6 +227,50 @@ golangci:
       gosec:
         excludes:
           - G104 # unchecked errors are errcheck's
+
+      # Complexity and length. Sonar's default for cognitive complexity is 15;
+      # cyclomatic follows it; funlen's 40 statements / 60 lines defaults are
+      # raised to 80 lines for the long-but-flat function. Tests are exempt
+      # (see exclusions): a table-driven test is one long function by design.
+      gocognit:
+        min-complexity: 15
+      gocyclo:
+        min-complexity: 15
+      funlen:
+        lines: 80
+        statements: 40
+        ignore-comments: true
+
+      # Literals. mnd reports a bare number where a named constant would say
+      # what it means; the list below is what the codebase treats as
+      # self-evident (0 and 1 always are). goconst reports a string repeated
+      # three times or more; format strings are exempt, they are patterns,
+      # not values.
+      mnd:
+        ignored-numbers:
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
+          - "7"
+          - "8"
+          - "9"
+          - "16"
+          - "20"
+          - "24"
+          - "32"
+          - "0xf"
+          - "0x1f"
+          - "0x3"
+          - "0xFF"
+          - "0xE0"
+          - "0x03"
+          - "0x0F"
+      goconst:
+        min-occurrences: 3
+        ignore-string-values:
+          - '^%'
 
       # govet: the defaults. fieldalignment (struct fields ordered to minimize
       # padding) stays off: reordering is safe but the finding is noise.
@@ -287,18 +331,21 @@ golangci:
       revive:
         enable-all-rules: true
         rules:
-          - name: function-length
-            arguments: [100, 0]
-          - name: add-constant
-            arguments:
-              - allowFloats: "0.0,1.0"
-                allowInts: "0,1,2,3,4,5,6,7,8,9,-1,16,20,24,32,0xf,0x1f,0x3,0x1,0xFF,0xE0,0x03,0x0F,0x00"
-                allowStrs: '"","%w: %q","%w: %w","%w: %s"," ","-","`","\n",":","@",".","%s:%s"'
-                ignoreFuncs: 'slog[.].*'
+          # Measures owned by the single-purpose linters (see their settings
+          # below): their settings are richer and their suppression is
+          # already per linter.
           - name: cognitive-complexity
-            arguments: [30]
+            disabled: true # gocognit
           - name: cyclomatic
-            arguments: [30]
+            disabled: true # gocyclo
+          - name: function-length
+            disabled: true # funlen
+          - name: add-constant
+            disabled: true # mnd for numbers, goconst for strings
+          # A boolean parameter that selects behaviour is a design choice this
+          # codebase makes on purpose: 31 suppressions of this rule say so.
+          - name: flag-parameter
+            disabled: true
           - name: max-public-structs
             arguments: [10]
 

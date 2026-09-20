@@ -80,7 +80,7 @@ var ed25519OID = []byte{0x2B, 0x06, 0x01, 0x04, 0x01, 0xDA, 0x47, 0x0F, 0x01}
 // hashIDs maps a crypto.Hash to its OpenPGP algorithm number, the weak
 // SHA-1 included so a test can produce what the verifier must refuse.
 //
-//nolint:gochecknoglobals // immutable table.
+//nolint:gochecknoglobals,mnd // immutable table; the numbers are RFC 4880's hash algorithm ids.
 var hashIDs = map[crypto.Hash]byte{
 	crypto.SHA1:   2,
 	crypto.SHA256: 8,

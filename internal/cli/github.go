@@ -259,6 +259,33 @@ func runGithubFix(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return reportGithubOutcome(stdout, stderr, label, findings, printer)
 	}
 
+	printGithubPlan(progress, label, changes)
+
+	if !*yes && !confirm(progress) {
+		_, _ = fmt.Fprintln(stderr, "not applied (confirm with y, or pass -yes)")
+
+		return 1
+	}
+
+	applied, failed := applyGithubChanges(ctx, stderr, changes)
+
+	// Re-audit: the post-state, not the intent, is what gets reported. A
+	// check whose change applied without error and still fails is a write
+	// GitHub accepted and ignored — a feature it gates by plan on this target
+	// — and is reported as that, not as a fix that quietly did nothing. Only
+	// when every change applied: the consolidated PATCH rides on one change
+	// and the rest are no-ops, so a failed PATCH is not several ignored writes.
+	final, _ := audit(overrides)
+	if failed == 0 {
+		github.MarkIneffective(final, applied)
+	}
+
+	return reportGithubOutcome(stdout, stderr, label, final, printer)
+}
+
+// printGithubPlan lists the planned changes, grouped under their target
+// when the audit spans several.
+func printGithubPlan(progress io.Writer, label string, changes []github.Change) {
 	_, _ = fmt.Fprintf(progress, "limen github fix %s — plan:\n", label)
 
 	planTarget := ""
@@ -272,13 +299,11 @@ func runGithubFix(ctx context.Context, args []string, stdout, stderr io.Writer) 
 
 		_, _ = fmt.Fprintf(progress, "  ✎  %-32s %s\n", planned.Check, planned.Summary)
 	}
+}
 
-	if !*yes && !confirm(progress) {
-		_, _ = fmt.Fprintln(stderr, "not applied (confirm with y, or pass -yes)")
-
-		return 1
-	}
-
+// applyGithubChanges applies every change, each failure reported as it
+// happens, and returns the checks that applied and how many did not.
+func applyGithubChanges(ctx context.Context, stderr io.Writer, changes []github.Change) ([]string, int) {
 	failed := 0
 	applied := make([]string, 0, len(changes))
 
@@ -298,18 +323,7 @@ func runGithubFix(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		_, _ = fmt.Fprintf(stderr, "limen: %d change(s) failed to apply\n", failed)
 	}
 
-	// Re-audit: the post-state, not the intent, is what gets reported. A
-	// check whose change applied without error and still fails is a write
-	// GitHub accepted and ignored — a feature it gates by plan on this target
-	// — and is reported as that, not as a fix that quietly did nothing. Only
-	// when every change applied: the consolidated PATCH rides on one change
-	// and the rest are no-ops, so a failed PATCH is not several ignored writes.
-	final, _ := audit(overrides)
-	if failed == 0 {
-		github.MarkIneffective(final, applied)
-	}
-
-	return reportGithubOutcome(stdout, stderr, label, final, printer)
+	return applied, failed
 }
 
 // confirm asks for interactive consent on stdin (the plan was just printed

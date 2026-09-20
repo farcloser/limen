@@ -344,7 +344,7 @@ func registerUpdateApp(ctx context.Context, org string, orgAPI client, progress 
 
 	appID := strconv.FormatInt(conversion.ID, decimalBase)
 	if err := orgAPI.writeJSON(ctx, "POST", "/actions/variables", map[string]string{
-		"name": updateAppVariable, "value": appID, "visibility": "all",
+		jsonNameKey: updateAppVariable, "value": appID, "visibility": "all",
 	}); err != nil {
 		return updateAppFinding(
 			StatusAdvisory,

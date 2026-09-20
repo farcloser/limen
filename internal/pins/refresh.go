@@ -274,7 +274,7 @@ func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (s
 func sumFor(data []byte, want, sumsURL string) (string, error) {
 	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == want { //nolint:mnd // `<sha256>  <name>`.
+		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == want {
 			if !sha256RE.MatchString(fields[0]) {
 				return "", fmt.Errorf("%w: %s carries no sha256 for %s", ErrVerify, sumsURL, want)
 			}
