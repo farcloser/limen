@@ -138,6 +138,77 @@ brew, it has a pin story. The toolchain is pinned in two halves:
   `~/.cargo/bin`; that wiring lands in the Rust modules the day a repository needs it, and
   until then the modules stay as they are: named, never in a default, and not runnable.
 
+## Go — one lint baseline, per-project carve-outs: `.lint-go.yaml`
+
+Linting Go takes many tools, each configured its own way: golangci-lint reads a long YAML
+file, go-licenses takes its allowed list and its ignores as flags, the rest take flags of
+their own. And golangci-lint has no overlay — one configuration file, first found wins, no
+`extends`, `include` or merge, a request upstream has parked since 2020 — so every Go
+repository used to carry its own hand-edited copy of the file, the copies drifted from the
+baseline and from each other, and a change to the lint policy could not be applied to any of
+them without a manual three-way merge, so it was not applied. The per-project ignores for
+go-licenses lived in an exported variable in the root `Justfile`, a hidden override.
+
+The shape now is one baseline, one overlay, rendered at lint time:
+
+- **The baseline is limen's**, embedded in `limen-lint-go`, the second binary of limen's
+  release, and never edited by a project (`limen-lint-go baseline` prints it). It carries
+  the golangci-lint configuration every repository starts from, the go-licenses allowed list,
+  and the oldest golangci-lint release every linter name in it exists in. Two placeholders are
+  filled from the project's `go.mod` at render time: the module path (depguard's allow list)
+  and its first two elements, host and owner, the sibling modules `gci` groups together.
+- **The overlay is the project's**: a root `.lint-go.yaml`, seeded once as commented examples
+  and never rewritten. It uses the baseline's sections and golangci's own vocabulary, so it
+  reads as a fragment of the file it patches, and holds only what the project adds, changes
+  or takes out. The rules, one per kind of key:
+
+  | Overlay key | Effect on the baseline |
+  |---|---|
+  | `golangci.linters.disable`, `…enable` | moves the linter between the two sets (the baseline runs `default: all`, so this is golangci's own meaning too); a linter already where it is going is a note, not a carve-out |
+  | `golangci.formatters.enable` | adds a formatter (golangci's schema has no `formatters.disable`) |
+  | `golangci.linters.exclusions.paths`, `…rules`, `…presets`; `golangci.formatters.exclusions.paths` | append; nothing in the baseline's exclusions can be removed — if a project needs that, the baseline is wrong and it is a limen change |
+  | `golangci.linters.settings.<linter>`, `golangci.formatters.settings.<formatter>` | merge key by key: a scalar overrides, a mapping recurses, a list appends (a value the baseline already lists is a note); in a list of named mappings — revive's rules — a name the baseline has overrides that entry's keys, so a project changes one rule's arguments without restating the list, and a new name appends |
+  | `licenses.allowed` | replaces the allowed list |
+  | `licenses.ignore` | appends the modules go-licenses skips (typically the false positives of google/go-licenses#186) |
+  | anything else — `run`, `issues`, `output`, `severity`, `linters.default`, `exclusions.generated`, an unknown key | rejected with the key named: that is policy the baseline owns, never merged |
+
+- **The rendered configuration is a build artifact.** `just do lint go` has `limen-lint-go`
+  check the pinned golangci-lint against the baseline's floor, render the baseline with the
+  overlay into `build/golangci.yml`, and print how many carve-outs it applied; golangci-lint
+  then runs with `-c` on that file, which also makes it ignore any configuration at the root.
+  The licenses lane splices in the flags the driver prints for it. Nothing is committed, and
+  nothing at the root invites a hand edit: a root `.golangci.yml` is a stray that `limen check`
+  reports, since nothing reads it. Editor auto-discovery of a root file is deliberately given
+  up — the workflow is `just lint`.
+- **The user story is one command.** Edit `.lint-go.yaml`, run `just do lint go`: the render
+  is the recipe's first step, and the change is live.
+- **The baseline and the golangci-lint pin are checked against each other.** The baseline names
+  linters; a name unknown to an older golangci-lint fails the run. The baseline moves with
+  limen releases, the golangci-lint pin per repository with Renovate, so either can run ahead:
+  the driver refuses to run when the pinned golangci-lint is older than the release the
+  baseline declares, naming both and the recipe that moves the pin. The other direction is
+  safe — a newer golangci-lint warns on a retired name rather than failing on an unknown one.
+
+**What limen enforces** (the `lintgo` rule, Go modules only): a missing root `.lint-go.yaml`
+is seeded; a root golangci-lint configuration fails the check and is an advisory on fix, since
+its carve-outs are a human's to move. The driver itself needs no rule: it arrives with the limen
+pin, in the same archive, verified by the same checksum and signature, and the aqua registry
+entry for limen lists both binaries.
+
+**Why a driver of our own, and why it ships with limen.** limen is zero-dependency and has no
+YAML parser, and a module of its own keeps the parser out of limen's `go.mod`; the driver owns
+configuration only, never execution — each analyzer keeps its own module, built by `_go-tool`,
+and the just recipes stay the one orchestrator — and it does not import golangci-lint's
+packages, whose API stability upstream does not state; it reads the binary's build information
+from the standard library instead. It is a second binary of limen's release rather than a tool
+directive or a repository of its own because it is not an independent tool: its subcommands are
+called by limen's content-pinned recipes, its baseline is limen's policy, and its overlay
+contract is what limen's rule seeds. Those three move on one clock this way. It is the one
+pure-Go tool beside limen itself that a repository takes prebuilt rather than compiled by the
+pinned toolchain ([tooling](./tooling.md)): the release workflow builds both with the same
+pinned toolchain in the same job, so the provenance argument for source builds does not apply,
+and the driver loads no Go source, so the correctness argument does not either.
+
 ## Go — silencing a finding
 
 A finding is silenced by its **rule**, never by its **linter**. `//nolint:<linter>` is
@@ -183,7 +254,7 @@ pipeline could observe it, because `go test` runs a fixed vet subset that exclud
 
 `just do lint go vet` closes the gap by running `go vet -asmdecl -buildtag` — those two
 analyzers and **no others** — over every supported GOOS/GOARCH pair. The scoping is the
-point: `go vet` honours neither `.golangci.yml` nor `//nolint`, so any analyzer that
+point: `go vet` honours neither the rendered lint configuration nor `//nolint`, so any analyzer that
 overlaps with golangci-lint's `govet` would re-report a finding the project deliberately
 silenced and force the exception to be written twice, in two syntaxes. Restricted to the
 analyzers golangci-lint physically cannot run, the step can never contradict a project's

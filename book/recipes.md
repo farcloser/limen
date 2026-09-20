@@ -63,9 +63,12 @@ an explicit, documented decision before its recipes can work; the Rust one is in
   `lint`), and that pair is what CI runs.
 - **Project knobs are exported variables, named after the task path.** A recipe that
   needs per-project configuration reads an environment variable named after its task path
-  — `LINT_GO_LICENSES_FLAGS` for `just do lint go licenses`, `TEST_GO_TIMEOUT` and
-  `TEST_GO_COVER_MIN` for the test module, `BUILD_GO_FLAGS` and `BUILD_GO_LDFLAGS` for the
-  build module. A
+  — `TEST_GO_TIMEOUT` and `TEST_GO_COVER_MIN` for the test module, `BUILD_GO_FLAGS` and
+  `BUILD_GO_LDFLAGS` for the build module. Lint *policy* is not a knob: what
+  `just do lint go` accepts — a linter off, an exclusion, a module go-licenses must ignore
+  — is declared in the project's `.lint-go.yaml`, a committed file with a defined vocabulary
+  ([per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml)),
+  never an exported variable. A
   project sets them once in the root `Justfile` (`export NAME := 'value'` — exports propagate
   into every module recipe), or on the invocation for a one-off. The exceptions that
   prove the rule carry the name of what they configure rather than one task's:

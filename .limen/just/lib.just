@@ -77,3 +77,18 @@ _go-tool name pkg:
         echo "neither tools/{{ name }}/go.mod nor tools/go.mod carries 'tool {{ pkg }}' — add it: just do tools add {{ pkg }} (see book/tooling.md)" >&2
         exit 1
     fi
+
+# The golangci-lint configuration the lint and fix recipes run: the baseline
+# limen-lint-go embeds with the project's .lint-go.yaml applied, rendered on
+# every run into build/ (gitignored) — so an edit to the overlay is live at
+# the next `just do lint go`, and nothing at the root invites a hand edit
+# (book/per-language.md, "one baseline, per-project carve-outs"). First the
+# floor: the baseline names linters, and a pinned golangci-lint older than the
+# release it is written for fails on a name it does not know; hence the
+# dependency on the golangci-lint build, whose binary it reads.
+# limen-lint-go ships in limen's release, on the hermetic PATH like limen;
+# LIMEN_LINT_GO_BIN is for the limen repository itself, which builds it from
+# its own tree (same idea as LIMEN_BIN in lint.just).
+_golangci-config:
+    ${LIMEN_LINT_GO_BIN:-limen-lint-go} check build/tools/golangci-lint
+    ${LIMEN_LINT_GO_BIN:-limen-lint-go} render -o build/golangci.yml

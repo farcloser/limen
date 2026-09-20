@@ -14,15 +14,18 @@ default: code vet mod vuln licenses
 
 # golangci-lint, built here by the pinned toolchain from tools/golangci-lint
 # (its own module, so its analyzers' dependencies stay upstream's; see _go-tool
-# in lib.just), then once per supported platform (see _per-platform:
+# in lib.just), on the configuration limen-lint-go renders from the baseline
+# and the project's .lint-go.yaml (see _golangci-config in lib.just: the file
+# lives under build/, so `-c` names it and golangci ignores any root
+# .golangci.yml), then once per supported platform (see _per-platform:
 # platform-specific files are only analyzed for the GOOS/GOARCH that builds
 # them). Built with the toolchain it analyzes, it cannot skew from it — the
 # reason the prebuilt binary and its lockstep check are gone.
 # The formatter is build-graph-independent and runs once. The last step
 # enforces the suppression doctrine (book/per-language.md, "silencing a
 # finding"): a finding is silenced by its rule, never by its linter.
-code: (_banner "lint go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") (_per-platform "build/tools/golangci-lint run") _suppression-check
-    build/tools/golangci-lint fmt --diff
+code: (_banner "lint go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") _golangci-config (_per-platform "build/tools/golangci-lint run -c build/golangci.yml") _suppression-check
+    build/tools/golangci-lint fmt --diff -c build/golangci.yml
 
 # Polices the shape the book requires (per-language.md, "silencing a
 # finding"): nolintlint checks a directive's form, not which linter it names,
@@ -59,7 +62,7 @@ _suppression-check:
 # nothing through it whatever the govet configuration says — even
 # `enable-all`. Broken amd64 assembly passed `lint go` on the amd64 CI legs
 # for exactly that reason. Scoped to those two on purpose: `go vet` reads
-# neither .golangci.yml nor //nolint, so any analyzer that overlaps with
+# neither the rendered configuration nor //nolint, so any analyzer that overlaps with
 # golangci's govet would re-report findings a project deliberately silenced,
 # and the same exception would then have to be written twice. Every
 # supported platform, like the rest (see _per-platform in lib.just); vet
@@ -87,15 +90,17 @@ mod: (_banner "lint go" "mod")
 vuln: (_banner "lint go" "vuln") (_go-tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck") (_per-platform "build/tools/govulncheck ./...")
 
 # Dependency license compliance, once per supported platform (see _per-platform in
-# lib.just: each platform pulls its own dependencies). Extra flags (typically
-# --ignore=<module> for the false positives of google/go-licenses#186): export
-# LINT_GO_LICENSES_FLAGS from the root Justfile.
+# lib.just: each platform pulls its own dependencies). The allowed licenses
+# are the baseline's (limen-lint-go embeds it) and the ignored modules
+# (typically the false positives of google/go-licenses#186) the project's
+# .lint-go.yaml `licenses` section; limen-lint-go prints the flags for both
+# (LIMEN_LINT_GO_BIN: see _golangci-config in lib.just).
 #
 # GOROOT is passed explicitly because go-licenses recognizes stdlib packages by
 # their location under GOROOT, reading its default from its own build. _go-tool
 # compiles it with the pinned toolchain, so the two agree by construction; the
 # explicit value keeps that true even when a project overrides GOROOT.
-licenses: (_banner "lint go" "licenses") (_go-tool "go-licenses" "github.com/google/go-licenses/v2") (_per-platform 'GOROOT="$(go env GOROOT)" build/tools/go-licenses check --include_tests --allowed_licenses=Apache-2.0,BSD-2-Clause,BSD-3-Clause,MIT ${LINT_GO_LICENSES_FLAGS:-} ./...')
+licenses: (_banner "lint go" "licenses") (_go-tool "go-licenses" "github.com/google/go-licenses/v2") (_per-platform 'GOROOT="$(go env GOROOT)" build/tools/go-licenses check --include_tests $(${LIMEN_LINT_GO_BIN:-limen-lint-go} flags licenses) ./...')
 
 # Every bounds check the compiler could not eliminate. Informational: never
 # fails, native arch only (BCE is arch-specific), not in the default set.
