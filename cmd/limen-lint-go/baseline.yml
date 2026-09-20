@@ -9,6 +9,22 @@
 # ${MODULE_PATH} is the module path, ${MODULE_PREFIX} its first two elements
 # (the host and the owner: github.com/farcloser), the sibling modules gci
 # groups together.
+#
+# Selection doctrine. `default: all` makes the baseline the ceiling: every
+# linter golangci-lint ships is on unless named below, so a new release's
+# linters arrive enabled and are triaged, never missed. A linter is disabled
+# for one of three reasons, each stated on its line: deprecated; a duplicate of
+# a check another enabled tool already makes (one finding, reported once, by the
+# tool whose suppression is rule-level, see book/per-language.md "silencing a
+# finding"); or judged to carry no engineering value. Inside the bag linters
+# (revive, gocritic, staticcheck, govet, gosec) the same rule applies check by
+# check: revive owns style and naming, because its directives are per rule;
+# the single-purpose linters own the measures (gocognit, gocyclo, funlen for
+# complexity and length, mnd and goconst for literals), because their
+# settings are richer and `//nolint:<linter>` is already rule-level; govet and
+# staticcheck own correctness, because their analyzers are stronger; the
+# modernizers with an auto-fix (modernize, perfsprint, staticcheck S/QF) own
+# rewrites.
 
 lint-go:
   # The oldest golangci-lint release every linter name below exists in: a
@@ -77,7 +93,13 @@ golangci:
       - nonamedreturns # named returns are occasionally the clearest form; revive confusing-results reports the ambiguous case
       - prealloc # premature optimization
     exclusions:
+      # A baseline rule no project triggers is a bug in the baseline.
+      warn-unused: true
       rules:
+        # Tests are black-box consumers, so the rules about API hygiene and
+        # production robustness do not apply to them; the rules about
+        # correctness do. errcheck stays on: a test that ignores an error can
+        # pass for the wrong reason.
         - path: _test.go
           linters:
             - varnamelen
@@ -178,6 +200,58 @@ golangci:
         context-background: true
         context-todo: true
 
+      sloglint:
+        # Static messages with lowercase style and snake_case keys make logs
+        # queryable; a call with a context in scope passes it on.
+        static-msg: true
+        msg-style: lowercased
+        key-naming-case: snake
+        context: scope
+
+      usestdlibvars:
+        # Every constant the standard library names, not only http.
+        time-date-month: true
+        time-month: true
+        time-layout: true
+        crypto-hash: true
+        default-rpc-path: true
+        sql-isolation-level: true
+        tls-signature-scheme: true
+        constant-kind: true
+
+      iface:
+        enable:
+          - identical # two interfaces with the same method set in one package
+          - opaque # a function that returns an interface but only ever one concrete type
+          - unexported # an unexported interface in an exported signature
+
+      godoclint:
+        # revive exported and package-comments own the shape of a godoc; these
+        # are the two checks nothing else makes.
+        default: none
+        enable:
+          - single-pkg-doc
+          - no-unused-link
+
+      gochecksumtype:
+        # Same posture as exhaustive: a default clause does not excuse a
+        # missing variant.
+        default-signifies-exhaustive: false
+
+      embeddedstructfieldcheck:
+        # An embedded sync.Mutex exports Lock and Unlock on the parent type.
+        forbid-mutex: true
+
+      interfacebloat:
+        # The bigger the interface, the weaker the abstraction. No enrolled
+        # interface exceeds this.
+        max: 5
+
+      gomoddirectives:
+        # `replace` is refused by default (a local one is a project carve-out);
+        # `exclude` is refused too, being a replace by other means.
+        exclude-forbidden: true
+
       govet:
         # Every analyzer, including the ten vet leaves off by default:
         # nilness, shadow, unusedwrite, deepequalerrors and friends are real
@@ -193,11 +267,10 @@ golangci:
             strict: false
 
       errorlint:
-        # Disable err==target → errors.Is(err, target) auto-rewrite. The fixer
-        # has known bugs where it adds the errors.Is() call but fails to add
-        # the "errors" import, leaving the file uncompilable. The two forms
-        # behave identically unless someone wraps io.EOF, which never happens
-        # in practice.
+        # err113 already reports `err == target` and demands errors.Is, so the
+        # comparison check here would report each one twice — and its auto-fix
+        # rewrites without adding the errors import (go-errorlint#111, open),
+        # which `just do fix go` would apply.
         comparison: false
       wsl_v5:
         # Configuration options
@@ -361,6 +434,14 @@ golangci:
             allow:
               - $gostd
               - ${MODULE_PATH}
+            # Standard-library packages the allow list would otherwise admit.
+            deny:
+              - pkg: log$
+                desc: logging is log/slog
+              - pkg: math/rand$
+                desc: use math/rand/v2
+              - pkg: io/ioutil$
+                desc: deprecated since Go 1.16; the functions moved to io and os
 
       staticcheck:
         # All SA (bugs), S (simplifications) and QF (quick fixes). The ST
@@ -413,6 +494,10 @@ golangci:
         max-len: 120
         tab-len: 4
         shorten-comments: true
+        # tagalign (a linter) owns struct tags: it aligns and sorts them under
+        # `run --fix`, and golines running after it would re-break them, so
+        # the fix pipeline never converges with both on.
+        reformat-tags: false
     enable:
       - gci
       - gofumpt
