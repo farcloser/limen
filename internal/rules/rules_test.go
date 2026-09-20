@@ -941,6 +941,70 @@ func TestDirectoryNamedLikeFileIsNotAccepted(t *testing.T) {
 	}
 }
 
+// TestPinsRule: a repository without pins.yaml gets no finding; one whose
+// digests match their versions passes; a stale digest (what a Renovate bump
+// leaves until the refresh) fails naming the pin and the command; a file
+// the commands could not act on fails with the parser's reason. Offline.
+func TestPinsRule(t *testing.T) {
+	t.Parallel()
+
+	const current = `pins:
+  - name: tool
+    renovate: github-releases example/tool
+    version: 2.0.0
+    url: https://example.invalid/tool-${version}.tgz
+    verify: download
+    digest:
+      version: 2.0.0
+      sha256: 0000000000000000000000000000000000000000000000000000000000000000
+`
+
+	if f := findingByRule(
+		rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()),
+		"pins",
+	); f.Message != "rule not evaluated" {
+		t.Errorf("no pins.yaml must produce no finding, got: %+v", f)
+	}
+
+	files := compliantFiles()
+	files["pins.yaml"] = current
+
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); !f.OK() {
+		t.Errorf("current digests must pass: %s", f.Message)
+	}
+
+	files["pins.yaml"] = strings.Replace(current, "      version: 2.0.0", "      version: 1.0.0", 1)
+
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins")
+	if f.OK() || !strings.Contains(f.Message, "tool") || !strings.Contains(f.Message, "limen pins refresh") {
+		t.Errorf("a stale digest must fail naming the pin and the refresh, got: %+v", f)
+	}
+
+	files["pins.yaml"] = strings.Replace(current, "verify: download", "verify: carrier-pigeon", 1)
+
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); f.OK() ||
+		!strings.Contains(f.Message, "carrier-pigeon") {
+		t.Errorf("an unknown verify method must fail naming it, got: %+v", f)
+	}
+
+	// A method that shells out needs its tool pinned in aqua.yaml: the
+	// canonical manifest pins gh and cosign, one without cosign fails naming
+	// the package.
+	files["pins.yaml"] = strings.Replace(current, "verify: download",
+		"verify: cosign-sha256sums https://e.invalid/S https://e.invalid/B ^x$ https://e.invalid", 1)
+
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); !f.OK() {
+		t.Errorf("a pinned verifier must pass: %s", f.Message)
+	}
+
+	files["aqua.yaml"] = canonicalAquaWith(t, canonicalAquaLine(t, "sigstore/cosign@")+"\n", "")
+
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); f.OK() ||
+		!strings.Contains(f.Message, "sigstore/cosign") {
+		t.Errorf("an unpinned verifier must fail naming its package, got: %+v", f)
+	}
+}
+
 func TestWorkflowsRule(t *testing.T) {
 	t.Parallel()
 

@@ -186,6 +186,10 @@ func Check(root string, policy Policy) []Finding {
 		findings = append(findings, f)
 	}
 
+	if f, ok := checkPins(root); ok {
+		findings = append(findings, f)
+	}
+
 	return findings
 }
 
