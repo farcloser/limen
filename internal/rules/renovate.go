@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -285,8 +286,48 @@ func (cfg config) hasForkProcessing() bool {
 	return ok && value == forkProcessingValue
 }
 
+// supersededConfigs are the other files Renovate would read its config from,
+// in its own precedence order, every one of them behind renovate.json: once
+// renovate.json exists they are dead config that still looks authoritative.
+//
+//nolint:gochecknoglobals // immutable table.
+var supersededConfigs = []string{
+	"renovate.json5",
+	".github/renovate.json",
+	".github/renovate.json5",
+	".gitlab/renovate.json",
+	".gitlab/renovate.json5",
+	".renovaterc",
+	".renovaterc.json",
+	".renovaterc.json5",
+}
+
+// deadConfigs names the superseded config files the repository carries.
+func deadConfigs(root string) []string {
+	var dead []string
+
+	for _, name := range supersededConfigs {
+		if exists(filepath.Join(root, filepath.FromSlash(name))) {
+			dead = append(dead, name)
+		}
+	}
+
+	return dead
+}
+
+// doneSeparator joins the edits of one run in a message.
+const doneSeparator = "; "
+
+// deadConfigsMessage says what to do about them; the fixer removes nothing,
+// so the hand is named.
+func deadConfigsMessage(dead []string) string {
+	return strings.Join(dead, ", ") + ": dead config — Renovate reads renovate.json first and never this file;" +
+		" move anything still wanted into renovate.json and remove it (limen fix removes nothing)"
+}
+
 // checkRenovate verifies the preset reference, forkProcessing, and — when the
-// identity is known — that it is among gitIgnoredAuthors.
+// identity is known — that it is among gitIgnoredAuthors; and that no
+// superseded config file sits beside renovate.json.
 func checkRenovate(root string, policy Policy) Finding {
 	data, err := readRepoFile(root, pathRenovate)
 	if err != nil {
@@ -297,6 +338,10 @@ func checkRenovate(root string, policy Policy) Finding {
 			Path:    pathRenovate,
 			Message: "no renovate.json yet (the workflows rule seeds it) — not evaluated",
 		}
+	}
+
+	if dead := deadConfigs(root); len(dead) > 0 {
+		return fail(ruleRenovate, dead[0], deadConfigsMessage(dead))
 	}
 
 	cfg, err := parseConfig(data)
@@ -353,7 +398,21 @@ func checkRenovate(root string, policy Policy) Finding {
 
 // remediateRenovate sets the preset reference and forkProcessing, and adds
 // the update-App identity to gitIgnoredAuthors when it is known and missing.
+// A superseded config file beside renovate.json is named, never removed: what
+// it carries is the project's to move over or drop.
 func remediateRenovate(root string, opts FixOptions) Outcome {
+	out := remediateRenovateValues(root, opts)
+
+	if dead := deadConfigs(root); len(dead) > 0 && out.Action != ActionFailed {
+		out.Action = ActionAdvisory
+		out.Message += doneSeparator + deadConfigsMessage(dead)
+	}
+
+	return out
+}
+
+// remediateRenovateValues is the edit itself: the three maintained keys.
+func remediateRenovateValues(root string, opts FixOptions) Outcome {
 	data, err := readRepoFile(root, pathRenovate)
 	if err != nil {
 		return Outcome{
@@ -413,7 +472,12 @@ func remediateRenovate(root string, opts FixOptions) Outcome {
 	// file rewrote every hand-edited config on every run — the checksum
 	// workflow then carried that formatting diff into each Renovate branch.
 	if !changed {
-		return Outcome{Rule: ruleRenovate, Action: ActionNone, Path: pathRenovate, Message: strings.Join(done, "; ")}
+		return Outcome{
+			Rule:    ruleRenovate,
+			Action:  ActionNone,
+			Path:    pathRenovate,
+			Message: strings.Join(done, doneSeparator),
+		}
 	}
 
 	content, err := render(cfg)
@@ -425,5 +489,10 @@ func remediateRenovate(root string, opts FixOptions) Outcome {
 		return Outcome{Rule: ruleRenovate, Action: ActionFailed, Path: pathRenovate, Message: err.Error()}
 	}
 
-	return Outcome{Rule: ruleRenovate, Action: ActionMerged, Path: pathRenovate, Message: strings.Join(done, "; ")}
+	return Outcome{
+		Rule:    ruleRenovate,
+		Action:  ActionMerged,
+		Path:    pathRenovate,
+		Message: strings.Join(done, doneSeparator),
+	}
 }
