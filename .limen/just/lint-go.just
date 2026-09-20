@@ -12,14 +12,17 @@ import 'lib.just'
 
 default: code vet mod vuln licenses
 
-# golangci-lint, once per supported platform (see _per-platform in lib.just:
+# golangci-lint, built here by the pinned toolchain from tools/golangci-lint
+# (its own module, so its analyzers' dependencies stay upstream's; see _go-tool
+# in lib.just), then once per supported platform (see _per-platform:
 # platform-specific files are only analyzed for the GOOS/GOARCH that builds
-# them).
+# them). Built with the toolchain it analyzes, it cannot skew from it — the
+# reason the prebuilt binary and its lockstep check are gone.
 # The formatter is build-graph-independent and runs once. The last step
 # enforces the suppression doctrine (book/per-language.md, "silencing a
 # finding"): a finding is silenced by its rule, never by its linter.
-code: (_banner "lint go" "go") _golangci-toolchain-check (_per-platform "golangci-lint run") _suppression-check
-    golangci-lint fmt --diff
+code: (_banner "lint go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") (_per-platform "build/tools/golangci-lint run") _suppression-check
+    build/tools/golangci-lint fmt --diff
 
 # Polices the shape the book requires (per-language.md, "silencing a
 # finding"): nolintlint checks a directive's form, not which linter it names,
@@ -50,30 +53,6 @@ _suppression-check:
         '//nolint(:all)?([^a-z:]|$)'
     exit "$fail"
 
-# golangci-lint embeds Go's type checker, so a golangci built with go1.N cannot
-# analyze a go1.N+1 toolchain: it panics with "file requires newer Go version".
-# The two pins move in lockstep — golangci first (a release built with the
-# newer Go), then golang/go — and this check turns the panic into that
-# instruction. The canonical renovate.json groups the two bumps for the same
-# reason. Compares major.minor only: patch releases share a language version.
-[private]
-_golangci-toolchain-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # The probe must not be the failure: a golangci-lint that cannot run
-    # (aqua refusing a pin with no checksum yet, say) failed this recipe under
-    # pipefail with its stderr discarded, so the run died with no message at
-    # all. Its stderr is let through and its status ignored; the check then
-    # skips, and `golangci-lint run` fails next with the same error, visibly.
-    built="$({ golangci-lint version || true; } | sed -nE 's/.*built with go([0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
-    toolchain="$(go env GOVERSION | sed -nE 's/^go([0-9]+\.[0-9]+).*/\1/p')"
-    if [ -n "$built" ] && [ -n "$toolchain" ] && [ "$(printf '%s\n%s\n' "$toolchain" "$built" | sort -V | tail -n 1)" != "$built" ]; then
-        echo "golangci-lint was built with go${built} but the pinned toolchain is go${toolchain}:" >&2
-        echo "it cannot analyze a newer Go. Bump golangci/golangci-lint to a release built with go${toolchain}" >&2
-        echo "(just do tools update golangci-lint) BEFORE bumping golang/go." >&2
-        exit 1
-    fi
-
 # The two `go vet` analyzers golangci-lint cannot run: its package loader never
 # hands analyzers a package's non-Go files, so asmdecl (assembly against the Go
 # declarations it implements) and buildtag (constraints in non-Go files) report
@@ -93,8 +72,14 @@ vet: (_banner "lint go" "vet") (_per-platform "go vet -asmdecl -buildtag ./...")
 # own module — see _go-tool in lib.just). Fails printing the diff; `just do fix
 # go mod` repairs.
 mod: (_banner "lint go" "mod")
+    #!/usr/bin/env bash
+    set -euo pipefail
     go mod tidy -diff
     go -C tools mod tidy -diff
+    # The isolated tool modules too (tools/<name>/go.mod, see _go-tool).
+    for m in tools/*/go.mod; do
+        [ -f "$m" ] && go -C "${m%/go.mod}" mod tidy -diff
+    done
 
 # Known-vulnerability scan against the Go vulnerability database (network:
 # govulncheck fetches vuln.go.dev), once per supported platform (see _per-platform

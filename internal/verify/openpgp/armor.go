@@ -58,7 +58,7 @@ func dearmor(lines []string, kind string) (block, error) {
 		case crc != "":
 			return block{}, fmt.Errorf("%w: data after the checksum line", ErrArmor)
 		default:
-			encoded.WriteString(line)
+			_, _ = encoded.WriteString(line)
 		}
 	}
 

@@ -68,6 +68,15 @@ tool (
 require golang.org/x/tools v0.49.0 // indirect
 `
 
+// goModGolangci is the isolated module a Go repository carries for
+// golangci-lint: one directive, its own graph.
+const goModGolangci = `module example.com/proj/tools/golangci-lint
+
+go 1.26
+
+tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+`
+
 func runGoStub() int {
 	args := os.Args[1:]
 	if len(args) < 2 || args[0] != "get" || args[1] != "-tool" {
@@ -233,9 +242,19 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 		}
 	}
 
+	// A complete tools/go.mod is not enough in a Go module: golangci-lint
+	// lives in a module of its own, and the check names that module.
 	files["tools/go.mod"] = goModWithTools
+
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools")
+	if f.OK() || f.Path != "tools/golangci-lint/go.mod" ||
+		!strings.Contains(f.Message, "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") {
+		t.Fatalf("a Go module without tools/golangci-lint/go.mod should fail naming it, got: %+v", f)
+	}
+
+	files["tools/golangci-lint/go.mod"] = goModGolangci
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools"); !f.OK() {
-		t.Fatalf("a tools/go.mod declaring every tool should pass: %s", f.Message)
+		t.Fatalf("a tools/go.mod declaring every tool, with the isolated module, should pass: %s", f.Message)
 	}
 
 	// The directives in the project's own go.mod are the pollution the rule
@@ -295,6 +314,16 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 
 	if !strings.Contains(f.Message, "retired") || !strings.Contains(f.Message, "github.com/vbatts/git-validation") {
 		t.Errorf("message did not explain the retirement: %s", f.Message)
+	}
+
+	// The prebuilt golangci-lint is retired the same way: an isolated module
+	// builds it now, and a manifest still pinning the binary fails.
+	files["aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
+		"packages:\n  - name: golangci/golangci-lint@v2.0.0\n")
+
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
+	if f.OK() || !strings.Contains(f.Message, "golangci/golangci-lint") {
+		t.Fatalf("a manifest pinning the prebuilt golangci-lint should fail naming it, got: %+v", f)
 	}
 }
 
@@ -417,6 +446,18 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	if !strings.Contains(string(toolsMod), "module example.com/proj/tools") ||
 		!strings.Contains(string(toolsMod), "go 1.26") {
 		t.Errorf("tools/go.mod lacks the derived module path or go directive:\n%s", toolsMod)
+	}
+
+	// The isolated module is seeded too, with its own derived path and the
+	// one directive the fake go appended.
+	isolated, err := os.ReadFile(filepath.Join(dir, "tools/golangci-lint/go.mod"))
+	if err != nil {
+		t.Fatalf("tools/golangci-lint/go.mod not created: %v", err)
+	}
+
+	if !strings.Contains(string(isolated), "module example.com/proj/tools/golangci-lint") ||
+		!strings.Contains(string(isolated), "tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint") {
+		t.Errorf("tools/golangci-lint/go.mod lacks its module path or directive:\n%s", isolated)
 	}
 
 	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {

@@ -118,9 +118,9 @@ func NewEd25519() (*Signer, error) {
 // Fingerprint is the key's v4 fingerprint, 40 uppercase hex digits.
 func (s *Signer) Fingerprint() string {
 	hash := sha1.New() // #nosec G401 -- see the import.
-	hash.Write([]byte{fingerprintTag})
-	hash.Write(twoOctets(len(s.keyBody)))
-	hash.Write(s.keyBody)
+	_, _ = hash.Write([]byte{fingerprintTag})
+	_, _ = hash.Write(twoOctets(len(s.keyBody)))
+	_, _ = hash.Write(s.keyBody)
 
 	return strings.ToUpper(hex.EncodeToString(hash.Sum(nil)))
 }
@@ -162,9 +162,9 @@ func (s *Signer) Clearsign(text string, hash crypto.Hash) ([]byte, error) {
 
 	var out strings.Builder
 
-	out.WriteString("-----BEGIN PGP SIGNED MESSAGE-----\nHash: " + hashName(hash) + "\n\n")
-	out.WriteString(strings.Join(escaped, "\n") + "\n")
-	out.Write(armor("SIGNATURE", packet(tagSignature, sig)))
+	_, _ = out.WriteString("-----BEGIN PGP SIGNED MESSAGE-----\nHash: " + hashName(hash) + "\n\n")
+	_, _ = out.WriteString(strings.Join(escaped, "\n") + "\n")
+	_, _ = out.Write(armor("SIGNATURE", packet(tagSignature, sig)))
 
 	return []byte(out.String()), nil
 }
@@ -186,9 +186,9 @@ func (s *Signer) sign(data []byte, hash crypto.Hash, hashID byte) ([]byte, error
 	) // #nosec G115 -- a few subpackets.
 
 	hasher := hash.New()
-	hasher.Write(data)
-	hasher.Write(header)
-	hasher.Write(trailer)
+	_, _ = hasher.Write(data)
+	_, _ = hasher.Write(header)
+	_, _ = hasher.Write(trailer)
 	digest := hasher.Sum(nil)
 
 	body := slices.Clone(header)
@@ -296,18 +296,18 @@ func armor(kind string, body []byte) []byte {
 
 	var out strings.Builder
 
-	out.WriteString("-----BEGIN PGP " + kind + "-----\n\n")
+	_, _ = out.WriteString("-----BEGIN PGP " + kind + "-----\n\n")
 
 	for len(encoded) > armorLineLength {
-		out.WriteString(encoded[:armorLineLength] + "\n")
+		_, _ = out.WriteString(encoded[:armorLineLength] + "\n")
 		encoded = encoded[armorLineLength:]
 	}
 
-	out.WriteString(encoded + "\n")
+	_, _ = out.WriteString(encoded + "\n")
 
 	sum := binary.BigEndian.AppendUint32(nil, crc24(body))[1:]
-	out.WriteString("=" + base64.StdEncoding.EncodeToString(sum) + "\n")
-	out.WriteString("-----END PGP " + kind + "-----\n")
+	_, _ = out.WriteString("=" + base64.StdEncoding.EncodeToString(sum) + "\n")
+	_, _ = out.WriteString("-----END PGP " + kind + "-----\n")
 
 	return []byte(out.String())
 }

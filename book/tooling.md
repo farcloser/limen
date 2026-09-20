@@ -49,7 +49,7 @@ means adding a second `nixpkgs` input frozen at the right commit; in aqua it is 
 
 aqua matches every paramount requirement directly:
 
-- **Exact per-tool pinning** is native: `golangci/golangci-lint@<version>`.
+- **Exact per-tool pinning** is native: `goreleaser/goreleaser@<version>`.
 - **Per-project** via a committed `aqua.yaml`; projects never collide.
 - **Security**: binary-release tools are checksum-verified and, where the vendor publishes
   them, cosign/SLSA/attestation-verified. Go-built tools — the `go.mod` tools below — fall
@@ -73,24 +73,31 @@ tool; the Go that built it — its standard library, its fixes — is decided by
 Nothing in the manifest describes the binary that actually runs, which is the opposite of
 what a pin is for. So **no Go-built tool is an aqua package**.
 
-**The line is who compiles it, not what language it is written in.** Most of what `aqua.yaml`
-pins is a Go program — `golangci-lint`, `yamlfmt`, `gotestsum`, `goreleaser`, `gh`, `cosign`,
-`just`'s neighbours, `limen` itself — and none of that is "Go-built" in the sense above: nothing
-on your machine compiles it. Each is upstream's prebuilt release binary, checksum-verified and,
-where upstream signs, attestation-verified, the same artifact on every machine. What goes in
-`tools/go.mod` is what limen compiles from source: the analyzers, because their correctness
-depends on the compiler matching the pinned toolchain, and the tools whose upstream ships no
-binary to pin — `git-validation`, `godolint`, and `dot` (`forkcloser/dot` publishes a tag, not
-binaries, which is exactly what a tool directive needs). A tool that ships trustworthy release
-binaries stays in aqua even when it is written in Go.
+**The line is who compiles it, and the pinned toolchain should, wherever `go get` can.** A
+prebuilt Go binary from an upstream release carries that upstream's standard library, built
+with whatever Go they used that day; a fix in `net/http` or `crypto/tls` reaches it only when
+they rebuild, and the `binaries` lint lane found most of the pinned ones behind. A tool built
+here by the pinned `go` from a `tool` directive carries the toolchain we chose, its source fixed
+by module hash and verified against the Go checksum database, reproducibly. So a pure-Go tool is
+a tool directive: the analyzers, because their correctness also depends on the compiler matching
+the toolchain; the tools whose upstream ships no binary to pin — `git-validation`, `godolint`,
+`dot` (`forkcloser/dot` publishes a tag, not binaries); and `golangci-lint`, which embeds Go's
+type checker and, built with the toolchain it analyzes, can no longer skew from it. What stays
+in `aqua.yaml` is what nothing here compiles: tools in other languages, `limen` itself (the
+released binary every repository pins is what its checksums and signature cover), and the Go
+tools a write job must run without a toolchain, `gh` and `cosign`, until in-process
+verification retires them.
 
-**`golangci-lint` is the one deliberate exception to the correctness half.** It embeds Go's
-type checker, so it has the same skew as the analyzers: built with go1.N it cannot analyze a
-go1.N+1 module. Building it from source would cost minutes per platform on every leg, so the
-baseline keeps the prebuilt binary and enforces lockstep instead: the lint recipe's toolchain
-check refuses a golangci built with an older Go than the pinned toolchain and names the
-fix, and the shared Renovate preset groups every third-party aqua pin, `golang/go` and
-`golangci-lint` among them, into one pull request, so the two move together.
+**One module per tool whose graph must stay upstream's.** The shared `tools/go.mod` resolves
+every directive's dependencies together, and minimal version selection lifts a dependency two
+tools share to the newest either wants — a binary its upstream never tested. golangci-lint
+bundles over a hundred analyzers and says so itself: source builds are unsupported, and the
+`go tool` form is tolerable only from a dedicated module. So it lives in
+`tools/golangci-lint/go.mod`, alone, resolving to exactly upstream's graph; `_go-tool` in
+`lib.just` builds from the isolated module when one exists and from `tools/go.mod` otherwise,
+and the `gotools` rule seeds the module in every Go repository. The one thing that survives as a
+hand check at each bump: an upstream `replace` directive, which does not apply across modules
+and would make a source build a different program from the release — none today.
 
 For a tool that **loads Go source** — `deadcode`, `govulncheck`, `go-licenses`, anything built
 on `go/packages` — the gap is a correctness failure, not only a provenance one: such a tool
@@ -373,7 +380,7 @@ it delegates to `aqua update`, which resolves commands). Each leaves `aqua.yaml`
 
 ```bash
 just do tools add    junegunn/fzf                    # add a tool at its latest version
-just do tools set    golangci/golangci-lint <version>  # pin an existing tool to an exact version
+just do tools set    goreleaser/goreleaser <version>  # pin an existing tool to an exact version
 just do tools update golangci-lint                   # bump an existing tool (by COMMAND name) to its latest version
 just do tools remove junegunn/fzf                    # remove a tool entirely
 ```
@@ -415,7 +422,7 @@ The short path is `just do tools update <command>` (latest — the executable na
 
 ```bash
 # 1. Edit aqua.yaml — bump the version, e.g.
-#      golangci/golangci-lint@<old>  ->  @<new>
+#      goreleaser/goreleaser@<old>  ->  @<new>
 # 2. Refresh the checksum for the new version:
 aqua update-checksum
 # 3. Install and verify:
@@ -429,7 +436,7 @@ git commit --message "tooling: bump golangci-lint"
 ### Automated (Renovate — the intended workflow)
 
 1. Renovate detects the new release and opens a **per-tool** PR bumping the version in
-   `aqua.yaml` (e.g. "update golangci/golangci-lint to a newer version").
+   `aqua.yaml` (e.g. "update goreleaser/goreleaser to a newer version").
 2. The `update-aqua-checksum` workflow does the repo-specific follow-up **in the same PR**:
    it regenerates `aqua-checksums.json`, and — when the bumped tool is `limen` itself — runs
    the newly pinned `limen fix` so the canonical files move with the pin (a repo is coherent
