@@ -89,8 +89,8 @@ type checker, so it has the same skew as the analyzers: built with go1.N it cann
 go1.N+1 module. Building it from source would cost minutes per platform on every leg, so the
 baseline keeps the prebuilt binary and enforces lockstep instead: the lint recipe's toolchain
 check refuses a golangci built with an older Go than the pinned toolchain and names the
-fix, and the shared Renovate preset groups the `golang/go` and `golangci-lint` bumps into one
-pull request so the two pins move together.
+fix, and the shared Renovate preset groups every third-party aqua pin, `golang/go` and
+`golangci-lint` among them, into one pull request, so the two move together.
 
 For a tool that **loads Go source** — `deadcode`, `govulncheck`, `go-licenses`, anything built
 on `go/packages` — the gap is a correctness failure, not only a provenance one: such a tool
