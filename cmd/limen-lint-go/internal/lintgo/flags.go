@@ -42,7 +42,7 @@ func flags(args []string, dir string, raw []byte, stdout io.Writer) error {
 		parts = append(parts, flagIgnore+module)
 	}
 
-	fmt.Fprintln(stdout, strings.Join(parts, flagSeparator))
+	_, _ = fmt.Fprintln(stdout, strings.Join(parts, flagSeparator))
 
 	return nil
 }

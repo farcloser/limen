@@ -74,7 +74,7 @@ func runVerifierStub() int {
 
 	defer func() { _ = file.Close() }()
 
-	fmt.Fprintln(file, strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")+" "+strings.Join(os.Args[1:], " "))
+	_, _ = fmt.Fprintln(file, strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")+" "+strings.Join(os.Args[1:], " "))
 
 	return 0
 }

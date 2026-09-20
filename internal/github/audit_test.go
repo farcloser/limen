@@ -264,7 +264,7 @@ func runGHStub(dir string) int {
 
 		return 1
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
 	// Log first, respond second — unlisted writes are logged too. The
 	// response lookup keys on method and path alone; --paginate and --slurp
@@ -282,7 +282,7 @@ func runGHStub(dir string) int {
 		logged += " --slurp"
 	}
 
-	fmt.Fprintln(logFile, logged)
+	_, _ = fmt.Fprintln(logFile, logged)
 
 	if len(args) >= 6 && args[4] == "--input" {
 		if _, err := io.Copy(logFile, os.Stdin); err != nil {
@@ -291,7 +291,7 @@ func runGHStub(dir string) int {
 			return 1
 		}
 
-		fmt.Fprintln(logFile)
+		_, _ = fmt.Fprintln(logFile)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(dir, "responses.json"))
@@ -357,9 +357,9 @@ func runGHSecretStub(dir string, args []string) int {
 
 		return 1
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
-	fmt.Fprintln(logFile, key)
+	_, _ = fmt.Fprintln(logFile, key)
 
 	if _, err := io.Copy(logFile, os.Stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
@@ -367,7 +367,7 @@ func runGHSecretStub(dir string, args []string) int {
 		return 1
 	}
 
-	fmt.Fprintln(logFile)
+	_, _ = fmt.Fprintln(logFile)
 
 	raw, err := os.ReadFile(filepath.Join(dir, "responses.json"))
 	if err != nil {

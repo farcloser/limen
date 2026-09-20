@@ -44,7 +44,8 @@ golangci:
   linters:
     default: all
     enable:
-      # These are the default set of golangci (errcheck is disabled, see below)
+      # These are the default set of golangci
+      - errcheck # unchecked errors, deferred and go calls included (see its settings below)
       - govet # Vet examines Go source code and reports suspicious constructs. It is roughly the same as 'go vet' and uses its passes.
       - ineffassign # Detects when assignments to existing variables are not used.
       - staticcheck # It's the set of rules from staticcheck.
@@ -175,7 +176,6 @@ golangci:
       # Duplicates
       - cyclop # provided by revive
       - gocyclo # provided by revive
-      - errcheck # provided by revive
       - errname # provided by revive
       - forcetypeassert # provided by revive
       - funlen # provided by revive
@@ -204,11 +204,30 @@ golangci:
             - perfsprint
             - depguard
         - path: _test.go
-          text: "add-constant|cognitive-complexity|confusing-results|nested-structs|use-waitgroup-go|unchecked-type-assertion|unhandled-error|unused-receiver"
+          text: "add-constant|cognitive-complexity|confusing-results|nested-structs|use-waitgroup-go|unchecked-type-assertion|unused-receiver"
           linters:
             - revive
 
     settings:
+      errcheck:
+        # Type assertions are revive unchecked-type-assertion's (rule-level
+        # suppression). `_ = f()` and `_, _ = w.Write(b)` are the codebase's
+        # idiom for a reviewed discard: turning check-blank on makes every one
+        # of those lines a finding.
+        check-type-assertions: false
+        check-blank: false
+        # errcheck's built-in list already excludes fmt.Print* and
+        # fmt.Fprint*(os.Stderr). Standard output is the CLI's contract with a
+        # pipe; a failure there has no better handler than the exit.
+        exclude-functions:
+          - fmt.Fprint(os.Stdout)
+          - fmt.Fprintf(os.Stdout)
+          - fmt.Fprintln(os.Stdout)
+
+      gosec:
+        excludes:
+          - G104 # unchecked errors are errcheck's
+
       # govet: the defaults. fieldalignment (struct fields ordered to minimize
       # padding) stays off: reordering is safe but the finding is noise.
       errorlint:
@@ -286,14 +305,11 @@ golangci:
           - name: line-length-limit
             # Formatter `golines` takes care of this.
             disabled: true
+          # errcheck owns unchecked errors: this rule visits expression
+          # statements only, so a `defer f.Close()` or `go f()` whose error is
+          # dropped is invisible to it; errcheck sees both.
           - name: unhandled-error
-            arguments:
-              - "fmt.Print"
-              - "fmt.Println"
-              - "fmt.Printf"
-              - "fmt.Fprint"
-              - "fmt.Fprintln"
-              - "fmt.Fprintf"
+            disabled: true
 
       depguard:
         rules:

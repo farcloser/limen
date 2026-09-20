@@ -70,7 +70,7 @@ func Run(args []string, baseline []byte, stdout, stderr io.Writer) int {
 	dir := global.String(flagDir, ".", "the module to run in")
 
 	if err := global.Parse(args); err != nil || global.NArg() == 0 {
-		fmt.Fprintln(stderr, usage)
+		_, _ = fmt.Fprintln(stderr, usage)
 
 		return exitUsage
 	}
@@ -96,10 +96,10 @@ func Run(args []string, baseline []byte, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 
-	fmt.Fprintln(stderr, err)
+	_, _ = fmt.Fprintln(stderr, err)
 
 	if errors.Is(err, ErrUsage) {
-		fmt.Fprintln(stderr, usage)
+		_, _ = fmt.Fprintln(stderr, usage)
 
 		return exitUsage
 	}
