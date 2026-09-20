@@ -70,9 +70,8 @@ func TestConfigRoundTrip(t *testing.T) {
 	files["renovate.json"] = `{"extends":["` + pinnedPresetRef(t) + `"],"prConcurrentLimit":10}` + "\n"
 	root := writeRepo(t, files)
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
-		"renovate",
 	); o.Action != rules.ActionMerged {
 		t.Fatalf("fix: %s (%s), want merged", o.Action, o.Message)
 	}
@@ -227,10 +226,7 @@ func TestSupersededConfig(t *testing.T) {
 		t.Errorf("check must fail naming renovate.json5, got: %+v", finding)
 	}
 
-	outcome := outcomeByRule(
-		rules.Fix(context.Background(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
-		"renovate",
-	)
+	outcome := renovateOutcome(rules.Fix(context.Background(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}))
 	if outcome.Action != rules.ActionAdvisory || !strings.Contains(outcome.Message, "renovate.json5") {
 		t.Errorf("fix must end advisory naming renovate.json5, got: %s (%s)", outcome.Action, outcome.Message)
 	}
@@ -306,9 +302,8 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("unknown identity must not fail: %s", f.Message)
 	}
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
-		"renovate",
 	); o.Action != rules.ActionNone {
 		t.Errorf("unknown identity: %s, want none", o.Action)
 	}
@@ -318,9 +313,8 @@ func TestRenovateRule(t *testing.T) {
 		t.Error("a missing update-App identity must fail when known")
 	}
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: known}),
-		"renovate",
 	); o.Action != rules.ActionMerged {
 		t.Errorf("fix: %s (%s), want merged", o.Action, o.Message)
 	}
@@ -334,9 +328,8 @@ func TestRenovateRule(t *testing.T) {
 	}
 
 	// Idempotent.
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: known}),
-		"renovate",
 	); o.Action != rules.ActionNone {
 		t.Errorf("second fix: %s, want none", o.Action)
 	}
@@ -354,9 +347,8 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("a compliant hand-edited file must pass: %s", f.Message)
 	}
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: known}),
-		"renovate",
 	); o.Action != rules.ActionNone {
 		t.Errorf("fix on a compliant hand-edited file: %s (%s), want none", o.Action, o.Message)
 	}
@@ -382,9 +374,8 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("the raw seed must fail naming %s, got: %+v", want, f)
 	}
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
-		"renovate",
 	); o.Action != rules.ActionMerged {
 		t.Errorf("fix on the raw seed: %s (%s), want merged", o.Action, o.Message)
 	}
@@ -413,9 +404,8 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("a config without %s must fail naming it, got: %+v", "forkProcessing", f)
 	}
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
-		"renovate",
 	); o.Action != rules.ActionMerged {
 		t.Errorf("fix must set %s: %s (%s)", "forkProcessing", o.Action, o.Message)
 	}
@@ -430,9 +420,8 @@ func TestRenovateRule(t *testing.T) {
 	custom["renovate.json"] = `{"extends":["config:recommended"]}` + "\n"
 	root = writeRepo(t, custom)
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: known}),
-		"renovate",
 	); o.Action != rules.ActionMerged {
 		t.Errorf("no key: %s (%s), want merged", o.Action, o.Message)
 	}
@@ -450,9 +439,8 @@ func TestRenovateRule(t *testing.T) {
 		t.Error("invalid JSON must fail check")
 	}
 
-	if o := outcomeByRule(
+	if o := renovateOutcome(
 		rules.Fix(context.Background(), root, rules.FixOptions{Policy: known}),
-		"renovate",
 	); o.Action != rules.ActionAdvisory {
 		t.Errorf("invalid JSON: %s (%s), want advisory", o.Action, o.Message)
 	}
@@ -488,7 +476,11 @@ func ignoredAuthorsOf(t *testing.T, root string) []string {
 	return cfg.GitIgnoredAuthors
 }
 
-func outcomeByRule(outcomes []rules.Outcome, rule string) rules.Outcome {
+// renovateOutcome is the renovate rule's outcome among outcomes, or a
+// failure when the rule was not remediated at all.
+func renovateOutcome(outcomes []rules.Outcome) rules.Outcome {
+	const rule = "renovate"
+
 	for _, o := range outcomes {
 		if o.Rule == rule {
 			return o

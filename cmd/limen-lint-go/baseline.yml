@@ -43,146 +43,39 @@ golangci:
 
   linters:
     default: all
-    enable:
-      # These are the default set of golangci
-      - errcheck # unchecked errors, deferred and go calls included (see its settings below)
-      - govet # Vet examines Go source code and reports suspicious constructs. It is roughly the same as 'go vet' and uses its passes.
-      - ineffassign # Detects when assignments to existing variables are not used.
-      - staticcheck # It's the set of rules from staticcheck.
-      - unused # Checks Go code for unused constants, variables, functions and types.
-
-      # These are the linters we knowingly want enabled in addition to the default set
-
-      # Generic bugs catching
-      - asasalint # prevents variadic any
-      - containedctx # avoid embedding context into structs
-      - depguard # allows to explicitly allow or disallow third party modules
-      - err113 # encourage static errors
-      - gochecknoglobals # globals should be avoided as much as possible
-      - gosec # various security checks
-      - modernize # pushes towards modern go
-      - noctx # warn about command execution without context
-      - revive # meta linter (see settings below)
-      - wrapcheck # ensure we wrap errors
-
-      # Complexity management
-      - interfacebloat # limit complexity in public APIs
-
-      # Testing
-      - paralleltest # enforces tests using parallel
-      - testpackage # test packages should be separate from the package they test (eg: name them package_test)
-      - thelper # enforces use of t.Helper()
-      - tparallel # detects WRONG uses of parallel in tests
-
-      # Specialized linters
-      - promlinter # prometheus
-      - sloglint # slog
-      - zerologlint # zerolog
-
-      # Documentation style
-      - godoclint # warn if package level doc is duplicated
-      - godot # forces dot at the end of comments
-      - testableexamples # makes sure that examples are testable (have an expected output)
-
-      # Style preferences
-      - embeddedstructfieldcheck # embedded field position
-      - funcorder # encourage placing private methods after public ones
-      - varnamelen # encourage readable descriptive names for variables instead of x, y, z
-      - wsl_v5 # general formatting
-
-      # Additional to be reviewed
-      - forbidigo # might be convenient to forbid certain patterns
-      - gocritic
-      - misspell
-      - unconvert
-
-      # Remove legacy behavior
-      - copyloopvar # go 1.22+
-
-      # More linters that are enabled by default to review
-
-      # arangolint: Opinionated best practices for arangodb client.
-      # asciicheck: Checks that all code identifiers does not have non-ASCII symbols in the name. [fast]
-      # bidichk: Checks for dangerous unicode character sequences. [fast]
-      # bodyclose: Checks whether HTTP response body is closed successfully.
-      # canonicalheader: Canonicalheader checks whether net/http.Header uses canonical header. [auto-fix]
-      # contextcheck: Check whether the function uses a non-inherited context.
-      # copyloopvar: A linter detects places where loop variables are copied. [fast, auto-fix]
-      # decorder: Check declaration order and count of types, constants, variables and functions. [fast]
-      # dogsled: Checks assignments with too many blank identifiers (e.g. x, _, _, _, := f()). [fast]
-      # dupl: Detects duplicate fragments of code. [fast]
-      # dupword: Checks for duplicate words in the source code. [fast, auto-fix]
-      # durationcheck: Check for two durations multiplied together.
-      # errorlint: Find code that can cause problems with the error wrapping scheme introduced in Go 1.13. [auto-fix]
-      # exhaustive: Check exhaustiveness of enum switch statements.
-      # exptostd: Detects functions from golang.org/x/exp/ that can be replaced by std functions. [auto-fix]
-      # fatcontext: Detects nested contexts in loops and function literals. [auto-fix]
-      # gocheckcompilerdirectives: Checks that go compiler directive comments (//go:) are valid. [fast]
-      # gochecknoinits: Checks that no init functions are present in Go code. [fast]
-      # gochecksumtype: Run exhaustiveness checks on Go "sum types".
-      # gomoddirectives: Manage the use of 'replace', 'retract', and 'excludes' directives in go.mod. [fast]
-      # goprintffuncname: Checks that printf-like functions are named with `f` at the end. [fast]
-      # gosmopolitan: Report certain i18n/l10n anti-patterns in your Go codebase.
-      # grouper: Analyze expression groups. [fast]
-      # iface: Detect the incorrect use of interfaces, helping developers avoid interface pollution. [auto-fix]
-      # importas: Enforces consistent import aliases. [auto-fix]
-      # inamedparam: Reports interfaces with unnamed method parameters. [fast]
-      # intrange: Intrange is a linter to find places where for loops could make use of an integer range. [auto-fix]
-      # iotamixing: Checks if iotas are being used in const blocks with other non-iota declarations. [fast]
-      # maintidx: Maintidx measures the maintainability index of each function. [fast]
-      # makezero: Find slice declarations with non-zero initial length.
-      # mirror: Reports wrong mirror patterns of bytes/strings usage. [auto-fix]
-      # musttag: Enforce field tags in (un)marshaled structs.
-      # nilerr: Find the code that returns nil even if it checks that the error is not nil.
-      # nilnesserr: Reports constructs that checks for err != nil, but returns a different nil value error.
-      # nilnil: Checks that there is no simultaneous return of `nil` error and an invalid value.
-      # nlreturn: Checks for a new line before return and branch statements to increase code clarity. [fast, auto-fix]
-      # nolintlint: Reports ill-formed or insufficient nolint directives. [fast, auto-fix]
-      # nosprintfhostport: Checks for misuse of Sprintf to construct a host with port in a URL. [fast]
-      # perfsprint: Checks that fmt.Sprintf can be replaced with a faster alternative. [auto-fix]
-      # protogetter: Reports direct reads from proto message fields when getters should be used. [auto-fix]
-      # reassign: Checks that package variables are not reassigned.
-      # recvcheck: Checks for receiver type consistency.
-      # rowserrcheck: Checks whether Rows.Err of rows is checked successfully.
-      # spancheck: Checks for mistakes with OpenTelemetry/Census spans.
-      # sqlclosecheck: Checks that sql.Rows, sql.Stmt, sqlx.NamedStmt, pgx.Query are closed.
-      # tagalign: Check that struct tags are well aligned. [fast, auto-fix]
-      # tagliatelle: Checks the struct tags.
-      # unqueryvet: Detects SELECT * in SQL queries and SQL builders, preventing performance issues and encouraging explicit column selection. [fast]
-      # usestdlibvars: A linter that detect the possibility to use variables/constants from the Go standard library. [fast, auto-fix]
-      # usetesting: Reports uses of functions with replacement inside the testing package. [auto-fix]
-      # wastedassign: Finds wasted assignment statements.
-      # whitespace: Whitespace is a linter that checks for unnecessary newlines at the start and end of functions, if, for, etc. [fast, auto-fix]
-
-      # Duplication
-      # goheader: Check if file header matches to pattern. [fast, auto-fix]
-      # MAYBE disable revive file-header
-
     disable:
-      # These are the linters that we know we do not want
-      - errchkjson # forces handling of json err (eg: prevents _), which is too much
-      - exhaustruct # does not serve much of a purpose
-      - exhaustruct_v5 # the v2.13 rewrite of exhaustruct: same verdict (an unknown name here fails golangci < 2.13, so the pin and this line move together)
-      - ginkgolinter # no ginkgo
-      - godox # not helpful unless we could downgrade it to warning / info
-      - nestif # already provided ten different ways with revive cognitive complexity, etc
-      - ireturn # too annoying with not enough value
-      - noinlineerr # useless theater
-      - nonamedreturns # named returns are occasionally useful
-      - prealloc # premature optimization
-      - testifylint # no testify
-      - wsl # deprecated
+      # Deprecated: each has a successor, named on the successor's line.
+      - exhaustruct # superseded by exhaustruct_v5, itself disabled below
+      - gomodguard # superseded by gomodguard_v2, itself disabled below
+      - wsl # superseded by wsl_v5
 
-      # Duplicates
+      # Duplicates. The check stays on, made once, by the tool named.
       - cyclop # gocyclo, plus a package average nobody acts on
-      - errname # provided by revive
-      - forcetypeassert # provided by revive
-      - gomodguard # we use depguard instead
-      - lll # provided by golines
-      - loggercheck # better dealt with by specialized libraries
-      - nakedret # provided by revive
-      - predeclared # provided by revive
-      - unparam # provided by revive
+      - maintidx # a blend of cyclomatic complexity and length, both measured by gocyclo and funlen
+      - nestif # gocognit, and revive max-control-nesting
+      - nakedret # revive bare-return
+      - predeclared # revive redefines-builtin-id
+      - forcetypeassert # revive unchecked-type-assertion
+      - lll # golines reflows long lines instead of reporting them
+      - loggercheck # govet's slog analyzer checks slog key/value pairs; no other supported logger is allowed in
+      - nlreturn # wsl_v5's `return` check
+      - whitespace # wsl_v5's leading-whitespace and trailing-whitespace checks
+      - gomodguard_v2 # depguard, which also checks import paths, not just modules
+
+      # No engineering value, or a policy this organization does not hold.
+      - decorder # a fixed type/const/var/func file order is ceremony; funcorder covers what matters (methods after their type)
+      - grouper # requires single import/const/var blocks; gci already owns import layout
+      - goheader # no file-header policy; a project that has one enables it in its overlay
+      - importas # nothing without an alias list; a project with aliases to enforce enables it in its overlay
+      - errchkjson # forces handling json errors that cannot occur; SA1026 already catches the unmarshalable types
+      - exhaustruct_v5 # listing every field is noise on option structs and specs, the common case here
+      - ginkgolinter # ginkgo is not an allowed dependency
+      - testifylint # testify is not an allowed dependency
+      - godox # a TODO is a tracked decision, not a lint failure
+      - ireturn # "return concrete types" is a guideline with too many legitimate exceptions; iface's opaque check reports the harmful case
+      - noinlineerr # `if err := f(); err != nil` is idiomatic
+      - nonamedreturns # named returns are occasionally the clearest form; revive confusing-results reports the ambiguous case
+      - prealloc # premature optimization
     exclusions:
       rules:
         - path: _test.go
@@ -204,7 +97,7 @@ golangci:
             - mnd # fixture values
             - goconst # fixture values
         - path: _test.go
-          text: "confusing-results|nested-structs|use-waitgroup-go|unchecked-type-assertion|unused-receiver"
+          text: "confusing-results|nested-structs|unchecked-type-assertion|unused-receiver"
           linters:
             - revive
 
@@ -370,8 +263,50 @@ golangci:
           - todoCommentWithoutDetail # see godox
 
       revive:
+        # revive is the one style bag because `//revive:disable-next-line:<rule>`
+        # is per rule. Every rule is on; the ones below are off because another
+        # tool makes the same check with a stronger analysis or an auto-fix, or
+        # because the rule is obsolete.
         enable-all-rules: true
         rules:
+          # Obsolete since Go 1.22 loop-variable semantics (revive's own note).
+          - name: range-val-address
+            disabled: true
+          - name: range-val-in-closure
+            disabled: true
+          # Correctness twins of govet and staticcheck analyzers, which are
+          # flow-sensitive where revive matches syntax.
+          - name: constant-logical-expr
+            disabled: true # staticcheck SA4000
+          - name: unconditional-recursion
+            disabled: true # staticcheck SA5007
+          - name: unreachable-code
+            disabled: true # govet unreachable
+          - name: atomic
+            disabled: true # govet atomic
+          - name: waitgroup-by-value
+            disabled: true # govet copylocks
+          - name: string-of-int
+            disabled: true # govet stringintconv
+          # Rewrites with an auto-fix elsewhere.
+          - name: use-any
+            disabled: true # modernize any
+          - name: use-waitgroup-go
+            disabled: true # modernize waitgroupgo
+          - name: use-slices-sort
+            disabled: true # modernize slicessort
+          - name: redundant-build-tag
+            disabled: true # modernize plusbuild
+          - name: use-errors-new
+            disabled: true # perfsprint errorf
+          - name: errorf
+            disabled: true # staticcheck S1028
+          - name: bool-literal-in-expr
+            disabled: true # staticcheck S1002
+          - name: identical-branches
+            disabled: true # gocritic dupBranchBody
+          - name: empty-lines
+            disabled: true # wsl_v5 leading-whitespace, trailing-whitespace
           # Measures owned by the single-purpose linters (see their settings
           # below): their settings are richer and their suppression is
           # already per linter.
@@ -389,6 +324,12 @@ golangci:
             disabled: true
           - name: max-public-structs
             arguments: [10]
+          # A public interface's methods are the contract; document them.
+          - name: exported
+            arguments: [checkPublicInterface]
+          # A switch may omit default; when present it is the last clause.
+          - name: enforce-switch-style
+            arguments: [allowNoDefault]
 
           - name: line-length-limit
             # Formatter `golines` takes care of this.
@@ -409,8 +350,30 @@ golangci:
               - ${MODULE_PATH}
 
       staticcheck:
+        # All SA (bugs), S (simplifications) and QF (quick fixes). The ST
+        # (style) checks that revive also makes are off here, so a finding is
+        # reported once and silenced per rule; the remaining ST checks have no
+        # revive twin.
         checks:
           - all
+          - -ST1000 # revive package-comments
+          - -ST1001 # revive dot-imports
+          - -ST1003 # revive var-naming
+          - -ST1005 # revive error-strings
+          - -ST1006 # revive receiver-naming
+          - -ST1008 # revive error-return
+          - -ST1011 # revive time-naming
+          - -ST1012 # revive error-naming
+          - -ST1013 # usestdlibvars http-status-code
+          - -ST1015 # revive enforce-switch-style
+          - -ST1016 # revive receiver-naming
+          - -ST1019 # revive duplicated-imports
+          - -ST1020 # revive exported
+          - -ST1021 # revive exported
+          - -ST1022 # revive exported
+          - -ST1023 # revive var-declaration
+          - -QF1009 # revive time-equal
+          - -QF1011 # revive var-declaration
 
   formatters:
     settings:

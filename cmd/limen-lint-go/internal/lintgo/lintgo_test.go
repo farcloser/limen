@@ -56,13 +56,17 @@ const (
 	licenseLane = "licenses"
 )
 
-// writeModule is a module directory: its go.mod for module, and its
+// writeModule is a module directory for moduleAcme: its go.mod, and its
 // .lint-go.yaml when overlay is not empty.
-func writeModule(t *testing.T, module, overlay string) string {
+func writeModule(t *testing.T, overlay string) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module "+module+"\n\ngo 1.26\n"), 0o600); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "go.mod"),
+		[]byte("module "+moduleAcme+"\n\ngo 1.26\n"),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +95,7 @@ func run(t *testing.T, dir, baseline string, args ...string) (stdout, stderr str
 func rendered(t *testing.T, baseline, overlay string) (config, failure string) {
 	t.Helper()
 
-	stdout, stderr, code := run(t, writeModule(t, moduleAcme, overlay), baseline, renderCmd)
+	stdout, stderr, code := run(t, writeModule(t, overlay), baseline, renderCmd)
 	if code != 0 {
 		return "", stderr
 	}
@@ -128,12 +132,12 @@ func TestRenderFillsPlaceholders(t *testing.T) {
 func TestRenderReportsTheOverlay(t *testing.T) {
 	t.Parallel()
 
-	_, stderr, code := run(t, writeModule(t, moduleAcme, ""), baselineSmall, renderCmd)
+	_, stderr, code := run(t, writeModule(t, ""), baselineSmall, renderCmd)
 	if code != 0 || !strings.Contains(stderr, "no "+lintgo.OverlayFile) {
 		t.Fatalf("no overlay should render the baseline and say so, got %d: %s", code, stderr)
 	}
 
-	_, stderr, code = run(t, writeModule(t, moduleAcme, "golangci:\n  linters:\n    disable: [revive, dupl]\n"),
+	_, stderr, code = run(t, writeModule(t, "golangci:\n  linters:\n    disable: [revive, dupl]\n"),
 		baselineSmall, renderCmd)
 	if code != 0 || !strings.Contains(stderr, "1 carve-out(s)") {
 		t.Fatalf("one real carve-out should be counted as one, got %d: %s", code, stderr)
@@ -149,7 +153,7 @@ func TestRenderToFile(t *testing.T) {
 
 	out := filepath.Join(t.TempDir(), "build", "golangci.yml")
 
-	stdout, stderr, code := run(t, writeModule(t, moduleAcme, ""), baselineSmall, renderCmd, "-o", out)
+	stdout, stderr, code := run(t, writeModule(t, ""), baselineSmall, renderCmd, "-o", out)
 	if code != 0 {
 		t.Fatal(stderr)
 	}
@@ -232,7 +236,7 @@ func TestMergeAppendsExclusions(t *testing.T) {
 func TestMergeSettings(t *testing.T) {
 	t.Parallel()
 
-	dir := writeModule(t, moduleAcme, `golangci:
+	dir := writeModule(t, `golangci:
   linters:
     settings:
       revive:
@@ -345,14 +349,13 @@ func TestOverlayRejected(t *testing.T) {
 func TestFlagsLicenses(t *testing.T) {
 	t.Parallel()
 
-	stdout, stderr, code := run(t, writeModule(t, moduleAcme, ""), baselineSmall, flagsCmd, licenseLane)
+	stdout, stderr, code := run(t, writeModule(t, ""), baselineSmall, flagsCmd, licenseLane)
 	if code != 0 || stdout != "--allowed_licenses=MIT\n" {
 		t.Fatalf("baseline flags: %d %q %s", code, stdout, stderr)
 	}
 
 	dir := writeModule(
 		t,
-		moduleAcme,
 		"licenses:\n  allowed: [Apache-2.0, MIT]\n  ignore: [gotest.tools/v3, example.com/x]\n",
 	)
 
@@ -454,7 +457,7 @@ func TestBaselineShipped(t *testing.T) {
 		t.Error("the shipped floor should accept v2.13.0")
 	}
 
-	stdout, _, code := run(t, writeModule(t, moduleAcme, ""), string(raw), flagsCmd, licenseLane)
+	stdout, _, code := run(t, writeModule(t, ""), string(raw), flagsCmd, licenseLane)
 	if code != 0 || !strings.HasPrefix(stdout, "--allowed_licenses=Apache-2.0,") {
 		t.Errorf("the shipped licenses lane: %d %q", code, stdout)
 	}
