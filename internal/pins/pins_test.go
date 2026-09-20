@@ -194,17 +194,17 @@ func TestParseAndGet(t *testing.T) {
 		{"tool", "sha256", strings.Repeat("0", 64)},
 		{"kernel", "url", "https://h/pub/v7.x/linux-7.2.6.tar.xz"},
 	} {
-		got, err := manifest.Get(tc.name, tc.field)
-		if err != nil || got != tc.want {
-			t.Errorf("Get(%s, %s) = %q, %v; want %q", tc.name, tc.field, got, err, tc.want)
+		got, getErr := manifest.Get(tc.name, tc.field)
+		if getErr != nil || got != tc.want {
+			t.Errorf("Get(%s, %s) = %q, %v; want %q", tc.name, tc.field, got, getErr, tc.want)
 		}
 	}
 
-	if _, err := manifest.Get("tool", "digest"); !errors.Is(err, pins.ErrNoSuchField) {
+	if _, err = manifest.Get("tool", "digest"); !errors.Is(err, pins.ErrNoSuchField) {
 		t.Errorf("an unserved field: %v, want ErrNoSuchField", err)
 	}
 
-	if _, err := manifest.Get("nope", "version"); !errors.Is(err, pins.ErrNoSuchPin) {
+	if _, err = manifest.Get("nope", "version"); !errors.Is(err, pins.ErrNoSuchPin) {
 		t.Errorf("an unknown pin: %v, want ErrNoSuchPin", err)
 	}
 

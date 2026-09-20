@@ -192,15 +192,15 @@ func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []st
 	sums := filepath.Join(dir, "SHA256SUMS")
 	bundle := filepath.Join(dir, "SHA256SUMS.bundle")
 
-	if _, err := download(ctx, sumsURL, sums); err != nil {
+	if _, err = download(ctx, sumsURL, sums); err != nil {
 		return "", err
 	}
 
-	if _, err := download(ctx, bundleURL, bundle); err != nil {
+	if _, err = download(ctx, bundleURL, bundle); err != nil {
 		return "", err
 	}
 
-	if err := run(ctx, root, "cosign", "verify-blob", "--bundle", bundle,
+	if err = run(ctx, root, "cosign", "verify-blob", "--bundle", bundle,
 		"--certificate-identity-regexp", identity, "--certificate-oidc-issuer", issuer, sums); err != nil {
 		return "", err
 	}
@@ -232,11 +232,11 @@ func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (s
 	sums := filepath.Join(dir, "SHA256SUMS.asc")
 	key := filepath.Join(dir, "key.asc")
 
-	if _, err := download(ctx, sumsURL, sums); err != nil {
+	if _, err = download(ctx, sumsURL, sums); err != nil {
 		return "", err
 	}
 
-	if _, err := download(ctx, keyURL, key); err != nil {
+	if _, err = download(ctx, keyURL, key); err != nil {
 		return "", err
 	}
 

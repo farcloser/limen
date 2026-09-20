@@ -253,7 +253,9 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 	}
 
 	files["tools/golangci-lint/go.mod"] = goModGolangci
-	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools"); !f.OK() {
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools")
+
+	if !f.OK() {
 		t.Fatalf("a tools/go.mod declaring every tool, with the isolated module, should pass: %s", f.Message)
 	}
 

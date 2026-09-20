@@ -272,8 +272,20 @@ golangci:
         ignore-string-values:
           - '^%'
 
-      # govet: the defaults. fieldalignment (struct fields ordered to minimize
-      # padding) stays off: reordering is safe but the finding is noise.
+      govet:
+        # Every analyzer, including the ten vet leaves off by default:
+        # nilness, shadow, unusedwrite, deepequalerrors and friends are real
+        # bug classes. fieldalignment is the one exception: reordering struct
+        # fields for padding is safe but the finding is noise.
+        enable-all: true
+        disable:
+          - fieldalignment
+        settings:
+          shadow:
+            # Strict mode also reports a shadow whose outer variable is never
+            # read again, which is the harmless case.
+            strict: false
+
       errorlint:
         # Disable err==target → errors.Is(err, target) auto-rewrite. The fixer
         # has known bugs where it adds the errors.Is() call but fails to add

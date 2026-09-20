@@ -193,8 +193,8 @@ func (m *aquaManifest) openSection(sec *aquaSection, key, rest string, lineIndex
 		return false // duplicated top-level key
 	}
 
-	if rest := strings.TrimSpace(stripAquaComment(rest)); rest != "" {
-		if key != "packages" || rest != "[]" {
+	if value := strings.TrimSpace(stripAquaComment(rest)); value != "" {
+		if key != "packages" || value != "[]" {
 			return false // flow style
 		}
 

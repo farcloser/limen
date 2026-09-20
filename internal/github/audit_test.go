@@ -211,7 +211,7 @@ func installGHStub() (string, error) {
 	}
 
 	stub := filepath.Join(dir, "gh"+ext)
-	if err := os.Symlink(self, stub); err == nil {
+	if err = os.Symlink(self, stub); err == nil {
 		return dir, nil
 	}
 
@@ -285,7 +285,7 @@ func runGHStub(dir string) int {
 	_, _ = fmt.Fprintln(logFile, logged)
 
 	if len(args) >= 6 && args[4] == "--input" {
-		if _, err := io.Copy(logFile, os.Stdin); err != nil {
+		if _, err = io.Copy(logFile, os.Stdin); err != nil {
 			fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
 
 			return 1
@@ -361,7 +361,7 @@ func runGHSecretStub(dir string, args []string) int {
 
 	_, _ = fmt.Fprintln(logFile, key)
 
-	if _, err := io.Copy(logFile, os.Stdin); err != nil {
+	if _, err = io.Copy(logFile, os.Stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
 
 		return 1
@@ -840,13 +840,13 @@ func TestLoadOverrides(t *testing.T) {
 
 	write("github:\n  nonsense-check: because\n")
 
-	if _, err := github.LoadOverrides(dir); err == nil {
+	if _, err = github.LoadOverrides(dir); err == nil {
 		t.Error("unknown check identifier must fail the file")
 	}
 
 	write("github:\n  wiki:\n")
 
-	if _, err := github.LoadOverrides(dir); err == nil {
+	if _, err = github.LoadOverrides(dir); err == nil {
 		t.Error("an exception without a reason must fail the file")
 	}
 
