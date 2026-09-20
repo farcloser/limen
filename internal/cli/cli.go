@@ -95,6 +95,8 @@ func Run(version string, args []string, stdout, stderr io.Writer) int {
 		return runBootstrap(version, args[1:], stdout, stderr)
 	case cmdGithub:
 		return runGithub(args[1:], stdout, stderr)
+	case cmdPins:
+		return runPins(args[1:], stdout, stderr)
 	case "version", "-v", "--version":
 		_, _ = fmt.Fprintln(stdout, "limen "+version)
 
@@ -627,6 +629,8 @@ Usage:
   limen bootstrap [flags] <path>          Create a new compliant repository at path
   limen github check [-repo owner/name] [-org name]   Audit GitHub repository or organization settings (via gh)
   limen github fix [-repo] [-org] [-yes]  Repair the fixable GitHub settings
+  limen pins get <name> <field>           Print a pinned artifact's version, url, or sha256
+  limen pins refresh [-all] [path]        Recompute stale digests in pins.yaml, verified
   limen version                           Print the limen version
   limen help                              Show this help
 

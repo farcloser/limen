@@ -5,6 +5,8 @@
 package cli_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -593,5 +595,77 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) { // Serial by design:
 	fixed, _ = os.ReadFile(filepath.Join(dir, "renovate.json"))
 	if !strings.Contains(string(fixed), "\""+renamed+"\",\n") || !strings.Contains(string(fixed), "\""+email+"\",\n") {
 		t.Errorf("fix did not add the discovered address alongside the earlier one:\n%s", fixed)
+	}
+}
+
+// TestPinsCommands: `limen pins get` serves a value from the working
+// directory's pins.yaml; `limen pins refresh` brings a stale digest to the
+// bytes at the url; both name their misuse.
+//
+//nolint:paralleltest // serial by design: t.Chdir forbids t.Parallel, and the linter does not see it.
+func TestPinsCommands(t *testing.T) {
+	const tarball = "release bytes"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, tarball)
+	}))
+	t.Cleanup(server.Close)
+
+	sum := sha256.Sum256([]byte(tarball))
+
+	dir := t.TempDir()
+	manifest := "pins:\n  - name: tool\n    renovate: github-releases example/tool\n    version: 2.0.0\n    url: " +
+		server.URL + "/tool-${version}.tgz\n    verify: download\n    digest:\n      version: 1.0.0\n      sha256: " +
+		strings.Repeat("0", 64) + "\n"
+
+	if err := os.WriteFile(filepath.Join(dir, "pins.yaml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut strings.Builder
+
+	if code := run([]string{"pins", "refresh", dir}, &out, &errOut); code != 0 {
+		t.Fatalf("pins refresh = %d: %s%s", code, out.String(), errOut.String())
+	}
+
+	if !strings.Contains(out.String(), hex.EncodeToString(sum[:])) {
+		t.Errorf("refresh did not report the new digest: %s", out.String())
+	}
+
+	// get reads the working directory's file, like a recipe would.
+	t.Chdir(dir)
+
+	out.Reset()
+
+	if code := run(
+		[]string{"pins", "get", "tool", "sha256"},
+		&out,
+		io.Discard,
+	); code != 0 ||
+		strings.TrimSpace(out.String()) != hex.EncodeToString(sum[:]) {
+		t.Errorf("pins get sha256 = %d, %q", code, out.String())
+	}
+
+	out.Reset()
+
+	if code := run(
+		[]string{"pins", "get", "tool", "url"},
+		&out,
+		io.Discard,
+	); code != 0 ||
+		strings.TrimSpace(out.String()) != server.URL+"/tool-2.0.0.tgz" {
+		t.Errorf("pins get url = %d, %q", code, out.String())
+	}
+
+	for _, args := range [][]string{
+		{"pins"},
+		{"pins", "frobnicate"},
+		{"pins", "get", "tool"},
+		{"pins", "get", "nope", "url"},
+		{"pins", "get", "tool", "digest"},
+	} {
+		if code := run(args, io.Discard, io.Discard); code != 2 {
+			t.Errorf("run(%v) = %d, want 2", args, code)
+		}
 	}
 }

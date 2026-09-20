@@ -14,6 +14,7 @@
     "packageRules, go toolchain: golangci-lint embeds Go's type checker, so a golang/go bump can only land with (or after) a golangci release built with that Go; one grouped PR keeps the two in lockstep and the lint recipe's toolchain check names the fix when they still disagree.",
     "packageRules, lychee: releases are tagged lychee-vX.Y.Z next to lychee-lib-vX.Y.Z and nightly; regex versioning that carries the prefix parses the pin and the candidates alike and excludes the others by construction.",
     "packageRules, runner images: the github-actions manager, which config:recommended enables, also proposes the runs-on images (ubuntu-24.04 to 26.04, macos-15 to 26) from the github-runners datasource. Those are product targets, not dependencies: the matrix is the set of platforms the code and the commands are proven on, set by the canonical ci.yaml seed and moved deliberately, on purpose, as a reviewed change. Off for that datasource; the actions themselves keep moving.",
+    "customManagers, pins.yaml: the artifacts a repository fetches by hand (a kernel tarball, a toolchain release, a source archive) live in one limen-owned file, each entry naming its own datasource and depName on its renovate: line, optionally an extract-version regexp and a versioning scheme on the two lines after it, and the version: line that closes the block is what moves. The digest follows in the same pull request: the checksum workflow runs `limen pins refresh`, which recomputes it through the verifier the entry declares. Watched here, once, for every repository; nobody writes a regex manager per pin.",
     "commitBody: `just do lint commits` enforces DCO on every PR range, bot commits included."
   ],
   "extends": [
@@ -32,6 +33,15 @@
   "constraints": {
     "gomodMod": "v0.10.0"
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)pins\\.yaml$/"],
+      "matchStrings": [
+        "renovate: (?<datasource>\\S+) (?<depName>\\S+)\\n(?:\\s+extract-version: (?<extractVersion>\\S+)\\n)?(?:\\s+versioning: (?<versioning>\\S+)\\n)?\\s+version: (?<currentValue>\\S+)"
+      ]
+    }
+  ],
   "packageRules": [
     {
       "matchDepNames": [

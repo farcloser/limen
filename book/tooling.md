@@ -442,6 +442,79 @@ git commit --message "tooling: bump golangci-lint"
 > bump would merge a stale checksum and **every install would fail**. The workflow is
 > load-bearing, not optional.
 
+### Pinned artifacts beyond aqua: `pins.yaml`
+
+Some of what a build fetches is not a tool aqua knows: a kernel source tarball, a
+toolchain release archive, the sources of a C library the build compiles. Those used to be
+two variables in a Justfile or a build script — a URL with a version in it and a sha256 next
+to it — with a Renovate regex manager per repository watching the version and a comment
+saying the sha256 is a hand step. A Renovate bump then arrived green with a stale digest,
+because nothing in CI read the pin, and failed at build time.
+
+`pins.yaml`, at the repository root, is the one place such a pin lives; everything else
+reads it:
+
+```yaml
+pins:
+  - name: llvm
+    renovate: github-releases llvm/llvm-project
+    extract-version: ^llvmorg-(?<version>.*)$
+    version: 22.1.8
+    url: https://github.com/llvm/llvm-project/releases/download/llvmorg-${version}/LLVM-${version}-Linux-ARM64.tar.xz
+    verify: github-attestation llvm
+    digest:
+      version: 22.1.8
+      sha256: <64 hex>
+  - name: guest-kernel
+    renovate: github-releases farcloser/ossein-kernel
+    versioning: regex:^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)-ossein\.(?<build>\d+)$
+    version: 7.1.5-ossein.2
+    url: https://github.com/farcloser/ossein-kernel/releases/download/${version}/kernel-arm64
+    verify: cosign-sha256sums https://github.com/farcloser/ossein-kernel/releases/download/${version}/SHA256SUMS https://github.com/farcloser/ossein-kernel/releases/download/${version}/SHA256SUMS.cosign.bundle ^(142371135\+[^@]+@users\.noreply\.github\.com|apostasie@farcloser\.world)$ https://github.com/login/oauth
+    digest:
+      version: 7.1.5-ossein.2
+      sha256: <64 hex>
+```
+
+- **The build reads it back**: `limen pins get llvm url` and `limen pins get llvm sha256`,
+  inside the recipe that fetches (not at Justfile load: every top-level `shell()` runs on
+  every `just` invocation). The value exists once.
+- **Renovate reads it, from the shared preset.** The `renovate:` line names the datasource
+  and the depName; `extract-version:` (a regexp pulling the version out of a tag such as
+  `llvmorg-22.1.8`) and `versioning:` (a scheme for tags semver misreads, such as a
+  `-ossein.N` suffix that semver takes for a prerelease) may follow it; the `version:` line
+  closes the block and is what moves. The four come in that order with nothing else between
+  them — the preset's regex reads the block as one — and the `pins` rule refuses another
+  order. One custom manager in `default.json` watches every `pins.yaml`; no repository
+  writes a regex manager per pin.
+- **limen owns the digest.** `digest.version` records the version the sha256 was computed
+  for, so a digest left behind by a bump is visible offline: the `pins` rule fails it, naming
+  the pin and the command. `limen pins refresh` recomputes every stale digest through the
+  method the entry declares and rewrites the two lines in place; the checksum workflow runs
+  it on every Renovate branch, in the same step as `limen fix`, from the same checksummed
+  release — data the branch can change only in ways the release understands, never recipe
+  text in a write job.
+
+The methods, each a way to obtain a sha256 the entry can stand behind:
+
+| `verify:` | What it does | For |
+|---|---|---|
+| `download` | hashes the bytes at `url`; TLS is the whole guarantee | a GitHub archive tarball, a source that signs nothing |
+| `github-attestation <owner>` | downloads, has `gh attestation verify --owner <owner>` accept the file (SLSA provenance, the default predicate), hashes it | a project whose own release workflow attests its assets (LLVM) |
+| `github-release-asset <owner/repo> [<tag>]` | downloads, has `gh release verify-asset <tag> --repo <owner/repo>` accept it, hashes it; the tag is `${version}` unless templated (`v${version}`) | GitHub's own attestation of an immutable release, which `gh attestation verify` does not see (Kata) |
+| `cosign-sha256sums <sums-url> <bundle-url> <identity-regexp> <issuer>` | fetches the SHA256SUMS and its cosign bundle, has `cosign verify-blob` accept the pair, takes the artifact's line; the artifact itself is not downloaded | a release that ships a cosign-signed sums file (ossein-kernel) |
+
+`${version}` and `${major}` (the version up to its first dot, the way kernel.org names a
+series directory) expand in `url` and in the method's arguments. The arguments are split on
+whitespace, so an identity regexp carries none. The tool a method shells out to — `gh`,
+`cosign` — must be pinned in `aqua.yaml`, and the `pins` rule says so when it is not: unpinned,
+aqua's proxy falls through to whatever binary the machine has, and the digest would be
+vouched for by a tool nobody chose. Downloads retry transient failures the way every `curl`
+in the rig does; a verifier's refusal ends the run with the file as it was. A source that
+publishes a PGP-clearsigned sums file — kernel.org — has no method yet: no OpenPGP tool is
+pinnable from the standard registry today, so that pin stays where it was, a hand step, until
+one is.
+
 This is the formal, auditable, low-toil update process that replaces the old hand-maintained
 `Makefile`: every tool change is a reviewed PR with verified checksums, pinned exactly, per
 project.
