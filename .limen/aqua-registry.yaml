@@ -128,3 +128,35 @@ packages:
           - https://token.actions.githubusercontent.com
     supported_envs:
       - darwin/arm64
+  # curl: forkcloser's first-party build with dependable TLS 1.3, so a recipe
+  # or script that fetches by hand runs the pinned curl from the hermetic PATH
+  # instead of whatever the machine or runner ships. Verified two ways on
+  # install: the committed checksum, and GitHub's artifact attestation for the
+  # release workflow — a plain checksum pin would discard the guarantee this
+  # build exists to give. The binary sits in a versioned directory inside the
+  # archive; on windows it is curl.exe with curl-ca-bundle.crt beside it. No
+  # darwin/amd64: Intel Mac support was dropped upstream.
+  - type: github_release
+    repo_owner: forkcloser
+    repo_name: curl
+    description: curl with dependable TLS 1.3, first-party build (forkcloser/curl)
+    asset: curl_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
+    format: tar.gz
+    files:
+      - name: curl
+        src: curl_{{trimV .Version}}_{{.OS}}_{{.Arch}}/curl
+    overrides:
+      - goos: windows
+        files:
+          - name: curl
+            src: curl_{{trimV .Version}}_{{.OS}}_{{.Arch}}/curl.exe
+    checksum:
+      type: github_release
+      asset: checksums.txt
+      algorithm: sha256
+    github_artifact_attestations:
+      signer_workflow: forkcloser/curl/.github/workflows/release.yaml
+    supported_envs:
+      - darwin/arm64
+      - linux
+      - windows
