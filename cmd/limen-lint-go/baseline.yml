@@ -165,6 +165,12 @@ golangci:
         ignore-string-values:
           - '^%'
 
+      nolintlint:
+        # The book's rule: a suppression names its linter and its reason.
+        require-explanation: true
+        require-specific: true
+        allow-unused: false
+
       govet:
         # Every analyzer, including the ten vet leaves off by default:
         # nilness, shadow, unusedwrite, deepequalerrors and friends are real
