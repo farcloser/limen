@@ -16,8 +16,18 @@ packages:
     description: Verify a repository against Farcloser engineering rules
     asset: limen_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
     format: tar.gz
+    # Two binaries per archive: limen, and limen-lint-go, the Go lint driver
+    # the lint recipes run (book/per-language.md). Releases before it shipped
+    # carry limen alone; the override keeps those installable. The top-level
+    # constraint is what makes aqua consult the overrides at all.
     files:
       - name: limen
+      - name: limen-lint-go
+    version_constraint: semver("> 0.5.2")
+    version_overrides:
+      - version_constraint: semver("<= 0.5.2")
+        files:
+          - name: limen
     checksum:
       type: github_release
       asset: checksums.txt

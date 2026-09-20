@@ -117,9 +117,9 @@ func parseKey(body []byte) (Key, error) {
 // fingerprint is the v4 fingerprint of a key packet body (RFC 4880 §12.2).
 func fingerprint(body []byte) Fingerprint {
 	hash := sha1.New() // #nosec G401 -- see the import.
-	hash.Write([]byte{fingerprintPrefix})
-	hash.Write(twoOctetLength(len(body)))
-	hash.Write(body)
+	_, _ = hash.Write([]byte{fingerprintPrefix})
+	_, _ = hash.Write(twoOctetLength(len(body)))
+	_, _ = hash.Write(body)
 
 	return Fingerprint(strings.ToUpper(hex.EncodeToString(hash.Sum(nil))))
 }

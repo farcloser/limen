@@ -18,6 +18,7 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | `.limen/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--limenlycheetoml). |
 | `.github/` workflows | The [CI surface](#ci-workflows--github): two content-pinned limen pieces, plus seeded-once workflows and renovate config. |
 | `tools/go.mod` | Declares the Go-built tools the recipes run as `tool` directives; a Go module adds the source analyzers — the [`gotools` rule](#the-gotools-rule--toolsgomod-tool-directives). |
+| `.lint-go.yaml` | Go modules only. The project's carve-outs from the Go lint baseline `limen-lint-go` embeds, seeded once and the project's own — the `lintgo` rule, in [per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml). A root `.golangci.yml` is a stray. |
 
 `limen` resolves common spelling/extension variants (`LICENSE`, `LICENSE.md`, `LICENSE.txt`,
 `COPYING`; `README`, `README.md`, `README.txt`) so a repo is not failed on a technicality,

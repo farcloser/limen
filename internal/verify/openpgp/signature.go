@@ -210,8 +210,8 @@ func (s *signature) verify(key Key, data []byte) error {
 	}
 
 	hasher := hashID.New()
-	hasher.Write(data)
-	hasher.Write(s.trailer())
+	_, _ = hasher.Write(data)
+	_, _ = hasher.Write(s.trailer())
 	digest := hasher.Sum(nil)
 
 	if digest[0] != s.left16[0] || digest[1] != s.left16[1] {

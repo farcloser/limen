@@ -2,19 +2,37 @@
 # mounts every shared limen task under `just do ...`.
 import '.limen/just/main.just'
 
-export LINT_GO_LICENSES_FLAGS := "--ignore gotest.tools"
-
 # Judge this repository by its own working tree, not the released pin: `go run`
-# compiles the current tree on every invocation.
+# compiles the current tree on every invocation; limen-lint-go, a module of
+# its own under cmd/, is built into build/tools/ first (build-lint-go).
 export LIMEN_BIN := 'go run ./cmd/limen'
+export LIMEN_LINT_GO_BIN := 'build/tools/limen-lint-go'
 
 # Bare `just` lists; `lint` and `test` below are what CI runs.
 default:
     @just --list
 
-lint: do::lint::default do::lint::go::default do::lint::go::deadcode
-fix: do::fix::default do::fix::go::default
-test: do::test::go::default
+lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode lint-lint-go
+fix: build-lint-go do::fix::default do::fix::go::default
+test: do::test::go::default test-lint-go
+
+# limen-lint-go is the second binary of limen's release (see .goreleaser.yaml),
+# a nested module so its YAML parser never enters limen's own go.mod. The
+# shared Go lanes stop at the root module, so this repository builds, lints
+# and tests it itself: the lint runs on the baseline rendered for that module
+# with its own .lint-go.yaml, using the golangci-lint the lint go lane built.
+build-lint-go:
+    mkdir -p build/tools && GOOS='' GOARCH='' go -C cmd/limen-lint-go build -o '../../build/tools/' .
+
+lint-lint-go:
+    go -C cmd/limen-lint-go mod tidy -diff
+    go -C cmd/limen-lint-go vet ./...
+    build/tools/limen-lint-go -C cmd/limen-lint-go render -o build/golangci-lint-go.yml
+    cd cmd/limen-lint-go && ../../build/tools/golangci-lint run -c ../../build/golangci-lint-go.yml ./...
+    cd cmd/limen-lint-go && ../../build/tools/golangci-lint fmt --diff -c ../../build/golangci-lint-go.yml
+
+test-lint-go:
+    cd cmd/limen-lint-go && gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
 
 # Host-side helper, not baseline: presupposes macOS, UTM and a provisioned
 # Windows VM (book/vm_testing.md). The VM mounts this repository's parent as

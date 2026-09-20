@@ -303,10 +303,11 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 // entry.
 //
 // The set is the gotools rule's own tables read from the other side — every
-// tool it requires, plus every directive it has retired — so the two rules
-// enforce one doctrine from one source and cannot drift apart.
+// tool it requires, every directive it has retired, and the aqua packages
+// its isolated modules replaced — so the two rules enforce one doctrine from
+// one source and cannot drift apart.
 func retiredCanonicalPkgs() []string {
-	pkgs := slices.Concat(goToolsEverywhere, goSourceAnalyzers)
+	pkgs := slices.Concat(goToolsEverywhere, goSourceAnalyzers, isolatedAquaRetired)
 	for pkg := range retiredGoTools {
 		pkgs = append(pkgs, pkg)
 	}

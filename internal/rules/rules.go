@@ -182,6 +182,10 @@ func Check(root string, policy Policy) []Finding {
 
 	findings = append(findings, checkGoTools(root))
 
+	if f, ok := checkLintGo(root); ok {
+		findings = append(findings, f)
+	}
+
 	if f, ok := checkYamlfmt(root); ok {
 		findings = append(findings, f)
 	}

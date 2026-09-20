@@ -1,0 +1,11 @@
+# limen-lint-go's own carve-outs, for the lint this repository runs on the
+# module (the root Justfile's lint-lint-go): the one dependency depguard must
+# let through.
+golangci:
+  linters:
+    settings:
+      depguard:
+        rules:
+          main:
+            allow:
+              - go.yaml.in/yaml/v3

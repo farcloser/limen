@@ -1,0 +1,14 @@
+# This project's carve-outs from the Go lint baseline (`limen-lint-go baseline`
+# prints it; this repository authors it, cmd/limen-lint-go/baseline.yml): the
+# baseline's sections, in its shape, holding only what this project adds,
+# changes or takes out (book/per-language.md, "one baseline, per-project
+# carve-outs"). `just do lint go` renders the two on every run.
+golangci:
+  linters:
+    exclusions:
+      rules:
+        # Structs in internal/github mirror the GitHub REST API, whose wire
+        # format is snake_case — the tags are the wire's, not ours to restyle.
+        - path: internal/github/
+          linters:
+            - tagliatelle

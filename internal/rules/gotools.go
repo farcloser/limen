@@ -32,15 +32,18 @@ const (
 	ruleGoTools    = "gotools"
 	goModFile      = "go.mod"
 	goToolsDir     = "tools"
-	goToolsModFile = goToolsDir + "/" + goModFile
+	goToolsModFile = goToolsDir + slash + goModFile
 
 	// go.mod directive keywords, as they open a line.
 	toolDirective   = "tool "
 	moduleDirective = "module "
 
-	// The tools module of a repository without a root go.mod: no module path
-	// to derive from, and the module is never imported, so a bare name.
-	bareToolsModule = "tools"
+	// The go subcommand that moves a tool directive, and its flag.
+	goGetVerb  = "get"
+	goToolFlag = "-tool"
+
+	// Module-relative paths always join with a slash, whatever the platform.
+	slash = "/"
 
 	// The go directive seeded when neither a root go.mod nor an aqua golang/go
 	// pin says otherwise: the first release with tool directives.
@@ -79,6 +82,29 @@ var goSourceAnalyzers = []string{
 	"golang.org/x/tools/cmd/deadcode",
 	"golang.org/x/vuln/cmd/govulncheck",
 	"github.com/google/go-licenses/v2",
+}
+
+// isolatedGoTools are the tools a Go module declares each in a module of its
+// own, tools/<name>/go.mod, keyed by the name the tool builds as. A tool
+// goes here when its dependency graph must stay its upstream's exactly:
+// minimal version selection across the shared tools/go.mod would lift the
+// analyzers golangci-lint bundles past the versions upstream tested, which
+// upstream states is unsupported, and a module of its own resolves to
+// upstream's go.mod and nothing else. Built here by the pinned toolchain
+// like every other directive, so it can never skew from the Go it analyzes.
+//
+//nolint:gochecknoglobals // immutable baseline data.
+var isolatedGoTools = map[string]string{
+	"golangci-lint": "github.com/golangci/golangci-lint/v2/cmd/golangci-lint",
+}
+
+// isolatedAquaRetired are the aqua packages the isolated tools replaced: a
+// manifest still pinning one carries an upstream-built binary beside the
+// one the toolchain builds, and the aqua rule retires it.
+//
+//nolint:gochecknoglobals // immutable baseline data.
+var isolatedAquaRetired = []string{
+	"golangci/golangci-lint",
 }
 
 // aquaGoPin finds the golang/go pin of an aqua manifest (`golang/go@go1.N.M`,
@@ -139,12 +165,51 @@ func checkGoTools(root string) Finding {
 		return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+retiredGoModToolsMessage(retired))
 	}
 
+	if rootMod != nil {
+		if missing := missingIsolatedGoTools(root); len(missing) > 0 {
+			return fail(ruleGoTools, isolatedGoModFile(missing[0]), isolatedGoToolsMessage(missing))
+		}
+	}
+
 	return Finding{
 		Rule:    ruleGoTools,
 		Status:  StatusOK,
 		Path:    goToolsModFile,
 		Message: goToolsPassMessage,
 	}
+}
+
+// isolatedGoModFile is the go.mod of an isolated tool's module.
+func isolatedGoModFile(name string) string {
+	return goToolsDir + slash + name + slash + goModFile
+}
+
+// missingIsolatedGoTools names the isolated tools whose module is absent or
+// lacks its directive, sorted.
+func missingIsolatedGoTools(root string) []string {
+	var missing []string
+
+	for name, pkg := range isolatedGoTools {
+		gomod, err := readRepoFile(root, isolatedGoModFile(name))
+		if err != nil || !goModToolDirectives(string(gomod))[pkg] {
+			missing = append(missing, name)
+		}
+	}
+
+	slices.Sort(missing)
+
+	return missing
+}
+
+// isolatedGoToolsMessage names each missing isolated tool with its module.
+func isolatedGoToolsMessage(missing []string) string {
+	pairs := make([]string, 0, len(missing))
+	for _, name := range missing {
+		pairs = append(pairs, isolatedGoModFile(name)+" lacks 'tool "+isolatedGoTools[name]+"'")
+	}
+
+	return strings.Join(pairs, listSeparator) +
+		" — each is built by the pinned toolchain from a module of its own (limen fix creates it)"
 }
 
 // retiredGoModTools returns the retired tool packages the go.mod text still
@@ -355,7 +420,7 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 	toolsRoot := filepath.Join(root, goToolsDir)
 
 	if len(missing) > 0 {
-		getArgs := []string{"get", "-tool"}
+		getArgs := []string{goGetVerb, goToolFlag}
 		for _, pkg := range missing {
 			getArgs = append(getArgs, pkg+"@latest")
 		}
@@ -372,7 +437,7 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 	}
 
 	if len(retired) > 0 {
-		getArgs := []string{"get", "-tool"}
+		getArgs := []string{goGetVerb, goToolFlag}
 		for _, pkg := range retired {
 			getArgs = append(getArgs, pkg+"@none")
 		}
@@ -388,6 +453,17 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 		)
 	}
 
+	if rootMod != nil {
+		for _, name := range missingIsolatedGoTools(root) {
+			if outcome := remediateIsolatedGoTool(ctx, root, rootMod, name); outcome != nil {
+				return *outcome
+			}
+
+			done = append(done, "created "+isolatedGoModFile(name)+" with 'tool "+isolatedGoTools[name]+
+				"' (go get -tool, then go mod tidy, in that module)")
+		}
+	}
+
 	return Outcome{
 		Rule:    ruleGoTools,
 		Action:  ActionMerged,
@@ -396,19 +472,57 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 	}
 }
 
+// remediateIsolatedGoTool seeds one isolated tool module and pins its
+// directive at the latest release; nil on success, the advisory otherwise.
+func remediateIsolatedGoTool(ctx context.Context, root string, rootMod []byte, name string) *Outcome {
+	modFile := isolatedGoModFile(name)
+	pkg := isolatedGoTools[name]
+
+	if _, err := readRepoFile(root, modFile); err != nil {
+		seed := bareGoMod(string(rootMod), aquaGoDirective(root), goToolsDir+slash+name,
+			"// "+name+"'s own module: its dependency graph stays exactly its upstream's,\n"+
+				"// which a shared tools module could not promise (book/tooling.md).\n")
+		if err := writeFile(root, modFile, seed); err != nil {
+			advisory := goToolsAdvisory(modFile, "could not write "+modFile+": "+err.Error(), nil)
+
+			return &advisory
+		}
+	}
+
+	getArgs := []string{goGetVerb, goToolFlag, pkg + "@latest"}
+	if out := goGetThenTidy(ctx, filepath.Join(root, goToolsDir, name), getArgs); out != "" {
+		advisory := goToolsAdvisory(modFile, isolatedGoToolsMessage([]string{name})+"; "+out, getArgs)
+
+		return &advisory
+	}
+
+	return nil
+}
+
 // bareToolsGoMod is the tools module before any directive. In a Go repository
 // (rootMod non-empty) the module path is the root's with /tools appended and
 // the go directive is the root's, so the tools are built for the same
 // language version as the project; elsewhere the module is `tools` and the
 // go directive is the caller's (the aqua-pinned go, see aquaGoDirective).
 func bareToolsGoMod(rootMod, goDirective string) string {
-	module, goLine := bareToolsModule, goDirective
+	return bareGoMod(rootMod, goDirective, goToolsDir,
+		"// The Go-built tools the shared recipes run, pinned as tool directives\n"+
+			"// in a module of their own so their dependency graph never reaches the\n"+
+			"// project's go.mod (book/tooling.md).\n")
+}
+
+// bareGoMod is a tools module at relDir before any directive, opened by the
+// given comment: the root module's path with relDir appended and the root's
+// go directive in a Go repository, else `<relDir's last element>` and the
+// caller's go directive.
+func bareGoMod(rootMod, goDirective, relDir, comment string) string {
+	module, goLine := relDir[strings.LastIndex(relDir, slash)+1:], goDirective
 
 	for raw := range strings.SplitSeq(rootMod, "\n") {
 		line := strings.TrimSpace(raw)
 		switch {
 		case strings.HasPrefix(line, moduleDirective):
-			module = strings.TrimSpace(strings.TrimPrefix(line, moduleDirective)) + "/" + goToolsDir
+			module = strings.TrimSpace(strings.TrimPrefix(line, moduleDirective)) + slash + relDir
 		case strings.HasPrefix(line, "go "):
 			goLine = line
 		default:
@@ -416,10 +530,7 @@ func bareToolsGoMod(rootMod, goDirective string) string {
 		}
 	}
 
-	return "// The Go-built tools the shared recipes run, pinned as tool directives\n" +
-		"// in a module of their own so their dependency graph never reaches the\n" +
-		"// project's go.mod (book/tooling.md).\n" +
-		moduleDirective + module + "\n\n" + goLine + "\n"
+	return comment + moduleDirective + module + "\n\n" + goLine + "\n"
 }
 
 // aquaGoDirective is the go directive matching the repository's aqua golang/go

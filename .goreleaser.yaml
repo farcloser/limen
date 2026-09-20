@@ -46,6 +46,37 @@ builds:
     # Reproducible builds: stamp the commit time, not the build time.
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+  # limen-lint-go, the Go lint driver every Go repository's lint recipes run
+  # (book/per-language.md, "one baseline, per-project carve-outs"): a module
+  # of its own under cmd/ — its YAML parser must not enter limen's go.mod —
+  # built here so it ships in the same archive, verified by the same
+  # checksum and signature, and pinned by the same aqua entry as limen; the
+  # baseline it embeds moves with limen's releases, like every canonical
+  # file. Same flags as limen's build, minus the version stamp it has no use
+  # for.
+  - id: limen-lint-go
+    dir: cmd/limen-lint-go
+    main: .
+    binary: limen-lint-go
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - -s -w
+    targets:
+      - darwin_arm64
+      - linux_amd64
+      - linux_arm64
+      - windows_amd64
+      - windows_arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# One archive per platform carrying both binaries (no ids: every build).
 archives:
   - formats: ["tar.gz"]
 
