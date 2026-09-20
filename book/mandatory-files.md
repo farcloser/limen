@@ -173,6 +173,11 @@ any existing repository.
 
 One rule: `* -text` — no git line-ending magic, for any file, in either direction. What is
 on disk is what is committed is what every checkout gets, byte for byte, on every platform.
+Plus one exemption that is not about line endings: `*.patch` and `*.diff` are excluded from
+git's whitespace check, the one the commit lint runs. A unified diff's context lines carry
+space-before-tab by construction for any tab-indented source, so a repository that vendors
+patches could never rebase one and pass; the attribute is git's own answer, and the line
+above still applies to those files.
 
 The failure it prevents is concrete: Windows machines (GitHub's runners included) default
 git to `core.autocrlf=true`, which rewrites every text file to CRLF at checkout. Every
@@ -186,7 +191,10 @@ Two deliberate consequences, both inherited from the Go project's identical file
   Windows contributor needs an editor that writes LF — the same bar Go sets.
 - **No local additions.** The file is content-pinned: an extra attribute line (an `eol=`
   override, an LFS filter) would reintroduce content transformation between the working
-  tree and the object store, which is exactly what the pin removes.
+  tree and the object store, which is exactly what the pin removes. What a project needs
+  scoped to one subtree goes in a per-directory `.gitattributes` there, git's own
+  mechanism, which the pin does not govern; a subtree that turns conversion back on owns
+  the consequence.
 
 ## Canonical AGENTS.md
 
