@@ -53,6 +53,10 @@ just: (_banner "lint" "just")
 dockerfile: (_banner "lint" "dockerfile") (_go-tool "godolint" "github.com/farcloser/godolint/cmd/godolint")
     #!/usr/bin/env bash
     set -euo pipefail
+    # Twice on windows-11-arm this body exited 4 within a second of starting,
+    # before any tool ran, with no output; the trap makes the next one say
+    # which line, since a silent exit cannot be diagnosed from a log.
+    trap 'echo "lint dockerfile: line $LINENO exited $?" >&2' ERR
     # Same enumeration as `lint just`, over both Dockerfile and Containerfile
     # spellings. '*.Dockerfile' needs no '**/' twin: a wildcard already matches
     # across directories.
