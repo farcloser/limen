@@ -89,8 +89,8 @@ func (i UpdateAppIdentity) Email() string {
 // endpoint, nothing that depends on the caller's credentials. For `limen
 // check`. It never registers anything; a missing App is ErrUpdateAppUnknown,
 // and so is any transport failure (wrapped, so the cause is printable).
-func ResolveUpdateAppIdentity(org string) (UpdateAppIdentity, error) {
-	return identityFor(updateAppName(org))
+func ResolveUpdateAppIdentity(ctx context.Context, org string) (UpdateAppIdentity, error) {
+	return identityFor(ctx, updateAppName(org))
 }
 
 // DiscoverUpdateAppIdentity finds the update-App identity for org using every
@@ -99,13 +99,13 @@ func ResolveUpdateAppIdentity(org string) (UpdateAppIdentity, error) {
 // convention otherwise. For `limen fix` and `bootstrap`, which write the
 // answer into the tree — never for check, whose verdict must not depend on
 // who runs it.
-func DiscoverUpdateAppIdentity(org string) (UpdateAppIdentity, error) {
-	return identityFor(discoveredUpdateAppSlug(org))
+func DiscoverUpdateAppIdentity(ctx context.Context, org string) (UpdateAppIdentity, error) {
+	return identityFor(ctx, discoveredUpdateAppSlug(ctx, org))
 }
 
 // identityFor completes an identity from a slug: the bot user's id.
-func identityFor(slug string) (UpdateAppIdentity, error) {
-	userID, err := botUserID(slug)
+func identityFor(ctx context.Context, slug string) (UpdateAppIdentity, error) {
+	userID, err := botUserID(ctx, slug)
 	if err != nil {
 		return UpdateAppIdentity{}, err
 	}
@@ -119,19 +119,24 @@ func identityFor(slug string) (UpdateAppIdentity, error) {
 // — a laptop without gh, a CI runner without a token, a token without org
 // admin — because the convention is the right answer for every App limen
 // registered under its default name.
-func discoveredUpdateAppSlug(org string) string {
+func discoveredUpdateAppSlug(ctx context.Context, org string) string {
 	orgAPI := orgClient(org)
 
 	var variable struct {
 		Value string `json:"value"`
 	}
 
-	if outcome := orgAPI.getJSON("/actions/variables/"+updateAppVariable, &variable); outcome.err != nil ||
+	if outcome := orgAPI.getJSON(ctx, "/actions/variables/"+updateAppVariable, &variable); outcome.err != nil ||
 		outcome.notFound || variable.Value == "" {
 		return updateAppName(org)
 	}
 
-	installations, outcome := listPages[orgAppInstallationRef](orgAPI, "/installations?per_page=100", "installations")
+	installations, outcome := listPages[orgAppInstallationRef](
+		ctx,
+		orgAPI,
+		"/installations?per_page=100",
+		"installations",
+	)
 	if outcome.err != nil || outcome.notFound {
 		return updateAppName(org)
 	}
@@ -156,10 +161,10 @@ type orgAppInstallationRef struct {
 // endpoint. Unauthenticated works (60 requests/hour/IP); a GH_TOKEN or
 // GITHUB_TOKEN in the environment is sent when present, for the rate limit
 // only — the endpoint returns the same public record either way.
-func botUserID(slug string) (int64, error) {
+func botUserID(ctx context.Context, slug string) (int64, error) {
 	endpoint := usersAPIBase() + "/users/" + url.PathEscape(slug+"[bot]")
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %w", ErrUpdateAppUnknown, err)
 	}

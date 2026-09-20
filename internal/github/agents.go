@@ -17,6 +17,7 @@
 package github
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -110,10 +111,10 @@ func teamMissingMessage(owner string) string {
 // — an unreadable list is unverifiable, a readable one without the team is a
 // finding. found is meaningful only when outcome carries neither error nor
 // notFound.
-func findAgentsTeam(org client) (found bool, outcome apiOutcome) {
+func findAgentsTeam(ctx context.Context, org client) (found bool, outcome apiOutcome) {
 	var teams []teamSummary
 
-	outcome = org.getJSONAllPages(teamsListPath, &teams)
+	outcome = org.getJSONAllPages(ctx, teamsListPath, &teams)
 	if outcome.err != nil || outcome.notFound {
 		return false, outcome
 	}
@@ -132,7 +133,7 @@ func findAgentsTeam(org client) (found bool, outcome apiOutcome) {
 func (a *auditor) auditAgentsTeam(owner, name string) {
 	org := orgClient(owner)
 
-	probe := org.api("GET", "", nil)
+	probe := org.api(a.ctx, "GET", "", nil)
 
 	switch {
 	case probe.notFound:
@@ -146,7 +147,7 @@ func (a *auditor) auditAgentsTeam(owner, name string) {
 		return
 	}
 
-	found, outcome := findAgentsTeam(org)
+	found, outcome := findAgentsTeam(a.ctx, org)
 
 	switch {
 	case outcome.err != nil:
@@ -166,7 +167,7 @@ func (a *auditor) auditAgentsTeam(owner, name string) {
 
 	var grants []repoTeamGrant
 
-	outcome = a.client.getJSONAllPages(teamsListPath, &grants)
+	outcome = a.client.getJSONAllPages(a.ctx, teamsListPath, &grants)
 
 	switch {
 	case outcome.err != nil:
@@ -202,8 +203,8 @@ func (a *auditor) auditAgentsTeam(owner, name string) {
 		&Change{
 			Check:   checkAgentsTeam,
 			Summary: agentsTeamSlug + " team: " + current + " → " + teamPermissionPush,
-			apply: func(_ client) error {
-				return org.writeJSON("PUT", teamGrantPath(owner, name),
+			apply: func(ctx context.Context, _ client) error {
+				return org.writeJSON(ctx, "PUT", teamGrantPath(owner, name),
 					map[string]string{"permission": teamPermissionPush})
 			},
 		})
@@ -215,7 +216,7 @@ func (a *auditor) auditAgentsTeam(owner, name string) {
 // without the grant. Archived repositories are skipped: GitHub refuses
 // permission changes on them, and nothing is contributed to them anyway.
 func (a *auditor) auditOrgAgentsTeam(org string) {
-	found, outcome := findAgentsTeam(a.client)
+	found, outcome := findAgentsTeam(a.ctx, a.client)
 
 	switch {
 	case outcome.err != nil:
@@ -235,7 +236,7 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 
 	var members []teamMember
 
-	outcome = a.client.getJSONAllPages(teamPath+agentsTeamSlug+"/members?per_page=100", &members)
+	outcome = a.client.getJSONAllPages(a.ctx, teamPath+agentsTeamSlug+"/members?per_page=100", &members)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
 
@@ -244,7 +245,7 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 
 	var granted []teamRepoGrant
 
-	outcome = a.client.getJSONAllPages(teamPath+agentsTeamSlug+"/repos?per_page=100", &granted)
+	outcome = a.client.getJSONAllPages(a.ctx, teamPath+agentsTeamSlug+"/repos?per_page=100", &granted)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
 
@@ -253,7 +254,7 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 
 	var repos []orgRepo
 
-	outcome = a.client.getJSONAllPages("/repos?per_page=100&type=all", &repos)
+	outcome = a.client.getJSONAllPages(a.ctx, "/repos?per_page=100&type=all", &repos)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
 
@@ -296,9 +297,9 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 					missing,
 					listSeparator,
 				),
-				apply: func(c client) error {
+				apply: func(ctx context.Context, c client) error {
 					for _, name := range missing {
-						if err := c.writeJSON("PUT", teamGrantPath(org, name),
+						if err := c.writeJSON(ctx, "PUT", teamGrantPath(org, name),
 							map[string]string{"permission": teamPermissionPush}); err != nil {
 							return err
 						}

@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,7 +21,12 @@ func TestCanonicalAquaHasNoTwoLinePins(t *testing.T) {
 		t.Error("the canonical aqua.yaml carries a version: line")
 	}
 
-	if o := outcomesFor(rules.Fix(writeRepo(t, compliantFiles()), bootstrapOpts()), "aqua"); !allNone(o) {
+	if o := outcomesFor(
+		rules.Fix(context.Background(), writeRepo(t, compliantFiles()), bootstrapOpts()),
+		"aqua",
+	); !allNone(
+		o,
+	) {
 		t.Errorf("fix on the canonical aqua.yaml has something to do: %v", o)
 	}
 }
@@ -100,7 +106,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		t.Errorf("check must name every two-line pin, got: %+v", f)
 	}
 
-	if !allResolvedOutcomes(outcomesFor(rules.Fix(dir, bootstrapOpts()), "aqua")) {
+	if !allResolvedOutcomes(outcomesFor(rules.Fix(context.Background(), dir, bootstrapOpts()), "aqua")) {
 		t.Fatal("fix did not resolve the two-line pins")
 	}
 
@@ -136,7 +142,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		t.Errorf("merged manifest must pass check: %s", f.Message)
 	}
 
-	if o := outcomesFor(rules.Fix(dir, bootstrapOpts()), "aqua"); !allNone(o) {
+	if o := outcomesFor(rules.Fix(context.Background(), dir, bootstrapOpts()), "aqua"); !allNone(o) {
 		t.Errorf("fix is not idempotent: %v", o)
 	}
 }
@@ -170,7 +176,7 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	files["aqua.yaml"] = manifest
 	dir := writeRepo(t, files)
 
-	if !allResolvedOutcomes(outcomesFor(rules.Fix(dir, bootstrapOpts()), "aqua")) {
+	if !allResolvedOutcomes(outcomesFor(rules.Fix(context.Background(), dir, bootstrapOpts()), "aqua")) {
 		t.Fatal("fix did not resolve the manifest")
 	}
 

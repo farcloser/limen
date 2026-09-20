@@ -4,6 +4,7 @@
 package github_test
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -25,7 +26,7 @@ func TestOrgReposSkipsArchived(t *testing.T) {
 		},
 	})
 
-	repos, err := github.OrgRepos(testOrg)
+	repos, err := github.OrgRepos(context.Background(), testOrg)
 	if err != nil {
 		t.Fatalf("OrgRepos: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestOrgReposPaginates(t *testing.T) {
 		"GET orgs/test-org/repos?per_page=100&type=all": {Body: "[" + strings.Join(entries, ",") + "]"},
 	})
 
-	repos, err := github.OrgRepos(testOrg)
+	repos, err := github.OrgRepos(context.Background(), testOrg)
 	if err != nil {
 		t.Fatalf("OrgRepos: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestOrgReposUnreadable(t *testing.T) {
 		"GET orgs/test-org/repos?per_page=100&type=all": {Fail: true},
 	})
 
-	if _, err := github.OrgRepos(testOrg); err == nil {
+	if _, err := github.OrgRepos(context.Background(), testOrg); err == nil {
 		t.Error("an unreadable repository list must be an error, not an empty sweep")
 	}
 }
@@ -96,7 +97,7 @@ func TestOrgReposUnreadable(t *testing.T) {
 func TestAuditManyTagsTargets(t *testing.T) {
 	stubGH(t, compliantOrgResponses())
 
-	findings, _ := github.AuditMany(testOrg, []string{"test-org/alpha", "test-org/beta"}, nil)
+	findings, _ := github.AuditMany(context.Background(), testOrg, []string{"test-org/alpha", "test-org/beta"}, nil)
 
 	if len(findings) == 0 {
 		t.Fatal("no findings")
@@ -139,7 +140,7 @@ func TestOrgEnforcedWriteNamesTheOrg(t *testing.T) {
 
 	stubGH(t, responses)
 
-	_, changes := github.Audit("test/repo", nil)
+	_, changes := github.Audit(context.Background(), "test/repo", nil)
 
 	var planned *github.Change
 
@@ -153,7 +154,7 @@ func TestOrgEnforcedWriteNamesTheOrg(t *testing.T) {
 		t.Fatal("no change planned for the enabled setting")
 	}
 
-	err := planned.Apply()
+	err := planned.Apply(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "enforced organization code security configuration") {
 		t.Fatalf("Apply = %v, want an org-enforced refusal", err)
 	}

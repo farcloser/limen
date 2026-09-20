@@ -128,7 +128,7 @@ func (c client) orgOf() string {
 
 // api runs `gh api` with the given method, repo-relative path, and optional
 // JSON payload (sent via --input -), and classifies the outcome.
-func (c client) api(method, path string, payload []byte) apiOutcome {
+func (c client) api(ctx context.Context, method, path string, payload []byte) apiOutcome {
 	fullPath := c.base + path
 
 	args := []string{"api", "--method", method, fullPath}
@@ -136,7 +136,7 @@ func (c client) api(method, path string, payload []byte) apiOutcome {
 		args = append(args, "--input", "-")
 	}
 
-	return c.classify(runGH(args, method, fullPath, payload))
+	return c.classify(runGH(ctx, args, method, fullPath, payload))
 }
 
 // classify phrases the refusals that need to name where the setting actually
@@ -173,20 +173,19 @@ func (c client) classify(outcome apiOutcome) apiOutcome {
 //
 // --paginate and --slurp go LAST. The test stub reads the method and path off
 // fixed argv positions, and a flag inserted ahead of them shifts every key.
-func (c client) apiAllPages(path string, flags ...string) apiOutcome {
+func (c client) apiAllPages(ctx context.Context, path string, flags ...string) apiOutcome {
 	fullPath := c.base + path
 
 	args := append([]string{"api", "--method", methodGet, fullPath, "--paginate"}, flags...)
 
-	return c.classify(runGH(args, methodGet, fullPath, nil))
+	return c.classify(runGH(ctx, args, methodGet, fullPath, nil))
 }
 
 // runGH executes one gh invocation and classifies the outcome; method and
 // fullPath are carried only to phrase the error.
-func runGH(args []string, method, fullPath string, payload []byte) apiOutcome {
-	// The rules API carries no context; Background is the honest choice.
+func runGH(ctx context.Context, args []string, method, fullPath string, payload []byte) apiOutcome {
 	// gh on the hermetic PATH; every argument is a fixed API path built above.
-	cmd := exec.CommandContext(context.Background(), "gh", args...) // #nosec G204 -- see above.
+	cmd := exec.CommandContext(ctx, "gh", args...) // #nosec G204 -- see above.
 	if payload != nil {
 		cmd.Stdin = bytes.NewReader(payload)
 	}
@@ -247,8 +246,8 @@ func condenseStderr(raw string) string {
 
 // getJSONAllPages fetches every page of a list endpoint whose response is a
 // JSON array and decodes the merged array into out.
-func (c client) getJSONAllPages(path string, out any) apiOutcome {
-	outcome := c.apiAllPages(path)
+func (c client) getJSONAllPages(ctx context.Context, path string, out any) apiOutcome {
+	outcome := c.apiAllPages(ctx, path)
 	if outcome.err != nil || outcome.notFound {
 		return outcome
 	}
@@ -266,8 +265,8 @@ func (c client) getJSONAllPages(path string, out any) apiOutcome {
 // field's entries from all pages, in order. gh merges array pages only;
 // --slurp hands object pages back as one array of page objects, and the
 // field is collected from each.
-func listPages[T any](c client, path, field string) ([]T, apiOutcome) {
-	outcome := c.apiAllPages(path, "--slurp")
+func listPages[T any](ctx context.Context, c client, path, field string) ([]T, apiOutcome) {
+	outcome := c.apiAllPages(ctx, path, "--slurp")
 	if outcome.err != nil || outcome.notFound {
 		return nil, outcome
 	}
@@ -306,8 +305,8 @@ func listPages[T any](c client, path, field string) ([]T, apiOutcome) {
 
 // getJSON fetches a repo-relative path and decodes the JSON response into out.
 // For single objects only — never a list endpoint (see apiAllPages).
-func (c client) getJSON(path string, out any) apiOutcome {
-	outcome := c.api(methodGet, path, nil)
+func (c client) getJSON(ctx context.Context, path string, out any) apiOutcome {
+	outcome := c.api(ctx, methodGet, path, nil)
 	if outcome.err != nil || outcome.notFound {
 		return outcome
 	}
@@ -323,8 +322,8 @@ func (c client) getJSON(path string, out any) apiOutcome {
 // if any. A 404 is an error here, as in writeJSON: the caller only deletes
 // what the audit just observed, so "not found" means the endpoint, not the
 // setting, is missing.
-func (c client) deleteResource(path string) error {
-	outcome := c.api("DELETE", path, nil)
+func (c client) deleteResource(ctx context.Context, path string) error {
+	outcome := c.api(ctx, "DELETE", path, nil)
 	if outcome.notFound {
 		return fmt.Errorf("gh api DELETE %s: %w", path, errEndpointNotFound)
 	}
@@ -334,13 +333,13 @@ func (c client) deleteResource(path string) error {
 
 // writeJSON sends payload (marshaled) to a repo-relative path with the given
 // method and reports the error, if any.
-func (c client) writeJSON(method, path string, payload any) error {
+func (c client) writeJSON(ctx context.Context, method, path string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("encoding %s %s payload: %w", method, path, err)
 	}
 
-	outcome := c.api(method, path, body)
+	outcome := c.api(ctx, method, path, body)
 	if outcome.notFound {
 		return fmt.Errorf("gh api %s %s: %w", method, path, errEndpointNotFound)
 	}

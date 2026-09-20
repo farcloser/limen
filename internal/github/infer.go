@@ -10,9 +10,9 @@ import (
 // InferRepo derives the "owner/name" slug from the origin remote of the git
 // repository at dir, accepting both SSH (git@github.com:owner/name.git) and
 // HTTPS (https://github.com/owner/name) remote forms.
-func InferRepo(dir string) (string, error) {
+func InferRepo(ctx context.Context, dir string) (string, error) {
 	gitArgs := []string{"-C", dir, "remote", "get-url", "origin"}
-	cmd := exec.CommandContext(context.Background(), "git", gitArgs...) // #nosec G204 -- fixed argument list.
+	cmd := exec.CommandContext(ctx, "git", gitArgs...) // #nosec G204 -- fixed argument list.
 
 	out, err := cmd.Output()
 	if err != nil {

@@ -181,9 +181,9 @@ func retiredGoModToolsMessage(retired []string) string {
 
 // goGetThenTidy runs one `go get` in the tools module followed by `go mod
 // tidy`, and returns the first failure's output, or "" when both succeeded.
-func goGetThenTidy(toolsRoot string, getArgs []string) string {
+func goGetThenTidy(ctx context.Context, toolsRoot string, getArgs []string) string {
 	for _, args := range [][]string{getArgs, {"mod", "tidy"}} {
-		if out := runGo(toolsRoot, args...); out != "" {
+		if out := runGo(ctx, toolsRoot, args...); out != "" {
 			return out
 		}
 	}
@@ -313,7 +313,7 @@ func stripGoModToolDirectives(gomod string) string {
 // it too. The go steps need the pinned go on PATH and the network — when
 // either is unavailable the rule ends as an advisory carrying the exact
 // command to run by hand.
-func remediateGoTools(root string) Outcome {
+func remediateGoTools(ctx context.Context, root string) Outcome {
 	rootMod := rootGoMod(root)
 
 	var done []string
@@ -323,7 +323,7 @@ func remediateGoTools(root string) Outcome {
 			return goToolsAdvisory(goModFile, "could not rewrite go.mod: "+err.Error(), nil)
 		}
 
-		if out := runGo(root, "mod", "tidy"); out != "" {
+		if out := runGo(ctx, root, "mod", "tidy"); out != "" {
 			return goToolsAdvisory(goModFile, out, nil)
 		}
 
@@ -360,7 +360,7 @@ func remediateGoTools(root string) Outcome {
 			getArgs = append(getArgs, pkg+"@latest")
 		}
 
-		if out := goGetThenTidy(toolsRoot, getArgs); out != "" {
+		if out := goGetThenTidy(ctx, toolsRoot, getArgs); out != "" {
 			return goToolsAdvisory(goToolsModFile, missingGoModToolsMessage(missing)+"; "+out, getArgs)
 		}
 
@@ -377,7 +377,7 @@ func remediateGoTools(root string) Outcome {
 			getArgs = append(getArgs, pkg+"@none")
 		}
 
-		if out := goGetThenTidy(toolsRoot, getArgs); out != "" {
+		if out := goGetThenTidy(ctx, toolsRoot, getArgs); out != "" {
 			return goToolsAdvisory(goToolsModFile, retiredGoModToolsMessage(retired)+"; "+out, getArgs)
 		}
 
@@ -442,10 +442,10 @@ func aquaGoDirective(root string) string {
 
 // runGo runs the pinned go with args in dir and returns "" on success, or a
 // one-line description of the failure.
-func runGo(dir string, args ...string) string {
+func runGo(ctx context.Context, dir string, args ...string) string {
 	// The pinned go on the hermetic PATH; args are fixed lists plus baseline
 	// package paths.
-	cmd := exec.CommandContext(context.Background(), "go", args...) // #nosec G204 -- see above.
+	cmd := exec.CommandContext(ctx, "go", args...) // #nosec G204 -- see above.
 	cmd.Dir = dir
 
 	combined, err := cmd.CombinedOutput()

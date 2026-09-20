@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/farcloser/limen/internal/github"
 )
@@ -64,6 +63,18 @@ func noopBrowser(t *testing.T) string {
 // the code prints for a user without a browser is the contract the test
 // drives.
 var formURLRE = regexp.MustCompile(`open (http://127\.0\.0\.1:\d+/) yourself`)
+
+// cancelOnForm is a progress writer that ends the context the moment the
+// manifest form's URL is printed: the human who walked away.
+type cancelOnForm struct{ cancel context.CancelFunc }
+
+func (c cancelOnForm) Write(p []byte) (int, error) {
+	if formURLRE.Match(p) {
+		c.cancel()
+	}
+
+	return len(p), nil
+}
 
 // approver is a progress writer that plays the human: when the manifest
 // form's URL is printed, it fetches the form (handing the page to check) and
@@ -281,10 +292,14 @@ func TestEnsureUpdateAppCallbackTimeout(t *testing.T) {
 	})
 	interactiveRig(t) // the browser "opens", the user never approves
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	// The context ends once the form URL is printed, which is when the wait
+	// on the human begins: the probes before it ran to completion, and what
+	// is cut short is exactly the approval. A deadline on the whole call
+	// would race the probes' process spawns on a slow runner.
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	finding := github.EnsureUpdateAquaChecksumApp(ctx, testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(ctx, testOrg, cancelOnForm{cancel: cancel})
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("abandoned browser flow: %v (%s), want advisory", finding.Status, finding.Message)
