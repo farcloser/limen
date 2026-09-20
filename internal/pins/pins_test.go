@@ -6,6 +6,7 @@ package pins_test
 
 import (
 	"context"
+	"crypto"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/farcloser/limen/internal/pins"
+	"github.com/farcloser/limen/internal/verify/openpgp/openpgptest"
 )
 
 // verifierEnv names the file the fake gh and cosign append their argv to,
@@ -275,6 +277,14 @@ func TestParseRejects(t *testing.T) {
 			pins.ErrEntry,
 		},
 		"bad sha256": {strings.Replace(good, strings.Repeat("0", 64), "abc", 1), pins.ErrEntry},
+		"pgp fingerprint with spaces": {
+			strings.Replace(good, "verify: download",
+				"verify: pgp-sha256sums https://x/s.asc https://x/k.asc B886 8C80", 1), pins.ErrEntry,
+		},
+		"pgp fingerprint too short": {
+			strings.Replace(good, "verify: download",
+				"verify: pgp-sha256sums https://x/s.asc https://x/k.asc 632D3A06589DA6B1", 1), pins.ErrEntry,
+		},
 		"no digest": {
 			strings.Replace(good, "    digest:\n      version: 1\n      sha256: "+strings.Repeat("0", 64)+"\n", "", 1),
 			pins.ErrEntry,
@@ -480,6 +490,86 @@ func TestRefreshStopsOnRefusal(t *testing.T) { // Serial by design: t.Setenv for
 	gone := writePins(t, strings.Replace(text, "/a-${version}.tgz", "/missing", 1))
 	if _, err := pins.Refresh(context.Background(), gone, io.Discard); !errors.Is(err, pins.ErrVerify) {
 		t.Errorf("refresh of a missing artifact: %v, want ErrVerify", err)
+	}
+}
+
+// TestRefreshThroughClearsignedSums: the PGP method runs no tool. The sums
+// are clearsigned by a key the test generates, the digest is the signed
+// line, and a key other than the pinned one, or a tampered listing, is a
+// refusal.
+func TestRefreshThroughClearsignedSums(t *testing.T) {
+	t.Parallel()
+
+	const kernelSum = "3333333333333333333333333333333333333333333333333333333333333333"
+
+	signer, err := openpgptest.NewRSA()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other, err := openpgptest.NewEd25519()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signed, err := signer.Clearsign(kernelSum+"  linux-7.2.6.tar.xz\n", crypto.SHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	host := artifactHost(t, map[string]string{
+		"/pub/v7.x/sha256sums.asc": string(signed),
+		"/pub/v7.x/tampered.asc":   strings.Replace(string(signed), "3333", "4444", 1),
+		"/keys/signer.asc":         string(signer.PublicKeyBlock()),
+		"/keys/other.asc":          string(other.PublicKeyBlock()),
+	})
+
+	manifest := func(sums, key, fingerprint string) string {
+		return `pins:
+  - name: kernel
+    renovate: github-tags example/linux
+    version: 7.2.6
+    url: ` + host.URL + `/pub/v${major}.x/linux-${version}.tar.xz
+    verify: pgp-sha256sums ` + host.URL + `/pub/v${major}.x/` + sums + ` ` + host.URL + `/keys/` + key + ` ` + fingerprint + `
+    digest:
+      version: 7.2.5
+      sha256: ` + strings.Repeat("1", 64) + `
+`
+	}
+
+	root := writePins(t, manifest("sha256sums.asc", "signer.asc", strings.ToLower(signer.Fingerprint())))
+
+	changed, err := pins.Refresh(context.Background(), root, io.Discard)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	if !slices.Equal(changed, []string{"kernel"}) {
+		t.Errorf("changed = %v, want kernel", changed)
+	}
+
+	parsed, err := pins.Parse(mustRead(t, filepath.Join(root, pins.File)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := parsed.Get("kernel", "sha256"); got != kernelSum {
+		t.Errorf("kernel sha256 = %s, want the signed line %s", got, kernelSum)
+	}
+
+	for name, text := range map[string]string{
+		"key other than the pinned one": manifest("sha256sums.asc", "signer.asc", other.Fingerprint()),
+		"block without the signer":      manifest("sha256sums.asc", "other.asc", signer.Fingerprint()),
+		"tampered listing":              manifest("tampered.asc", "signer.asc", signer.Fingerprint()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := pins.Refresh(context.Background(), writePins(t, text), io.Discard)
+			if !errors.Is(err, pins.ErrVerify) {
+				t.Fatalf("err = %v, want ErrVerify", err)
+			}
+		})
 	}
 }
 

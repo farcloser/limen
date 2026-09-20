@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/farcloser/limen/internal/verify/openpgp"
 )
 
 // ErrVerify is an artifact the declared method would not vouch for.
@@ -21,6 +23,15 @@ var ErrVerify = errors.New("verification failed")
 
 // filePermissions is owner read-write, like every file limen writes.
 const filePermissions = 0o600
+
+// Every download lands under a temporary directory of its own.
+const (
+	tempPrefix = "limen-pins"
+	errTempDir = "temporary directory: %w"
+)
+
+// errAt prefixes an error with a sentinel and what it is about.
+const errAt = "%w: %s: %w"
 
 // Load reads the repository's pins.yaml. A missing file is (Manifest{}, false, nil).
 func Load(root string) (Manifest, bool, error) {
@@ -129,6 +140,8 @@ func digest(ctx context.Context, root string, entry Entry) (string, error) {
 		})
 	case VerifyCosignSums:
 		return hashFromSignedSums(ctx, root, entry, args)
+	case VerifyPGPSums:
+		return hashFromClearsignedSums(ctx, entry, args)
 	default:
 		return "", fmt.Errorf("%w: unknown method %q", ErrEntry, entry.Method())
 	}
@@ -138,9 +151,9 @@ func digest(ctx context.Context, root string, entry Entry) (string, error) {
 // accept that file, and returns its sha256. The bytes hashed are the bytes
 // verified: one download, one file.
 func hashDownload(ctx context.Context, url string, verify func(file string) error) (string, error) {
-	dir, err := os.MkdirTemp("", "limen-pins")
+	dir, err := os.MkdirTemp("", tempPrefix)
 	if err != nil {
-		return "", fmt.Errorf("temporary directory: %w", err)
+		return "", fmt.Errorf(errTempDir, err)
 	}
 
 	defer func() { _ = os.RemoveAll(dir) }()
@@ -169,9 +182,9 @@ func hashDownload(ctx context.Context, url string, verify func(file string) erro
 func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []string) (string, error) {
 	sumsURL, bundleURL, identity, issuer := args[0], args[1], args[2], args[3]
 
-	dir, err := os.MkdirTemp("", "limen-pins")
+	dir, err := os.MkdirTemp("", tempPrefix)
 	if err != nil {
-		return "", fmt.Errorf("temporary directory: %w", err)
+		return "", fmt.Errorf(errTempDir, err)
 	}
 
 	defer func() { _ = os.RemoveAll(dir) }()
@@ -197,8 +210,68 @@ func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []st
 		return "", fmt.Errorf("reading the signed sums: %w", err)
 	}
 
-	want := path.Base(entry.ResolvedURL())
+	return sumFor(data, path.Base(entry.ResolvedURL()), sumsURL)
+}
 
+// hashFromClearsignedSums takes the artifact's line from a PGP-clearsigned
+// sums file: the file and the signer's public key block are fetched, the
+// signature is verified in-process, the signing key must be the one the
+// entry pins by fingerprint, and only the text the signature vouches for is
+// read. The key's URL is transport — a key from anywhere is accepted if and
+// only if it is the pinned one.
+func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (string, error) {
+	sumsURL, keyURL, fingerprint := args[0], args[1], strings.ToUpper(args[2])
+
+	dir, err := os.MkdirTemp("", tempPrefix)
+	if err != nil {
+		return "", fmt.Errorf(errTempDir, err)
+	}
+
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	sums := filepath.Join(dir, "SHA256SUMS.asc")
+	key := filepath.Join(dir, "key.asc")
+
+	if _, err := download(ctx, sumsURL, sums); err != nil {
+		return "", err
+	}
+
+	if _, err := download(ctx, keyURL, key); err != nil {
+		return "", err
+	}
+
+	keyData, err := os.ReadFile(key) // #nosec G304 -- a file this function just wrote.
+	if err != nil {
+		return "", fmt.Errorf("reading the key: %w", err)
+	}
+
+	keys, err := openpgp.ParseKeys(keyData)
+	if err != nil {
+		return "", fmt.Errorf(errAt, ErrVerify, keyURL, err)
+	}
+
+	sumsData, err := os.ReadFile(sums) // #nosec G304 -- a file this function just wrote.
+	if err != nil {
+		return "", fmt.Errorf("reading the signed sums: %w", err)
+	}
+
+	verified, err := openpgp.VerifyClearsigned(sumsData, keys)
+	if err != nil {
+		return "", fmt.Errorf(errAt, ErrVerify, sumsURL, err)
+	}
+
+	if string(verified.Signer) != fingerprint {
+		return "", fmt.Errorf("%w: %s is signed by %s, not by the pinned key %s",
+			ErrVerify, sumsURL, verified.Signer, fingerprint)
+	}
+
+	return sumFor(verified.Text, path.Base(entry.ResolvedURL()), sumsURL)
+}
+
+// sumFor takes the sha256 of one file out of a `<sha256>  <name>` listing;
+// a name it does not carry, or carries with something other than a sha256,
+// is a verification failure, since the listing is what was vouched for.
+func sumFor(data []byte, want, sumsURL string) (string, error) {
 	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == want { //nolint:mnd // `<sha256>  <name>`.
@@ -263,7 +336,7 @@ func downloadOnce(ctx context.Context, url, file string) (string, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s: %w", errTransient, url, err)
+		return "", fmt.Errorf(errAt, errTransient, url, err)
 	}
 
 	defer func() { _ = resp.Body.Close() }()
