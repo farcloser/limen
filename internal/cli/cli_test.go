@@ -90,8 +90,11 @@ func stubDir(t *testing.T) string {
 	dir := t.TempDir()
 	aqua := filepath.Join(dir, "aqua")
 	// update-checksum writes the file the aqua rule then expects, like the
-	// real one would (its content is not judged).
-	aquaScript := "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/log\"\n" +
+	// real one would (its content is not judged). Builtins only, never an
+	// external command: with aqua's bin on PATH every coreutils name is an
+	// aqua proxy, which execs `aqua` — this very stub — and recurses without
+	// end. `${0%/*}` is the shell's own dirname.
+	aquaScript := "#!/bin/sh\necho \"$@\" >> \"${0%/*}/log\"\n" +
 		"case \"$*\" in *update-checksum*) echo '{\"stub\":true}' > aqua-checksums.json;; esac\n"
 	goStub := filepath.Join(dir, "go")
 	goScript := "#!/bin/sh\n" +
