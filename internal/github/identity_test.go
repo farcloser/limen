@@ -5,6 +5,7 @@
 package github_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -43,7 +44,7 @@ func TestResolveUpdateAppIdentityConvention(t *testing.T) {
 		"/users/limen-ci-test-org[bot]": `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`,
 	})
 
-	identity, err := github.ResolveUpdateAppIdentity("test-org")
+	identity, err := github.ResolveUpdateAppIdentity(context.Background(), "test-org")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -80,7 +81,7 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 		"/users/our-ci-pusher[bot]": `{"id": 99, "login": "our-ci-pusher[bot]", "type": "Bot"}`,
 	})
 
-	identity, err := github.DiscoverUpdateAppIdentity("test-org")
+	identity, err := github.DiscoverUpdateAppIdentity(context.Background(), "test-org")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -89,7 +90,13 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 		t.Errorf("identity = %+v, want the renamed App", identity)
 	}
 
-	if _, err := github.ResolveUpdateAppIdentity("test-org"); !errors.Is(err, github.ErrUpdateAppUnknown) {
+	if _, err := github.ResolveUpdateAppIdentity(
+		context.Background(),
+		"test-org",
+	); !errors.Is(
+		err,
+		github.ErrUpdateAppUnknown,
+	) {
 		t.Errorf("resolve with a renamed App: %v, want github.ErrUpdateAppUnknown (check stays credential-independent)",
 			err)
 	}
@@ -105,12 +112,12 @@ func TestDiscoverUpdateAppIdentityFallsBack(t *testing.T) {
 		"/users/limen-ci-test-org[bot]": `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`,
 	})
 
-	discovered, err := github.DiscoverUpdateAppIdentity("test-org")
+	discovered, err := github.DiscoverUpdateAppIdentity(context.Background(), "test-org")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
 
-	resolved, err := github.ResolveUpdateAppIdentity("test-org")
+	resolved, err := github.ResolveUpdateAppIdentity(context.Background(), "test-org")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -131,11 +138,23 @@ func TestResolveUpdateAppIdentityUnknown(t *testing.T) {
 		"/users/limen-ci-human[bot]": `{"id": 7, "login": "limen-ci-human[bot]", "type": "User"}`,
 	})
 
-	if _, err := github.ResolveUpdateAppIdentity("nobody"); !errors.Is(err, github.ErrUpdateAppUnknown) {
+	if _, err := github.ResolveUpdateAppIdentity(
+		context.Background(),
+		"nobody",
+	); !errors.Is(
+		err,
+		github.ErrUpdateAppUnknown,
+	) {
 		t.Errorf("unregistered App: %v, want github.ErrUpdateAppUnknown", err)
 	}
 
-	if _, err := github.ResolveUpdateAppIdentity("human"); !errors.Is(err, github.ErrUpdateAppUnknown) {
+	if _, err := github.ResolveUpdateAppIdentity(
+		context.Background(),
+		"human",
+	); !errors.Is(
+		err,
+		github.ErrUpdateAppUnknown,
+	) {
 		t.Errorf("non-bot record: %v, want github.ErrUpdateAppUnknown", err)
 	}
 }

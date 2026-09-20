@@ -74,12 +74,12 @@ type FixOptions struct {
 // so on an empty tree every rule takes its "create" path. The rule order matches
 // Check, and aqua runs before the conditional YAML rule so a bootstrapped repo's
 // freshly written aqua.yaml is seen by the yamlfmt rule.
-func Fix(root string, opts FixOptions) []Outcome {
+func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	var outcomes []Outcome
 
 	add := func(entries ...Outcome) { outcomes = append(outcomes, entries...) }
 
-	add(remediateGit(root))
+	add(remediateGit(ctx, root))
 	add(remediateReadme(root))
 	add(remediateLicense(root, opts))
 	add(remediateEditorconfig(root))
@@ -87,8 +87,8 @@ func Fix(root string, opts FixOptions) []Outcome {
 	add(remediateGitattributes(root))
 	add(remediateAgents(root)...)
 	add(remediateJustfile(root)...)
-	add(remediateAqua(root, opts.SelfVersion)...)
-	add(remediateGoTools(root))
+	add(remediateAqua(ctx, root, opts.SelfVersion)...)
+	add(remediateGoTools(ctx, root))
 	add(remediateLychee(root))
 	add(remediateWorkflows(root)...)
 	add(remediateRenovate(root, opts))
@@ -122,14 +122,14 @@ func AllResolved(outcomes []Outcome) bool {
 	return true
 }
 
-func remediateGit(root string) Outcome {
+func remediateGit(ctx context.Context, root string) Outcome {
 	const rule = "git"
 	if checkGit(root).OK() {
 		return Outcome{Rule: rule, Action: ActionNone, Path: gitDirName, Message: "already a git repository"}
 	}
 
 	// The rules API carries no context; Background is the honest choice.
-	cmd := exec.CommandContext(context.Background(), "git", "init")
+	cmd := exec.CommandContext(ctx, "git", "init")
 
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -433,7 +433,7 @@ func pinExact(root, rule, relPath, canonical string) Outcome {
 // describe a different package set. A manifest that cannot be parsed, a failed
 // regeneration, or anything merging cannot resolve (duplicate package entries)
 // ends as an advisory.
-func remediateAqua(root, selfVersion string) []Outcome {
+func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 	const rule = "aqua"
 
 	var out []Outcome
@@ -513,7 +513,7 @@ func remediateAqua(root, selfVersion string) []Outcome {
 
 	if !advised && !pristine && (manifestWrote || !exists(filepath.Join(root, aquaChecksumsFile))) {
 		existed := exists(filepath.Join(root, aquaChecksumsFile))
-		if err := regenerateAquaChecksums(root); err != nil {
+		if err := regenerateAquaChecksums(ctx, root); err != nil {
 			out = append(
 				out,
 				Outcome{
@@ -565,7 +565,7 @@ func seededAquaManifest(selfVersion string) (seed, message string) {
 
 // regenerateAquaChecksums authorizes the (content-pinned) policy, then has aqua
 // rebuild aqua-checksums.json for whatever the manifest now pins.
-func regenerateAquaChecksums(root string) error {
+func regenerateAquaChecksums(ctx context.Context, root string) error {
 	// --log-level warn: on failure the output lands in the advisory message, and
 	// aqua's per-package INFO lines would drown the actual error there.
 	for _, args := range [][]string{
@@ -573,7 +573,7 @@ func regenerateAquaChecksums(root string) error {
 		{"--log-level", "warn", "update-checksum", "--prune"},
 	} {
 		// aqua on the hermetic PATH; args come from the fixed lists above.
-		cmd := exec.CommandContext(context.Background(), "aqua", args...) // #nosec G204 -- see above.
+		cmd := exec.CommandContext(ctx, "aqua", args...) // #nosec G204 -- see above.
 
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {

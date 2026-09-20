@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -163,8 +164,9 @@ type orgSecurityConfiguration struct {
 // (creating configurations and repositories is a human act), and org rulesets
 // are absent entirely — their migration from the per-repo rulesets is phase 4
 // of the design.
-func AuditOrg(org string, overrides map[string]string) ([]Finding, []Change) {
+func AuditOrg(ctx context.Context, org string, overrides map[string]string) ([]Finding, []Change) {
 	aud := &auditor{
+		ctx:           ctx,
 		client:        orgClient(org),
 		overrides:     overrides,
 		settingsPatch: map[string]any{},
@@ -189,7 +191,7 @@ func AuditOrg(org string, overrides map[string]string) ([]Finding, []Change) {
 func (a *auditor) auditOrgObject() {
 	var settings orgSettings
 
-	outcome := a.client.getJSON("", &settings)
+	outcome := a.client.getJSON(a.ctx, "", &settings)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome),
 			checkOrgTwoFactor, checkOrgDefaultRepoPerm, checkOrgCreatePublicRepos,
@@ -356,7 +358,7 @@ func (a *auditor) auditOrgAdmins() {
 		Login string `json:"login"`
 	}
 
-	outcome := a.client.getJSONAllPages("/members?role=admin&per_page=100", &admins)
+	outcome := a.client.getJSONAllPages(a.ctx, "/members?role=admin&per_page=100", &admins)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgAdmins)
 
@@ -447,7 +449,7 @@ type orgActionsPermissions struct {
 func (a *auditor) auditOrgActionsPermissions() {
 	var permissions orgActionsPermissions
 
-	outcome := a.client.getJSON("/actions/permissions", &permissions)
+	outcome := a.client.getJSON(a.ctx, "/actions/permissions", &permissions)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome),
 			checkOrgActionsEnabledRepos, checkOrgActionsAllowed, checkOrgActionsShaPinning)
@@ -476,7 +478,7 @@ func (a *auditor) auditOrgActionsPermissions() {
 		targetAllowed = "selected"
 	}
 
-	fixPermissions := func(apiClient client) error {
+	fixPermissions := func(ctx context.Context, apiClient client) error {
 		payload := map[string]any{
 			"enabled_repositories": targetScope,
 			"allowed_actions":      targetAllowed,
@@ -488,7 +490,7 @@ func (a *auditor) auditOrgActionsPermissions() {
 			payload["sha_pinning_required"] = shaFixes || *permissions.ShaPinningRequired
 		}
 
-		if err := apiClient.writeJSON(methodPut, "/actions/permissions", payload); err != nil {
+		if err := apiClient.writeJSON(ctx, methodPut, "/actions/permissions", payload); err != nil {
 			return err
 		}
 
@@ -499,7 +501,7 @@ func (a *auditor) auditOrgActionsPermissions() {
 			return nil
 		}
 
-		return apiClient.writeJSON(methodPut, "/actions/permissions/selected-actions", map[string]any{
+		return apiClient.writeJSON(ctx, methodPut, "/actions/permissions/selected-actions", map[string]any{
 			"github_owned_allowed": true,
 			"verified_allowed":     false,
 			"patterns_allowed":     []string{},
@@ -567,7 +569,7 @@ func (a *auditor) auditOrgActionsWorkflowDefaults() {
 		CanApprovePullRequestReviews bool   `json:"can_approve_pull_request_reviews"`
 	}
 
-	outcome := a.client.getJSON("/actions/permissions/workflow", &workflow)
+	outcome := a.client.getJSON(a.ctx, "/actions/permissions/workflow", &workflow)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgActionsWorkflow, checkOrgActionsApprovePRs)
 
@@ -584,8 +586,8 @@ func (a *auditor) auditOrgActionsWorkflowDefaults() {
 
 	targetApprove := workflow.CanApprovePullRequestReviews && a.exempted(checkOrgActionsApprovePRs)
 
-	fixWorkflow := func(apiClient client) error {
-		return apiClient.writeJSON(methodPut, "/actions/permissions/workflow", map[string]any{
+	fixWorkflow := func(ctx context.Context, apiClient client) error {
+		return apiClient.writeJSON(ctx, methodPut, "/actions/permissions/workflow", map[string]any{
 			"default_workflow_permissions":     targetPerms,
 			"can_approve_pull_request_reviews": targetApprove,
 		})
@@ -626,7 +628,7 @@ func (a *auditor) auditOrgForkPRApproval() {
 		ApprovalPolicy string `json:"approval_policy"`
 	}
 
-	outcome := a.client.getJSON("/actions/permissions/fork-pr-contributor-approval", &approval)
+	outcome := a.client.getJSON(a.ctx, "/actions/permissions/fork-pr-contributor-approval", &approval)
 
 	switch {
 	case outcome.err != nil || outcome.notFound:
@@ -637,8 +639,8 @@ func (a *auditor) auditOrgForkPRApproval() {
 			&Change{
 				Check:   checkOrgForkPRApproval,
 				Summary: "org fork PR approval: " + approvalWeakest + " → " + approvalBaseline,
-				apply: func(apiClient client) error {
-					return apiClient.writeJSON(methodPut, "/actions/permissions/fork-pr-contributor-approval",
+				apply: func(ctx context.Context, apiClient client) error {
+					return apiClient.writeJSON(ctx, methodPut, "/actions/permissions/fork-pr-contributor-approval",
 						map[string]any{"approval_policy": approvalBaseline})
 				},
 			})
@@ -653,7 +655,7 @@ func (a *auditor) auditOrgForkPRApproval() {
 // GROUPS: GitHub's built-in "Default" group always exists, so counting
 // groups flags every org forever. Plan-gated (404) counts as none.
 func (a *auditor) auditOrgSelfHostedRunners() {
-	runners, outcome := listPages[orgNamed](a.client, "/actions/runners?per_page=100", "runners")
+	runners, outcome := listPages[orgNamed](a.ctx, a.client, "/actions/runners?per_page=100", "runners")
 
 	switch {
 	case outcome.notFound:
@@ -682,7 +684,7 @@ func (a *auditor) auditOrgSelfHostedRunners() {
 func (a *auditor) auditOrgSecurityConfiguration() {
 	var defaults []orgSecurityDefault
 
-	outcome := a.client.getJSON("/code-security/configurations/defaults", &defaults)
+	outcome := a.client.getJSON(a.ctx, "/code-security/configurations/defaults", &defaults)
 
 	switch {
 	case outcome.err != nil || outcome.notFound:
@@ -721,7 +723,7 @@ func (a *auditor) auditOrgSecurityConfiguration() {
 func (a *auditor) auditOrgDependabotSecurityUpdates() {
 	var configurations []orgSecurityConfiguration
 
-	outcome := a.client.getJSONAllPages("/code-security/configurations?per_page=100", &configurations)
+	outcome := a.client.getJSONAllPages(a.ctx, "/code-security/configurations?per_page=100", &configurations)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgDependabotFixes)
 
@@ -752,7 +754,7 @@ func (a *auditor) auditOrgDependabotSecurityUpdates() {
 				Check: checkOrgDependabotFixes,
 				Summary: "dependabot security updates in " + describeConfigurations(writable) +
 					": enabled → disabled",
-				apply: func(c client) error { return disableDependabotFixes(c, writable) },
+				apply: func(ctx context.Context, c client) error { return disableDependabotFixes(ctx, c, writable) },
 			})
 	case len(frozen) > 0:
 		// Advisory, never a fix: a global or enterprise configuration is not
@@ -770,10 +772,10 @@ func (a *auditor) auditOrgDependabotSecurityUpdates() {
 
 // disableDependabotFixes patches every offending configuration; the first
 // failure stops the run, so a partial apply is reported rather than hidden.
-func disableDependabotFixes(c client, configurations []orgSecurityConfiguration) error {
+func disableDependabotFixes(ctx context.Context, c client, configurations []orgSecurityConfiguration) error {
 	for _, configuration := range configurations {
 		path := "/code-security/configurations/" + strconv.Itoa(configuration.ID)
-		if err := c.writeJSON("PATCH", path, map[string]any{
+		if err := c.writeJSON(ctx, "PATCH", path, map[string]any{
 			"dependabot_security_updates": disabledValue,
 		}); err != nil {
 			return err
@@ -833,7 +835,12 @@ const renovateAppSlug = "renovate"
 // carries no fix. A self-hosted Renovate is a legitimate exemption: declare it
 // in limen.yaml.
 func (a *auditor) auditOrgInstalledApps() {
-	installations, outcome := listPages[orgAppInstallation](a.client, "/installations?per_page=100", "installations")
+	installations, outcome := listPages[orgAppInstallation](
+		a.ctx,
+		a.client,
+		"/installations?per_page=100",
+		"installations",
+	)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgInstalledApps, checkOrgRenovateInstalled)
 
@@ -878,7 +885,7 @@ func (a *auditor) auditOrgInstalledApps() {
 func (a *auditor) auditOrgWebhooks() {
 	var hooks []webhook
 
-	outcome := a.client.getJSONAllPages("/hooks?per_page=100", &hooks)
+	outcome := a.client.getJSONAllPages(a.ctx, "/hooks?per_page=100", &hooks)
 	if outcome.err != nil || outcome.notFound {
 		// Org webhooks live behind their own classic scope, which admin:org
 		// does not cover — and GitHub answers 404, not 403, without it.
@@ -916,7 +923,7 @@ func (a *auditor) auditOrgWebhooks() {
 // auditOrgActionsSecrets inventories org-level Actions secrets (names only —
 // the API never exposes values).
 func (a *auditor) auditOrgActionsSecrets() {
-	secrets, outcome := listPages[orgNamed](a.client, "/actions/secrets?per_page=100", "secrets")
+	secrets, outcome := listPages[orgNamed](a.ctx, a.client, "/actions/secrets?per_page=100", "secrets")
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgActionsSecrets)
 
@@ -945,7 +952,7 @@ func (a *auditor) auditOrgTeams() {
 		Slug string `json:"slug"`
 	}
 
-	outcome := a.client.getJSONAllPages("/teams?per_page=100", &teams)
+	outcome := a.client.getJSONAllPages(a.ctx, "/teams?per_page=100", &teams)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOrgTeams)
 
@@ -977,7 +984,7 @@ func (a *auditor) auditOrgPATGrants() {
 		Owner orgLogin `json:"owner"`
 	}
 
-	outcome := a.client.getJSONAllPages("/personal-access-tokens?per_page=100", &grants)
+	outcome := a.client.getJSONAllPages(a.ctx, "/personal-access-tokens?per_page=100", &grants)
 	if outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
 			a.unverifiable(errPATPolicyUnconfigured, checkOrgPATGrants)
@@ -1065,7 +1072,7 @@ func (a *auditor) auditOrgCommunityHealth(org string) {
 		Private bool `json:"private"`
 	}
 
-	outcome := healthRepo.getJSON("", &settings)
+	outcome := healthRepo.getJSON(a.ctx, "", &settings)
 
 	switch {
 	case outcome.notFound:
@@ -1108,7 +1115,7 @@ func (a *auditor) auditOrgCommunityHealth(org string) {
 		found := false
 
 		for _, location := range communityHealthLocations(file) {
-			fileOutcome := healthRepo.api("GET", "/contents/"+location, nil)
+			fileOutcome := healthRepo.api(a.ctx, "GET", "/contents/"+location, nil)
 
 			switch {
 			case fileOutcome.notFound:

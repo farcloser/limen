@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"fmt"
 	"slices"
 )
@@ -9,10 +10,10 @@ import (
 // "owner/name" slugs, sorted. Archived repositories are skipped: their
 // settings are frozen by GitHub, so every fixable check would fail forever
 // with a write the API refuses.
-func OrgRepos(org string) ([]string, error) {
+func OrgRepos(ctx context.Context, org string) ([]string, error) {
 	var repos []orgRepo
 
-	outcome := orgClient(org).getJSONAllPages("/repos?per_page=100&type=all", &repos)
+	outcome := orgClient(org).getJSONAllPages(ctx, "/repos?per_page=100&type=all", &repos)
 	if outcome.err != nil {
 		return nil, fmt.Errorf("listing the repositories of %s: %w", org, outcome.err)
 	}
@@ -45,8 +46,8 @@ func OrgRepos(org string) ([]string, error) {
 // fix audits twice (plan, then the post-apply re-audit) and both passes must
 // judge the same set, or a repository created mid-run would appear in the
 // report as a fix that was never planned.
-func AuditMany(org string, repos []string, overrides map[string]string) ([]Finding, []Change) {
-	findings, changes := AuditOrg(org, overrides)
+func AuditMany(ctx context.Context, org string, repos []string, overrides map[string]string) ([]Finding, []Change) {
+	findings, changes := AuditOrg(ctx, org, overrides)
 	target := "org " + org
 
 	for index := range findings {
@@ -58,7 +59,7 @@ func AuditMany(org string, repos []string, overrides map[string]string) ([]Findi
 	}
 
 	for _, slug := range repos {
-		repoFindings, repoChanges := Audit(slug, overrides)
+		repoFindings, repoChanges := Audit(ctx, slug, overrides)
 
 		for index := range repoFindings {
 			repoFindings[index].Target = slug

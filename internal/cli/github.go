@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 // cmdGithub is the settings-audit subcommand family (design/LIMEN-GITHUB.md).
 const cmdGithub = "github"
 
-func runGithub(args []string, stdout, stderr io.Writer) int {
+func runGithub(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		githubUsage(stderr)
 
@@ -24,9 +25,9 @@ func runGithub(args []string, stdout, stderr io.Writer) int {
 
 	switch args[0] {
 	case cmdCheck:
-		return runGithubCheck(args[1:], stdout, stderr)
+		return runGithubCheck(ctx, args[1:], stdout, stderr)
 	case cmdFix:
-		return runGithubFix(args[1:], stdout, stderr)
+		return runGithubFix(ctx, args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "limen: unknown github command %q\n\n", args[0])
 		githubUsage(stderr)
@@ -75,7 +76,7 @@ type githubScope struct {
 // organization when -org is given, a repository (named or inferred from
 // origin) otherwise. It returns the audit to run and the label findings are
 // reported under.
-func githubAudit(scope githubScope, stderr io.Writer) (auditRunner, string, bool) {
+func githubAudit(ctx context.Context, scope githubScope, stderr io.Writer) (auditRunner, string, bool) {
 	if scope.org != "" && scope.repo != "" {
 		_, _ = fmt.Fprintln(stderr, "limen: -repo and -org are mutually exclusive — audit one target per run")
 
@@ -83,24 +84,24 @@ func githubAudit(scope githubScope, stderr io.Writer) (auditRunner, string, bool
 	}
 
 	if scope.allRepos {
-		return githubSweep(scope.org, stderr)
+		return githubSweep(ctx, scope.org, stderr)
 	}
 
 	if scope.org != "" {
 		runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
-			return github.AuditOrg(scope.org, overrides)
+			return github.AuditOrg(ctx, scope.org, overrides)
 		}
 
 		return runner, "org " + scope.org, true
 	}
 
-	repo, resolved := githubTarget(scope.repo, stderr)
+	repo, resolved := githubTarget(ctx, scope.repo, stderr)
 	if !resolved {
 		return nil, "", false
 	}
 
 	runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
-		return github.Audit(repo, overrides)
+		return github.Audit(ctx, repo, overrides)
 	}
 
 	return runner, repo, true
@@ -110,14 +111,14 @@ func githubAudit(scope githubScope, stderr io.Writer) (auditRunner, string, bool
 // non-archived repository in it. The repository list is read once, here, and
 // captured by the runner — fix audits twice, and both passes must judge the
 // same set.
-func githubSweep(orgFlag string, stderr io.Writer) (auditRunner, string, bool) {
+func githubSweep(ctx context.Context, orgFlag string, stderr io.Writer) (auditRunner, string, bool) {
 	if orgFlag == "" {
 		_, _ = fmt.Fprintln(stderr, "limen: -all-repos sweeps an organization — name it with -org")
 
 		return nil, "", false
 	}
 
-	repos, err := github.OrgRepos(orgFlag)
+	repos, err := github.OrgRepos(ctx, orgFlag)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, errFormat, err)
 
@@ -125,7 +126,7 @@ func githubSweep(orgFlag string, stderr io.Writer) (auditRunner, string, bool) {
 	}
 
 	runner := func(overrides map[string]string) ([]github.Finding, []github.Change) {
-		return github.AuditMany(orgFlag, repos, overrides)
+		return github.AuditMany(ctx, orgFlag, repos, overrides)
 	}
 
 	return runner, fmt.Sprintf("org %s and its %d repositories", orgFlag, len(repos)), true
@@ -151,12 +152,12 @@ func githubNoPositional(flagSet *flag.FlagSet, stderr io.Writer) bool {
 
 // githubTarget resolves the repository slug: the -repo flag when given, the
 // origin remote of the current directory otherwise.
-func githubTarget(repoFlag string, stderr io.Writer) (string, bool) {
+func githubTarget(ctx context.Context, repoFlag string, stderr io.Writer) (string, bool) {
 	if repoFlag != "" {
 		return repoFlag, true
 	}
 
-	slug, err := github.InferRepo(".")
+	slug, err := github.InferRepo(ctx, ".")
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, errFormat, err)
 
@@ -166,7 +167,7 @@ func githubTarget(repoFlag string, stderr io.Writer) (string, bool) {
 	return slug, true
 }
 
-func runGithubCheck(args []string, stdout, stderr io.Writer) int {
+func runGithubCheck(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdGithub+" "+cmdCheck, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	repoFlag := flagSet.String("repo", "", "repository slug (owner/name); default: inferred from origin")
@@ -184,7 +185,7 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 	}
 
 	audit, label, resolved := githubAudit(
-		githubScope{repo: *repoFlag, org: *orgFlag, allRepos: *allRepos}, stderr,
+		ctx, githubScope{repo: *repoFlag, org: *orgFlag, allRepos: *allRepos}, stderr,
 	)
 	if !resolved {
 		return 2
@@ -207,7 +208,7 @@ func runGithubCheck(args []string, stdout, stderr io.Writer) int {
 	return reportGithubOutcome(stdout, stderr, label, findings, printer)
 }
 
-func runGithubFix(args []string, stdout, stderr io.Writer) int {
+func runGithubFix(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdGithub+" "+cmdFix, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	repoFlag := flagSet.String("repo", "", "repository slug (owner/name); default: inferred from origin")
@@ -226,7 +227,7 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	}
 
 	audit, label, resolved := githubAudit(
-		githubScope{repo: *repoFlag, org: *orgFlag, allRepos: *allRepos}, stderr,
+		ctx, githubScope{repo: *repoFlag, org: *orgFlag, allRepos: *allRepos}, stderr,
 	)
 	if !resolved {
 		return 2
@@ -282,7 +283,7 @@ func runGithubFix(args []string, stdout, stderr io.Writer) int {
 	applied := make([]string, 0, len(changes))
 
 	for _, planned := range changes {
-		if applyErr := planned.Apply(); applyErr != nil {
+		if applyErr := planned.Apply(ctx); applyErr != nil {
 			failed++
 
 			_, _ = fmt.Fprintf(stderr, "limen: %s%s: %v\n", targetPrefix(planned.Target), planned.Check, applyErr)

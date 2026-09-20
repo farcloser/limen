@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"os/signal"
 
 	"github.com/farcloser/limen/internal/pins"
 )
@@ -14,7 +12,7 @@ import (
 // cmdPins is the pinned-artifacts subcommand family (internal/pins).
 const cmdPins = "pins"
 
-func runPins(args []string, stdout, stderr io.Writer) int {
+func runPins(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		pinsUsage(stderr)
 
@@ -25,7 +23,7 @@ func runPins(args []string, stdout, stderr io.Writer) int {
 	case "get":
 		return runPinsGet(args[1:], stdout, stderr)
 	case "refresh":
-		return runPinsRefresh(args[1:], stdout, stderr)
+		return runPinsRefresh(ctx, args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "limen: unknown pins command %q\n\n", args[0])
 		pinsUsage(stderr)
@@ -82,7 +80,7 @@ func runPinsGet(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runPinsRefresh(args []string, stdout, stderr io.Writer) int {
+func runPinsRefresh(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdPins+" refresh", flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	all := flagSet.Bool("all", false, "recompute every digest, not only the stale ones")
@@ -109,11 +107,6 @@ func runPinsRefresh(args []string, stdout, stderr io.Writer) int {
 	if len(positional) == 1 {
 		root = positional[0]
 	}
-
-	// Downloads can be large; Ctrl-C ends the run with the file untouched by
-	// the entry in flight.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
 
 	refresh := pins.Refresh
 	if *all {

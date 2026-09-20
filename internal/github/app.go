@@ -132,12 +132,10 @@ func interactive() bool { return os.Getenv("CI") == "" }
 // It never returns StatusFail: bootstrap treats every non-ok as a warning.
 // ctx bounds the two waits on the human (the browser approval and the
 // installation click); cancelling it turns the wait into an advisory.
-//
-//nolint:contextcheck // the gh client carries no context (see runGH); ctx bounds the waits on the human, not the API reads.
 func EnsureUpdateAquaChecksumApp(ctx context.Context, org string, progress io.Writer) Finding {
 	orgAPI := orgClient(org)
 
-	if outcome := orgAPI.api("GET", "", nil); outcome.err != nil || outcome.notFound {
+	if outcome := orgAPI.api(ctx, "GET", "", nil); outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
 			return updateAppFinding(StatusAdvisory, errNotAnOrg.Error())
 		}
@@ -146,14 +144,14 @@ func EnsureUpdateAquaChecksumApp(ctx context.Context, org string, progress io.Wr
 			fmt.Sprintf("cannot read the organization: %v — an org-admin token is required", outcome.err))
 	}
 
-	state, finding := probeUpdateApp(orgAPI)
+	state, finding := probeUpdateApp(ctx, orgAPI)
 	if finding != nil {
 		return *finding
 	}
 
 	switch {
 	case state.hasVariable && state.hasSecret:
-		return confirmInstallation(orgAPI, state.appID,
+		return confirmInstallation(ctx, orgAPI, state.appID,
 			fmt.Sprintf("%s and %s already set", updateAppVariable, updateAppSecret))
 	case state.hasVariable != state.hasSecret:
 		present, missing := updateAppVariable, updateAppSecret
@@ -187,14 +185,14 @@ type updateAppState struct {
 
 // probeUpdateApp reads the variable and the secret; a non-404 error on either
 // is the "cannot verify" case and short-circuits into a finding.
-func probeUpdateApp(orgAPI client) (updateAppState, *Finding) {
+func probeUpdateApp(ctx context.Context, orgAPI client) (updateAppState, *Finding) {
 	var state updateAppState
 
 	var variable struct {
 		Value string `json:"value"`
 	}
 
-	outcome := orgAPI.getJSON("/actions/variables/"+updateAppVariable, &variable)
+	outcome := orgAPI.getJSON(ctx, "/actions/variables/"+updateAppVariable, &variable)
 	if outcome.err != nil {
 		finding := updateAppFinding(StatusUnverifiable,
 			fmt.Sprintf("cannot read org Actions variables: %v — an org-admin token is required", outcome.err))
@@ -205,7 +203,7 @@ func probeUpdateApp(orgAPI client) (updateAppState, *Finding) {
 	state.hasVariable = !outcome.notFound
 	state.appID = variable.Value
 
-	outcome = orgAPI.api("GET", "/actions/secrets/"+updateAppSecret, nil)
+	outcome = orgAPI.api(ctx, "GET", "/actions/secrets/"+updateAppSecret, nil)
 	if outcome.err != nil {
 		finding := updateAppFinding(StatusUnverifiable,
 			fmt.Sprintf("cannot read org Actions secrets: %v — an org-admin token is required", outcome.err))
@@ -222,8 +220,8 @@ func probeUpdateApp(orgAPI client) (updateAppState, *Finding) {
 // org with the permissions the workflow needs, and folds the answer into the
 // finding. An unreadable installations list downgrades to unverifiable —
 // configured, but the last leg cannot be proven.
-func confirmInstallation(orgAPI client, appID, configured string) Finding {
-	installation, err := findInstallation(orgAPI, appID)
+func confirmInstallation(ctx context.Context, orgAPI client, appID, configured string) Finding {
+	installation, err := findInstallation(ctx, orgAPI, appID)
 	if err != nil {
 		return updateAppFinding(StatusUnverifiable,
 			fmt.Sprintf("%s; installation not verifiable: %v", configured, err))
@@ -300,8 +298,8 @@ func (installation appInstallation) missingPermissions() string {
 
 // findInstallation returns the org's installation of the App with the given
 // id, or nil when there is none.
-func findInstallation(orgAPI client, appID string) (*appInstallation, error) {
-	installations, outcome := listPages[appInstallation](orgAPI, "/installations?per_page=100", "installations")
+func findInstallation(ctx context.Context, orgAPI client, appID string) (*appInstallation, error) {
+	installations, outcome := listPages[appInstallation](ctx, orgAPI, "/installations?per_page=100", "installations")
 	if outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
 			return nil, errEndpointNotFound
@@ -331,15 +329,13 @@ type appConversion struct {
 // registerUpdateApp runs the manifest flow end to end: browser approval,
 // code conversion, credential storage, installation. Each failure names the
 // step so the finding is actionable.
-//
-//nolint:contextcheck // the gh client carries no context (see runGH); ctx bounds the waits on the human.
 func registerUpdateApp(ctx context.Context, org string, orgAPI client, progress io.Writer) Finding {
 	code, err := manifestApproval(ctx, org, progress)
 	if err != nil {
 		return updateAppFinding(StatusAdvisory, fmt.Sprintf("App registration did not complete: %v", err))
 	}
 
-	conversion, err := convertManifestCode(code)
+	conversion, err := convertManifestCode(ctx, code)
 	if err != nil {
 		return updateAppFinding(StatusAdvisory, fmt.Sprintf("converting the manifest code: %v", err))
 	}
@@ -347,7 +343,7 @@ func registerUpdateApp(ctx context.Context, org string, orgAPI client, progress 
 	_, _ = fmt.Fprintf(progress, "limen: App %q registered (id %d)\n", conversion.Slug, conversion.ID)
 
 	appID := strconv.FormatInt(conversion.ID, decimalBase)
-	if err := orgAPI.writeJSON("POST", "/actions/variables", map[string]string{
+	if err := orgAPI.writeJSON(ctx, "POST", "/actions/variables", map[string]string{
 		"name": updateAppVariable, "value": appID, "visibility": "all",
 	}); err != nil {
 		return updateAppFinding(
@@ -503,12 +499,12 @@ func updateAppName(org string) string {
 
 // convertManifestCode exchanges the one-time code for the App's identity and
 // private key.
-func convertManifestCode(code string) (appConversion, error) {
+func convertManifestCode(ctx context.Context, code string) (appConversion, error) {
 	var conversion appConversion
 
 	converter := client{base: "app-manifests/" + code + "/conversions"}
 
-	outcome := converter.api("POST", "", nil)
+	outcome := converter.api(ctx, "POST", "", nil)
 	if outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
 			return conversion, errEndpointNotFound
@@ -528,8 +524,6 @@ func convertManifestCode(code string) (appConversion, error) {
 // until the installation appears (installing is the one step GitHub reserves
 // for the UI). Timing out is an advisory, not a failure: the credential is
 // stored, only the click is missing.
-//
-//nolint:contextcheck // the gh client carries no context (see runGH); ctx bounds the wait on the human.
 func awaitInstallation(ctx context.Context, orgAPI client, conversion appConversion, progress io.Writer) Finding {
 	installURL := conversion.HTMLURL + "/installations/new"
 
@@ -549,7 +543,7 @@ func awaitInstallation(ctx context.Context, orgAPI client, conversion appConvers
 	defer cancel()
 
 	for {
-		installation, err := findInstallation(orgAPI, appID)
+		installation, err := findInstallation(ctx, orgAPI, appID)
 		if err != nil {
 			return updateAppFinding(StatusUnverifiable,
 				fmt.Sprintf("App id %s registered and credentials stored; installation not verifiable: %v", appID, err))

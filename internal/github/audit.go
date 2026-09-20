@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -177,6 +178,7 @@ func optInChecks() map[string]bool {
 // auditor accumulates findings and the planned changes that would repair the
 // failing ones.
 type auditor struct {
+	ctx           context.Context //nolint:containedctx // the one audit's scope: every call the auditor makes is that audit's.
 	client        client
 	owner         string
 	overrides     map[string]string
@@ -197,10 +199,11 @@ type auditor struct {
 // Audit checks the repository's settings against the baseline. overrides maps
 // exempted check identifiers to their reasons (see LoadOverrides). It returns
 // the findings and the changes a fix run would apply.
-func Audit(repo string, overrides map[string]string) ([]Finding, []Change) {
+func Audit(ctx context.Context, repo string, overrides map[string]string) ([]Finding, []Change) {
 	owner, name, _ := strings.Cut(repo, "/")
 
 	aud := &auditor{
+		ctx:           ctx,
 		client:        repoClient(repo),
 		owner:         owner,
 		overrides:     overrides,
@@ -304,7 +307,7 @@ func (a *auditor) flushSettingsPatch() {
 	payload := a.settingsPatch
 	for i := range a.changes {
 		if a.changes[i].apply == nil {
-			a.changes[i].apply = func(apiClient client) error {
+			a.changes[i].apply = func(ctx context.Context, apiClient client) error {
 				if payload == nil {
 					return nil
 				}
@@ -313,7 +316,7 @@ func (a *auditor) flushSettingsPatch() {
 				fields := payload
 				payload = nil
 
-				return apiClient.writeJSON("PATCH", "", fields)
+				return apiClient.writeJSON(ctx, "PATCH", "", fields)
 			}
 		}
 	}
@@ -327,7 +330,7 @@ const boolTrue, boolFalse = "true", "false"
 func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catalog of independent checks, one block each.
 	var settings repoSettings
 
-	outcome := a.client.getJSON("", &settings)
+	outcome := a.client.getJSON(a.ctx, "", &settings)
 	if outcome.err != nil || outcome.notFound {
 		err := outcome.err
 		if err == nil {
@@ -548,8 +551,8 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 			&Change{
 				Check:   checkPushProtection,
 				Summary: "secret scanning push protection: disabled → enabled",
-				apply: func(apiClient client) error {
-					return apiClient.writeJSON("PATCH", "", map[string]any{
+				apply: func(ctx context.Context, apiClient client) error {
+					return apiClient.writeJSON(ctx, "PATCH", "", map[string]any{
 						"security_and_analysis": map[string]any{
 							"secret_scanning":                 map[string]any{"status": enabledValue},
 							"secret_scanning_push_protection": map[string]any{"status": enabledValue},
@@ -581,7 +584,7 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 // Dependabot's PRs anyway declares the exception.
 func (a *auditor) auditSecurityToggles() {
 	// Dependabot alerts: 204 = enabled, 404 = disabled.
-	alertsOutcome := a.client.api("GET", "/vulnerability-alerts", nil)
+	alertsOutcome := a.client.api(a.ctx, "GET", "/vulnerability-alerts", nil)
 
 	switch {
 	case alertsOutcome.err != nil:
@@ -600,7 +603,9 @@ func (a *auditor) auditSecurityToggles() {
 			&Change{
 				Check:   checkDependabotAlerts,
 				Summary: "dependabot alerts: disabled → enabled",
-				apply:   func(c client) error { return c.writeJSON("PUT", "/vulnerability-alerts", nil) },
+				apply: func(ctx context.Context, c client) error {
+					return c.writeJSON(ctx, "PUT", "/vulnerability-alerts", nil)
+				},
 			})
 	default:
 		a.flag(checkDependabotAlerts, StatusOK, "", "", "Dependabot alerts are enabled", nil)
@@ -610,7 +615,7 @@ func (a *auditor) auditSecurityToggles() {
 		Enabled bool `json:"enabled"`
 	}
 
-	fixesOutcome := a.client.getJSON("/automated-security-fixes", &fixes)
+	fixesOutcome := a.client.getJSON(a.ctx, "/automated-security-fixes", &fixes)
 
 	switch {
 	case fixesOutcome.err != nil || fixesOutcome.notFound:
@@ -625,7 +630,7 @@ func (a *auditor) auditSecurityToggles() {
 			&Change{
 				Check:   checkDependabotFixes,
 				Summary: "dependabot security updates: enabled → disabled",
-				apply:   func(c client) error { return c.deleteResource("/automated-security-fixes") },
+				apply:   func(ctx context.Context, c client) error { return c.deleteResource(ctx, "/automated-security-fixes") },
 			})
 	}
 
@@ -637,7 +642,7 @@ func (a *auditor) auditPrivateVulnerabilityReporting() {
 		Enabled bool `json:"enabled"`
 	}
 
-	outcome := a.client.getJSON("/private-vulnerability-reporting", &reporting)
+	outcome := a.client.getJSON(a.ctx, "/private-vulnerability-reporting", &reporting)
 
 	switch {
 	case outcome.err != nil || outcome.notFound:
@@ -650,7 +655,9 @@ func (a *auditor) auditPrivateVulnerabilityReporting() {
 			&Change{
 				Check:   checkPrivateVulnReporting,
 				Summary: "private vulnerability reporting: disabled → enabled",
-				apply:   func(c client) error { return c.writeJSON("PUT", "/private-vulnerability-reporting", nil) },
+				apply: func(ctx context.Context, c client) error {
+					return c.writeJSON(ctx, "PUT", "/private-vulnerability-reporting", nil)
+				},
 			})
 	}
 }
@@ -663,7 +670,7 @@ func (a *auditor) auditActions() {
 		CanApprovePullRequestReviews bool   `json:"can_approve_pull_request_reviews"`
 	}
 
-	workflowOutcome := a.client.getJSON("/actions/permissions/workflow", &workflow)
+	workflowOutcome := a.client.getJSON(a.ctx, "/actions/permissions/workflow", &workflow)
 	if workflowOutcome.err != nil || workflowOutcome.notFound {
 		a.unverifiable(orNotFound(workflowOutcome), checkActionsWorkflowPerms, checkActionsApprovePRs)
 	} else {
@@ -678,8 +685,8 @@ func (a *auditor) auditActions() {
 
 		targetApprove := workflow.CanApprovePullRequestReviews && a.exempted(checkActionsApprovePRs)
 
-		fixWorkflow := func(c client) error {
-			return c.writeJSON("PUT", "/actions/permissions/workflow", map[string]any{
+		fixWorkflow := func(ctx context.Context, c client) error {
+			return c.writeJSON(ctx, "PUT", "/actions/permissions/workflow", map[string]any{
 				"default_workflow_permissions":     targetPerms,
 				"can_approve_pull_request_reviews": targetApprove,
 			})
@@ -716,7 +723,7 @@ func (a *auditor) auditActions() {
 		AllowedActions string `json:"allowed_actions"`
 	}
 
-	permissionsOutcome := a.client.getJSON("/actions/permissions", &permissions)
+	permissionsOutcome := a.client.getJSON(a.ctx, "/actions/permissions", &permissions)
 
 	switch {
 	case permissionsOutcome.err != nil || permissionsOutcome.notFound:
@@ -727,15 +734,15 @@ func (a *auditor) auditActions() {
 			&Change{
 				Check:   checkActionsAllowed,
 				Summary: "allowed actions: all → selected (GitHub-owned only)",
-				apply: func(apiClient client) error {
-					if err := apiClient.writeJSON("PUT", "/actions/permissions", map[string]any{
+				apply: func(ctx context.Context, apiClient client) error {
+					if err := apiClient.writeJSON(ctx, "PUT", "/actions/permissions", map[string]any{
 						"enabled":         true,
 						"allowed_actions": "selected",
 					}); err != nil {
 						return err
 					}
 
-					return apiClient.writeJSON("PUT", "/actions/permissions/selected-actions", map[string]any{
+					return apiClient.writeJSON(ctx, "PUT", "/actions/permissions/selected-actions", map[string]any{
 						"github_owned_allowed": true,
 						"verified_allowed":     false,
 						"patterns_allowed":     []string{},
@@ -761,7 +768,7 @@ func (a *auditor) auditForkPRApproval() {
 		ApprovalPolicy string `json:"approval_policy"`
 	}
 
-	outcome := a.client.getJSON("/actions/permissions/fork-pr-contributor-approval", &approval)
+	outcome := a.client.getJSON(a.ctx, "/actions/permissions/fork-pr-contributor-approval", &approval)
 
 	switch {
 	case outcome.err != nil || outcome.notFound:
@@ -772,8 +779,8 @@ func (a *auditor) auditForkPRApproval() {
 			&Change{
 				Check:   checkForkPRApproval,
 				Summary: "fork PR approval: " + approvalWeakest + " → " + approvalBaseline,
-				apply: func(apiClient client) error {
-					return apiClient.writeJSON("PUT", "/actions/permissions/fork-pr-contributor-approval",
+				apply: func(ctx context.Context, apiClient client) error {
+					return apiClient.writeJSON(ctx, "PUT", "/actions/permissions/fork-pr-contributor-approval",
 						map[string]any{"approval_policy": approvalBaseline})
 				},
 			})
@@ -804,7 +811,7 @@ func (a *auditor) auditActionsAccess() {
 		AccessLevel string `json:"access_level"`
 	}
 
-	outcome := a.client.getJSON("/actions/permissions/access", &access)
+	outcome := a.client.getJSON(a.ctx, "/actions/permissions/access", &access)
 
 	switch {
 	case outcome.err != nil || outcome.notFound:
@@ -818,8 +825,8 @@ func (a *auditor) auditActionsAccess() {
 			&Change{
 				Check:   checkActionsAccessLevel,
 				Summary: "actions access level: " + access.AccessLevel + " → none",
-				apply: func(apiClient client) error {
-					return apiClient.writeJSON("PUT", "/actions/permissions/access",
+				apply: func(ctx context.Context, apiClient client) error {
+					return apiClient.writeJSON(ctx, "PUT", "/actions/permissions/access",
 						map[string]any{"access_level": accessLevelNone})
 				},
 			})
@@ -843,7 +850,7 @@ func (a *auditor) auditCodeScanning() {
 		State string `json:"state"`
 	}
 
-	outcome := a.client.getJSON("/code-scanning/default-setup", &setup)
+	outcome := a.client.getJSON(a.ctx, "/code-scanning/default-setup", &setup)
 
 	switch {
 	case outcome.err != nil || outcome.notFound:
@@ -856,8 +863,8 @@ func (a *auditor) auditCodeScanning() {
 			&Change{
 				Check:   checkCodeScanning,
 				Summary: "code scanning default setup: " + setup.State + " → configured",
-				apply: func(apiClient client) error {
-					return apiClient.writeJSON("PATCH", "/code-scanning/default-setup",
+				apply: func(ctx context.Context, apiClient client) error {
+					return apiClient.writeJSON(ctx, "PATCH", "/code-scanning/default-setup",
 						map[string]any{"state": scanStateConfigured})
 				},
 			})
@@ -939,7 +946,7 @@ func (d rulesetDetail) statusCheckContexts() []string {
 func (a *auditor) auditRulesets() {
 	var summaries []rulesetSummary
 
-	outcome := a.client.getJSONAllPages("/rulesets?per_page=100", &summaries)
+	outcome := a.client.getJSONAllPages(a.ctx, "/rulesets?per_page=100", &summaries)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkRulesetDefaultBranch, checkRulesetVersionTags)
 
@@ -1016,7 +1023,7 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 			&Change{
 				Check:   target.check,
 				Summary: "create ruleset " + target.name,
-				apply:   func(c client) error { return c.writeJSON("POST", "/rulesets", canonical) },
+				apply:   func(ctx context.Context, c client) error { return c.writeJSON(ctx, "POST", "/rulesets", canonical) },
 			})
 
 		return
@@ -1026,7 +1033,7 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 
 	var detail rulesetDetail
 
-	detailOutcome := a.client.getJSON(rulesetPath, &detail)
+	detailOutcome := a.client.getJSON(a.ctx, rulesetPath, &detail)
 	if detailOutcome.err != nil || detailOutcome.notFound {
 		a.unverifiable(orNotFound(detailOutcome), target.check)
 
@@ -1051,7 +1058,7 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 	reconcile := &Change{
 		Check:   target.check,
 		Summary: "reconcile ruleset " + target.name + " to the canonical definition",
-		apply:   func(c client) error { return c.writeJSON("PUT", rulesetPath, payload) },
+		apply:   func(ctx context.Context, c client) error { return c.writeJSON(ctx, "PUT", rulesetPath, payload) },
 	}
 
 	if existing.Enforcement != enforcementActive {
@@ -1091,8 +1098,8 @@ func legacyMatrixContexts(contexts []string) bool {
 		return false
 	}
 
-	for _, context := range contexts {
-		if !strings.HasPrefix(context, "verify (") {
+	for _, name := range contexts {
+		if !strings.HasPrefix(name, "verify (") {
 			return false
 		}
 	}
@@ -1112,7 +1119,7 @@ func (a *auditor) workflowHasGate() bool {
 		Content string `json:"content"`
 	}
 
-	outcome := a.client.getJSON("/contents/.github/workflows/ci.yaml", &file)
+	outcome := a.client.getJSON(a.ctx, "/contents/.github/workflows/ci.yaml", &file)
 	if outcome.err != nil || outcome.notFound {
 		return false
 	}
@@ -1389,8 +1396,8 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 	}
 
 	checkEntries := make([]map[string]any, 0, len(contexts))
-	for _, context := range contexts {
-		checkEntries = append(checkEntries, map[string]any{"context": context})
+	for _, name := range contexts {
+		checkEntries = append(checkEntries, map[string]any{"context": name})
 	}
 
 	return map[string]any{
@@ -1520,7 +1527,11 @@ type issueSummary struct {
 func (a *auditor) auditRenovateProcessing() {
 	var issues []issueSummary
 
-	outcome := a.client.getJSONAllPages("/issues?state=open&creator="+renovateAppCreator+"&per_page=100", &issues)
+	outcome := a.client.getJSONAllPages(
+		a.ctx,
+		"/issues?state=open&creator="+renovateAppCreator+"&per_page=100",
+		&issues,
+	)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkRenovateProcessing)
 
@@ -1560,7 +1571,7 @@ type collaboratorPermissions struct {
 func (a *auditor) auditOutsideCollaborators() {
 	var collaborators []outsideCollaborator
 
-	outcome := a.client.getJSONAllPages("/collaborators?affiliation=outside&per_page=100", &collaborators)
+	outcome := a.client.getJSONAllPages(a.ctx, "/collaborators?affiliation=outside&per_page=100", &collaborators)
 	if outcome.err != nil || outcome.notFound {
 		a.unverifiable(orNotFound(outcome), checkOutsideCollaborators)
 
@@ -1592,7 +1603,7 @@ func (a *auditor) auditOutsideCollaborators() {
 func (a *auditor) auditSurface() {
 	var hooks []webhook
 
-	hooksOutcome := a.client.getJSONAllPages("/hooks?per_page=100", &hooks)
+	hooksOutcome := a.client.getJSONAllPages(a.ctx, "/hooks?per_page=100", &hooks)
 
 	switch {
 	case hooksOutcome.err != nil || hooksOutcome.notFound:
@@ -1623,7 +1634,7 @@ func (a *auditor) auditSurface() {
 
 	var keys []deployKey
 
-	keysOutcome := a.client.getJSONAllPages("/keys?per_page=100", &keys)
+	keysOutcome := a.client.getJSONAllPages(a.ctx, "/keys?per_page=100", &keys)
 
 	switch {
 	case keysOutcome.err != nil || keysOutcome.notFound:
@@ -1646,7 +1657,7 @@ func (a *auditor) auditSurface() {
 		)
 	}
 
-	pagesOutcome := a.client.api("GET", "/pages", nil)
+	pagesOutcome := a.client.api(a.ctx, "GET", "/pages", nil)
 
 	switch {
 	case pagesOutcome.notFound:

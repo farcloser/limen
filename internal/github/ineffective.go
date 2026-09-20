@@ -65,7 +65,7 @@ type planSummary struct {
 func (a *auditor) ownerPlanFree() bool {
 	var org ownerPlan
 
-	outcome := orgClient(a.owner).getJSON("", &org)
+	outcome := orgClient(a.owner).getJSON(a.ctx, "", &org)
 	if outcome.err != nil || outcome.notFound || org.Plan == nil {
 		return false
 	}

@@ -86,17 +86,23 @@ func Run(version string, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	// One context for the run, ended by Ctrl-C: every gh call, download and
+	// wait on the human inherits it, so an interrupt stops the work in flight
+	// instead of killing the process mid-write.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	switch args[0] {
 	case cmdCheck:
-		return runCheck(args[1:], stdout, stderr)
+		return runCheck(ctx, args[1:], stdout, stderr)
 	case cmdFix:
-		return runFix(version, args[1:], stdout, stderr)
+		return runFix(ctx, version, args[1:], stdout, stderr)
 	case cmdBootstrap:
-		return runBootstrap(version, args[1:], stdout, stderr)
+		return runBootstrap(ctx, version, args[1:], stdout, stderr)
 	case cmdGithub:
-		return runGithub(args[1:], stdout, stderr)
+		return runGithub(ctx, args[1:], stdout, stderr)
 	case cmdPins:
-		return runPins(args[1:], stdout, stderr)
+		return runPins(ctx, args[1:], stdout, stderr)
 	case "version", "-v", "--version":
 		_, _ = fmt.Fprintln(stdout, "limen "+version)
 
@@ -139,7 +145,7 @@ func splitPathFromFlags(args []string) (flags, positional []string) {
 	return flags, positional
 }
 
-func runCheck(args []string, stdout, stderr io.Writer) int {
+func runCheck(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdCheck, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	asJSON := flagSet.Bool(flagJSON, false, "emit findings as JSON")
@@ -173,7 +179,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	findings := rules.Check(root, policyFor(root, resolveIdentity))
+	findings := rules.Check(root, policyFor(ctx, root, resolveIdentity))
 
 	if *asJSON {
 		enc := json.NewEncoder(stdout)
@@ -195,7 +201,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	return 1
 }
 
-func runFix(version string, args []string, stdout, stderr io.Writer) int {
+func runFix(ctx context.Context, version string, args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdFix, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	asJSON := flagSet.Bool(flagJSON, false, "emit outcomes as JSON")
@@ -230,8 +236,8 @@ func runFix(version string, args []string, stdout, stderr io.Writer) int {
 	}
 
 	// fix never creates a LICENSE: no License in the options.
-	outcomes := rules.Fix(root, rules.FixOptions{
-		Policy:      policyFor(root, discoverIdentity),
+	outcomes := rules.Fix(ctx, root, rules.FixOptions{
+		Policy:      policyFor(ctx, root, discoverIdentity),
 		SelfVersion: releaseVersion(version),
 	})
 
@@ -243,14 +249,14 @@ func runFix(version string, args []string, stdout, stderr io.Writer) int {
 // origin remote through the given resolver (best-effort; see
 // updateAppIdentity). Which resolver is the command's contract: check gets
 // the deterministic one, fix the discovering one — see identityResolver.
-func policyFor(root string, resolve identityResolver) rules.Policy {
+func policyFor(ctx context.Context, root string, resolve identityResolver) rules.Policy {
 	policy := rules.DefaultPolicy()
-	policy.UpdateAppIdentity = updateAppIdentity("", root, resolve)
+	policy.UpdateAppIdentity = updateAppIdentity(ctx, "", root, resolve)
 
 	return policy
 }
 
-func runBootstrap(version string, args []string, stdout, stderr io.Writer) int {
+func runBootstrap(ctx context.Context, version string, args []string, stdout, stderr io.Writer) int {
 	flagSet := flag.NewFlagSet(cmdBootstrap, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	asJSON := flagSet.Bool(flagJSON, false, "emit outcomes as JSON")
@@ -311,7 +317,7 @@ func runBootstrap(version string, args []string, stdout, stderr io.Writer) int {
 		)
 	}
 
-	outcomes := rules.Fix(root, rules.FixOptions{
+	outcomes := rules.Fix(ctx, root, rules.FixOptions{
 		Policy:      rules.DefaultPolicy(),
 		License:     license.ID(*licenseID),
 		Holder:      *holder,
@@ -326,7 +332,7 @@ func runBootstrap(version string, args []string, stdout, stderr io.Writer) int {
 	// Install the pinned tooling: authorize the local registry, then link the
 	// tools (aqua downloads each lazily on first use). All output goes to stderr
 	// so -json keeps a clean machine-readable stdout.
-	if err := installTooling(root, stderr); err != nil {
+	if err := installTooling(ctx, root, stderr); err != nil {
 		_, _ = fmt.Fprintf(stderr, errFormat, err)
 		_, _ = fmt.Fprintf(stderr, "the repository is set up; once aqua is available run, from %s:\n", root)
 		_, _ = fmt.Fprint(
@@ -337,16 +343,16 @@ func runBootstrap(version string, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	ensureUpdateApp(*org, root, stderr)
+	ensureUpdateApp(ctx, *org, root, stderr)
 
 	// The App may have just been registered: only now can its commit identity
 	// be resolved and written into the seeded renovate.json. A second, narrow
 	// remediation pass — every other rule is already resolved and reports none.
-	if identity := updateAppIdentity(*org, root, discoverIdentity); identity != "" {
+	if identity := updateAppIdentity(ctx, *org, root, discoverIdentity); identity != "" {
 		policy := rules.DefaultPolicy()
 		policy.UpdateAppIdentity = identity
 
-		for _, outcome := range rules.Fix(root, rules.FixOptions{Policy: policy, SelfVersion: releaseVersion(version)}) {
+		for _, outcome := range rules.Fix(ctx, root, rules.FixOptions{Policy: policy, SelfVersion: releaseVersion(version)}) {
 			if outcome.Rule == "renovate" && outcome.Action != rules.ActionNone {
 				_, _ = fmt.Fprintf(stderr, "limen: renovate: %s\n", outcome.Message)
 			}
@@ -361,7 +367,7 @@ func runBootstrap(version string, args []string, stdout, stderr io.Writer) int {
 // the same verdict on every machine, so it may not use anything that depends
 // on the caller's credentials; fix writes the answer into the tree, so it
 // should use the best answer available.
-type identityResolver func(org string) (string, error)
+type identityResolver func(ctx context.Context, org string) (string, error)
 
 // updateAppIdentity resolves the commit author address of the org's
 // update-aqua-checksum App for the repository at root: the org from -org or
@@ -370,9 +376,9 @@ type identityResolver func(org string) (string, error)
 // sandbox, or on an org that never registered the App — so every failure
 // returns "" and the rules then do not enforce; the renovate finding says so
 // in its message, which is why nothing is printed here.
-func updateAppIdentity(org, root string, resolve identityResolver) string {
+func updateAppIdentity(ctx context.Context, org, root string, resolve identityResolver) string {
 	if org == "" {
-		slug, err := github.InferRepo(root)
+		slug, err := github.InferRepo(ctx, root)
 		if err != nil {
 			return ""
 		}
@@ -384,7 +390,7 @@ func updateAppIdentity(org, root string, resolve identityResolver) string {
 		return ""
 	}
 
-	identity, err := resolve(org)
+	identity, err := resolve(ctx, org)
 	if err != nil {
 		return ""
 	}
@@ -394,8 +400,8 @@ func updateAppIdentity(org, root string, resolve identityResolver) string {
 
 // resolveIdentity is check's resolver: deterministic — convention slug,
 // public users endpoint, no credentials consulted.
-func resolveIdentity(org string) (string, error) {
-	identity, err := github.ResolveUpdateAppIdentity(org)
+func resolveIdentity(ctx context.Context, org string) (string, error) {
+	identity, err := github.ResolveUpdateAppIdentity(ctx, org)
 	if err != nil {
 		return "", fmt.Errorf("resolving the update-app identity of %s: %w", org, err)
 	}
@@ -406,8 +412,8 @@ func resolveIdentity(org string) (string, error) {
 // discoverIdentity is fix's and bootstrap's resolver: reads the App back from
 // the org when gh is authorized (a renamed App is found), convention
 // otherwise.
-func discoverIdentity(org string) (string, error) {
-	identity, err := github.DiscoverUpdateAppIdentity(org)
+func discoverIdentity(ctx context.Context, org string) (string, error) {
+	identity, err := github.DiscoverUpdateAppIdentity(ctx, org)
 	if err != nil {
 		return "", fmt.Errorf("discovering the update-app identity of %s: %w", org, err)
 	}
@@ -421,9 +427,9 @@ func discoverIdentity(org string) (string, error) {
 // no org known, a token without org admin, an abandoned browser flow — is a
 // warning, because the repository itself bootstrapped fine and this step can
 // be rerun any time.
-func ensureUpdateApp(org, root string, stderr io.Writer) {
+func ensureUpdateApp(ctx context.Context, org, root string, stderr io.Writer) {
 	if org == "" {
-		slug, err := github.InferRepo(root)
+		slug, err := github.InferRepo(ctx, root)
 		if err == nil {
 			org, _, _ = strings.Cut(slug, "/")
 		}
@@ -437,11 +443,6 @@ func ensureUpdateApp(org, root string, stderr io.Writer) {
 
 		return
 	}
-
-	// Ctrl-C ends the waits on the human (browser approval, installation
-	// click) as an advisory instead of a killed bootstrap.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
 
 	finding := github.EnsureUpdateAquaChecksumApp(ctx, org, stderr)
 	if finding.OK() {
@@ -458,7 +459,7 @@ func ensureUpdateApp(org, root string, stderr io.Writer) {
 // whatever the manifest pins (a no-op on the pristine seed), then installs
 // (links) every tool. It runs with the repo as the working directory so aqua
 // finds aqua.yaml.
-func installTooling(root string, progress io.Writer) error {
+func installTooling(ctx context.Context, root string, progress io.Writer) error {
 	steps := [][]string{
 		{"policy", "allow", "aqua-policy.yaml"},
 		{"update-checksum", "--prune"},
@@ -473,7 +474,7 @@ func installTooling(root string, progress io.Writer) error {
 		_, _ = fmt.Fprintf(progress, "\n$ %s\n", command)
 
 		// aquaBinary is a constant; every argument is from the fixed lists above.
-		cmd := exec.CommandContext(context.Background(), aquaBinary, args...) // #nosec G204 -- see above.
+		cmd := exec.CommandContext(ctx, aquaBinary, args...) // #nosec G204 -- see above.
 		cmd.Dir = root
 		cmd.Stdout = progress
 
