@@ -197,6 +197,47 @@ func TestCanonicalSeed(t *testing.T) {
 	if !slices.Contains(stringsAt(cfg, "extends"), "local>farcloser/limen") {
 		t.Errorf("the seed must extend %q", "local>farcloser/limen")
 	}
+
+	// The seed carries what every repository needs and nothing of limen's
+	// own: no manager, and no App identity but GitHub's — the org's is the
+	// rule's to add, since the farcloser App never pushes to another org.
+	if _, has := cfg["customManagers"]; has {
+		t.Error("the seed must carry no customManagers: a manager is a project's own")
+	}
+
+	if got := stringsAt(cfg, "gitIgnoredAuthors"); !slices.Equal(got,
+		[]string{"41898282+github-actions[bot]@users.noreply.github.com"}) {
+		t.Errorf("the seed's gitIgnoredAuthors = %v, want the github-actions identity alone", got)
+	}
+}
+
+// TestSupersededConfig: a renovate.json5 (or any other config file Renovate
+// would read only in renovate.json's absence) beside renovate.json is dead
+// config that still looks authoritative. check fails naming it; fix edits
+// renovate.json as usual but ends advisory, naming it, and never removes it.
+func TestSupersededConfig(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files["renovate.json5"] = "{ extends: ['config:recommended'] }\n"
+	root := writeRepo(t, files)
+
+	finding := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate")
+	if finding.OK() || finding.Path != "renovate.json5" || !strings.Contains(finding.Message, "dead config") {
+		t.Errorf("check must fail naming renovate.json5, got: %+v", finding)
+	}
+
+	outcome := outcomeByRule(
+		rules.Fix(context.Background(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		"renovate",
+	)
+	if outcome.Action != rules.ActionAdvisory || !strings.Contains(outcome.Message, "renovate.json5") {
+		t.Errorf("fix must end advisory naming renovate.json5, got: %s (%s)", outcome.Action, outcome.Message)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "renovate.json5")); err != nil {
+		t.Errorf("fix must leave renovate.json5 in place: %v", err)
+	}
 }
 
 // TestCanonicalPresetRef: limen extends its own default branch; every other
