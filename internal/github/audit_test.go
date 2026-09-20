@@ -7,7 +7,6 @@
 package github_test
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -446,7 +445,7 @@ func findingByCheck(findings []github.Finding, check string) (github.Finding, bo
 func TestAuditCompliant(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	stubGH(t, compliantResponses())
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	if !github.AllOK(findings) {
 		for _, finding := range findings {
@@ -498,7 +497,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 	}
 	stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	wantFail := []string{
 		"merge-methods", "squash-commit-defaults", "delete-branch-on-merge", "auto-merge",
@@ -535,7 +534,7 @@ func TestAuditUnverifiable(t *testing.T) { //nolint:paralleltest // serial by de
 	// Everything errors (a token with no access at all).
 	stubGH(t, map[string]stubResponse{})
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	if len(changes) != 0 {
 		t.Errorf("unverifiable audit planned %d change(s)", len(changes))
@@ -567,13 +566,13 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 	responses["GET repos/test/repo/automated-security-fixes"] = stubResponse{Body: `{"enabled": true}`}
 	logPath := stubGH(t, responses)
 
-	_, changes := github.Audit(context.Background(), testRepo, nil)
+	_, changes := github.Audit(t.Context(), testRepo, nil)
 	if len(changes) == 0 {
 		t.Fatal("expected planned changes")
 	}
 
 	for _, planned := range changes {
-		if err := planned.Apply(context.Background()); err != nil {
+		if err := planned.Apply(t.Context()); err != nil {
 			t.Errorf("%s: %v", planned.Check, err)
 		}
 	}
@@ -613,7 +612,7 @@ func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by desi
 	stubGH(t, responses)
 
 	findings, changes := github.Audit(
-		context.Background(),
+		t.Context(),
 		testRepo,
 		map[string]string{"wiki": "hosts the operations runbook"},
 	)
@@ -647,7 +646,7 @@ func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest //
 	logPath := stubGH(t, responses)
 
 	_, changes := github.Audit(
-		context.Background(),
+		t.Context(),
 		testRepo,
 		map[string]string{"wiki": "hosts the operations runbook"},
 	)
@@ -657,7 +656,7 @@ func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest //
 			t.Fatal("an exempted check must not plan a change")
 		}
 
-		if err := planned.Apply(context.Background()); err != nil {
+		if err := planned.Apply(t.Context()); err != nil {
 			t.Fatalf("%s: %v", planned.Check, err)
 		}
 	}
@@ -689,7 +688,7 @@ func TestWorkflowFixPreservesExemptedField(t *testing.T) {
 	}
 	logPath := stubGH(t, responses)
 
-	_, changes := github.Audit(context.Background(), testRepo, map[string]string{
+	_, changes := github.Audit(t.Context(), testRepo, map[string]string{
 		"actions-workflow-permissions": "release automation pushes tags",
 	})
 
@@ -699,7 +698,7 @@ func TestWorkflowFixPreservesExemptedField(t *testing.T) {
 		}
 
 		if planned.Check == "actions-approve-pull-requests" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -733,7 +732,7 @@ func TestRulesetsBeyondFirstPage(t *testing.T) { //nolint:paralleltest // serial
 	}
 	stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	for _, check := range []string{"ruleset-default-branch", "ruleset-version-tags"} {
 		if finding, found := findingByCheck(findings, check); !found || finding.Status != github.StatusOK {
@@ -781,8 +780,8 @@ func TestEveryListingPaginates(t *testing.T) { //nolint:paralleltest // serial: 
 	maps.Copy(responses, compliantOrgResponses())
 	logPath := stubGH(t, responses)
 
-	github.Audit(context.Background(), testRepo, nil)
-	github.AuditOrg(context.Background(), testOrg, map[string]string{"org-admins": "alice is the org"})
+	github.Audit(t.Context(), testRepo, nil)
+	github.AuditOrg(t.Context(), testOrg, map[string]string{"org-admins": "alice is the org"})
 
 	log, err := os.ReadFile(logPath)
 	if err != nil {
@@ -919,7 +918,7 @@ func TestInferRepo(t *testing.T) {
 				}
 			}
 
-			slug, err := github.InferRepo(context.Background(), dir)
+			slug, err := github.InferRepo(t.Context(), dir)
 
 			if testCase.wantOK && (err != nil || slug != testCase.want) {
 				t.Errorf("InferRepo = %q, %v; want %q", slug, err, testCase.want)
@@ -939,7 +938,7 @@ func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by desig
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, found := findingByCheck(findings, "actions-fork-pr-approval")
 	if !found || finding.Status != github.StatusFail {
@@ -948,7 +947,7 @@ func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by desig
 
 	for _, planned := range changes {
 		if planned.Check == "actions-fork-pr-approval" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -972,7 +971,7 @@ func TestActionsAccessLevel(t *testing.T) { //nolint:paralleltest // serial by d
 	// Public repository: not applicable, and the endpoint is never queried.
 	stubGH(t, compliantResponses())
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
 	if finding, _ := findingByCheck(findings, "actions-access-level"); finding.Status != github.StatusOK {
 		t.Errorf("public repository access level: %v, want ok (not applicable)", finding.Status)
 	}
@@ -985,7 +984,7 @@ func TestActionsAccessLevel(t *testing.T) { //nolint:paralleltest // serial by d
 	responses["GET repos/test/repo/actions/permissions/access"] = stubResponse{Body: `{"access_level":"organization"}`}
 	stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 	if finding, _ := findingByCheck(findings, "actions-access-level"); finding.Status != github.StatusFail {
 		t.Errorf("private repository with organization access: %v, want fail", finding.Status)
 	}
@@ -1008,7 +1007,7 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 	// error, which would surface as unverifiable).
 	stubGH(t, compliantResponses())
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
 	if finding, _ := findingByCheck(findings, "code-scanning"); finding.Status != github.StatusOK {
 		t.Errorf("not opted in: %v, want ok", finding.Status)
 	}
@@ -1020,14 +1019,14 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 
 	optIn := map[string]string{"code-scanning": "this repo parses untrusted input"}
 
-	findings, changes := github.Audit(context.Background(), testRepo, optIn)
+	findings, changes := github.Audit(t.Context(), testRepo, optIn)
 	if finding, _ := findingByCheck(findings, "code-scanning"); finding.Status != github.StatusFail {
 		t.Errorf("opted in and not configured: %v, want fail (opt-in must not read as exemption)", finding.Status)
 	}
 
 	for _, planned := range changes {
 		if planned.Check == "code-scanning" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -1042,7 +1041,7 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 	responses["GET repos/test/repo/code-scanning/default-setup"] = stubResponse{Body: `{"state":"configured"}`}
 	stubGH(t, responses)
 
-	findings, _ = github.Audit(context.Background(), testRepo, optIn)
+	findings, _ = github.Audit(t.Context(), testRepo, optIn)
 	if finding, _ := findingByCheck(findings, "code-scanning"); finding.Status != github.StatusOK {
 		t.Errorf("opted in and configured: %v, want ok", finding.Status)
 	}
@@ -1056,7 +1055,7 @@ func TestOutsideCollaborators(t *testing.T) { //nolint:paralleltest // serial: s
 	}
 	stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, found := findingByCheck(findings, "outside-collaborators")
 	if !found || finding.Status != github.StatusAdvisory {
@@ -1086,7 +1085,7 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1095,7 +1094,7 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 
 	for _, planned := range changes {
 		if planned.Check == "ruleset-default-branch" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -1134,7 +1133,7 @@ func TestRulesetMigratesLegacyContextsToGate(t *testing.T) {
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1147,7 +1146,7 @@ func TestRulesetMigratesLegacyContextsToGate(t *testing.T) {
 
 	for _, planned := range changes {
 		if planned.Check == "ruleset-default-branch" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -1200,7 +1199,7 @@ func TestRulesetNotCreatedWithoutGate(t *testing.T) { //nolint:paralleltest // s
 		responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = workflow
 		logPath := stubGH(t, responses)
 
-		findings, changes := github.Audit(context.Background(), testRepo, nil)
+		findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 		finding, _ := findingByCheck(findings, "ruleset-default-branch")
 		if finding.Status != github.StatusFail {
@@ -1235,7 +1234,7 @@ func TestRulesetKeepsLegacyContextsWithoutGate(t *testing.T) {
 	}
 	stubGH(t, responses)
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusOK {
@@ -1257,11 +1256,11 @@ func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // seri
 	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
 	logPath := stubGH(t, responses)
 
-	_, changes := github.Audit(context.Background(), testRepo, nil)
+	_, changes := github.Audit(t.Context(), testRepo, nil)
 
 	for _, planned := range changes {
 		if planned.Check == "ruleset-default-branch" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -1291,7 +1290,7 @@ func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest /
 	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
 	logPath := stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1300,7 +1299,7 @@ func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest /
 
 	for _, planned := range changes {
 		if planned.Check == "ruleset-default-branch" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -1330,7 +1329,7 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1343,7 +1342,7 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 
 	for _, planned := range changes {
 		if planned.Check == "ruleset-default-branch" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -1364,7 +1363,7 @@ func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // seria
 	}
 	stubGH(t, responses)
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1389,7 +1388,7 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	}
 	logPath := stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1402,7 +1401,7 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 
 	for _, planned := range changes {
 		if planned.Check == "ruleset-default-branch" {
-			if err := planned.Apply(context.Background()); err != nil {
+			if err := planned.Apply(t.Context()); err != nil {
 				t.Fatalf("apply: %v", err)
 			}
 		}
@@ -1438,7 +1437,7 @@ func TestRulesetApprovalDriftFails(t *testing.T) { //nolint:paralleltest // seri
 	}
 	stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1473,7 +1472,7 @@ func TestRulesetApprovalAbsentFails(t *testing.T) { //nolint:paralleltest // ser
 	}
 	stubGH(t, responses)
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
 
 	if finding, _ := findingByCheck(findings, "ruleset-default-branch"); finding.Status != github.StatusFail {
 		t.Fatalf("an unreported approval count: %v, want fail", finding.Status)
@@ -1493,7 +1492,7 @@ func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // s
 	}
 	stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), testRepo, nil)
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 	finding, _ := findingByCheck(findings, "ruleset-default-branch")
 	if finding.Status != github.StatusFail {
@@ -1533,7 +1532,7 @@ func TestDependabotAlerts404WithoutAdmin(t *testing.T) {
 
 	stubGH(t, responses)
 
-	findings, changes := github.Audit(context.Background(), "test/repo", nil)
+	findings, changes := github.Audit(t.Context(), "test/repo", nil)
 
 	finding, found := findingByCheck(findings, "dependabot-alerts")
 	if !found || finding.Status != github.StatusUnverifiable {
@@ -1559,7 +1558,7 @@ func TestDependabotAlerts404WithAdmin(t *testing.T) {
 
 	stubGH(t, responses)
 
-	findings, _ := github.Audit(context.Background(), "test/repo", nil)
+	findings, _ := github.Audit(t.Context(), "test/repo", nil)
 
 	finding, found := findingByCheck(findings, "dependabot-alerts")
 	if !found || finding.Status != github.StatusFail {

@@ -171,6 +171,13 @@ golangci:
         require-specific: true
         allow-unused: false
 
+      usetesting:
+        # Beyond the defaults (t.TempDir, t.Setenv, t.Chdir): os.TempDir and
+        # the Go 1.24 t.Context.
+        os-temp-dir: true
+        context-background: true
+        context-todo: true
+
       govet:
         # Every analyzer, including the ten vet leaves off by default:
         # nilness, shadow, unusedwrite, deepequalerrors and friends are real

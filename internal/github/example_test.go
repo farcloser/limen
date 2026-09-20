@@ -4,7 +4,6 @@
 package github_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -78,8 +77,8 @@ func TestOverrideExampleCoversEveryCheck(t *testing.T) {
 
 	stubGH(t, responses)
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
-	orgFindings, _ := github.AuditOrg(context.Background(), testOrg, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
+	orgFindings, _ := github.AuditOrg(t.Context(), testOrg, nil)
 
 	for _, finding := range append(findings, orgFindings...) {
 		if !documented[finding.Check] {

@@ -1,7 +1,6 @@
 package rules_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -288,7 +287,7 @@ func TestGoToolsRetiredDirective(t *testing.T) {
 	}
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 
@@ -339,7 +338,7 @@ func TestFixRemovesRetiredPackages(t *testing.T) {
 		"packages:\n  - name: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n    registry: local\n")
 	dir := writeRepo(t, files)
 
-	outcome := outcomeFor(rules.Fix(context.Background(), dir, bootstrapOpts()), "aqua")
+	outcome := outcomeFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "aqua")
 	if !resolved(outcome.Action) {
 		t.Fatalf("aqua fix unresolved: %s (%s)", outcome.Action, outcome.Message)
 	}
@@ -365,7 +364,7 @@ func TestFixGoToolsNoOpWhenComplete(t *testing.T) {
 
 	outcome := outcomeFor(
 		rules.Fix(
-			context.Background(),
+			t.Context(),
 			writeRepo(t, compliantFiles()),
 			rules.FixOptions{Policy: rules.DefaultPolicy()},
 		),
@@ -388,7 +387,7 @@ func TestFixGoToolsSeedsWithoutGoMod(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "created "+"tools/go.mod") {
@@ -433,7 +432,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged {
@@ -467,7 +466,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	}
 
 	if again := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	); again.Action != rules.ActionNone {
 		t.Fatalf("second fix not a no-op: %s (%s)", again.Action, again.Message)
@@ -485,7 +484,7 @@ func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "moved tool directive(s)") {
@@ -520,7 +519,7 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) { // Serial by design: t.Sete
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionAdvisory {
@@ -567,7 +566,7 @@ func TestAquaGoDirective(t *testing.T) {
 			delete(files, "tools/go.mod")
 			dir := writeRepo(t, files)
 
-			rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+			rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
 
 			toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 			if err != nil {

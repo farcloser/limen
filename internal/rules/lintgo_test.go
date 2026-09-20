@@ -1,7 +1,6 @@
 package rules_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +80,7 @@ func TestFixSeedsLintGo(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcomes := outcomesFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		ruleLintGo,
 	)
 
@@ -124,7 +123,7 @@ func TestFixSeedsLintGo(t *testing.T) {
 	}
 
 	for _, outcome := range outcomesFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		ruleLintGo,
 	) {
 		if outcome.Action != rules.ActionNone {
