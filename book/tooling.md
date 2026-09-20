@@ -503,17 +503,19 @@ The methods, each a way to obtain a sha256 the entry can stand behind:
 | `github-attestation <owner>` | downloads, has `gh attestation verify --owner <owner>` accept the file (SLSA provenance, the default predicate), hashes it | a project whose own release workflow attests its assets (LLVM) |
 | `github-release-asset <owner/repo> [<tag>]` | downloads, has `gh release verify-asset <tag> --repo <owner/repo>` accept it, hashes it; the tag is `${version}` unless templated (`v${version}`) | GitHub's own attestation of an immutable release, which `gh attestation verify` does not see (Kata) |
 | `cosign-sha256sums <sums-url> <bundle-url> <identity-regexp> <issuer>` | fetches the SHA256SUMS and its cosign bundle, has `cosign verify-blob` accept the pair, takes the artifact's line; the artifact itself is not downloaded | a release that ships a cosign-signed sums file (ossein-kernel) |
+| `pgp-sha256sums <sums-url> <key-url> <fingerprint>` | fetches the clearsigned sums and the signer's public key block, verifies the signature in-process (limen's own OpenPGP reader: v4 keys and signatures, RSA or Ed25519, SHA-2), requires the signing key to be the one the fingerprint pins, takes the artifact's line from the signed text; the artifact itself is not downloaded | a source that clearsigns its checksums (kernel.org's `sha256sums.asc`) |
 
 `${version}` and `${major}` (the version up to its first dot, the way kernel.org names a
 series directory) expand in `url` and in the method's arguments. The arguments are split on
-whitespace, so an identity regexp carries none. The tool a method shells out to — `gh`,
-`cosign` — must be pinned in `aqua.yaml`, and the `pins` rule says so when it is not: unpinned,
-aqua's proxy falls through to whatever binary the machine has, and the digest would be
-vouched for by a tool nobody chose. Downloads retry transient failures the way every `curl`
-in the rig does; a verifier's refusal ends the run with the file as it was. A source that
-publishes a PGP-clearsigned sums file — kernel.org — has no method yet: no OpenPGP tool is
-pinnable from the standard registry today, so that pin stays where it was, a hand step, until
-one is.
+whitespace, so an identity regexp carries none and a fingerprint is forty hex digits
+unbroken. The tool a method shells out to — `gh`, `cosign` — must be pinned in `aqua.yaml`,
+and the `pins` rule says so when it is not: unpinned, aqua's proxy falls through to whatever
+binary the machine has, and the digest would be vouched for by a tool nobody chose. The PGP
+method shells out to nothing: the fingerprint in the entry is the whole trust decision, the
+key URL only fetches the block that must hash to it, and limen reads exactly what a
+clearsigned checksum file takes and refuses the rest by name (another key version, a weak
+digest, an algorithm it does not carry). Downloads retry transient failures the way every
+`curl` in the rig does; a verifier's refusal ends the run with the file as it was.
 
 This is the formal, auditable, low-toil update process that replaces the old hand-maintained
 `Makefile`: every tool change is a reviewed PR with verified checksums, pinned exactly, per

@@ -71,6 +71,12 @@ const (
 	// `cosign verify-blob` accept the pair for the given identity and issuer,
 	// and takes the artifact's line; the artifact itself is not downloaded.
 	VerifyCosignSums = "cosign-sha256sums"
+	// VerifyPGPSums fetches a PGP-clearsigned sums file and the signer's
+	// public key block, verifies the signature in-process against the key
+	// whose fingerprint the entry pins, and takes the artifact's line from the
+	// signed text; the artifact itself is not downloaded. The key's URL is
+	// transport, the fingerprint is the trust.
+	VerifyPGPSums = "pgp-sha256sums"
 )
 
 // arity is how many arguments a method takes after its name.
@@ -84,6 +90,7 @@ var verifyArity = map[string]arity{
 	VerifyGitHubAttestation:  {1, 1},
 	VerifyGitHubReleaseAsset: {1, 2}, //nolint:mnd // owner/repo, optional tag template.
 	VerifyCosignSums:         {4, 4}, //nolint:mnd // sums url, bundle url, identity regexp, issuer.
+	VerifyPGPSums:            {3, 3}, //nolint:mnd // sums url, key url, fingerprint.
 }
 
 var (
@@ -100,6 +107,9 @@ var (
 var (
 	nameRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 	sha256RE = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	// fingerprintRE is a v4 OpenPGP fingerprint as the manifest carries it:
+	// forty hex digits, no spaces (the arguments split on whitespace).
+	fingerprintRE = regexp.MustCompile(`^[0-9A-Fa-f]{40}$`)
 )
 
 // Entry is one pinned artifact.
@@ -389,6 +399,11 @@ func (e Entry) validate() error {
 	if got := len(e.Verify) - 1; got < want.min || got > want.max {
 		return fmt.Errorf("%w: %s: verify %s takes %d to %d argument(s), got %d",
 			ErrEntry, label, e.Verify[0], want.min, want.max, got)
+	}
+
+	if e.Verify[0] == VerifyPGPSums && !fingerprintRE.MatchString(e.Verify[3]) {
+		return fmt.Errorf("%w: %s: verify %s: the fingerprint must be 40 hex digits without spaces, got %q",
+			ErrEntry, label, VerifyPGPSums, e.Verify[3])
 	}
 
 	return e.validateOrder()
