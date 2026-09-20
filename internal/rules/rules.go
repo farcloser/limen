@@ -60,8 +60,10 @@ var CanonicalEditorconfig = limen.CanonicalEditorconfig //nolint:gochecknoglobal
 // so the working tree is byte-identical on every platform (a Windows checkout
 // with core.autocrlf=true otherwise rewrites text files to CRLF and every
 // format checker fails). LF is enforced by the pinned .editorconfig and the
-// format linters, not by git magic. It is this repo's own .gitattributes,
-// embedded — the rule is content-pinned, so extras are not allowed.
+// format linters, not by git magic. Vendored diffs are exempt from git's
+// whitespace check, which is not a line-ending rule. It is this repo's own
+// .gitattributes, embedded — the rule is content-pinned, so extras are not
+// allowed.
 var CanonicalGitattributes = limen.CanonicalGitattributes //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
 // CanonicalAgents is the exact AGENTS.md every repository must carry verbatim:
