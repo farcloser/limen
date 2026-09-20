@@ -232,6 +232,10 @@ The human sets the priorities; the agent measures scope before it moves.
   [generic principle](./index.md#generic-principles) applied to two sessions:
   the boundary that keeps package A from narrating package B keeps one
   session's report from reaching into another's implementation.
+- **On GitHub, the human has a handle.** Anything public — a pull request
+  title or body, a comment, a commit message, release notes — names the
+  person as `@apostasie`. "The owner" and "the human" are words the sessions
+  use among themselves, and read as odd on a public page.
 - **Answers, not menus.** Lead with the conclusion; give one recommendation,
   not a survey; a fix that cuts against recorded doctrine is named as such
   and argued, never slipped in. When something is either the right call or

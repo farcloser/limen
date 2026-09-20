@@ -135,6 +135,10 @@ owner="$(gh api "orgs/<org>/members?role=admin" -q '.[0].login')"   # a CODEOWNE
 gh pr edit claudio/<date>-<topic> --add-reviewer "$owner"
 ```
 
+In anything public on GitHub — a pull request title or body, a comment, a
+commit message — the human is `@apostasie`, by handle, never "the owner" or
+"the human". Those are session words; GitHub has a name for the person.
+
 ## 5. After a merge
 
 ```
