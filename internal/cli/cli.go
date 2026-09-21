@@ -256,7 +256,20 @@ func policyFor(ctx context.Context, root string, resolve identityResolver) rules
 	return policy
 }
 
-func runBootstrap(ctx context.Context, version string, args []string, stdout, stderr io.Writer) int {
+// bootstrapOptions is a parsed and validated `limen bootstrap` command line.
+type bootstrapOptions struct {
+	root      string
+	licenseID license.ID
+	holder    string
+	org       string
+	asJSON    bool
+}
+
+// parseBootstrapOptions parses the bootstrap flags and validates what can be
+// validated before anything is written: one path, a license limen can
+// generate, and a target that is empty unless -force says otherwise. ok is
+// false when the command must stop with a usage error, already printed.
+func parseBootstrapOptions(args []string, stderr io.Writer) (bootstrapOptions, bool) {
 	flagSet := flag.NewFlagSet(cmdBootstrap, flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	asJSON := flagSet.Bool(flagJSON, false, "emit outcomes as JSON")
@@ -278,28 +291,45 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		flagSet.PrintDefaults()
 	}
 	if err := flagSet.Parse(args); err != nil {
-		return 2
+		return bootstrapOptions{}, false
 	}
 
 	if flagSet.NArg() != 1 {
 		_, _ = fmt.Fprintln(stderr, "limen: bootstrap needs exactly one path")
 
-		return 2
+		return bootstrapOptions{}, false
 	}
 
-	root := flagSet.Arg(0)
+	opts := bootstrapOptions{
+		root:      flagSet.Arg(0),
+		licenseID: license.ID(*licenseID),
+		holder:    *holder,
+		org:       *org,
+		asJSON:    *asJSON,
+	}
 
-	if !license.CanGenerate(license.ID(*licenseID)) {
+	if !license.CanGenerate(opts.licenseID) {
 		_, _ = fmt.Fprintf(stderr, "limen: cannot generate a %q LICENSE (allowed: %s)\n", *licenseID, allowedLicenses())
 
+		return bootstrapOptions{}, false
+	}
+
+	if !dirEmpty(opts.root) && !*force {
+		_, _ = fmt.Fprintf(stderr, "limen: %s is not empty (use -force to bootstrap anyway)\n", opts.root)
+
+		return bootstrapOptions{}, false
+	}
+
+	return opts, true
+}
+
+func runBootstrap(ctx context.Context, version string, args []string, stdout, stderr io.Writer) int {
+	opts, ok := parseBootstrapOptions(args, stderr)
+	if !ok {
 		return 2
 	}
 
-	if !dirEmpty(root) && !*force {
-		_, _ = fmt.Fprintf(stderr, "limen: %s is not empty (use -force to bootstrap anyway)\n", root)
-
-		return 2
-	}
+	root := opts.root
 
 	if err := os.MkdirAll(root, dirPermissions); err != nil {
 		_, _ = fmt.Fprintf(stderr, errFormat, err)
@@ -319,13 +349,13 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 
 	outcomes := rules.Fix(ctx, root, rules.FixOptions{
 		Policy:      rules.DefaultPolicy(),
-		License:     license.ID(*licenseID),
-		Holder:      *holder,
+		License:     opts.licenseID,
+		Holder:      opts.holder,
 		Year:        time.Now().Year(),
 		SelfVersion: releaseVersion(version),
 	})
 
-	code := reportOutcomes(stdout, stderr, cmdBootstrap, root, outcomes, *asJSON)
+	code := reportOutcomes(stdout, stderr, cmdBootstrap, root, outcomes, opts.asJSON)
 	if code != 0 {
 		return code
 	}
@@ -343,12 +373,12 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		return 1
 	}
 
-	ensureUpdateApp(ctx, *org, root, stderr)
+	ensureUpdateApp(ctx, opts.org, root, stderr)
 
 	// The App may have just been registered: only now can its commit identity
 	// be resolved and written into the seeded renovate.json. A second, narrow
 	// remediation pass — every other rule is already resolved and reports none.
-	if identity := updateAppIdentity(ctx, *org, root, discoverIdentity); identity != "" {
+	if identity := updateAppIdentity(ctx, opts.org, root, discoverIdentity); identity != "" {
 		policy := rules.DefaultPolicy()
 		policy.UpdateAppIdentity = identity
 
@@ -522,18 +552,10 @@ func dirEmpty(root string) bool {
 	return err == nil && len(entries) == 0
 }
 
-// The suppression below is revive's own directive rather than a golangci one,
-// deliberately: nolintlint polices golangci directives, and this finding is
-// environment-nondeterministic across the per-platform legs — the policing itself
-// then flakes.
-//
-//revive:disable:flag-parameter
-
 // reportOutcomes prints remediation outcomes and returns the process exit code:
 // 0 when every rule is now compliant, 1 when any advisory or failure remains.
 // asJSON is the user's -json flag: an output mode is domain data, and every
-// call site passes the self-describing *asJSON — not the opaque-literal
-// control coupling the rule guards against.
+// call site passes the self-describing *asJSON.
 func reportOutcomes(
 	stdout, stderr io.Writer,
 	verb, root string,
@@ -559,8 +581,6 @@ func reportOutcomes(
 
 	return 1
 }
-
-//revive:enable:flag-parameter
 
 func printOutcomes(writer io.Writer, verb, root string, outcomes []rules.Outcome) {
 	_, _ = fmt.Fprintf(writer, "limen %s %s\n", verb, root)

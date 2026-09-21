@@ -5,7 +5,6 @@
 package github_test
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -44,7 +43,7 @@ func TestResolveUpdateAppIdentityConvention(t *testing.T) {
 		"/users/limen-ci-test-org[bot]": `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`,
 	})
 
-	identity, err := github.ResolveUpdateAppIdentity(context.Background(), "test-org")
+	identity, err := github.ResolveUpdateAppIdentity(t.Context(), "test-org")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -81,7 +80,7 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 		"/users/our-ci-pusher[bot]": `{"id": 99, "login": "our-ci-pusher[bot]", "type": "Bot"}`,
 	})
 
-	identity, err := github.DiscoverUpdateAppIdentity(context.Background(), "test-org")
+	identity, err := github.DiscoverUpdateAppIdentity(t.Context(), "test-org")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -91,7 +90,7 @@ func TestDiscoverUpdateAppIdentityRenamed(t *testing.T) {
 	}
 
 	if _, err := github.ResolveUpdateAppIdentity(
-		context.Background(),
+		t.Context(),
 		"test-org",
 	); !errors.Is(
 		err,
@@ -112,12 +111,12 @@ func TestDiscoverUpdateAppIdentityFallsBack(t *testing.T) {
 		"/users/limen-ci-test-org[bot]": `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`,
 	})
 
-	discovered, err := github.DiscoverUpdateAppIdentity(context.Background(), "test-org")
+	discovered, err := github.DiscoverUpdateAppIdentity(t.Context(), "test-org")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
 
-	resolved, err := github.ResolveUpdateAppIdentity(context.Background(), "test-org")
+	resolved, err := github.ResolveUpdateAppIdentity(t.Context(), "test-org")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -139,7 +138,7 @@ func TestResolveUpdateAppIdentityUnknown(t *testing.T) {
 	})
 
 	if _, err := github.ResolveUpdateAppIdentity(
-		context.Background(),
+		t.Context(),
 		"nobody",
 	); !errors.Is(
 		err,
@@ -149,7 +148,7 @@ func TestResolveUpdateAppIdentityUnknown(t *testing.T) {
 	}
 
 	if _, err := github.ResolveUpdateAppIdentity(
-		context.Background(),
+		t.Context(),
 		"human",
 	); !errors.Is(
 		err,

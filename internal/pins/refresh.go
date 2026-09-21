@@ -192,16 +192,17 @@ func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []st
 	sums := filepath.Join(dir, "SHA256SUMS")
 	bundle := filepath.Join(dir, "SHA256SUMS.bundle")
 
-	if _, err := download(ctx, sumsURL, sums); err != nil {
+	if _, err = download(ctx, sumsURL, sums); err != nil {
 		return "", err
 	}
 
-	if _, err := download(ctx, bundleURL, bundle); err != nil {
+	if _, err = download(ctx, bundleURL, bundle); err != nil {
 		return "", err
 	}
 
-	if err := run(ctx, root, "cosign", "verify-blob", "--bundle", bundle,
-		"--certificate-identity-regexp", identity, "--certificate-oidc-issuer", issuer, sums); err != nil {
+	err = run(ctx, root, "cosign", "verify-blob", "--bundle", bundle,
+		"--certificate-identity-regexp", identity, "--certificate-oidc-issuer", issuer, sums)
+	if err != nil {
 		return "", err
 	}
 
@@ -232,11 +233,11 @@ func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (s
 	sums := filepath.Join(dir, "SHA256SUMS.asc")
 	key := filepath.Join(dir, "key.asc")
 
-	if _, err := download(ctx, sumsURL, sums); err != nil {
+	if _, err = download(ctx, sumsURL, sums); err != nil {
 		return "", err
 	}
 
-	if _, err := download(ctx, keyURL, key); err != nil {
+	if _, err = download(ctx, keyURL, key); err != nil {
 		return "", err
 	}
 
@@ -274,7 +275,7 @@ func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (s
 func sumFor(data []byte, want, sumsURL string) (string, error) {
 	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == want { //nolint:mnd // `<sha256>  <name>`.
+		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == want {
 			if !sha256RE.MatchString(fields[0]) {
 				return "", fmt.Errorf("%w: %s carries no sha256 for %s", ErrVerify, sumsURL, want)
 			}
@@ -329,7 +330,7 @@ func download(ctx context.Context, url, file string) (string, error) {
 // downloadOnce is one attempt: a status worth retrying is errTransient, a
 // definitive refusal is ErrVerify.
 func downloadOnce(ctx context.Context, url, file string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf(errFormat, url, err)
 	}

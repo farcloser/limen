@@ -25,6 +25,7 @@ const (
 	readmeFileName    = "README.md"
 	licenseFileName   = "LICENSE"
 	aquaChecksumsFile = "aqua-checksums.json"
+	ruleAqua          = "aqua"
 
 	// The .github surface (see book/mandatory-files.md): the first two are
 	// content-pinned limen machinery, the rest are seeded once and then the
@@ -728,30 +729,34 @@ func findFirstFold(root string, names ...string) (string, bool) {
 	}
 
 	for _, name := range names {
-		found := ""
-
-		for _, entry := range entries {
-			if !strings.EqualFold(entry.Name(), name) || !exists(filepath.Join(root, entry.Name())) {
-				continue
-			}
-
-			if entry.Name() == name {
-				found = name
-
-				break
-			}
-
-			if found == "" {
-				found = entry.Name()
-			}
-		}
-
-		if found != "" {
+		if found := foldMatch(root, entries, name); found != "" {
 			return found, true
 		}
 	}
 
 	return "", false
+}
+
+// foldMatch is the entry that is a file and spells name, the exact spelling
+// preferred over a case-insensitive one; "" when none does.
+func foldMatch(root string, entries []fs.DirEntry, name string) string {
+	found := ""
+
+	for _, entry := range entries {
+		if !strings.EqualFold(entry.Name(), name) || !exists(filepath.Join(root, entry.Name())) {
+			continue
+		}
+
+		if entry.Name() == name {
+			return name
+		}
+
+		if found == "" {
+			found = entry.Name()
+		}
+	}
+
+	return found
 }
 
 func exists(path string) bool {

@@ -4,7 +4,7 @@
 package github_test
 
 import (
-	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,7 +17,7 @@ import (
 
 // exampleEntryRE matches one commented-out declaration entry in the example
 // file: `#   check-id: …`.
-var exampleEntryRE = regexp.MustCompile(`(?m)^#   ([a-z0-9-]+): `)
+var exampleEntryRE = regexp.MustCompile(`(?m)^# {3}([a-z0-9-]+): `)
 
 // documentedChecks returns every check identifier limen-example.yaml documents.
 func documentedChecks(t *testing.T) map[string]bool {
@@ -72,14 +72,12 @@ func TestOverrideExampleCoversEveryCheck(t *testing.T) {
 	documented := documentedChecks(t)
 
 	responses := compliantResponses()
-	for key, response := range compliantOrgResponses() {
-		responses[key] = response
-	}
+	maps.Copy(responses, compliantOrgResponses())
 
 	stubGH(t, responses)
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
-	orgFindings, _ := github.AuditOrg(context.Background(), testOrg, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
+	orgFindings, _ := github.AuditOrg(t.Context(), testOrg, nil)
 
 	for _, finding := range append(findings, orgFindings...) {
 		if !documented[finding.Check] {

@@ -92,13 +92,9 @@ func (a *approver) Write(p []byte) (int, error) {
 		url := string(match[1])
 
 		a.once.Do(func() {
-			a.wg.Add(1)
-
-			go func() {
-				defer a.wg.Done()
-
+			a.wg.Go(func() {
 				a.approve(url)
-			}()
+			})
 		})
 	}
 
@@ -148,7 +144,7 @@ func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
 
 	if finding.Status != github.StatusOK {
 		t.Fatalf("configured org: %v (%s), want ok", finding.Status, finding.Message)
@@ -181,7 +177,7 @@ func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("installation without workflows: %v (%s), want advisory", finding.Status, finding.Message)
@@ -206,7 +202,7 @@ func TestEnsureUpdateAppUnverifiable(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
 
 	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable variables: %v (%s), want unverifiable", finding.Status, finding.Message)
@@ -223,7 +219,7 @@ func TestEnsureUpdateAppInstallationUnverifiable(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
 
 	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable installations: %v (%s), want unverifiable", finding.Status, finding.Message)
@@ -239,7 +235,7 @@ func TestEnsureUpdateAppHalfConfigured(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("half-configured org: %v, want advisory", finding.Status)
@@ -257,7 +253,7 @@ func TestEnsureUpdateAppNotAnOrg(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("user-account owner: %v, want advisory", finding.Status)
@@ -272,7 +268,7 @@ func TestEnsureUpdateAppNonInteractive(t *testing.T) {
 	})
 	t.Setenv("CI", "1")
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("non-interactive environment: %v (%s), want advisory", finding.Status, finding.Message)
@@ -296,7 +292,7 @@ func TestEnsureUpdateAppCallbackTimeout(t *testing.T) {
 	// on the human begins: the probes before it ran to completion, and what
 	// is cut short is exactly the approval. A deadline on the whole call
 	// would race the probes' process spawns on a slow runner.
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	finding := github.EnsureUpdateAquaChecksumApp(ctx, testOrg, cancelOnForm{cancel: cancel})
@@ -343,7 +339,7 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 	}}
 	defer human.wg.Wait()
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, human)
 
 	if finding.Status != github.StatusOK {
 		t.Fatalf("full flow: %v (%s), want ok", finding.Status, finding.Message)
@@ -384,7 +380,7 @@ func TestEnsureUpdateAppSecretFailure(t *testing.T) {
 	human := &approver{t: t, code: "test-code"}
 	defer human.wg.Wait()
 
-	finding := github.EnsureUpdateAquaChecksumApp(context.Background(), testOrg, human)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, human)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("failed secret write: %v (%s), want advisory", finding.Status, finding.Message)

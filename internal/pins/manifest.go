@@ -88,9 +88,9 @@ type arity struct{ min, max int }
 var verifyArity = map[string]arity{
 	VerifyDownload:           {0, 0},
 	VerifyGitHubAttestation:  {1, 1},
-	VerifyGitHubReleaseAsset: {1, 2}, //nolint:mnd // owner/repo, optional tag template.
-	VerifyCosignSums:         {4, 4}, //nolint:mnd // sums url, bundle url, identity regexp, issuer.
-	VerifyPGPSums:            {3, 3}, //nolint:mnd // sums url, key url, fingerprint.
+	VerifyGitHubReleaseAsset: {1, 2},
+	VerifyCosignSums:         {4, 4},
+	VerifyPGPSums:            {3, 3},
 }
 
 var (
@@ -356,7 +356,7 @@ func splitField(field string, line int) (key, value string, err error) {
 	}
 
 	if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') &&
-		value[len(value)-1] == value[0] { //nolint:mnd // a quoted scalar.
+		value[len(value)-1] == value[0] {
 		value = value[1 : len(value)-1]
 	}
 
@@ -376,7 +376,7 @@ func (e Entry) validate() error {
 		return fmt.Errorf("%w: %s: name must match %s", ErrEntry, label, nameRE)
 	case e.Version == "":
 		return fmt.Errorf("%w: %s: no version", ErrEntry, label)
-	case len(e.Renovate) != 2: //nolint:mnd // datasource, depName.
+	case len(e.Renovate) != 2:
 		return fmt.Errorf("%w: %s: renovate must be `<datasource> <depName>`"+
 			" (extract-version and versioning are their own lines)", ErrEntry, label)
 	case e.URL == "":

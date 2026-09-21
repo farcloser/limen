@@ -5,6 +5,7 @@
 package cli_test
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -316,7 +317,7 @@ func TestReleaseStampPinsOnlyExactReleases(t *testing.T) { // Serial by design: 
 	t.Setenv(ghStubEnv, "1")
 	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	embedded := regexp.MustCompile(`(?m)^  - name: farcloser/limen@(\S+)`).FindStringSubmatch(limen.CanonicalAquaYAML)
+	embedded := regexp.MustCompile(`(?m)^ {2}- name: farcloser/limen@(\S+)`).FindStringSubmatch(limen.CanonicalAquaYAML)
 	if embedded == nil {
 		t.Fatal("the canonical aqua.yaml carries no limen pin")
 	}
@@ -539,7 +540,7 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) { // Serial by design:
 	}
 
 	after, _ := os.ReadFile(filepath.Join(dir, "renovate.json"))
-	if string(after) != string(seed) {
+	if !bytes.Equal(after, seed) {
 		t.Error("fix edited renovate.json without a resolved identity")
 	}
 

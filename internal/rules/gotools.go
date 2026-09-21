@@ -383,16 +383,10 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 
 	var done []string
 
-	if stray := sortedKeys(goModToolDirectives(string(rootMod))); len(stray) > 0 {
-		if err := writeFile(root, goModFile, stripGoModToolDirectives(string(rootMod))); err != nil {
-			return goToolsAdvisory(goModFile, "could not rewrite go.mod: "+err.Error(), nil)
-		}
-
-		if out := runGo(ctx, root, "mod", "tidy"); out != "" {
-			return goToolsAdvisory(goModFile, out, nil)
-		}
-
-		done = append(done, "moved tool directive(s) for "+strings.Join(stray, ", ")+" out of "+goModFile)
+	if step, advisory := moveStrayGoTools(ctx, root, rootMod); advisory != nil {
+		return *advisory
+	} else if step != "" {
+		done = append(done, step)
 	}
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
@@ -420,56 +414,106 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 	toolsRoot := filepath.Join(root, goToolsDir)
 
 	if len(missing) > 0 {
-		getArgs := []string{goGetVerb, goToolFlag}
-		for _, pkg := range missing {
-			getArgs = append(getArgs, pkg+"@latest")
+		step, advisory := goToolsGet(ctx, toolsRoot, missing, "latest", missingGoModToolsMessage(missing),
+			"added tool directive(s) for ", " (go -C tools get -tool, then go -C tools mod tidy)")
+		if advisory != nil {
+			return *advisory
 		}
 
-		if out := goGetThenTidy(ctx, toolsRoot, getArgs); out != "" {
-			return goToolsAdvisory(goToolsModFile, missingGoModToolsMessage(missing)+"; "+out, getArgs)
-		}
-
-		done = append(
-			done,
-			"added tool directive(s) for "+strings.Join(missing, listSeparator)+
-				" (go -C tools get -tool, then go -C tools mod tidy)",
-		)
+		done = append(done, step)
 	}
 
 	if len(retired) > 0 {
-		getArgs := []string{goGetVerb, goToolFlag}
-		for _, pkg := range retired {
-			getArgs = append(getArgs, pkg+"@none")
+		step, advisory := goToolsGet(ctx, toolsRoot, retired, "none", retiredGoModToolsMessage(retired),
+			"removed retired tool directive(s) for ", " (go -C tools get -tool <pkg>@none, then go -C tools mod tidy)")
+		if advisory != nil {
+			return *advisory
 		}
 
-		if out := goGetThenTidy(ctx, toolsRoot, getArgs); out != "" {
-			return goToolsAdvisory(goToolsModFile, retiredGoModToolsMessage(retired)+"; "+out, getArgs)
-		}
-
-		done = append(
-			done,
-			"removed retired tool directive(s) for "+strings.Join(retired, listSeparator)+
-				" (go -C tools get -tool <pkg>@none, then go -C tools mod tidy)",
-		)
+		done = append(done, step)
 	}
 
-	if rootMod != nil {
-		for _, name := range missingIsolatedGoTools(root) {
-			if outcome := remediateIsolatedGoTool(ctx, root, rootMod, name); outcome != nil {
-				return *outcome
-			}
-
-			done = append(done, "created "+isolatedGoModFile(name)+" with 'tool "+isolatedGoTools[name]+
-				"' (go get -tool, then go mod tidy, in that module)")
-		}
+	steps, advisory := seedIsolatedGoTools(ctx, root, rootMod)
+	if advisory != nil {
+		return *advisory
 	}
 
 	return Outcome{
 		Rule:    ruleGoTools,
 		Action:  ActionMerged,
 		Path:    goToolsModFile,
-		Message: strings.Join(done, "; "),
+		Message: strings.Join(append(done, steps...), "; "),
 	}
+}
+
+// seedIsolatedGoTools seeds every isolated tool module a Go repository lacks
+// (none is asked of a repository without a root go.mod): the steps done, or
+// the advisory that stopped it.
+func seedIsolatedGoTools(ctx context.Context, root string, rootMod []byte) ([]string, *Outcome) {
+	if rootMod == nil {
+		return nil, nil
+	}
+
+	var done []string
+
+	for _, name := range missingIsolatedGoTools(root) {
+		if outcome := remediateIsolatedGoTool(ctx, root, rootMod, name); outcome != nil {
+			return nil, outcome
+		}
+
+		done = append(done, "created "+isolatedGoModFile(name)+" with 'tool "+isolatedGoTools[name]+
+			"' (go get -tool, then go mod tidy, in that module)")
+	}
+
+	return done, nil
+}
+
+// moveStrayGoTools strips the tool directives out of the project's go.mod
+// and tidies it: the step done ("" when there was nothing to move), or the
+// advisory when a write or the tidy failed.
+func moveStrayGoTools(ctx context.Context, root string, rootMod []byte) (string, *Outcome) {
+	stray := sortedKeys(goModToolDirectives(string(rootMod)))
+	if len(stray) == 0 {
+		return "", nil
+	}
+
+	if err := writeFile(root, goModFile, stripGoModToolDirectives(string(rootMod))); err != nil {
+		advisory := goToolsAdvisory(goModFile, "could not rewrite go.mod: "+err.Error(), nil)
+
+		return "", &advisory
+	}
+
+	if out := runGo(ctx, root, "mod", "tidy"); out != "" {
+		advisory := goToolsAdvisory(goModFile, out, nil)
+
+		return "", &advisory
+	}
+
+	return "moved tool directive(s) for " + strings.Join(stray, ", ") + " out of " + goModFile, nil
+}
+
+// goToolsGet moves the directives for pkgs to version in the tools module —
+// "latest" adds them, "none" removes them — then tidies. The step done reads
+// prefix, the packages, suffix; when a go step fails the advisory carries
+// failure (the check's wording) and the command to run by hand.
+func goToolsGet(
+	ctx context.Context,
+	toolsRoot string,
+	pkgs []string,
+	version, failure, prefix, suffix string,
+) (string, *Outcome) {
+	getArgs := []string{goGetVerb, goToolFlag}
+	for _, pkg := range pkgs {
+		getArgs = append(getArgs, pkg+"@"+version)
+	}
+
+	if out := goGetThenTidy(ctx, toolsRoot, getArgs); out != "" {
+		advisory := goToolsAdvisory(goToolsModFile, failure+"; "+out, getArgs)
+
+		return "", &advisory
+	}
+
+	return prefix + strings.Join(pkgs, listSeparator) + suffix, nil
 }
 
 // remediateIsolatedGoTool seeds one isolated tool module and pins its

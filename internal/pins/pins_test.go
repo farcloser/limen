@@ -5,7 +5,7 @@
 package pins_test
 
 import (
-	"context"
+	"bytes"
 	"crypto"
 	"crypto/sha256"
 	"encoding/hex"
@@ -74,7 +74,7 @@ func runVerifierStub() int {
 
 	defer func() { _ = file.Close() }()
 
-	fmt.Fprintln(file, strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")+" "+strings.Join(os.Args[1:], " "))
+	_, _ = fmt.Fprintln(file, strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")+" "+strings.Join(os.Args[1:], " "))
 
 	return 0
 }
@@ -194,17 +194,17 @@ func TestParseAndGet(t *testing.T) {
 		{"tool", "sha256", strings.Repeat("0", 64)},
 		{"kernel", "url", "https://h/pub/v7.x/linux-7.2.6.tar.xz"},
 	} {
-		got, err := manifest.Get(tc.name, tc.field)
-		if err != nil || got != tc.want {
-			t.Errorf("Get(%s, %s) = %q, %v; want %q", tc.name, tc.field, got, err, tc.want)
+		got, getErr := manifest.Get(tc.name, tc.field)
+		if getErr != nil || got != tc.want {
+			t.Errorf("Get(%s, %s) = %q, %v; want %q", tc.name, tc.field, got, getErr, tc.want)
 		}
 	}
 
-	if _, err := manifest.Get("tool", "digest"); !errors.Is(err, pins.ErrNoSuchField) {
+	if _, err = manifest.Get("tool", "digest"); !errors.Is(err, pins.ErrNoSuchField) {
 		t.Errorf("an unserved field: %v, want ErrNoSuchField", err)
 	}
 
-	if _, err := manifest.Get("nope", "version"); !errors.Is(err, pins.ErrNoSuchPin) {
+	if _, err = manifest.Get("nope", "version"); !errors.Is(err, pins.ErrNoSuchPin) {
 		t.Errorf("an unknown pin: %v, want ErrNoSuchPin", err)
 	}
 
@@ -317,7 +317,7 @@ func TestRefreshDownload(t *testing.T) { // Serial by design: t.Setenv forbids t
 
 	var progress strings.Builder
 
-	changed, err := pins.Refresh(context.Background(), root, &progress)
+	changed, err := pins.Refresh(t.Context(), root, &progress)
 	if err != nil {
 		t.Fatalf("refresh: %v\n%s", err, progress.String())
 	}
@@ -354,11 +354,11 @@ func TestRefreshDownload(t *testing.T) { // Serial by design: t.Setenv forbids t
 	// Nothing stale: no write, no change reported.
 	before, _ := os.ReadFile(filepath.Join(root, pins.File))
 
-	if changed, err := pins.Refresh(context.Background(), root, io.Discard); err != nil || len(changed) != 0 {
+	if changed, err := pins.Refresh(t.Context(), root, io.Discard); err != nil || len(changed) != 0 {
 		t.Errorf("second refresh: %v, %v; want nothing", changed, err)
 	}
 
-	if again, _ := os.ReadFile(filepath.Join(root, pins.File)); string(again) != string(before) {
+	if again, _ := os.ReadFile(filepath.Join(root, pins.File)); !bytes.Equal(again, before) {
 		t.Error("a refresh with nothing to do rewrote the file")
 	}
 }
@@ -402,7 +402,7 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
 	log := filepath.Join(t.TempDir(), "log")
 	t.Setenv(verifierEnv, log)
 
-	changed, err := pins.RefreshAll(context.Background(), root, io.Discard)
+	changed, err := pins.RefreshAll(t.Context(), root, io.Discard)
 	if err != nil {
 		t.Fatalf("refresh -all: %v", err)
 	}
@@ -451,7 +451,7 @@ func TestReleaseAssetTag(t *testing.T) { // Serial by design: t.Setenv forbids t
 	log := filepath.Join(t.TempDir(), "log")
 	t.Setenv(verifierEnv, log)
 
-	if _, err := pins.Refresh(context.Background(), root, io.Discard); err != nil {
+	if _, err := pins.Refresh(t.Context(), root, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 
@@ -478,7 +478,7 @@ func TestRefreshStopsOnRefusal(t *testing.T) { // Serial by design: t.Setenv for
 
 	t.Setenv(verifierEnv, "") // the fake gh refuses
 
-	if _, err := pins.Refresh(context.Background(), root, io.Discard); !errors.Is(err, pins.ErrVerify) {
+	if _, err := pins.Refresh(t.Context(), root, io.Discard); !errors.Is(err, pins.ErrVerify) {
 		t.Fatalf("refresh with a refusing verifier: %v, want ErrVerify", err)
 	}
 
@@ -488,7 +488,7 @@ func TestRefreshStopsOnRefusal(t *testing.T) { // Serial by design: t.Setenv for
 
 	// A missing artifact is a refusal too.
 	gone := writePins(t, strings.Replace(text, "/a-${version}.tgz", "/missing", 1))
-	if _, err := pins.Refresh(context.Background(), gone, io.Discard); !errors.Is(err, pins.ErrVerify) {
+	if _, err := pins.Refresh(t.Context(), gone, io.Discard); !errors.Is(err, pins.ErrVerify) {
 		t.Errorf("refresh of a missing artifact: %v, want ErrVerify", err)
 	}
 }
@@ -539,7 +539,7 @@ func TestRefreshThroughClearsignedSums(t *testing.T) {
 
 	root := writePins(t, manifest("sha256sums.asc", "signer.asc", strings.ToLower(signer.Fingerprint())))
 
-	changed, err := pins.Refresh(context.Background(), root, io.Discard)
+	changed, err := pins.Refresh(t.Context(), root, io.Discard)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -565,7 +565,7 @@ func TestRefreshThroughClearsignedSums(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := pins.Refresh(context.Background(), writePins(t, text), io.Discard)
+			_, err := pins.Refresh(t.Context(), writePins(t, text), io.Discard)
 			if !errors.Is(err, pins.ErrVerify) {
 				t.Fatalf("err = %v, want ErrVerify", err)
 			}

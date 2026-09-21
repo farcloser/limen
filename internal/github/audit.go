@@ -123,6 +123,8 @@ const (
 	scanStateConfigured   = "configured"
 	decimalBase           = 10
 	jsonTypeKey           = "type"
+	jsonNameKey           = "name"
+	jsonStatusKey         = "status"
 	jsonRulesKey          = "rules"
 	jsonParametersKey     = "parameters"
 	rulePullRequest       = "pull_request"
@@ -327,7 +329,7 @@ const boolTrue, boolFalse = "true", "false"
 // auditRepoObject covers every check answered by GET /repos/{owner}/{repo}:
 // merge and branch workflow (R3), features and metadata (R5), and the
 // security_and_analysis block of R1.
-func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit // a linear catalog of independent checks, one block each.
+func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit,gocyclo // a linear catalog of independent checks, one block each.
 	var settings repoSettings
 
 	outcome := a.client.getJSON(a.ctx, "", &settings)
@@ -539,7 +541,7 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 			"secret scanning must be enabled",
 			a.patchSettings(checkSecretScanning, "secret scanning: disabled → enabled",
 				map[string]any{"security_and_analysis": map[string]any{
-					"secret_scanning": map[string]any{"status": enabledValue},
+					"secret_scanning": map[string]any{jsonStatusKey: enabledValue},
 				}}))
 	}
 
@@ -554,8 +556,8 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 				apply: func(ctx context.Context, apiClient client) error {
 					return apiClient.writeJSON(ctx, "PATCH", "", map[string]any{
 						"security_and_analysis": map[string]any{
-							"secret_scanning":                 map[string]any{"status": enabledValue},
-							"secret_scanning_push_protection": map[string]any{"status": enabledValue},
+							"secret_scanning":                 map[string]any{jsonStatusKey: enabledValue},
+							"secret_scanning_push_protection": map[string]any{jsonStatusKey: enabledValue},
 						},
 					})
 				},
@@ -665,6 +667,15 @@ func (a *auditor) auditPrivateVulnerabilityReporting() {
 // auditActions covers R2: the workflow token defaults and the allowed-actions
 // policy.
 func (a *auditor) auditActions() {
+	a.auditActionsWorkflow()
+	a.auditActionsAllowed()
+	a.auditForkPRApproval()
+	a.auditActionsAccess()
+}
+
+// auditActionsWorkflow covers the workflow token's default permissions and
+// whether workflows may approve pull requests, one PUT for both.
+func (a *auditor) auditActionsWorkflow() {
 	var workflow struct {
 		DefaultWorkflowPermissions   string `json:"default_workflow_permissions"`
 		CanApprovePullRequestReviews bool   `json:"can_approve_pull_request_reviews"`
@@ -673,51 +684,57 @@ func (a *auditor) auditActions() {
 	workflowOutcome := a.client.getJSON(a.ctx, "/actions/permissions/workflow", &workflow)
 	if workflowOutcome.err != nil || workflowOutcome.notFound {
 		a.unverifiable(orNotFound(workflowOutcome), checkActionsWorkflowPerms, checkActionsApprovePRs)
-	} else {
-		// The PUT replaces both fields, so the target starts from the current
-		// state and moves only the fields whose checks fail unexempted — an
-		// exempted check plans no change, and its field must not ride to the
-		// baseline inside the other check's fix.
-		targetPerms := workflow.DefaultWorkflowPermissions
-		if targetPerms != baselineWorkflowPerms && !a.exempted(checkActionsWorkflowPerms) {
-			targetPerms = baselineWorkflowPerms
-		}
 
-		targetApprove := workflow.CanApprovePullRequestReviews && a.exempted(checkActionsApprovePRs)
-
-		fixWorkflow := func(ctx context.Context, c client) error {
-			return c.writeJSON(ctx, "PUT", "/actions/permissions/workflow", map[string]any{
-				"default_workflow_permissions":     targetPerms,
-				"can_approve_pull_request_reviews": targetApprove,
-			})
-		}
-
-		if workflow.DefaultWorkflowPermissions == baselineWorkflowPerms {
-			a.flag(checkActionsWorkflowPerms, StatusOK, "", "", "workflow token defaults to read-only", nil)
-		} else {
-			a.flag(checkActionsWorkflowPerms, StatusFail,
-				workflow.DefaultWorkflowPermissions, baselineWorkflowPerms,
-				"the default workflow token must be read-only",
-				&Change{
-					Check:   checkActionsWorkflowPerms,
-					Summary: "workflow token permissions: " + workflow.DefaultWorkflowPermissions + " → read",
-					apply:   fixWorkflow,
-				})
-		}
-
-		if !workflow.CanApprovePullRequestReviews {
-			a.flag(checkActionsApprovePRs, StatusOK, "", "", "workflows cannot approve pull requests", nil)
-		} else {
-			a.flag(checkActionsApprovePRs, StatusFail, boolTrue, boolFalse,
-				"workflows must not be able to approve pull requests",
-				&Change{
-					Check:   checkActionsApprovePRs,
-					Summary: "workflows can approve pull requests: true → false",
-					apply:   fixWorkflow,
-				})
-		}
+		return
 	}
 
+	// The PUT replaces both fields, so the target starts from the current
+	// state and moves only the fields whose checks fail unexempted — an
+	// exempted check plans no change, and its field must not ride to the
+	// baseline inside the other check's fix.
+	targetPerms := workflow.DefaultWorkflowPermissions
+	if targetPerms != baselineWorkflowPerms && !a.exempted(checkActionsWorkflowPerms) {
+		targetPerms = baselineWorkflowPerms
+	}
+
+	targetApprove := workflow.CanApprovePullRequestReviews && a.exempted(checkActionsApprovePRs)
+
+	fixWorkflow := func(ctx context.Context, c client) error {
+		return c.writeJSON(ctx, "PUT", "/actions/permissions/workflow", map[string]any{
+			"default_workflow_permissions":     targetPerms,
+			"can_approve_pull_request_reviews": targetApprove,
+		})
+	}
+
+	if workflow.DefaultWorkflowPermissions == baselineWorkflowPerms {
+		a.flag(checkActionsWorkflowPerms, StatusOK, "", "", "workflow token defaults to read-only", nil)
+	} else {
+		a.flag(checkActionsWorkflowPerms, StatusFail,
+			workflow.DefaultWorkflowPermissions, baselineWorkflowPerms,
+			"the default workflow token must be read-only",
+			&Change{
+				Check:   checkActionsWorkflowPerms,
+				Summary: "workflow token permissions: " + workflow.DefaultWorkflowPermissions + " → read",
+				apply:   fixWorkflow,
+			})
+	}
+
+	if !workflow.CanApprovePullRequestReviews {
+		a.flag(checkActionsApprovePRs, StatusOK, "", "", "workflows cannot approve pull requests", nil)
+	} else {
+		a.flag(checkActionsApprovePRs, StatusFail, boolTrue, boolFalse,
+			"workflows must not be able to approve pull requests",
+			&Change{
+				Check:   checkActionsApprovePRs,
+				Summary: "workflows can approve pull requests: true → false",
+				apply:   fixWorkflow,
+			})
+	}
+}
+
+// auditActionsAllowed covers the allowed-actions policy: "all" is below
+// the floor, GitHub-owned plus a pinned allowlist is the fix.
+func (a *auditor) auditActionsAllowed() {
 	var permissions struct {
 		Enabled        bool   `json:"enabled"`
 		AllowedActions string `json:"allowed_actions"`
@@ -753,9 +770,6 @@ func (a *auditor) auditActions() {
 		a.flag(checkActionsAllowed, StatusOK, "", "",
 			"allowed-actions policy is restricted (or Actions disabled entirely)", nil)
 	}
-
-	a.auditForkPRApproval()
-	a.auditActionsAccess()
 }
 
 // auditForkPRApproval covers the fork-pull-request approval policy. The
@@ -1134,7 +1148,7 @@ func (a *auditor) workflowHasGate() bool {
 
 // gateJobRE matches the gate job's key at the jobs level of the canonical
 // ci.yaml (two-space indent, the job name, nothing else on the line).
-var gateJobRE = regexp.MustCompile(`(?m)^  gate:\s*$`)
+var gateJobRE = regexp.MustCompile(`(?m)^ {2}gate:\s*$`)
 
 // rulesetProblem is one departure of a ruleset's rule content from the
 // canonical definition, phrased for the finding it becomes.
@@ -1401,7 +1415,7 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 	}
 
 	return map[string]any{
-		"name":        rulesetMainName,
+		jsonNameKey:   rulesetMainName,
 		"target":      "branch",
 		"enforcement": enforcementActive,
 		"conditions": map[string]any{
@@ -1457,7 +1471,7 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 // admins — the tag push is the release button, and this names who may press it.
 func canonicalTagsRuleset() map[string]any {
 	return map[string]any{
-		"name":        rulesetTagsName,
+		jsonNameKey:   rulesetTagsName,
 		"target":      "tag",
 		"enforcement": enforcementActive,
 		"conditions": map[string]any{
@@ -1601,37 +1615,64 @@ func (a *auditor) auditOutsideCollaborators() {
 // deploy keys) and the pages check of R5. All of it is inventory: nothing
 // here is ever auto-fixed.
 func (a *auditor) auditSurface() {
+	a.auditWebhooks()
+	a.auditDeployKeys()
+
+	pagesOutcome := a.client.api(a.ctx, "GET", "/pages", nil)
+
+	switch {
+	case pagesOutcome.notFound:
+		a.flag(checkPages, StatusOK, "", "", "GitHub Pages is off", nil)
+	case pagesOutcome.err != nil:
+		a.unverifiable(pagesOutcome.err, checkPages)
+	default:
+		a.flag(checkPages, StatusAdvisory, enabledValue, "off unless deliberate",
+			"GitHub Pages is enabled — confirm it is deliberate (exempt it in the override file if so)", nil)
+	}
+
+	a.auditOutsideCollaborators()
+}
+
+// auditWebhooks: every hook delivers over HTTPS, carries a secret and
+// verifies TLS; anything else is reviewed by hand.
+func (a *auditor) auditWebhooks() {
 	var hooks []webhook
 
 	hooksOutcome := a.client.getJSONAllPages(a.ctx, "/hooks?per_page=100", &hooks)
-
-	switch {
-	case hooksOutcome.err != nil || hooksOutcome.notFound:
+	if hooksOutcome.err != nil || hooksOutcome.notFound {
 		a.unverifiable(orNotFound(hooksOutcome), checkWebhooks)
-	default:
-		var offenders []string
 
-		for _, hook := range hooks {
-			insecure := fmt.Sprintf("%v", hook.Config.InsecureSSL) != "0"
-			if !strings.HasPrefix(hook.Config.URL, "https://") || hook.Config.Secret == "" || insecure {
-				offenders = append(offenders, hook.Config.URL)
-			}
-		}
+		return
+	}
 
-		if len(offenders) > 0 {
-			a.flag(
-				checkWebhooks,
-				StatusAdvisory,
-				strings.Join(offenders, listSeparator),
-				"https + secret + TLS verification",
-				"webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand",
-				nil,
-			)
-		} else {
-			a.flag(checkWebhooks, StatusOK, "", "", "webhooks are compliant (or none exist)", nil)
+	var offenders []string
+
+	for _, hook := range hooks {
+		insecure := fmt.Sprintf("%v", hook.Config.InsecureSSL) != "0"
+		if !strings.HasPrefix(hook.Config.URL, "https://") || hook.Config.Secret == "" || insecure {
+			offenders = append(offenders, hook.Config.URL)
 		}
 	}
 
+	if len(offenders) > 0 {
+		a.flag(
+			checkWebhooks,
+			StatusAdvisory,
+			strings.Join(offenders, listSeparator),
+			"https + secret + TLS verification",
+			"webhook(s) without HTTPS, a secret, or TLS verification — review and fix by hand",
+			nil,
+		)
+
+		return
+	}
+
+	a.flag(checkWebhooks, StatusOK, "", "", "webhooks are compliant (or none exist)", nil)
+}
+
+// auditDeployKeys: a deploy key is a credential, never auto-fixed, so any
+// present is an advisory naming them.
+func (a *auditor) auditDeployKeys() {
 	var keys []deployKey
 
 	keysOutcome := a.client.getJSONAllPages(a.ctx, "/keys?per_page=100", &keys)
@@ -1656,18 +1697,4 @@ func (a *auditor) auditSurface() {
 			nil,
 		)
 	}
-
-	pagesOutcome := a.client.api(a.ctx, "GET", "/pages", nil)
-
-	switch {
-	case pagesOutcome.notFound:
-		a.flag(checkPages, StatusOK, "", "", "GitHub Pages is off", nil)
-	case pagesOutcome.err != nil:
-		a.unverifiable(pagesOutcome.err, checkPages)
-	default:
-		a.flag(checkPages, StatusAdvisory, enabledValue, "off unless deliberate",
-			"GitHub Pages is enabled — confirm it is deliberate (exempt it in the override file if so)", nil)
-	}
-
-	a.auditOutsideCollaborators()
 }

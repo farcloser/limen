@@ -65,10 +65,10 @@ func render(args []string, dir string, raw []byte, stdout, stderr io.Writer) err
 	}
 
 	for _, note := range applied.notes {
-		fmt.Fprintln(stderr, "limen-lint-go: note: "+note)
+		_, _ = fmt.Fprintln(stderr, "limen-lint-go: note: "+note)
 	}
 
-	fmt.Fprintln(stderr, "limen-lint-go: "+applied.summary())
+	_, _ = fmt.Fprintln(stderr, "limen-lint-go: "+applied.summary())
 
 	text, err := encode(base.golangci)
 	if err != nil {

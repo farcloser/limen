@@ -1,7 +1,6 @@
 package rules_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +80,7 @@ func TestFixSeedsLintGo(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcomes := outcomesFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		ruleLintGo,
 	)
 
@@ -103,7 +102,7 @@ func TestFixSeedsLintGo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, line := range strings.Split(strings.TrimSpace(string(seed)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(seed)), "\n") {
 		if !strings.HasPrefix(line, "#") {
 			t.Errorf("the seed should be comments only, got %q", line)
 		}
@@ -124,7 +123,7 @@ func TestFixSeedsLintGo(t *testing.T) {
 	}
 
 	for _, outcome := range outcomesFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		ruleLintGo,
 	) {
 		if outcome.Action != rules.ActionNone {

@@ -138,7 +138,7 @@ func (cfg config) strings(key string) ([]string, bool) {
 // can be read: nothing to pin to, nothing enforced.
 func canonicalPresetRef(root string) string {
 	if gomod, err := readRepoFile(root, goModFile); err == nil {
-		if m := goModulePattern.FindSubmatch(gomod); m != nil && string(m[1]) == presetModulePath {
+		if m := goModulePattern.FindSubmatch(gomod); len(m) > 1 && string(m[1]) == presetModulePath {
 			return presetLocalRef
 		}
 	}

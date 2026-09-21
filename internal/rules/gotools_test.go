@@ -1,7 +1,6 @@
 package rules_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -253,7 +252,9 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 	}
 
 	files["tools/golangci-lint/go.mod"] = goModGolangci
-	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools"); !f.OK() {
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools")
+
+	if !f.OK() {
 		t.Fatalf("a tools/go.mod declaring every tool, with the isolated module, should pass: %s", f.Message)
 	}
 
@@ -286,7 +287,7 @@ func TestGoToolsRetiredDirective(t *testing.T) {
 	}
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 
@@ -337,7 +338,7 @@ func TestFixRemovesRetiredPackages(t *testing.T) {
 		"packages:\n  - name: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n    registry: local\n")
 	dir := writeRepo(t, files)
 
-	outcome := outcomeFor(rules.Fix(context.Background(), dir, bootstrapOpts()), "aqua")
+	outcome := outcomeFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "aqua")
 	if !resolved(outcome.Action) {
 		t.Fatalf("aqua fix unresolved: %s (%s)", outcome.Action, outcome.Message)
 	}
@@ -363,7 +364,7 @@ func TestFixGoToolsNoOpWhenComplete(t *testing.T) {
 
 	outcome := outcomeFor(
 		rules.Fix(
-			context.Background(),
+			t.Context(),
 			writeRepo(t, compliantFiles()),
 			rules.FixOptions{Policy: rules.DefaultPolicy()},
 		),
@@ -386,14 +387,14 @@ func TestFixGoToolsSeedsWithoutGoMod(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "created "+"tools/go.mod") {
 		t.Fatalf("got %s (%s), want merged with the module created", outcome.Action, outcome.Message)
 	}
 
-	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools/go.mod"))
+	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 	if err != nil {
 		t.Fatalf("tools/go.mod not created: %v", err)
 	}
@@ -431,14 +432,14 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged {
 		t.Fatalf("got %s (%s), want merged", outcome.Action, outcome.Message)
 	}
 
-	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools/go.mod"))
+	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 	if err != nil {
 		t.Fatalf("tools/go.mod not created: %v", err)
 	}
@@ -450,7 +451,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 
 	// The isolated module is seeded too, with its own derived path and the
 	// one directive the fake go appended.
-	isolated, err := os.ReadFile(filepath.Join(dir, "tools/golangci-lint/go.mod"))
+	isolated, err := os.ReadFile(filepath.Join(dir, "tools", "golangci-lint", "go.mod"))
 	if err != nil {
 		t.Fatalf("tools/golangci-lint/go.mod not created: %v", err)
 	}
@@ -465,7 +466,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	}
 
 	if again := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	); again.Action != rules.ActionNone {
 		t.Fatalf("second fix not a no-op: %s (%s)", again.Action, again.Message)
@@ -483,7 +484,7 @@ func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "moved tool directive(s)") {
@@ -518,7 +519,7 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) { // Serial by design: t.Sete
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionAdvisory {
@@ -565,9 +566,9 @@ func TestAquaGoDirective(t *testing.T) {
 			delete(files, "tools/go.mod")
 			dir := writeRepo(t, files)
 
-			rules.Fix(context.Background(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+			rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
 
-			toolsMod, err := os.ReadFile(filepath.Join(dir, "tools/go.mod"))
+			toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 			if err != nil {
 				t.Fatalf("tools/go.mod not created: %v", err)
 			}

@@ -594,7 +594,7 @@ func TestAquaAcceptsYmlVariant(t *testing.T) {
 func canonicalAquaLine(t *testing.T, substr string) string {
 	t.Helper()
 
-	for _, line := range strings.Split(limen.CanonicalAquaYAML, "\n") {
+	for line := range strings.SplitSeq(limen.CanonicalAquaYAML, "\n") {
 		if strings.Contains(line, substr) {
 			return line
 		}

@@ -1,7 +1,6 @@
 package github_test
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -50,7 +49,7 @@ func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // s
 	}
 	stubGH(t, responses)
 
-	findings, _ := github.Audit(context.Background(), testRepo, nil)
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
 
 	finding, found := findingByCheck(findings, "auto-merge")
 	if !found || finding.Status != github.StatusFail {
@@ -67,7 +66,7 @@ func TestAutoMergePrivateWarnsUpFront(t *testing.T) { //nolint:paralleltest // s
 	}
 	stubGH(t, responses)
 
-	findings, _ = github.Audit(context.Background(), testRepo, nil)
+	findings, _ = github.Audit(t.Context(), testRepo, nil)
 
 	if finding, _ := findingByCheck(findings, "auto-merge"); strings.Contains(finding.Message, "plan") {
 		t.Errorf("a public repository is not plan-gated, got %q", finding.Message)
@@ -101,7 +100,7 @@ func TestAutoMergeNotPlannedOnFreePrivate(t *testing.T) { //nolint:paralleltest 
 		responses["GET orgs/test"] = plan.org
 		logPath := stubGH(t, responses)
 
-		findings, changes := github.Audit(context.Background(), testRepo, nil)
+		findings, changes := github.Audit(t.Context(), testRepo, nil)
 
 		finding, _ := findingByCheck(findings, "auto-merge")
 		if finding.Status != github.StatusFail {
@@ -115,7 +114,7 @@ func TestAutoMergeNotPlannedOnFreePrivate(t *testing.T) { //nolint:paralleltest 
 				planned = true
 			}
 
-			if err := change.Apply(context.Background()); err != nil {
+			if err := change.Apply(t.Context()); err != nil {
 				t.Fatalf("%s: apply %s: %v", name, change.Check, err)
 			}
 		}

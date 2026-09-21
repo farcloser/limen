@@ -234,50 +234,31 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 		return
 	}
 
-	var members []teamMember
+	var (
+		members []teamMember
+		granted []teamRepoGrant
+		repos   []orgRepo
+	)
 
-	outcome = a.client.getJSONAllPages(a.ctx, teamPath+agentsTeamSlug+"/members?per_page=100", &members)
-	if outcome.err != nil || outcome.notFound {
-		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
-
-		return
+	pages := []struct {
+		path string
+		into any
+	}{
+		{teamPath + agentsTeamSlug + "/members?per_page=100", &members},
+		{teamPath + agentsTeamSlug + "/repos?per_page=100", &granted},
+		{"/repos?per_page=100&type=all", &repos},
 	}
 
-	var granted []teamRepoGrant
+	for _, page := range pages {
+		outcome = a.client.getJSONAllPages(a.ctx, page.path, page.into)
+		if outcome.err != nil || outcome.notFound {
+			a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
 
-	outcome = a.client.getJSONAllPages(a.ctx, teamPath+agentsTeamSlug+"/repos?per_page=100", &granted)
-	if outcome.err != nil || outcome.notFound {
-		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
-
-		return
-	}
-
-	var repos []orgRepo
-
-	outcome = a.client.getJSONAllPages(a.ctx, "/repos?per_page=100&type=all", &repos)
-	if outcome.err != nil || outcome.notFound {
-		a.unverifiable(orNotFound(outcome), checkOrgAgentsTeam)
-
-		return
-	}
-
-	writable := map[string]bool{}
-
-	for _, grant := range granted {
-		if grant.Permissions.Push || grant.Permissions.Maintain || grant.Permissions.Admin {
-			writable[grant.Name] = true
+			return
 		}
 	}
 
-	var missing []string
-
-	for _, repo := range repos {
-		if !repo.Archived && !writable[repo.Name] {
-			missing = append(missing, repo.Name)
-		}
-	}
-
-	slices.Sort(missing)
+	missing := reposWithoutWrite(granted, repos)
 
 	noMembers := ""
 
@@ -315,4 +296,28 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 		a.flag(checkOrgAgentsTeam, StatusOK, "", "",
 			"the "+agentsTeamSlug+" team has write on every repository", nil)
 	}
+}
+
+// reposWithoutWrite is every live repository the grants give no write on,
+// sorted: push, maintain or admin all count as write.
+func reposWithoutWrite(granted []teamRepoGrant, repos []orgRepo) []string {
+	writable := map[string]bool{}
+
+	for _, grant := range granted {
+		if grant.Permissions.Push || grant.Permissions.Maintain || grant.Permissions.Admin {
+			writable[grant.Name] = true
+		}
+	}
+
+	var missing []string
+
+	for _, repo := range repos {
+		if !repo.Archived && !writable[repo.Name] {
+			missing = append(missing, repo.Name)
+		}
+	}
+
+	slices.Sort(missing)
+
+	return missing
 }
