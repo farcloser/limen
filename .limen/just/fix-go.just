@@ -18,7 +18,11 @@ default: code mod
 # formatter's output can be another's work), so a single pass can leave a tree
 # `fmt --diff` still rejects — `just fix` green, `just lint` red. Bounded,
 # because two formatters undoing each other never settle: loop for the benign
-# case, fail loudly for the other.
+# case, fail loudly for the other. Then the tree is proven to still compile,
+# tests included: a fixer can drop a package's last use or introduce one
+# (goimports in the fmt pass repairs the import list, which is what it is
+# there for), and a fix that returns green over a tree that no longer builds
+# has failed its one promise. `go vet` is the type-check that covers _test.go.
 code: (_banner "fix go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") _golangci-config (_per-platform "build/tools/golangci-lint run --fix -c build/golangci.yml")
     #!/usr/bin/env bash
     set -euo pipefail
@@ -35,6 +39,10 @@ code: (_banner "fix go" "go") (_go-tool "golangci-lint" "github.com/golangci/gol
         fi
         build/tools/golangci-lint fmt -c build/golangci.yml
     done
+    if ! go vet ./...; then
+        echo "the fixers left a tree that does not compile (or vet): repair what they broke above, then run again." >&2
+        exit 1
+    fi
 
 # Tidy go.mod/go.sum, for the module, for tools/ (the analyzers' module) and
 # for each isolated tool module (tools/<name>/go.mod, see _go-tool).

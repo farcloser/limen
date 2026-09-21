@@ -109,7 +109,11 @@ on `go/packages` — the gap is a correctness failure, not only a provenance one
 embeds the source loader of the Go that compiled *it*, and compiled by go1.N it cannot read a
 module that declares go1.N+1. CI never sees it (every runner builds fresh with its own pin) —
 it surfaces on a laptop that works on two repos with different Go pins, as an analyzer refusing
-sources it should read.
+sources it should read. The case has been met in the wild: a *prebuilt* golangci-lint, with
+gocritic on `enable-all`, exits with no findings at all under the hermetic `GOROOT=''`, because
+ruleguard loads its embedded rules through the source loader of the Go that built the binary,
+whose root does not exist on this machine; the source-built one the recipes run carries the
+pinned toolchain's root and passes.
 
 The fix is Go's own: every Go-built tool is a `tool` directive, built from a pinned requirement
 by the module's own pinned toolchain, cached per toolchain, so the skew is impossible by

@@ -169,7 +169,7 @@ The shape now is one baseline, one overlay, rendered at lint time:
   |---|---|
   | `golangci.linters.disable`, `…enable` | moves the linter between the two sets (the baseline runs `default: all`, so this is golangci's own meaning too); a linter already where it is going is a note, not a carve-out |
   | `golangci.formatters.enable` | adds a formatter (golangci's schema has no `formatters.disable`) |
-  | `golangci.linters.exclusions.paths`, `…rules`, `…presets`; `golangci.formatters.exclusions.paths` | append; nothing in the baseline's exclusions can be removed — if a project needs that, the baseline is wrong and it is a limen change |
+  | `golangci.linters.exclusions.paths`, `…rules`, `…presets`; `golangci.formatters.exclusions.paths` | append; nothing in the baseline's exclusions can be removed — if a project needs that, the baseline is wrong and it is a limen change. The baseline excludes nothing in tests: what a project tolerates in `_test.go` is its own, and the seed shows the reviewed rule to tailor from |
   | `golangci.linters.settings.<linter>`, `golangci.formatters.settings.<formatter>` | merge key by key: a scalar overrides, a mapping recurses, a list appends (a value the baseline already lists is a note); in a list of named mappings — revive's rules — a name the baseline has overrides that entry's keys, so a project changes one rule's arguments without restating the list, and a new name appends |
   | `licenses.allowed` | replaces the allowed list |
   | `licenses.ignore` | appends the modules go-licenses skips (typically the false positives of google/go-licenses#186) |

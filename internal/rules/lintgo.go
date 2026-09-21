@@ -46,9 +46,30 @@ const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline
 #         - third_party/
 #       presets:                     # appends golangci-lint's exclusion presets
 #         - comments
-#       rules:                       # appends: a linter, or a finding text, off under a path
-#         - path: testutil/
-#           linters: [gosec]
+#       rules:                       # appends: linters, or a finding text, off under a path.
+#         # The baseline excludes nothing in tests; what a project tolerates
+#         # there is its own. The reviewed shape, to tailor: tests are
+#         # black-box consumers, so the rules about API hygiene and production
+#         # robustness do not apply to them, while the rules about correctness
+#         # do (errcheck stays on: a test that ignores an error can pass for
+#         # the wrong reason).
+#         - path: _test\.go
+#           linters:
+#             - varnamelen # table-driven tests name things tt, tc, wg
+#             - dupl # test cases are meant to look alike
+#             - dupword # test data
+#             - wrapcheck # a test does not wrap what it asserts on
+#             - gosec # file and command handling on test fixtures
+#             - err113 # dynamic errors are fine in fixtures
+#             - dogsled # multiple-return helpers are exercised for one value at a time
+#             - noctx # no cancellation to propagate
+#             - perfsprint # readability over allocations
+#             - depguard # test-only dependencies
+#             - gocognit # a table-driven test is one long, flat function by design
+#             - gocyclo # same
+#             - funlen # same
+#             - mnd # fixture values
+#             - goconst # fixture values
 #     settings:                      # per linter, merged key by key into the baseline's:
 #       wrapcheck:                   #   a scalar overrides, a mapping recurses, a list appends,
 #         ignore-package-globs:      #   a named entry (a revive rule) overrides its namesake

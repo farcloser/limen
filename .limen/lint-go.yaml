@@ -73,6 +73,10 @@ golangci:
   issues:
     max-issues-per-linter: 0
     max-same-issues: 0
+    # Every finding on a line, not the first: gocognit and gocyclo both report
+    # on a function's declaration line, and the default keeps whichever came
+    # first, so the other waits for the next run.
+    uniq-by-line: false
 
   linters:
     default: all
@@ -112,34 +116,12 @@ golangci:
       - prealloc # premature optimization
 
     exclusions:
-      # A baseline rule no project triggers is a bug in the baseline.
+      # No rules: the baseline excludes nothing, in tests or anywhere. What a
+      # project tolerates in its _test.go files is its own, stated in its
+      # .lint-go.yaml (the seed shows the reviewed rule to tailor from). An
+      # overlay rule that excludes nothing is then the project's own dead
+      # rule, and this warns about it.
       warn-unused: true
-      rules:
-        # Tests are black-box consumers, so the rules about API hygiene and
-        # production robustness do not apply to them; the rules about
-        # correctness do. errcheck stays on: a test that ignores an error can
-        # pass for the wrong reason.
-        - path: _test\.go
-          linters:
-            - varnamelen # table-driven tests name things tt, tc, wg
-            - dupl # test cases are meant to look alike
-            - dupword # test data
-            - wrapcheck # a test does not wrap what it asserts on
-            - gosec # file and command handling on test fixtures
-            - err113 # dynamic errors are fine in fixtures
-            - dogsled # multiple-return helpers are exercised for one value at a time
-            - noctx # no cancellation to propagate
-            - perfsprint # readability over allocations
-            - depguard # test-only dependencies
-            - gocognit # a table-driven test is one long, flat function by design
-            - gocyclo # same
-            - funlen # same
-            - mnd # fixture values
-            - goconst # fixture values
-        - path: _test\.go
-          text: "confusing-results|nested-structs|unchecked-type-assertion|unused-receiver"
-          linters:
-            - revive
 
     settings:
       errcheck:
@@ -153,12 +135,15 @@ golangci:
         check-type-assertions: false
         check-blank: false
         # errcheck's built-in list already excludes fmt.Print* and
-        # fmt.Fprint*(os.Stderr). Standard output is the CLI's contract with a
-        # pipe; a failure there has no better handler than the exit.
+        # fmt.Fprint*(os.Stderr). The Fprint family is excluded whatever the
+        # writer, the scope revive's unhandled-error had: standard output is
+        # the CLI's contract with a pipe, and a writer passed in for
+        # testability is a buffer or a recorder; a failure on either has no
+        # better handler than the exit.
         exclude-functions:
-          - fmt.Fprint(os.Stdout)
-          - fmt.Fprintf(os.Stdout)
-          - fmt.Fprintln(os.Stdout)
+          - fmt.Fprint
+          - fmt.Fprintf
+          - fmt.Fprintln
 
       errorlint:
         # err113 already reports `err == target` and demands errors.Is, so the
@@ -404,11 +389,13 @@ golangci:
         context-todo: true
 
       usestdlibvars:
-        # Every constant the standard library names, not only http.
+        # Every constant the standard library names, not only http. Not
+        # crypto-hash: its fix rewrites a displayed "SHA-256" to
+        # crypto.SHA256.String(), how a user-facing string is spelled, which
+        # is a judgment call and not a modernization.
         time-date-month: true
         time-month: true
         time-layout: true
-        crypto-hash: true
         default-rpc-path: true
         sql-isolation-level: true
         tls-signature-scheme: true
@@ -483,6 +470,11 @@ golangci:
       - gci
       - gofumpt
       - golines
+      # The one formatter that edits the import list: a fixer that drops a
+      # package's last use or introduces one leaves the tree not compiling
+      # (usetesting, perfsprint have), and the fmt pass the fix recipe runs
+      # to convergence is where goimports repairs it. gci keeps the grouping.
+      - goimports
     settings:
       gci:
         sections:

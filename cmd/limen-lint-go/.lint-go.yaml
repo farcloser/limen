@@ -1,8 +1,31 @@
 # limen-lint-go's own carve-outs, for the lint this repository runs on the
 # module (the root Justfile's lint-lint-go): the one dependency depguard must
-# let through.
+# let through, and the test tolerances the root module's overlay states.
 golangci:
   linters:
+    exclusions:
+      rules:
+        # Tests are black-box consumers: the rules about API hygiene and
+        # production robustness do not apply to them, the rules about
+        # correctness do (errcheck stays on: a test that ignores an error can
+        # pass for the wrong reason).
+        - path: _test\.go
+          linters:
+            - varnamelen # table-driven tests name things tt, tc, wg
+            - dupl # test cases are meant to look alike
+            - dupword # test data
+            - wrapcheck # a test does not wrap what it asserts on
+            - gosec # file and command handling on test fixtures
+            - err113 # dynamic errors are fine in fixtures
+            - dogsled # multiple-return helpers are exercised for one value at a time
+            - noctx # no cancellation to propagate
+            - perfsprint # readability over allocations
+            - depguard # test-only dependencies
+            - gocognit # a table-driven test is one long, flat function by design
+            - gocyclo # same
+            - funlen # same
+            - mnd # fixture values
+            - goconst # fixture values
     settings:
       depguard:
         rules:
