@@ -79,15 +79,58 @@ func writeModule(t *testing.T, overlay string) string {
 	return dir
 }
 
-// run is one limen-lint-go invocation against baseline in dir.
+// writeBaseline places baseline as dir's BaselineFile, where the driver
+// finds it first.
+func writeBaseline(t *testing.T, dir, baseline string) {
+	t.Helper()
+
+	path := filepath.Join(dir, lintgo.BaselineFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(path, []byte(baseline), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// run is one limen-lint-go invocation in dir, with baseline placed there.
 func run(t *testing.T, dir, baseline string, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
+	writeBaseline(t, dir, baseline)
 
 	var out, errs bytes.Buffer
 
-	code = lintgo.Run(append([]string{"-C", dir}, args...), []byte(baseline), &out, &errs)
+	code = lintgo.Run(append([]string{"-C", dir}, args...), &out, &errs)
 
 	return out.String(), errs.String(), code
+}
+
+// TestBaselineAboveTheModule: a nested module has no .limen/ of its own and
+// reads its repository's, the nearest above it; a tree without one fails
+// naming the file.
+func TestBaselineAboveTheModule(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBaseline(t, root, baselineSmall)
+
+	nested := filepath.Join(root, "cmd", "tool")
+	if err := os.MkdirAll(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errs bytes.Buffer
+	if code := lintgo.Run([]string{"-C", nested, checkCmd, "v2.13.0"}, &out, &errs); code != 0 {
+		t.Errorf("the repository's baseline should be found from a nested module: %d %s", code, errs.String())
+	}
+
+	errs.Reset()
+
+	if code := lintgo.Run([]string{"-C", t.TempDir(), checkCmd, "v2.13.0"}, &out, &errs); code != 1 ||
+		!strings.Contains(errs.String(), lintgo.BaselineFile) {
+		t.Errorf("no baseline anywhere should fail naming it: %d %s", code, errs.String())
+	}
 }
 
 // rendered is the configuration limen-lint-go renders for baseline with overlay, or
@@ -506,7 +549,7 @@ func TestCheck(t *testing.T) {
 func TestUsage(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{{}, {"frobnicate"}, {renderCmd, "extra"}, {checkCmd}, {flagsCmd}, {"baseline", "x"}} {
+	for _, args := range [][]string{{}, {"frobnicate"}, {renderCmd, "extra"}, {checkCmd}, {flagsCmd}} {
 		_, stderr, code := run(t, t.TempDir(), baselineSmall, args...)
 		if code != 2 || !strings.Contains(stderr, "usage:") {
 			t.Errorf("%v: exit %d, want 2 with usage: %s", args, code, stderr)
@@ -519,12 +562,12 @@ func TestUsage(t *testing.T) {
 	}
 }
 
-// TestBaselineShipped: the baseline beside the driver renders for a module,
+// TestBaselineShipped: the repository's baseline renders for a module,
 // placeholders filled, floor declared.
 func TestBaselineShipped(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "baseline.yml"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", lintgo.BaselineFile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,12 +588,6 @@ func TestBaselineShipped(t *testing.T) {
 	stdout, _, code := run(t, writeModule(t, ""), string(raw), flagsCmd, licenseLane)
 	if code != 0 || !strings.HasPrefix(stdout, "--allowed_licenses=Apache-2.0,") {
 		t.Errorf("the shipped licenses lane: %d %q", code, stdout)
-	}
-
-	// `baseline` is the file as shipped, comments and placeholders included.
-	stdout, _, code = run(t, t.TempDir(), string(raw), "baseline")
-	if code != 0 || stdout != string(raw) {
-		t.Errorf("baseline should print the shipped file verbatim: %d", code)
 	}
 }
 

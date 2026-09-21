@@ -1,19 +1,21 @@
 package rules
 
-// The lintgo rule: a Go repository keeps its carve-outs from the Go lint
-// baseline in a root .lint-go.yaml, seeded once and the project's own. The
-// lint recipes have limen-lint-go, the driver shipped in limen's release,
-// render the baseline it embeds with that overlay into the golangci-lint
+// The lintgo rule: a Go repository carries the Go lint baseline,
+// .limen/lint-go.yaml, content-pinned like the other .limen/ files, and its
+// carve-outs from it in a root .lint-go.yaml, seeded once and the project's
+// own. The lint recipes have limen-lint-go, the driver shipped in limen's
+// release, render the one with the other into the golangci-lint
 // configuration they run, under build/, and pass it with -c; a golangci-lint
 // configuration at the root is therefore a stray: golangci-lint never reads
 // it here, and it misleads whoever does (book/per-language.md, "one
 // baseline, per-project carve-outs").
 const (
-	ruleLintGo    = "lintgo"
-	lintGoOverlay = ".lint-go.yaml"
+	ruleLintGo     = "lintgo"
+	lintGoBaseline = ".limen/lint-go.yaml"
+	lintGoOverlay  = ".lint-go.yaml"
 
 	strayGolangciMessage = " is a golangci-lint configuration nothing here reads: the recipes render theirs" +
-		" under build/ from the baseline limen-lint-go embeds and " + lintGoOverlay +
+		" under build/ from " + lintGoBaseline + " and " + lintGoOverlay +
 		" — move its carve-outs into " + lintGoOverlay + " and delete it"
 )
 
@@ -26,7 +28,7 @@ var strayGolangciConfigs = []string{".golangci.yml", ".golangci.yaml", ".golangc
 // lintGoOverlaySeed is the .lint-go.yaml a repository starts from: the
 // vocabulary as commented examples, nothing carved out. Comments only, so
 // the parser sees an empty document and limen-lint-go an empty overlay.
-const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline (` + "`limen-lint-go baseline`" + ` prints it):
+const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline (` + lintGoBaseline + `):
 # the baseline's sections, in its shape, holding only what this project adds,
 # changes or takes out. ` + "`just do lint go`" + ` renders the two on every run
 # (book/per-language.md, "one baseline, per-project carve-outs"). Seeded once;
@@ -81,6 +83,10 @@ func checkLintGo(root string) (Finding, bool) {
 		return Finding{}, false
 	}
 
+	if f := checkPinned(root, ruleLintGo, lintGoBaseline, CanonicalLintGo); f != nil {
+		return *f, true
+	}
+
 	if name, found := findFirst(root, strayGolangciConfigs...); found {
 		return fail(ruleLintGo, name, name+strayGolangciMessage), true
 	}
@@ -98,15 +104,16 @@ func checkLintGo(root string) (Finding, bool) {
 	}, true
 }
 
-// remediateLintGo seeds the overlay once in a Go repository. A stray root
-// configuration is an advisory: its carve-outs are a human's to move.
-// Nothing for a repository that is not a Go module.
+// remediateLintGo pins the baseline exactly and seeds the overlay once in a
+// Go repository. A stray root configuration is an advisory: its carve-outs
+// are a human's to move. Nothing for a repository that is not a Go module.
 func remediateLintGo(root string) []Outcome {
 	if rootGoMod(root) == nil {
 		return nil
 	}
 
 	out := []Outcome{
+		pinExact(root, ruleLintGo, lintGoBaseline, CanonicalLintGo),
 		seedIfMissing(root, ruleLintGo, lintGoOverlay, lintGoOverlaySeed,
 			"seeded "+lintGoOverlay+" (the carve-outs are the project's own from here)"),
 	}

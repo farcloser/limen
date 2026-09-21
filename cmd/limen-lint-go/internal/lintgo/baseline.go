@@ -31,8 +31,44 @@ const (
 	moduleDirective         = "module "
 )
 
+// BaselineFile is the Go lint baseline, content-pinned by limen at the
+// repository root. limen-lint-go reads it from the nearest .limen/ at or
+// above the module it runs in: a nested module has no .limen/ of its own and
+// shares its repository's.
+const BaselineFile = ".limen/lint-go.yaml"
+
 // document is a YAML mapping as the parser hands it over.
 type document = map[string]any
+
+// readBaseline is the baseline for the module in dir: BaselineFile in dir,
+// or in the nearest directory above it.
+func readBaseline(dir string) ([]byte, error) {
+	start, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrBaseline, err)
+	}
+
+	current := start
+
+	for {
+		// current is the caller's working directory, its -C argument, or a parent of it.
+		data, err := os.ReadFile(filepath.Join(current, BaselineFile)) // #nosec G304 -- see above.
+		if err == nil {
+			return data, nil
+		}
+
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: %w", ErrBaseline, err)
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return nil, fmt.Errorf("%w: none at or above %s (limen fix places it)", ErrBaseline, start)
+		}
+
+		current = parent
+	}
+}
 
 // baseline is the parsed baseline, its placeholders filled.
 type baseline struct {

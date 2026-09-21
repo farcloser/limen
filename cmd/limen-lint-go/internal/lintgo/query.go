@@ -18,12 +18,12 @@ const (
 // mode prints whether a lane's findings fail the run: "blocking" or
 // "informational". Only NilAway has the choice, having no per-line
 // suppression to make a false positive survivable any other way.
-func mode(args []string, dir string, raw []byte, stdout io.Writer) error {
+func mode(args []string, dir string, stdout io.Writer) error {
 	if len(args) != queryArgs || args[0] != laneNilaway {
 		return fmt.Errorf("%w: %s takes one lane, %s", ErrUsage, cmdMode, laneNilaway)
 	}
 
-	base, _, err := load(dir, raw)
+	base, _, err := load(dir)
 	if err != nil {
 		return err
 	}
@@ -42,12 +42,12 @@ func mode(args []string, dir string, raw []byte, stdout io.Writer) error {
 // one per line, sorted: the suppression check fails a `//revive:disable`
 // directive naming one of them, since nothing else ever reports a revive
 // directive that silences nothing.
-func disabled(args []string, dir string, raw []byte, stdout io.Writer) error {
+func disabled(args []string, dir string, stdout io.Writer) error {
 	if len(args) != queryArgs || args[0] != linterRevive {
 		return fmt.Errorf("%w: %s takes one linter, %s", ErrUsage, cmdDisabled, linterRevive)
 	}
 
-	base, _, err := load(dir, raw)
+	base, _, err := load(dir)
 	if err != nil {
 		return err
 	}

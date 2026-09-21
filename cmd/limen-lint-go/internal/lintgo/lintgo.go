@@ -1,9 +1,10 @@
 // Package lintgo is the limen-lint-go driver: it renders the Go lint
 // baseline with a project's carve-outs into the configuration the lint
 // recipes run, checks the pinned golangci-lint against the baseline's floor,
-// and prints the go-licenses flags. The baseline is handed in by the caller
-// (main embeds it); the carve-outs are the .lint-go.yaml of the module
-// limen-lint-go runs in, absent meaning none.
+// and prints the go-licenses flags. The baseline is the repository's
+// .limen/lint-go.yaml, content-pinned by limen and found in the nearest
+// .limen/ at or above the module limen-lint-go runs in; the carve-outs are
+// that module's .lint-go.yaml, absent meaning none.
 package lintgo
 
 import (
@@ -23,7 +24,6 @@ const (
 	cmdRender    = "render"
 	cmdCheck     = "check"
 	cmdFlags     = "flags"
-	cmdBaseline  = "baseline"
 	cmdMode      = "mode"
 	cmdDisabled  = "disabled"
 	laneLicenses = "licenses"
@@ -46,9 +46,10 @@ var (
 	// ErrOverlay is a .lint-go.yaml that is not a carve-out: a key outside
 	// the vocabulary, a value of the wrong shape.
 	ErrOverlay = errors.New("limen-lint-go: " + OverlayFile)
-	// ErrBaseline is a baseline limen-lint-go cannot read; it ships inside
-	// the binary, so this is a limen defect.
-	ErrBaseline = errors.New("limen-lint-go: baseline")
+	// ErrBaseline is a baseline limen-lint-go cannot find or read: the file
+	// is content-pinned by limen, so a missing one wants `limen fix` and a
+	// malformed one is a limen defect.
+	ErrBaseline = errors.New("limen-lint-go: " + BaselineFile)
 	// ErrModule is a working directory without a readable go.mod.
 	ErrModule = errors.New("limen-lint-go: go.mod")
 	// ErrBinary is a golangci-lint binary whose build information cannot be
@@ -59,18 +60,18 @@ var (
 )
 
 const usage = `usage:
-  limen-lint-go [-C DIR] render [-o FILE]   the golangci-lint configuration: the baseline plus ` + OverlayFile + `
-  limen-lint-go [-C DIR] flags licenses     the go-licenses flags: the allowed licenses and the ignored modules
-  limen-lint-go [-C DIR] flags nilaway      the NilAway flags: the module to analyze and the exclusions
-  limen-lint-go [-C DIR] mode nilaway       whether NilAway's findings fail the run: blocking or informational
-  limen-lint-go [-C DIR] disabled revive    the revive rules the configuration turns off, one per line
-  limen-lint-go check GOLANGCI-BINARY       fail when the binary is older than the baseline's floor
-  limen-lint-go baseline                    the baseline as shipped, before any carve-out
--C DIR is the module to run in (its go.mod and ` + OverlayFile + `); the working directory by default.`
+  limen-lint-go [-C DIR] render [-o FILE]        the golangci-lint configuration: the baseline plus ` + OverlayFile + `
+  limen-lint-go [-C DIR] flags licenses          the go-licenses flags: the allowed licenses and the ignored modules
+  limen-lint-go [-C DIR] flags nilaway           the NilAway flags: the module to analyze and the exclusions
+  limen-lint-go [-C DIR] mode nilaway            whether NilAway's findings fail the run: blocking or informational
+  limen-lint-go [-C DIR] disabled revive         the revive rules the configuration turns off, one per line
+  limen-lint-go [-C DIR] check GOLANGCI-BINARY   fail when the binary is older than the baseline's floor
+-C DIR is the module to run in (its go.mod and ` + OverlayFile + `); the working directory by default.
+The baseline is ` + BaselineFile + ` in the nearest .limen/ at or above DIR: the repository's, placed by limen fix.`
 
-// Run executes one subcommand with the baseline and returns the exit status;
-// diagnostics go to stderr, the render, the flags and the baseline to stdout.
-func Run(args []string, baseline []byte, stdout, stderr io.Writer) int {
+// Run executes one subcommand and returns the exit status; diagnostics go to
+// stderr, the render and the flags to stdout.
+func Run(args []string, stdout, stderr io.Writer) int {
 	global := flag.NewFlagSet("limen-lint-go", flag.ContinueOnError)
 	global.SetOutput(io.Discard)
 	dir := global.String(flagDir, ".", "the module to run in")
@@ -87,17 +88,15 @@ func Run(args []string, baseline []byte, stdout, stderr io.Writer) int {
 
 	switch rest[0] {
 	case cmdRender:
-		err = render(rest[1:], *dir, baseline, stdout, stderr)
+		err = render(rest[1:], *dir, stdout, stderr)
 	case cmdCheck:
-		err = check(rest[1:], baseline)
+		err = check(rest[1:], *dir)
 	case cmdFlags:
-		err = flags(rest[1:], *dir, baseline, stdout)
-	case cmdBaseline:
-		err = printBaseline(rest[1:], baseline, stdout)
+		err = flags(rest[1:], *dir, stdout)
 	case cmdMode:
-		err = mode(rest[1:], *dir, baseline, stdout)
+		err = mode(rest[1:], *dir, stdout)
 	case cmdDisabled:
-		err = disabled(rest[1:], *dir, baseline, stdout)
+		err = disabled(rest[1:], *dir, stdout)
 	default:
 		err = fmt.Errorf("%w: unknown command %q", ErrUsage, rest[0])
 	}
@@ -115,18 +114,4 @@ func Run(args []string, baseline []byte, stdout, stderr io.Writer) int {
 	}
 
 	return exitError
-}
-
-// printBaseline writes the baseline as shipped, placeholders and comments
-// included: what a project carves out from, readable without the source.
-func printBaseline(args []string, baseline []byte, stdout io.Writer) error {
-	if len(args) != 0 {
-		return fmt.Errorf("%w: %s takes no argument", ErrUsage, cmdBaseline)
-	}
-
-	if _, err := stdout.Write(baseline); err != nil {
-		return fmt.Errorf("%w: writing: %w", ErrBaseline, err)
-	}
-
-	return nil
 }

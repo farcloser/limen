@@ -18,7 +18,8 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | `.limen/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--limenlycheetoml). |
 | `.github/` workflows | The [CI surface](#ci-workflows--github): two content-pinned limen pieces, plus seeded-once workflows and renovate config. |
 | `tools/go.mod` | Declares the Go-built tools the recipes run as `tool` directives; a Go module adds the source analyzers — the [`gotools` rule](#the-gotools-rule--toolsgomod-tool-directives). |
-| `.lint-go.yaml` | Go modules only. The project's carve-outs from the Go lint baseline `limen-lint-go` embeds, seeded once and the project's own — the `lintgo` rule, in [per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml). A root `.golangci.yml` is a stray. |
+| `.limen/lint-go.yaml` | Go modules only. Present and canonical — the shared [Go lint baseline](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml) `limen-lint-go` renders with the project's carve-outs. |
+| `.lint-go.yaml` | Go modules only. The project's carve-outs from the Go lint baseline, seeded once and the project's own — the `lintgo` rule, in [per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml). A root `.golangci.yml` is a stray. |
 
 `limen` resolves common spelling/extension variants (`LICENSE`, `LICENSE.md`, `LICENSE.txt`,
 `COPYING`; `README`, `README.md`, `README.txt`) so a repo is not failed on a technicality,
@@ -239,9 +240,9 @@ each project keeps room of its own:
 | `.limen/just/*.just` (shared modules) | The **shared recipe baseline**. `main.just` mounts the `do` tree, sets the hermetic environment, and carries the orientation recipes (`default`, `info`); under the `do` namespace sit `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe compares `aqua-checksums.json` against a fresh regeneration to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), `fix` (apply fixes in place, where the tool supports it — including `limen fix`), each loaded as a `mod`, plus `release` imported flat so it can take a tag argument. The same in every repo. | Content-pinned: **every `*.just` file under `.limen/just/`** must match the canonical exactly. |
 
 The `.limen/` directory also parks a few non-recipe config files to keep the repo root uncluttered
-(`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/aqua-registry.yaml`, `.limen/lychee.toml`). These
-are *not* just modules — only `*.just` files are — and they are governed by their own rules
-([per-language](./per-language.md), [tooling](./tooling.md),
+(`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/lint-go.yaml`, `.limen/aqua-registry.yaml`,
+`.limen/lychee.toml`). These are *not* just modules — only `*.just` files are — and they are
+governed by their own rules ([per-language](./per-language.md), [tooling](./tooling.md),
 [link checking](#link-checking--limenlycheetoml)), not the Justfile content-pin.
 
 Orientation recipes are flat — `just info`, a project's own `just run` — so the universal

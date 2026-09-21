@@ -13,7 +13,7 @@ import (
 
 // The rendered file's header, and how it is written.
 const (
-	renderedHeader = "# Rendered by limen-lint-go from the baseline it embeds and " + OverlayFile +
+	renderedHeader = "# Rendered by limen-lint-go from " + BaselineFile + " and " + OverlayFile +
 		": edit the overlay, never this file.\n"
 	renderedIndent  = 2
 	dirPermissions  = 0o700
@@ -22,8 +22,13 @@ const (
 
 // load reads dir's module, the baseline for it and dir's overlay, and applies
 // the one to the other.
-func load(dir string, raw []byte) (baseline, report, error) {
+func load(dir string) (baseline, report, error) {
 	module, err := modulePath(dir)
+	if err != nil {
+		return baseline{}, report{}, err
+	}
+
+	raw, err := readBaseline(dir)
 	if err != nil {
 		return baseline{}, report{}, err
 	}
@@ -50,7 +55,7 @@ func load(dir string, raw []byte) (baseline, report, error) {
 
 // render writes the golangci-lint configuration for dir's module: to stdout,
 // or to the -o file, created with its directory.
-func render(args []string, dir string, raw []byte, stdout, stderr io.Writer) error {
+func render(args []string, dir string, stdout, stderr io.Writer) error {
 	set := flag.NewFlagSet(cmdRender, flag.ContinueOnError)
 	set.SetOutput(io.Discard)
 	out := set.String(flagOut, "", "write the configuration here instead of stdout")
@@ -59,7 +64,7 @@ func render(args []string, dir string, raw []byte, stdout, stderr io.Writer) err
 		return fmt.Errorf("%w: %s takes -o FILE and nothing else", ErrUsage, cmdRender)
 	}
 
-	base, applied, err := load(dir, raw)
+	base, applied, err := load(dir)
 	if err != nil {
 		return err
 	}

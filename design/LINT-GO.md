@@ -52,8 +52,13 @@ from their root Justfile to add `--ignore` entries. A hidden per-project overrid
 
 ## Decisions
 
-1. **One baseline, owned by limen, embedded in a tool of ours.** Projects never
-   edit it.
+1. **One baseline, owned by limen, content-pinned at `.limen/lint-go.yaml` like
+   every other `.limen/` file.** Projects never edit it, and a change to the policy
+   is the diff of the pull request that bumps limen, where `limen fix` rewrites the
+   file. The driver reads it from the tree, the nearest `.limen/` at or above the
+   module it runs in, rather than embedding a copy: a nested module cannot embed
+   its parent's files, and a copy inside the binary is invisible to the review a
+   pinned file gets for free. (The first cut embedded it; this is the revision.)
 2. **One overlay per repository, `.lint-go.yaml` at the root**, project-owned,
    seeded once. It covers every Go lint lane that has a per-project knob, not
    only golangci-lint. Root placement follows the lychee precedent (canonical
@@ -73,7 +78,7 @@ from their root Justfile to add `--ignore` entries. A hidden per-project overrid
    driver is a nested module in limen's tree, `cmd/limen-lint-go`, built by the release
    workflow into the same archive, verified by the same checksum and signature, pinned
    by the same aqua entry. One clock for the recipes that call it, the baseline it
-   embeds and the overlay contract limen's rule seeds. It is the one pure-Go binary
+   reads and the overlay contract limen's rule seeds. It is the one pure-Go binary
    beside limen a repository takes prebuilt: the doctrine's exception for limen extends
    to limen's own binaries, built by the same pinned toolchain in the same job.
 5. **The driver owns configuration, never execution.** Each analyzer keeps its own
@@ -92,12 +97,12 @@ from their root Justfile to add `--ignore` entries. A hidden per-project overrid
 
 ```
 limen's tree                                    every Go repository
+.limen/lint-go.yaml       the baseline, pinned   .limen/lint-go.yaml   placed by limen fix, read by the driver
 cmd/limen-lint-go/        a nested module        .lint-go.yaml         seeded once, the project's own
 ├── go.mod                (YAML parser only)      tools/golangci-lint/  tool directive, upstream's graph
 ├── main.go                                       build/                gitignored
-├── baseline.yml          embedded                ├── tools/golangci-lint   built by _go-tool
-├── .lint-go.yaml         the driver's own        └── golangci.yml          rendered on every run
-└── internal/lintgo/      render · merge · check · flags · tests
+├── .lint-go.yaml         the driver's own        ├── tools/golangci-lint   built by _go-tool
+└── internal/lintgo/      render · merge · check  └── golangci.yml          rendered on every run
         │
         ▼ goreleaser (second build, same archive, same checksum and signature)
 limen release: limen + limen-lint-go, pinned by the one aqua entry (files: limen, limen-lint-go)
@@ -124,8 +129,8 @@ limen's own repository builds `limen-lint-go` from its tree before linting
 (`LIMEN_LINT_GO_BIN`, the twin of `LIMEN_BIN`), and lints and tests the nested
 module itself, since the shared Go lanes stop at the root module. The registry
 entry keeps releases before the second binary installable with a version
-override. `limen-lint-go baseline` prints the baseline as shipped, so a
-project reads what it carves out from without limen's source.
+override. What a project carves out from is in its own tree, `.limen/lint-go.yaml`,
+comments and placeholders included.
 
 ## The overlay: `.lint-go.yaml`
 
@@ -184,7 +189,7 @@ rendered result is validated by golangci-lint when it runs.
 
 ### Version coupling
 
-`baseline.yml` declares the golangci-lint version it was written for. `limen-lint-go
+`.limen/lint-go.yaml` declares the golangci-lint version it was written for. `limen-lint-go
 check` reads the module version out of `build/tools/golangci-lint` with
 `debug/buildinfo` and fails when it is older. A newer golangci-lint warns on a
 retired linter name rather than failing on an unknown one, so Renovate's per-repo
@@ -199,9 +204,10 @@ the recipe's first step; golangci-lint sees the change. Nothing else to run,
 nothing to commit but the overlay.
 
 **limen ships a new lint policy (a linter enabled, a threshold changed).**
-It lands in `baseline.yml`, content-pinned. Renovate bumps limen in each
-repository; the checksum-update workflow runs `limen fix`, which rewrites
-`cmd/limen-lint-go/*` to the new canonical. The project's carve-outs are untouched,
+It lands in `.limen/lint-go.yaml`, content-pinned. Renovate bumps limen in each
+repository; the checksum-update workflow runs `limen fix`, which rewrites the file
+to the new canonical, so the policy change is the diff of that pull request and
+the driver reads the new baseline on the next run. The project's carve-outs are untouched,
 because they live in the overlay. If the new baseline drops a linter the overlay
 disables, the disable becomes a reported no-op.
 
@@ -227,7 +233,8 @@ cheap on purpose; visibility is the counterweight.
 
 | Where | Change |
 |---|---|
-| `cmd/limen-lint-go/` | The driver, a nested module: `main.go`, `internal/lintgo/` (render, merge, check, flags, tests), `baseline.yml`, its own `.lint-go.yaml`. |
+| `.limen/lint-go.yaml` | The baseline, content-pinned in every Go module by the `lintgo` rule; the driver reads it from the nearest `.limen/` at or above the module it runs in. |
+| `cmd/limen-lint-go/` | The driver, a nested module: `main.go`, `internal/lintgo/` (render, merge, check, flags, tests), its own `.lint-go.yaml`. |
 | `.goreleaser.yaml`, `.limen/aqua-registry.yaml` | A second build into the same archive; the limen entry lists both binaries, with an override keeping earlier releases installable. |
 | limen `internal/rules/lintgo.go` | Seed `.lint-go.yaml` once; a root golangci-lint configuration fails check and is an advisory on fix. Go modules only. |
 | `.limen/just/lib.just`, `lint-go.just`, `fix-go.just` | `_golangci-config` checks the floor and renders; `code` runs golangci-lint with `-c build/golangci.yml`, `licenses` splices `$(limen-lint-go flags licenses)`; `LINT_GO_LICENSES_FLAGS` retired. |

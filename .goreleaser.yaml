@@ -51,9 +51,9 @@ builds:
   # of its own under cmd/ — its YAML parser must not enter limen's go.mod —
   # built here so it ships in the same archive, verified by the same
   # checksum and signature, and pinned by the same aqua entry as limen; the
-  # baseline it embeds moves with limen's releases, like every canonical
-  # file. Same flags as limen's build, minus the version stamp it has no use
-  # for.
+  # baseline it reads, .limen/lint-go.yaml, moves with limen's releases like
+  # every canonical file. Same flags as limen's build, minus the version stamp
+  # it has no use for.
   - id: limen-lint-go
     dir: cmd/limen-lint-go
     main: .
