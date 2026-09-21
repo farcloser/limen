@@ -87,7 +87,7 @@ var CanonicalYamlfmt = limen.CanonicalYamlfmt //nolint:gochecknoglobals // immut
 // CanonicalLychee is the exact .limen/lychee.toml a repository must carry
 // verbatim: the canonical lychee (link checker) configuration. It is this
 // repo's .limen/lychee.toml, embedded — the rule is content-pinned, so extras
-// are not allowed; a project's own exclusions go in a root .lychee.toml, which
+// are not allowed; a project's own exclusions go in a root .lint-links.toml, which
 // is not checked.
 var CanonicalLychee = limen.CanonicalLycheeToml //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
@@ -457,8 +457,9 @@ func checkAgents(root string) Finding {
 // checkLychee content-pins .limen/lychee.toml, the canonical configuration of
 // the lychee link checker behind `just do lint links`. It is unconditional: every
 // repository carries a README, so every repository has markdown whose links can
-// be checked. A project's own exclusions live in a root .lychee.toml (merged by
-// the recipe), which limen does not check.
+// be checked. A project's own exclusions live in a root .lint-links.toml (merged
+// by the recipe), which limen does not check; the name the overlay had before,
+// .lychee.toml, is a stray the recipe no longer reads.
 func checkLychee(root string) Finding {
 	const (
 		rule = "lychee"
@@ -466,6 +467,10 @@ func checkLychee(root string) Finding {
 	)
 	if f := checkPinned(root, rule, name, CanonicalLychee); f != nil {
 		return *f
+	}
+
+	if exists(filepath.Join(root, strayLycheeOverlay)) {
+		return fail(rule, strayLycheeOverlay, strayLycheeOverlay+strayLycheeMessage)
 	}
 
 	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: name + matchesCanonicalMsg}

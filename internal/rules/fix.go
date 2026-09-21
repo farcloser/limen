@@ -90,7 +90,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateAqua(ctx, root, opts.SelfVersion)...)
 	add(remediateGoTools(ctx, root))
 	add(remediateLintGo(root)...)
-	add(remediateLychee(root))
+	add(remediateLychee(root)...)
 	add(remediateWorkflows(root)...)
 	add(remediateRenovate(root, opts))
 
@@ -624,11 +624,31 @@ func remediateAgents(root string) []Outcome {
 	}
 }
 
+// The links overlay before it was named after the lane. Neither the recipe
+// nor limen reads it now: a project's own exclusions are its owner's to move,
+// so a stray is an advisory, never a rename by the fixer.
+const (
+	strayLycheeOverlay = ".lychee.toml"
+	strayLycheeMessage = " is a link-check overlay nothing here reads: the links recipe reads" +
+		" .lint-links.toml — rename it"
+)
+
 // remediateLychee content-pins .limen/lychee.toml exactly: created if missing,
 // overwritten if it drifted. A project's own exclusions belong in a root
-// lychee.toml, which is never touched.
-func remediateLychee(root string) Outcome {
-	return pinExact(root, "lychee", ".limen/lychee.toml", CanonicalLychee)
+// .lint-links.toml, which is never touched.
+func remediateLychee(root string) []Outcome {
+	out := []Outcome{pinExact(root, "lychee", ".limen/lychee.toml", CanonicalLychee)}
+
+	if exists(filepath.Join(root, strayLycheeOverlay)) {
+		out = append(out, Outcome{
+			Rule:    "lychee",
+			Action:  ActionAdvisory,
+			Path:    strayLycheeOverlay,
+			Message: strayLycheeOverlay + strayLycheeMessage,
+		})
+	}
+
+	return out
 }
 
 // remediateShellcheck content-pins .limen/.shellcheckrc in every repository —
