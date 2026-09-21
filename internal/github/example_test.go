@@ -4,6 +4,7 @@
 package github_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -71,9 +72,7 @@ func TestOverrideExampleCoversEveryCheck(t *testing.T) {
 	documented := documentedChecks(t)
 
 	responses := compliantResponses()
-	for key, response := range compliantOrgResponses() {
-		responses[key] = response
-	}
+	maps.Copy(responses, compliantOrgResponses())
 
 	stubGH(t, responses)
 

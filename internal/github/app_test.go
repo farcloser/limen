@@ -92,13 +92,9 @@ func (a *approver) Write(p []byte) (int, error) {
 		url := string(match[1])
 
 		a.once.Do(func() {
-			a.wg.Add(1)
-
-			go func() {
-				defer a.wg.Done()
-
+			a.wg.Go(func() {
 				a.approve(url)
-			}()
+			})
 		})
 	}
 

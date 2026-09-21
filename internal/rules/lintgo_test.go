@@ -102,7 +102,7 @@ func TestFixSeedsLintGo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, line := range strings.Split(strings.TrimSpace(string(seed)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(seed)), "\n") {
 		if !strings.HasPrefix(line, "#") {
 			t.Errorf("the seed should be comments only, got %q", line)
 		}

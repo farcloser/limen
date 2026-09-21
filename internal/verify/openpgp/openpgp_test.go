@@ -7,6 +7,7 @@ package openpgp_test
 import (
 	"crypto"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -115,8 +116,8 @@ func TestRefuses(t *testing.T) {
 
 	text := string(message)
 
-	sigStart := strings.Index(text, "-----BEGIN PGP SIGNATURE-----")
-	if sigStart < 0 {
+	before, _, ok := strings.Cut(text, "-----BEGIN PGP SIGNATURE-----")
+	if !ok {
 		t.Fatal("no signature block")
 	}
 
@@ -130,7 +131,7 @@ func TestRefuses(t *testing.T) {
 		"another key":        {text, otherKeys, openpgp.ErrNoKey},
 		"no keys":            {text, nil, openpgp.ErrNoKey},
 		"sha1":               {string(weak), otherKeys, openpgp.ErrUnsupported},
-		"no signature block": {text[:sigStart], keys, openpgp.ErrArmor},
+		"no signature block": {before, keys, openpgp.ErrArmor},
 		"not clearsigned":    {"hello\n", keys, openpgp.ErrArmor},
 		"checksum mismatch":  {breakChecksum(t, text), keys, openpgp.ErrArmor},
 	}
@@ -210,8 +211,8 @@ func flipInSignature(t *testing.T, message string) string {
 
 	crc := -1
 
-	for index := len(lines) - 1; index >= 0; index-- {
-		if strings.HasPrefix(lines[index], "=") {
+	for index, line := range slices.Backward(lines) {
+		if strings.HasPrefix(line, "=") {
 			crc = index
 
 			break
