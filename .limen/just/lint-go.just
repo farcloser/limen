@@ -10,7 +10,7 @@ set quiet
 # Shared private _banner recipe (see lib.just).
 import 'lib.just'
 
-default: code vet mod vuln licenses
+default: code vet mod vuln licenses nilaway
 
 # golangci-lint, built here by the pinned toolchain from tools/golangci-lint
 # (its own module, so its analyzers' dependencies stay upstream's; see _go-tool
@@ -54,6 +54,14 @@ _suppression-check:
         'nolint:[a-z, ]*staticcheck' '(^|[^A-Z])(SA|ST|S|QF)[0-9]{4}([^0-9]|$)'
     ban 'bare //nolint is banned — name the linter (or, for a bag linter, the rule)' \
         '//nolint(:all)?([^a-z:]|$)'
+    # A revive directive naming a rule the rendered configuration turns off
+    # silences nothing, and nolintlint does not read revive's syntax: this is
+    # the only place a stale one is ever reported.
+    while IFS= read -r rule; do
+        [ -n "$rule" ] || continue
+        ban "revive's ${rule} is off in the baseline: this directive silences nothing — remove it (or move the finding to the linter that owns the check now)" \
+            "//revive:(disable|enable)[a-z-]*:${rule}([^a-z-]|$)"
+    done < <(${LIMEN_LINT_GO_BIN:-limen-lint-go} disabled revive)
     exit "$fail"
 
 # The two `go vet` analyzers golangci-lint cannot run: its package loader never
@@ -88,6 +96,43 @@ mod: (_banner "lint go" "mod")
 # govulncheck fetches vuln.go.dev), once per supported platform (see _per-platform
 # in lib.just: call paths and dependencies differ by platform).
 vuln: (_banner "lint go" "vuln") (_go-tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck") (_per-platform "build/tools/govulncheck ./...")
+
+# NilAway (go.uber.org/nilaway), Uber's nil-panic analyzer: not a golangci-lint
+# linter and never to become one (its false positives are by design), so a
+# lane of its own, built from tools/nilaway (a module of its own, pinned by
+# pseudo-version) and run once per supported platform like the other
+# analyzers (see _per-platform in lib.just). limen-lint-go carries its flags
+# from the baseline and the project's .lint-go.yaml: -include-pkgs bounds
+# the analysis to the module, the exclude lists are the only suppression it
+# has (no per-line directive). Blocking by default; a project carrying a
+# backlog sets nilaway.blocking: false in its overlay and the findings print
+# without failing the lane.
+nilaway: (_banner "lint go" "nilaway") (_go-tool "nilaway" "go.uber.org/nilaway/cmd/nilaway")
+    #!/usr/bin/env bash
+    set -euo pipefail
+    flags=$(${LIMEN_LINT_GO_BIN:-limen-lint-go} flags nilaway)
+    mode=$(${LIMEN_LINT_GO_BIN:-limen-lint-go} mode nilaway)
+    fail=0
+    # The platform loop of _per-platform, inline: a leg's failure must not
+    # stop the others, and the verdict depends on the mode.
+    if [ "{{ go_cgo }}" = "1" ]; then
+        echo "CGO_ENABLED=1: cross-platform runs are impossible (foreign-platform package" >&2
+        echo "loading needs that platform's C toolchain) — native platform only." >&2
+        # shellcheck disable=SC2086 # the flags are a list by contract
+        build/tools/nilaway $flags ./... || fail=1
+    else
+        platforms=(darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64)
+        for platform in "${platforms[@]}"; do
+            echo "→ GOOS=${platform%/*} GOARCH=${platform#*/}"
+            # shellcheck disable=SC2086 # the flags are a list by contract
+            CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}" build/tools/nilaway $flags ./... || fail=1
+        done
+    fi
+    if [ "$fail" = 1 ] && [ "$mode" != blocking ]; then
+        echo "nilaway: findings above are informational for this project (nilaway.blocking is false in .lint-go.yaml)" >&2
+        exit 0
+    fi
+    exit "$fail"
 
 # Dependency license compliance, once per supported platform (see _per-platform in
 # lib.just: each platform pulls its own dependencies). The allowed licenses

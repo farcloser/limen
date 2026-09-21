@@ -24,7 +24,10 @@ const (
 	cmdCheck     = "check"
 	cmdFlags     = "flags"
 	cmdBaseline  = "baseline"
+	cmdMode      = "mode"
+	cmdDisabled  = "disabled"
 	laneLicenses = "licenses"
+	laneNilaway  = "nilaway"
 	flagDir      = "C"
 	flagOut      = "o"
 )
@@ -58,6 +61,9 @@ var (
 const usage = `usage:
   limen-lint-go [-C DIR] render [-o FILE]   the golangci-lint configuration: the baseline plus ` + OverlayFile + `
   limen-lint-go [-C DIR] flags licenses     the go-licenses flags: the allowed licenses and the ignored modules
+  limen-lint-go [-C DIR] flags nilaway      the NilAway flags: the module to analyze and the exclusions
+  limen-lint-go [-C DIR] mode nilaway       whether NilAway's findings fail the run: blocking or informational
+  limen-lint-go [-C DIR] disabled revive    the revive rules the configuration turns off, one per line
   limen-lint-go check GOLANGCI-BINARY       fail when the binary is older than the baseline's floor
   limen-lint-go baseline                    the baseline as shipped, before any carve-out
 -C DIR is the module to run in (its go.mod and ` + OverlayFile + `); the working directory by default.`
@@ -88,6 +94,10 @@ func Run(args []string, baseline []byte, stdout, stderr io.Writer) int {
 		err = flags(rest[1:], *dir, baseline, stdout)
 	case cmdBaseline:
 		err = printBaseline(rest[1:], baseline, stdout)
+	case cmdMode:
+		err = mode(rest[1:], *dir, baseline, stdout)
+	case cmdDisabled:
+		err = disabled(rest[1:], *dir, baseline, stdout)
 	default:
 		err = fmt.Errorf("%w: unknown command %q", ErrUsage, rest[0])
 	}

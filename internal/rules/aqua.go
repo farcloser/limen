@@ -739,7 +739,7 @@ func canonicalEntryLines(names []string, shift int) []string {
 		byName[p.name] = p
 	}
 
-	var out []string
+	out := make([]string, 0, len(names))
 
 	for _, name := range names {
 		p := byName[name]

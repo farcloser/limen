@@ -48,6 +48,10 @@ const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline
 # licenses:
 #   ignore:
 #     - gotest.tools/v3
+# nilaway:
+#   blocking: false           # print the findings without failing the lane, while a backlog is worked off
+#   exclude-errors-in-files:  # NilAway has no per-line suppression: a false positive is carried by file
+#     - internal/legacy/
 `
 
 // checkLintGo evaluates the rule; ok=false when the repository is not a Go

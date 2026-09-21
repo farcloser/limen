@@ -3,6 +3,7 @@ package rules
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -85,8 +86,17 @@ func parseConfig(data []byte) (config, error) {
 		return nil, fmt.Errorf("not valid JSON: %w", err)
 	}
 
+	// A JSON `null` decodes without error into a nil map, which every write
+	// below would then panic on.
+	if cfg == nil {
+		return nil, errNotAnObject
+	}
+
 	return cfg, nil
 }
+
+// errNotAnObject is a renovate.json whose top level is not a JSON object.
+var errNotAnObject = errors.New("not a JSON object")
 
 // render writes a config back out. HTML escaping is off because a preset
 // reference contains `>` and would otherwise come back as >; keys are

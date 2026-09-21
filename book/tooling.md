@@ -98,7 +98,9 @@ bundles over a hundred analyzers and says so itself: source builds are unsupport
 `go tool` form is tolerable only from a dedicated module. So it lives in
 `tools/golangci-lint/go.mod`, alone, resolving to exactly upstream's graph; `_go-tool` in
 `lib.just` builds from the isolated module when one exists and from `tools/go.mod` otherwise,
-and the `gotools` rule seeds the module in every Go repository. The one thing that survives as a
+and the `gotools` rule seeds the module in every Go repository. NilAway gets the same
+treatment in `tools/nilaway/go.mod`, for a different reason: no tagged release, a pin by
+pseudo-version, and breaking changes announced upstream, so its graph moves on its own. The one thing that survives as a
 hand check at each bump: an upstream `replace` directive, which does not apply across modules
 and would make a source build a different program from the release — none today.
 
