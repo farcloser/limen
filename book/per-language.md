@@ -170,6 +170,8 @@ The shape now is one baseline, one overlay, rendered at lint time:
   | `golangci.linters.settings.<linter>`, `golangci.formatters.settings.<formatter>` | merge key by key: a scalar overrides, a mapping recurses, a list appends (a value the baseline already lists is a note); in a list of named mappings — revive's rules — a name the baseline has overrides that entry's keys, so a project changes one rule's arguments without restating the list, and a new name appends |
   | `licenses.allowed` | replaces the allowed list |
   | `licenses.ignore` | appends the modules go-licenses skips (typically the false positives of google/go-licenses#186) |
+  | `nilaway.blocking` | overrides: `false` makes NilAway's findings print without failing the lane, for a project working off a backlog |
+  | `nilaway.exclude-pkgs`, `nilaway.exclude-errors-in-files` | append: package and file prefixes NilAway leaves out, its only suppression |
   | anything else — `run`, `issues`, `output`, `severity`, `linters.default`, `exclusions.generated`, an unknown key | rejected with the key named: that is policy the baseline owns, never merged |
 
 - **The rendered configuration is a build artifact.** `just do lint go` has `limen-lint-go`
@@ -188,6 +190,26 @@ The shape now is one baseline, one overlay, rendered at lint time:
   the driver refuses to run when the pinned golangci-lint is older than the release the
   baseline declares, naming both and the recipe that moves the pin. The other direction is
   safe — a newer golangci-lint warns on a retired name rather than failing on an unknown one.
+
+**NilAway is a lane of its own.** Uber's nil-panic analyzer is not a golangci-lint linter
+and will not become one: golangci-lint declined it because its false positives are by
+design, and its README labels it under active development with breaking changes. So it is
+`just do lint go nilaway`, in the lane's default set, built from `tools/nilaway` (a module of
+its own, pinned by pseudo-version since upstream tags no releases, moved by Renovate inside
+the "go modules" group like every other digest update) and run once per supported platform.
+The driver carries its flags from the baseline: `-include-pkgs` bounds the analysis to the
+module, without which NilAway walks the whole dependency graph. It has no per-line
+suppression, which is why the overlay carries two exclude lists and a `blocking` switch: the
+baseline says blocking, and a project with a backlog declares `nilaway.blocking: false` while
+it works the findings off, the findings printing all the while. `limen-lint-go mode nilaway`
+is how the lane learns which.
+
+**Stale revive directives are reported.** nolintlint reads golangci's `//nolint` syntax, not
+revive's, so a `//revive:disable-next-line:<rule>` naming a rule the baseline has since turned
+off would silence nothing and be reported by nothing. The suppression check in the lint
+recipe asks `limen-lint-go disabled revive` for the rules the rendered configuration turns off
+and fails on a directive naming one: remove it, or move the finding to the linter that owns
+the check now.
 
 **What limen enforces** (the `lintgo` rule, Go modules only): a missing root `.lint-go.yaml`
 is seeded; a root golangci-lint configuration fails the check and is an advisory on fix, since

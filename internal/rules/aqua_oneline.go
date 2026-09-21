@@ -69,7 +69,9 @@ func (m *aquaManifest) twoLinePins() []twoLinePin {
 			}
 		}
 
-		if versionAt == -1 {
+		// The match is what the loop found, or nothing: the index alone does
+		// not say so to a reader of the slice below.
+		if versionMatch == nil {
 			continue
 		}
 

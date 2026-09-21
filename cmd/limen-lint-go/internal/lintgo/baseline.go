@@ -16,6 +16,7 @@ const (
 	keyGolangciLint = "golangci-lint"
 	keyLicenses     = "licenses"
 	keyGolangci     = "golangci"
+	keyNilaway      = "nilaway"
 )
 
 // The two placeholders the baseline carries, filled from the module's go.mod:
@@ -37,9 +38,12 @@ type document = map[string]any
 type baseline struct {
 	// floor is the oldest golangci-lint release every linter name in the
 	// golangci section exists in.
-	floor    string
+	floor string
+	// module is the path the placeholders were filled for; "" when none was.
+	module   string
 	licenses document
 	golangci document
+	nilaway  document
 }
 
 // parseBaseline reads the baseline with its placeholders filled for module;
@@ -79,7 +83,12 @@ func parseBaseline(raw []byte, module string) (baseline, error) {
 		return baseline{}, err
 	}
 
-	return baseline{floor: floor, licenses: licenses, golangci: golangci}, nil
+	nilaway, err := section(doc, keyNilaway, ErrBaseline)
+	if err != nil {
+		return baseline{}, err
+	}
+
+	return baseline{floor: floor, module: module, licenses: licenses, golangci: golangci, nilaway: nilaway}, nil
 }
 
 // section is doc's mapping at key: an empty one when absent, sentinel-wrapped

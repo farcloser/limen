@@ -39,6 +39,11 @@ const (
 	keyIgnore     = "ignore"
 	keyJoin       = "."
 
+	// The nilaway section's keys.
+	keyBlocking     = "blocking"
+	keyExcludePkgs  = "exclude-pkgs"
+	keyExcludeFiles = "exclude-errors-in-files"
+
 	// policyOwned rejects an overlay key the baseline owns.
 	policyOwned = "%w: %s.%s is policy the baseline owns, not a carve-out"
 )
@@ -84,9 +89,11 @@ func merge(base *baseline, overlay document) (report, error) {
 			err = applier.golangci(base.golangci, sub)
 		case keyLicenses:
 			err = applier.licenses(base.licenses, sub)
+		case keyNilaway:
+			err = applier.nilaway(base.nilaway, sub)
 		default:
-			err = fmt.Errorf("%w: unknown section %q (the sections are %s and %s)",
-				ErrOverlay, key, keyGolangci, keyLicenses)
+			err = fmt.Errorf("%w: unknown section %q (the sections are %s, %s and %s)",
+				ErrOverlay, key, keyGolangci, keyLicenses, keyNilaway)
 		}
 
 		if err != nil {
@@ -414,6 +421,59 @@ func (m *merger) licenses(base, over document) error {
 			return fmt.Errorf("%w: unknown key %s (the keys are %s and %s)", ErrOverlay, path, keyAllowed, keyIgnore)
 		}
 	}
+
+	return nil
+}
+
+// nilaway applies the nilaway section: blocking overrides, the two exclude
+// lists append. NilAway has no per-line suppression, so a file prefix in
+// exclude-errors-in-files is the only way a project carries a false
+// positive, and blocking: false is how it carries a backlog.
+func (m *merger) nilaway(base, over document) error {
+	for key, value := range over {
+		path := keyNilaway + keyJoin + key
+
+		switch key {
+		case keyBlocking:
+			if err := m.nilawayBlocking(base, value, path); err != nil {
+				return err
+			}
+		case keyExcludePkgs, keyExcludeFiles:
+			entries, err := stringList(value, path)
+			if err != nil {
+				return err
+			}
+
+			current, err := stringList(base[key], path)
+			if err != nil {
+				return err
+			}
+
+			base[key] = anyList(append(current, entries...))
+			m.report.carveOuts += len(entries)
+		default:
+			return fmt.Errorf("%w: unknown key %s (the keys are %s, %s and %s)",
+				ErrOverlay, path, keyBlocking, keyExcludePkgs, keyExcludeFiles)
+		}
+	}
+
+	return nil
+}
+
+// nilawayBlocking overrides the switch; the baseline's own value is a note.
+func (m *merger) nilawayBlocking(base document, value any, path string) error {
+	blocking, isBool := value.(bool)
+	if !isBool {
+		return fmt.Errorf("%w: %s must be true or false", ErrOverlay, path)
+	}
+
+	if current, isBool := base[keyBlocking].(bool); isBool && current == blocking {
+		m.note(path + " equals the baseline's")
+	} else {
+		m.report.carveOuts++
+	}
+
+	base[keyBlocking] = blocking
 
 	return nil
 }

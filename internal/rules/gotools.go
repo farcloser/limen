@@ -96,6 +96,9 @@ var goSourceAnalyzers = []string{
 //nolint:gochecknoglobals // immutable baseline data.
 var isolatedGoTools = map[string]string{
 	"golangci-lint": "github.com/golangci/golangci-lint/v2/cmd/golangci-lint",
+	// NilAway: no tagged release, pinned by pseudo-version, under active
+	// development with breaking changes announced; its graph stays its own.
+	"nilaway": "go.uber.org/nilaway/cmd/nilaway",
 }
 
 // isolatedAquaRetired are the aqua packages the isolated tools replaced: a

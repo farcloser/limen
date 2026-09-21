@@ -761,8 +761,11 @@ func foldMatch(root string, entries []fs.DirEntry, name string) string {
 
 func exists(path string) bool {
 	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
 
-	return err == nil && !info.IsDir()
+	return !info.IsDir()
 }
 
 func fail(rule, path, msg string) Finding {

@@ -369,6 +369,91 @@ func TestFlagsLicenses(t *testing.T) {
 	}
 }
 
+// TestNilaway: the flags bound the analysis to the module and carry the
+// overlay's exclusions; the mode is the baseline's blocking unless the
+// overlay says otherwise; the section's vocabulary is closed.
+func TestNilaway(t *testing.T) {
+	t.Parallel()
+
+	const baseline = baselineSmall + `nilaway:
+  blocking: true
+  exclude-pkgs: []
+  exclude-errors-in-files: [third_party/]
+`
+
+	stdout, stderr, code := run(t, writeModule(t, ""), baseline, flagsCmd, "nilaway")
+	if code != 0 ||
+		stdout != "-include-pkgs="+moduleAcme+" -pretty-print=false -exclude-errors-in-files=third_party/\n" {
+		t.Fatalf("baseline flags: %d %q %s", code, stdout, stderr)
+	}
+
+	stdout, _, code = run(t, writeModule(t, ""), baseline, "mode", "nilaway")
+	if code != 0 || stdout != "blocking\n" {
+		t.Fatalf("baseline mode: %d %q", code, stdout)
+	}
+
+	dir := writeModule(
+		t,
+		"nilaway:\n  blocking: false\n  exclude-pkgs: [github.com/acme/thing/sub/gen]\n  exclude-errors-in-files: [internal/legacy/]\n",
+	)
+
+	stdout, stderr, code = run(t, dir, baseline, flagsCmd, "nilaway")
+	want := "-include-pkgs=" + moduleAcme + " -pretty-print=false" +
+		" -exclude-pkgs=github.com/acme/thing/sub/gen -exclude-errors-in-files=third_party/,internal/legacy/\n"
+
+	if code != 0 || stdout != want {
+		t.Fatalf("overlay flags: %d %q %s", code, stdout, stderr)
+	}
+
+	stdout, _, code = run(t, dir, baseline, "mode", "nilaway")
+	if code != 0 || stdout != "informational\n" {
+		t.Fatalf("overlay mode: %d %q", code, stdout)
+	}
+
+	_, stderr, code = run(t, dir, baseline, renderCmd, "-o", filepath.Join(t.TempDir(), "out.yml"))
+	if code != 0 || !strings.Contains(stderr, "3 carve-out(s)") {
+		t.Errorf("the three nilaway entries should count: %d %s", code, stderr)
+	}
+
+	for _, overlay := range []string{"nilaway:\n  blocking: maybe\n", "nilaway:\n  strict: true\n"} {
+		if config, failure := rendered(t, baseline, overlay); failure == "" {
+			t.Errorf("%q rendered instead of refusing:\n%s", overlay, config)
+		}
+	}
+
+	// Without a nilaway section in the baseline the lane is informational and
+	// the flags carry the module alone.
+	stdout, _, code = run(t, writeModule(t, ""), baselineSmall, "mode", "nilaway")
+	if code != 0 || stdout != "informational\n" {
+		t.Errorf("no section: %d %q", code, stdout)
+	}
+}
+
+// TestDisabledRevive lists the revive rules the rendered configuration turns
+// off, the overlay's disables included, sorted.
+func TestDisabledRevive(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, code := run(t, writeModule(t, ""), baselineSmall, "disabled", "revive")
+	if code != 0 || stdout != "line-length-limit\n" {
+		t.Fatalf("baseline: %d %q %s", code, stdout, stderr)
+	}
+
+	dir := writeModule(
+		t,
+		"golangci:\n  linters:\n    settings:\n      revive:\n        rules:\n          - name: cyclomatic\n            disabled: true\n",
+	)
+
+	stdout, _, code = run(t, dir, baselineSmall, "disabled", "revive")
+	if code != 0 || stdout != "cyclomatic\nline-length-limit\n" {
+		t.Fatalf("overlay: %d %q", code, stdout)
+	}
+
+	if _, _, code := run(t, dir, baselineSmall, "disabled", "gosec"); code != 2 {
+		t.Errorf("another linter should be a usage error, got %d", code)
+	}
+}
+
 // TestCheck: a version below the floor fails naming both, one at or above
 // passes; a path that is not a golangci-lint build fails as such.
 func TestCheck(t *testing.T) {

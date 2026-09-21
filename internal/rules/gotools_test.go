@@ -76,6 +76,14 @@ go 1.26
 tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 `
 
+// goModNilaway is the other isolated module a Go repository carries.
+const goModNilaway = `module example.com/proj/tools/nilaway
+
+go 1.26
+
+tool go.uber.org/nilaway/cmd/nilaway
+`
+
 func runGoStub() int {
 	args := os.Args[1:]
 	if len(args) < 2 || args[0] != "get" || args[1] != "-tool" {
@@ -252,10 +260,18 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 	}
 
 	files["tools/golangci-lint/go.mod"] = goModGolangci
+
+	// NilAway is the other isolated module; the check names each in turn.
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools")
+	if f.OK() || f.Path != "tools/nilaway/go.mod" || !strings.Contains(f.Message, "go.uber.org/nilaway/cmd/nilaway") {
+		t.Fatalf("a Go module without tools/nilaway/go.mod should fail naming it, got: %+v", f)
+	}
+
+	files["tools/nilaway/go.mod"] = goModNilaway
 	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gotools")
 
 	if !f.OK() {
-		t.Fatalf("a tools/go.mod declaring every tool, with the isolated module, should pass: %s", f.Message)
+		t.Fatalf("a tools/go.mod declaring every tool, with the isolated modules, should pass: %s", f.Message)
 	}
 
 	// The directives in the project's own go.mod are the pollution the rule

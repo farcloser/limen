@@ -41,6 +41,17 @@ licenses:
     - BSD-3-Clause
     - MIT
 
+nilaway:
+  # NilAway (go.uber.org/nilaway) is not a golangci-lint linter and will not
+  # become one; it runs as its own lane, bounded to the module by the
+  # placeholder (without it the whole dependency graph is analyzed). It has
+  # no per-line suppression: a false positive is carried by a file prefix in
+  # exclude-errors-in-files, a package prefix in exclude-pkgs, and a backlog
+  # by blocking: false in the project's .lint-go.yaml, until it is worked off.
+  blocking: true
+  exclude-pkgs: []
+  exclude-errors-in-files: []
+
 golangci:
   version: "2"
 

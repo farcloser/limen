@@ -22,6 +22,7 @@ func goRepoFiles() map[string]string {
 	files["go.mod"] = goModBare
 	files["tools/go.mod"] = goModWithTools
 	files["tools/golangci-lint/go.mod"] = goModGolangci
+	files["tools/nilaway/go.mod"] = goModNilaway
 
 	return files
 }

@@ -171,7 +171,10 @@ func (s *Signer) Clearsign(text string, hash crypto.Hash) ([]byte, error) {
 
 // sign builds a v4 canonical text signature packet body over data.
 func (s *Signer) sign(data []byte, hash crypto.Hash, hashID byte) ([]byte, error) {
-	fingerprint, _ := hex.DecodeString(s.Fingerprint())
+	fingerprint, err := hex.DecodeString(s.Fingerprint())
+	if err != nil {
+		return nil, fmt.Errorf("decoding the fingerprint: %w", err)
+	}
 
 	hashed := subpacket(subpacketCreation, binary.BigEndian.AppendUint32(nil, s.created))
 	hashed = append(hashed, subpacket(subpacketIssuerFingerprint, append([]byte{version4}, fingerprint...))...)
