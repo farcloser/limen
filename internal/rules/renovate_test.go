@@ -45,7 +45,10 @@ func renovateConfig(t *testing.T, root string) map[string]any {
 
 // stringsAt returns the array of strings at key, or nil.
 func stringsAt(cfg map[string]any, key string) []string {
-	raw, _ := cfg[key].([]any)
+	raw, isList := cfg[key].([]any)
+	if !isList {
+		return nil
+	}
 
 	var out []string
 
