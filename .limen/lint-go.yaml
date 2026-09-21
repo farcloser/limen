@@ -153,12 +153,15 @@ golangci:
         check-type-assertions: false
         check-blank: false
         # errcheck's built-in list already excludes fmt.Print* and
-        # fmt.Fprint*(os.Stderr). Standard output is the CLI's contract with a
-        # pipe; a failure there has no better handler than the exit.
+        # fmt.Fprint*(os.Stderr). The Fprint family is excluded whatever the
+        # writer, the scope revive's unhandled-error had: standard output is
+        # the CLI's contract with a pipe, and a writer passed in for
+        # testability is a buffer or a recorder; a failure on either has no
+        # better handler than the exit.
         exclude-functions:
-          - fmt.Fprint(os.Stdout)
-          - fmt.Fprintf(os.Stdout)
-          - fmt.Fprintln(os.Stdout)
+          - fmt.Fprint
+          - fmt.Fprintf
+          - fmt.Fprintln
 
       errorlint:
         # err113 already reports `err == target` and demands errors.Is, so the
