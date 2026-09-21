@@ -10,7 +10,7 @@ set quiet
 # Shared private _banner recipe (see lib.just).
 import 'lib.just'
 
-default: code vet mod vuln licenses nilaway
+default: code vet mod licenses nilaway
 
 # golangci-lint, built here by the pinned toolchain from tools/golangci-lint
 # (its own module, so its analyzers' dependencies stay upstream's; see _go-tool
@@ -91,11 +91,6 @@ mod: (_banner "lint go" "mod")
     for m in tools/*/go.mod; do
         [ -f "$m" ] && go -C "${m%/go.mod}" mod tidy -diff
     done
-
-# Known-vulnerability scan against the Go vulnerability database (network:
-# govulncheck fetches vuln.go.dev), once per supported platform (see _per-platform
-# in lib.just: call paths and dependencies differ by platform).
-vuln: (_banner "lint go" "vuln") (_go-tool "govulncheck" "golang.org/x/vuln/cmd/govulncheck") (_per-platform "build/tools/govulncheck ./...")
 
 # NilAway (go.uber.org/nilaway), Uber's nil-panic analyzer: not a golangci-lint
 # linter and never to become one (its false positives are by design), so a

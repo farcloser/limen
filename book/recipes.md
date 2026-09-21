@@ -142,16 +142,24 @@ What each shared module is *for* — mechanics live in the module files themselv
   first thing the default runs, since every other linter trusts the canonical files it
   verifies), `just`, `aqua`, `links`, `yaml`, `shell`, `dockerfile`, and `commits` (DCO and
   commit hygiene over a range) in the default, plus the explicit `go` submodule (code, vet, mod,
-  vuln, licenses, and the informational bce/escape/deadcode reports), `rust`, `homebrew`
+  licenses, nilaway, and the informational bce/escape/deadcode reports), `rust`, `homebrew`
   (formula style and audit through brew's own vendored tooling — see
-  [per-language rules](./per-language.md#homebrew-formulas)), `github` (the live GitHub
+  [per-language rules](./per-language.md#homebrew-formulas)), and `github` (the live GitHub
   settings audit — `limen github check`, needing network and an authed `gh`; see
-  [the github chapter](./github.md)), and `binaries` (every Go binary aqua pins, scanned
-  against the Go vulnerability database by the symbols it links: a pinned tool carries its
-  upstream's standard library, and a fix there reaches us only when that upstream rebuilds,
-  so this is how a known vulnerability in a tool we did not build is seen the day the
-  advisory lands; named until the pinned tools are built here with the pinned toolchain,
-  since its first run found most of them carrying some).
+  [the github chapter](./github.md)). A linter's verdict is a function of the tree: the
+  same tree gets the same answer tomorrow. What is not — a scan against a database that
+  moves on its own — is not a linter, and lives in `security`.
+- **`security`** — scans whose verdict changes with a database, not with the tree, so a green
+  turns red with nothing pushed: the `go` submodule's `vuln` (the module's reachable
+  dependency graph against the Go vulnerability database, once per supported platform), in
+  the default, and `binaries` (every Go binary aqua pins, scanned by the symbols it links: a
+  pinned tool carries its upstream's standard library, and a fix there reaches us only when
+  that upstream rebuilds, so this is how a known vulnerability in a tool we did not build is
+  seen the day the advisory lands; named until the pinned tools are built here with the
+  pinned toolchain, since its first run found most of them carrying some). Its CI lane is
+  its own, `security.yaml`, apart from `ci.yaml`, so a new advisory reddens one check that
+  says what it is, and a red is answered by a bump, never a code change — see
+  [the github chapter](./github.md#security).
 - **`test`** — the suites, per language (`just do test go`: `unit`, `race` — which asks the
   toolchain whether the host has a race detector at all and, where it does not (windows/arm64:
   Go vendors LLVM's ThreadSanitizer per platform and there is none there), says so loudly and
