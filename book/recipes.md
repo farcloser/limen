@@ -57,8 +57,9 @@ an explicit, documented decision before its recipes can work; the Rust one is in
   curated `default`. The membership rule is in [mandatory
   files](./mandatory-files.md#justfile): a recipe belongs in a default only when it no-ops
   harmlessly where it does not apply; anything needing a language toolchain is named
-  explicitly (`just do lint go`). The `test` module is the honest limit of that rule: *every*
-  test is language-bound, so bare `just do test` refuses with guidance instead of guessing —
+  explicitly (`just do lint go`). The `test` and `perf` modules are the honest limit of that
+  rule: *every* test and every report is language-bound, so bare `just do test` and
+  `just do perf` refuse with guidance instead of guessing —
   a project declares its suites as a `test` aggregate in the root `Justfile` (mirroring
   `lint`), and that pair is what CI runs.
 - **Project knobs are exported variables, named after the task path.** A recipe that
@@ -142,7 +143,7 @@ What each shared module is *for* — mechanics live in the module files themselv
   first thing the default runs, since every other linter trusts the canonical files it
   verifies), `just`, `aqua`, `links`, `yaml`, `shell`, `dockerfile`, and `commits` (DCO and
   commit hygiene over a range) in the default, plus the explicit `go` submodule (code, vet, mod,
-  licenses, nilaway, and the informational bce/escape/deadcode reports), `rust`, `homebrew`
+  licenses, nilaway, and the informational deadcode report), `rust`, `homebrew`
   (formula style and audit through brew's own vendored tooling — see
   [per-language rules](./per-language.md#homebrew-formulas)), and `github` (the live GitHub
   settings audit — `limen github check`, needing network and an authed `gh`; see
@@ -163,12 +164,19 @@ What each shared module is *for* — mechanics live in the module files themselv
 - **`test`** — the suites, per language (`just do test go`: `unit`, `race` — which asks the
   toolchain whether the host has a race detector at all and, where it does not (windows/arm64:
   Go vendors LLVM's ThreadSanitizer per platform and there is none there), says so loudly and
-  passes rather than fail every push on a Go limitation — `bench`, `fuzz`
+  passes rather than fail every push on a Go limitation — `fuzz`
   as a short smoke of every `Fuzz*` target — run by the canonical CI's own `fuzz` job on
   one leg, not from the `test` aggregate, so the matrix does not fuzz five times over —
-  `cover` with an optional minimum gate, `profile`
-  with rendered call graphs). No default — see
+  and `cover` with an optional minimum gate). No default — see
   above: bare `just do test` refuses, `just test` is the project's aggregate.
+- **`perf`** — the reports that judge nothing, per language (`just do perf go`: `bce` and
+  `escape` by default — every bounds check the compiler could not eliminate, every value it
+  moved to the heap and every function it refused to inline, both compile-only and quick —
+  and, named, `bench` with allocation stats and `profile` with pprof's top entries and
+  rendered call graphs, slow and writing under `build/`). None fails and none asserts,
+  which is why they are neither `lint` nor `test`: a number to read, not a verdict, and
+  nothing in CI runs them. No default, for the reason `test` has none: every report is
+  language-bound, so bare `just do perf` refuses.
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
   (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate `aqua-checksums.json`)
   in the default, plus the `go`, `rust`, and `homebrew` submodules and `github` (plan shown,
