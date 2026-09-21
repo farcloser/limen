@@ -82,6 +82,7 @@ func compliantFiles() map[string]string {
 		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
 		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
+		".github/workflows/security.yaml":             limen.CanonicalWorkflowSecurity,
 		// The seed, with its preset reference pinned to this manifest's limen
 		// version — what `limen fix` leaves behind (the renovate rule).
 		"renovate.json": rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
@@ -831,6 +832,7 @@ func TestYamlfmtConditional(t *testing.T) {
 	for _, y := range []string{
 		"aqua.yaml", "aqua-policy.yaml", ".limen/aqua-registry.yaml",
 		".github/workflows/update-aqua-checksum.yaml", ".github/actions/setup-aqua/action.yaml", ".github/workflows/ci.yaml",
+		".github/workflows/security.yaml",
 	} {
 		delete(noYAML, y) // remove every *.yaml/*.yml in the set
 	}
@@ -1047,6 +1049,13 @@ func TestWorkflowsRule(t *testing.T) {
 
 	if f := findingByRule(rules.Check(writeRepo(t, missing), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error("a missing CI workflow should fail")
+	}
+
+	noSecurity := compliantFiles()
+	delete(noSecurity, ".github/workflows/security.yaml")
+
+	if f := findingByRule(rules.Check(writeRepo(t, noSecurity), rules.DefaultPolicy()), "workflows"); f.OK() {
+		t.Error("a missing security workflow should fail")
 	}
 
 	// The release workflow is required exactly when goreleaser config exists.

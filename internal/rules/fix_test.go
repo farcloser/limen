@@ -957,7 +957,7 @@ func TestFixWorkflows(t *testing.T) {
 			if o.Action != rules.ActionNone {
 				t.Errorf("existing ci workflow: %s, want none (left untouched)", o.Action)
 			}
-		case ".github/actions/setup-aqua/action.yaml", "renovate.json":
+		case ".github/actions/setup-aqua/action.yaml", ".github/workflows/security.yaml", "renovate.json":
 			if o.Action != rules.ActionCreated {
 				t.Errorf("%s: %s, want created", o.Path, o.Action)
 			}

@@ -244,6 +244,22 @@ The decided merge model, enforced by both the repository settings and the
   Fuzz* targets" and passes where there is nothing — a project with no fuzz
   targets pays one short job for the day it adds some.
 
+  <a id="security"></a>
+  **Security.** The vulnerability scans are not in `ci.yaml` at all. A canonical
+  `security.yaml`, seeded once like `ci.yaml`, runs `just do security` on one linux
+  leg (the scan loops over every supported platform itself) on every push and pull
+  request, and once a day on a schedule. Apart on purpose: a linter's verdict is a
+  function of the tree, a scan's is a function of a database that moves without it,
+  so inside `ci.yaml` a new advisory would turn `gate` red on a pull request that
+  changed nothing near it, and nobody could tell from the check's name. In a lane of
+  its own the red is one check that says what it is, the schedule is how `main`
+  learns of an advisory between pushes, and the answer is the dependency bump
+  Renovate opens, never a code change on whichever pull request happened to be open.
+  The check feeds no gate and is not among the ruleset's required contexts: blocking
+  every merge until a bump lands would only push unrelated work into the same red.
+  Safe in every project: the recipe says "no go.mod" and passes where there is no
+  Go module.
+
   <a id="tools"></a>
   **Tools.** A `tools` job, one linux leg, runs a real `aqua install` where
   every other job only links. Links verify nothing, so without this job an

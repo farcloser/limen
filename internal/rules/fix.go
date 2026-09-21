@@ -346,9 +346,9 @@ func seedIfMissing(root, rule, relPath, content, createdMessage string) Outcome 
 
 // remediateWorkflows brings the .github surface up to the baseline in its two
 // regimes (see checkWorkflows): the checksum-update workflow and the
-// setup-aqua action are content-pinned exactly; the CI workflow and renovate
-// config are seeded once and never overwritten; the release workflow is
-// seeded only where a goreleaser config makes it applicable.
+// setup-aqua action are content-pinned exactly; the CI and security workflows
+// and the renovate config are seeded once and never overwritten; the release
+// workflow is seeded only where a goreleaser config makes it applicable.
 func remediateWorkflows(root string) []Outcome {
 	const rule = "workflows"
 
@@ -357,6 +357,8 @@ func remediateWorkflows(root string) []Outcome {
 		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
 		seedIfMissing(root, rule, pathWorkflowCI, limen.CanonicalWorkflowCI,
 			"seeded the canonical CI workflow (the content is the project's own from here)"),
+		seedIfMissing(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity,
+			"seeded the canonical security workflow (the content is the project's own from here)"),
 		seedIfMissing(root, rule, pathRenovate, limen.CanonicalRenovate,
 			"seeded the canonical renovate config (the content is the project's own from here)"),
 	}
