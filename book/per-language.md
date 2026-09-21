@@ -151,8 +151,11 @@ go-licenses lived in an exported variable in the root `Justfile`, a hidden overr
 
 The shape now is one baseline, one overlay, rendered at lint time:
 
-- **The baseline is limen's**, embedded in `limen-lint-go`, the second binary of limen's
-  release, and never edited by a project (`limen-lint-go baseline` prints it). It carries
+- **The baseline is limen's**: `.limen/lint-go.yaml`, content-pinned like the other files
+  under `.limen/`, never edited by a project, and read from the tree by `limen-lint-go`, the
+  second binary of limen's release. Pinned rather than built into the driver so that a change
+  to the policy is the diff of the pull request that bumps limen, where `limen fix` rewrites
+  the file, the same review every other baseline gets. It carries
   the golangci-lint configuration every repository starts from, the go-licenses allowed list,
   and the oldest golangci-lint release every linter name in it exists in. Two placeholders are
   filled from the project's `go.mod` at render time: the module path (depguard's allow list)
@@ -211,7 +214,8 @@ recipe asks `limen-lint-go disabled revive` for the rules the rendered configura
 and fails on a directive naming one: remove it, or move the finding to the linter that owns
 the check now.
 
-**What limen enforces** (the `lintgo` rule, Go modules only): a missing root `.lint-go.yaml`
+**What limen enforces** (the `lintgo` rule, Go modules only): `.limen/lint-go.yaml` is
+content-pinned, created when missing and overwritten when drifted; a missing root `.lint-go.yaml`
 is seeded; a root golangci-lint configuration fails the check and is an advisory on fix, since
 its carve-outs are a human's to move. The driver itself needs no rule: it arrives with the limen
 pin, in the same archive, verified by the same checksum and signature, and the aqua registry

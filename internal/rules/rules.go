@@ -84,6 +84,12 @@ var CanonicalShellcheckrc = limen.CanonicalShellcheckrc //nolint:gochecknoglobal
 // rule is content-pinned, so extras are not allowed.
 var CanonicalYamlfmt = limen.CanonicalYamlfmt //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
+// CanonicalLintGo is the exact .limen/lint-go.yaml a Go module must carry
+// verbatim: the Go lint baseline limen-lint-go renders with the project's
+// root .lint-go.yaml. Content-pinned, so extras are not allowed; a project's
+// carve-outs go in the overlay.
+var CanonicalLintGo = limen.CanonicalLintGo //nolint:gochecknoglobals // immutable alias of embedded canonical data.
+
 // CanonicalLychee is the exact .limen/lychee.toml a repository must carry
 // verbatim: the canonical lychee (link checker) configuration. It is this
 // repo's .limen/lychee.toml, embedded — the rule is content-pinned, so extras

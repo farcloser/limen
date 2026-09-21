@@ -10,21 +10,55 @@ import (
 )
 
 const (
-	ruleLintGo   = "lintgo"
-	lintGoYAML   = ".lint-go.yaml"
-	rootGolangci = ".golangci.yml"
+	ruleLintGo     = "lintgo"
+	lintGoBaseline = ".limen/lint-go.yaml"
+	lintGoYAML     = ".lint-go.yaml"
+	rootGolangci   = ".golangci.yml"
 )
 
 // goRepoFiles is a compliant Go repository: the compliant fixture plus a
-// root go.mod, the analyzers in tools/go.mod and golangci-lint in its module.
+// root go.mod, the analyzers in tools/go.mod, golangci-lint in its module and
+// the Go lint baseline.
 func goRepoFiles() map[string]string {
 	files := compliantFiles()
 	files["go.mod"] = goModBare
 	files["tools/go.mod"] = goModWithTools
 	files["tools/golangci-lint/go.mod"] = goModGolangci
 	files["tools/nilaway/go.mod"] = goModNilaway
+	files[lintGoBaseline] = rules.CanonicalLintGo
 
 	return files
+}
+
+// TestLintGoBaselinePinned: the baseline is content-pinned in a Go module —
+// missing or drifted fails the check, and fix writes the canonical back.
+func TestLintGoBaselinePinned(t *testing.T) {
+	t.Parallel()
+
+	missing := goRepoFiles()
+	delete(missing, lintGoBaseline)
+
+	if f := findingByRule(rules.Check(writeRepo(t, missing), rules.DefaultPolicy()), ruleLintGo); f.OK() {
+		t.Error("a Go module without the baseline should fail")
+	}
+
+	drifted := goRepoFiles()
+	drifted[lintGoBaseline] = rules.CanonicalLintGo + "\n# local\n"
+	dir := writeRepo(t, drifted)
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), ruleLintGo); f.OK() || f.Path != lintGoBaseline {
+		t.Fatalf("a drifted baseline should fail at %q, got %+v", lintGoBaseline, f)
+	}
+
+	outcomes := outcomesFor(rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}), ruleLintGo)
+	if len(outcomes) == 0 || outcomes[0].Action != rules.ActionOverwrote || outcomes[0].Path != lintGoBaseline {
+		t.Fatalf("fix should overwrite the drifted baseline first, got %+v", outcomes)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, lintGoBaseline))
+	if err != nil || string(data) != rules.CanonicalLintGo {
+		t.Errorf("the baseline should equal the canonical after fix: %v", err)
+	}
 }
 
 func TestLintGoOnlyForGoModules(t *testing.T) {
@@ -85,17 +119,21 @@ func TestFixSeedsLintGo(t *testing.T) {
 		ruleLintGo,
 	)
 
-	if len(outcomes) != 2 {
-		t.Fatalf("want the seed and the advisory, got %+v", outcomes)
+	if len(outcomes) != 3 {
+		t.Fatalf("want the pin, the seed and the advisory, got %+v", outcomes)
 	}
 
-	if outcomes[0].Action != rules.ActionCreated || outcomes[0].Path != lintGoYAML {
-		t.Errorf("the overlay should be seeded: %+v", outcomes[0])
+	if outcomes[0].Action != rules.ActionNone || outcomes[0].Path != lintGoBaseline {
+		t.Errorf("the baseline is already canonical: %+v", outcomes[0])
 	}
 
-	if outcomes[1].Action != rules.ActionAdvisory || outcomes[1].Path != rootGolangci ||
-		!strings.Contains(outcomes[1].Message, "move its carve-outs") {
-		t.Errorf("the stray configuration should be an advisory: %+v", outcomes[1])
+	if outcomes[1].Action != rules.ActionCreated || outcomes[1].Path != lintGoYAML {
+		t.Errorf("the overlay should be seeded: %+v", outcomes[1])
+	}
+
+	if outcomes[2].Action != rules.ActionAdvisory || outcomes[2].Path != rootGolangci ||
+		!strings.Contains(outcomes[2].Message, "move its carve-outs") {
+		t.Errorf("the stray configuration should be an advisory: %+v", outcomes[2])
 	}
 
 	seed, err := os.ReadFile(filepath.Join(dir, lintGoYAML))

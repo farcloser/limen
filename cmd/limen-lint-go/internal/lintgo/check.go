@@ -24,9 +24,14 @@ const (
 // baseline's floor: the baseline names linters, and a name unknown to an
 // older release fails the run. The argument is the binary, or a bare
 // vMAJOR.MINOR.PATCH to ask about a release before pinning it.
-func check(args []string, raw []byte) error {
+func check(args []string, dir string) error {
 	if len(args) != checkArgs {
 		return fmt.Errorf("%w: %s takes the golangci-lint binary (or a version) and nothing else", ErrUsage, cmdCheck)
+	}
+
+	raw, err := readBaseline(dir)
+	if err != nil {
+		return err
 	}
 
 	base, err := parseBaseline(raw, "")

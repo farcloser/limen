@@ -1,9 +1,15 @@
-# The Go lint baseline of every farcloser repository, embedded in
-# limen-lint-go and shipped with limen's release: a project reads it with
-# `limen-lint-go baseline` and never edits it. A project's carve-outs go in its
-# root .lint-go.yaml, in the same shape as the sections below; limen-lint-go
-# renders the two into the golangci-lint configuration the lint recipes run
-# (book/per-language.md, "one baseline, per-project carve-outs").
+# DO NOT EDIT MANUALLY.
+# This file is common to all projects and managed by limen.
+# Global configuration changes proposals can be discussed on https://github.com/farcloser/limen
+#
+# The Go lint baseline of every farcloser repository, content-pinned like the
+# other files under .limen/: a project never edits it, and a change to the
+# policy arrives as the diff of the pull request that bumps limen. A project's
+# carve-outs go in its root .lint-go.yaml, in the same shape as the sections
+# below; limen-lint-go, shipped with limen's release, reads this file from the
+# nearest .limen/ at or above the module it runs in and renders the two into
+# the golangci-lint configuration the lint recipes run (book/per-language.md,
+# "one baseline, per-project carve-outs").
 #
 # Two placeholders are filled from the project's go.mod at render time:
 # ${MODULE_PATH} is the module path, ${MODULE_PREFIX} its first two elements

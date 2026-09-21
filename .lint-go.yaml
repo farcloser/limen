@@ -1,5 +1,5 @@
-# This project's carve-outs from the Go lint baseline (`limen-lint-go baseline`
-# prints it; this repository authors it, cmd/limen-lint-go/baseline.yml): the
+# This project's carve-outs from the Go lint baseline (.limen/lint-go.yaml,
+# which this repository authors and every other one carries pinned): the
 # baseline's sections, in its shape, holding only what this project adds,
 # changes or takes out (book/per-language.md, "one baseline, per-project
 # carve-outs"). `just do lint go` renders the two on every run.

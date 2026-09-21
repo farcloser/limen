@@ -20,12 +20,12 @@ const (
 )
 
 // flags prints one lane's flags for dir's module, on one line.
-func flags(args []string, dir string, raw []byte, stdout io.Writer) error {
+func flags(args []string, dir string, stdout io.Writer) error {
 	if len(args) != flagsArgs {
 		return fmt.Errorf("%w: %s takes one lane, %s or %s", ErrUsage, cmdFlags, laneLicenses, laneNilaway)
 	}
 
-	base, _, err := load(dir, raw)
+	base, _, err := load(dir)
 	if err != nil {
 		return err
 	}

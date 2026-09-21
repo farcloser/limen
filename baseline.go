@@ -54,6 +54,14 @@ var CanonicalYamlfmt string
 //go:embed .limen/lychee.toml
 var CanonicalLycheeToml string
 
+// CanonicalLintGo is the repository's .limen/lint-go.yaml — the Go lint
+// baseline every Go module must carry verbatim; limen-lint-go reads it from
+// the tree and renders it with the project's root .lint-go.yaml. See
+// book/per-language.md.
+//
+//go:embed .limen/lint-go.yaml
+var CanonicalLintGo string
+
 // CanonicalAquaYAML is the aqua manifest limen seeds into a bootstrapped
 // repository. It and its aqua-checksums.json are a per-project starting point
 // (the repo evolves its own pinned set from there); aqua-policy.yaml and

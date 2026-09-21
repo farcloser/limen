@@ -136,7 +136,7 @@ nilaway: (_banner "lint go" "nilaway") (_go-tool "nilaway" "go.uber.org/nilaway/
 
 # Dependency license compliance, once per supported platform (see _per-platform in
 # lib.just: each platform pulls its own dependencies). The allowed licenses
-# are the baseline's (limen-lint-go embeds it) and the ignored modules
+# are the baseline's (.limen/lint-go.yaml) and the ignored modules
 # (typically the false positives of google/go-licenses#186) the project's
 # .lint-go.yaml `licenses` section; limen-lint-go prints the flags for both
 # (LIMEN_LINT_GO_BIN: see _golangci-config in lib.just).
