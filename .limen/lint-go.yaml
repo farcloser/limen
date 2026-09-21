@@ -407,11 +407,13 @@ golangci:
         context-todo: true
 
       usestdlibvars:
-        # Every constant the standard library names, not only http.
+        # Every constant the standard library names, not only http. Not
+        # crypto-hash: its fix rewrites a displayed "SHA-256" to
+        # crypto.SHA256.String(), how a user-facing string is spelled, which
+        # is a judgment call and not a modernization.
         time-date-month: true
         time-month: true
         time-layout: true
-        crypto-hash: true
         default-rpc-path: true
         sql-isolation-level: true
         tls-signature-scheme: true
@@ -486,6 +488,11 @@ golangci:
       - gci
       - gofumpt
       - golines
+      # The one formatter that edits the import list: a fixer that drops a
+      # package's last use or introduces one leaves the tree not compiling
+      # (usetesting, perfsprint have), and the fmt pass the fix recipe runs
+      # to convergence is where goimports repairs it. gci keeps the grouping.
+      - goimports
     settings:
       gci:
         sections:
