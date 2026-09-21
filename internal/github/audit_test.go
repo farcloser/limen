@@ -1174,6 +1174,128 @@ func gateWorkflowResponse() stubResponse {
 	}
 }
 
+// securityWorkflowResponse is the contents-API answer for a security.yaml that
+// carries the security job: the lane's one check, required where it exists.
+func securityWorkflowResponse() stubResponse {
+	return stubResponse{
+		Body: `{"content":"` + base64.StdEncoding.EncodeToString(
+			[]byte("jobs:\n  security:\n    runs-on: x\n"),
+		) + `"}`,
+	}
+}
+
+// A ruleset requiring the gate alone, on a repository whose default branch
+// carries the security lane, is missing the check that makes a vulnerability
+// block a merge: the audit fails it and the reconcile adds the context.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetRequiresSecurityWithLane(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"gate"}]}}]}`,
+	}
+	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
+	responses["GET repos/test/repo/contents/.github/workflows/security.yaml"] = securityWorkflowResponse()
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail || !strings.Contains(finding.Message, "security") {
+		t.Fatalf(
+			"gate alone with a security lane: %v (%s), want fail naming the check",
+			finding.Status, finding.Message,
+		)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == "ruleset-default-branch" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	payload := string(log)
+
+	if !strings.Contains(payload, `"context":"gate"`) || !strings.Contains(payload, `"context":"security"`) {
+		t.Errorf("reconcile must require both the gate and the security check, got: %s", payload)
+	}
+}
+
+// The reverse: a ruleset requiring the security check on a repository whose
+// default branch has no lane reporting it would wait forever, so the audit
+// moves it back onto the gate alone.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetDropsSecurityWithoutLane(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"gate"},{"context":"security"}]}}]}`,
+	}
+	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
+	responses["GET repos/test/repo/contents/.github/workflows/security.yaml"] = stubResponse{NotFound: true}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail || !strings.Contains(finding.Message, "waits on it forever") {
+		t.Fatalf("security required without a lane: %v (%s), want fail", finding.Status, finding.Message)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == "ruleset-default-branch" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	payload := string(log)
+
+	if !strings.Contains(payload, `"context":"gate"`) || strings.Contains(payload, `"context":"security"`) {
+		t.Errorf("reconcile must keep the gate and drop the security check, got: %s", payload)
+	}
+}
+
+// Creating limen:main on a repository whose default branch carries both
+// workflows requires both checks from the start.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetCreatesWithSecurityContext(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
+		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
+	}
+	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = gateWorkflowResponse()
+	responses["GET repos/test/repo/contents/.github/workflows/security.yaml"] = securityWorkflowResponse()
+	logPath := stubGH(t, responses)
+
+	_, changes := github.Audit(t.Context(), testRepo, nil)
+
+	for _, planned := range changes {
+		if planned.Check == "ruleset-default-branch" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	payload := string(log)
+
+	if !strings.Contains(payload, `"context":"gate"`) || !strings.Contains(payload, `"context":"security"`) {
+		t.Errorf("a created ruleset must require the gate and the security check, got: %s", payload)
+	}
+}
+
 // No limen:main, and no gate job for it to require: the fixer must not create
 // one. A pre-gate repository reached by the sweep for the first time got a
 // ruleset requiring `gate` from a workflow that never reports it, and every

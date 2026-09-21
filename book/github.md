@@ -174,16 +174,22 @@ The decided merge model, enforced by both the repository settings and the
   pushes and branch deletion on the default branch are blocked.
 - **Merges wait for green CI.** The `limen:main` ruleset carries required
   status checks, without which auto-merge (and a hasty human) would merge on
-  red. A fresh ruleset requires exactly **one** context, `gate` — the job in
-  the canonical `ci.yaml` that `needs` every matrix leg, the fuzz job and the
-  tools job, and fails unless all of them succeeded. The check *names* remain project-owned, so reconciliation
+  red. A fresh ruleset requires `gate` — the job in the canonical `ci.yaml`
+  that `needs` every matrix leg, the fuzz job and the tools job, and fails
+  unless all of them succeeded — and, where the default branch carries
+  `security.yaml`, the `security` check beside it (see [security](#security)):
+  what the canonical workflows report, read from the default branch, never
+  assumed from the seed. The check *names* remain project-owned, so reconciliation
   preserves whatever a repository already declared, exactly like the
-  standard-registry ref inside the pinned aqua sections — with one exception.
-  A ruleset that still names the matrix legs themselves (`verify (…)`, the
-  shape rulesets had before the gate job existed) on a repository whose
-  `ci.yaml` now carries the gate job is drift, and `limen github fix` moves it
-  onto `gate`: a leg the matrix dropped or never ran is a check nothing
-  reports, and the pull request waits on it forever. A repository without the
+  standard-registry ref inside the pinned aqua sections — with one exception:
+  canonical names follow the workflows. A ruleset that still names the matrix
+  legs themselves (`verify (…)`, the shape rulesets had before the gate job
+  existed) on a repository whose `ci.yaml` now carries the gate job is drift,
+  and `limen github fix` moves it onto `gate`: a leg the matrix dropped or
+  never ran is a check nothing reports, and the pull request waits on it
+  forever. Likewise `gate` alone on a repository whose default branch carries
+  the security lane is moved onto `gate` and `security`, and `security`
+  required where no lane reports it is moved back. A repository without the
   gate job keeps its legs until it has one — and gets no fresh `limen:main`
   until it has one either: on a repository with no `limen:main` yet and no
   gate job in its `ci.yaml` on the default branch (an empty repository
@@ -255,10 +261,13 @@ The decided merge model, enforced by both the repository settings and the
   its own the red is one check that says what it is, the schedule is how `main`
   learns of an advisory between pushes, and the answer is the dependency bump
   Renovate opens, never a code change on whichever pull request happened to be open.
-  The check feeds no gate and is not among the ruleset's required contexts: blocking
-  every merge until a bump lands would only push unrelated work into the same red.
-  Safe in every project: the recipe says "no go.mod" and passes where there is no
-  Go module.
+  The check feeds no gate but is required in its own name where the lane exists: a
+  vulnerability reachable from a pull request blocks its merge, and a red inherited
+  from `main` is explained on the pull request like any other until the bump lands.
+  The name is stable, so requiring it bakes nothing of the workflow's shape into the
+  ruleset, and the audit requires it only where `security.yaml` on the default branch
+  reports it (see "Merges wait for green CI" above). Safe in every project: the recipe
+  says "no go.mod" and passes where there is no Go module.
 
   <a id="tools"></a>
   **Tools.** A `tools` job, one linux leg, runs a real `aqua install` where
