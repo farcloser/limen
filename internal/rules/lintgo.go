@@ -28,29 +28,49 @@ var strayGolangciConfigs = []string{".golangci.yml", ".golangci.yaml", ".golangc
 // the parser sees an empty document and limen-lint-go an empty overlay.
 const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline (` + "`limen-lint-go baseline`" + ` prints it):
 # the baseline's sections, in its shape, holding only what this project adds,
-# changes or takes out — a linter disabled, an exclusion added, a setting
-# changed, a module go-licenses must ignore. ` + "`just do lint go`" + ` renders the
-# two on every run (book/per-language.md, "one baseline, per-project
-# carve-outs"). Seeded once; the file is the project's own.
+# changes or takes out. ` + "`just do lint go`" + ` renders the two on every run
+# (book/per-language.md, "one baseline, per-project carve-outs"). Seeded once;
+# the file is the project's own. Every key the overlay accepts is below, with
+# what it does to the baseline; anything else is refused as baseline policy.
 #
 # golangci:
 #   linters:
-#     disable:
+#     disable:                       # takes a linter out of the baseline's set
 #       - zerologlint
+#     enable:                        # adds one the baseline turns off
+#       - godox
 #     exclusions:
-#       rules:
+#       paths:                       # appends: files golangci-lint skips entirely
+#         - third_party/
+#       presets:                     # appends golangci-lint's exclusion presets
+#         - comments
+#       rules:                       # appends: a linter, or a finding text, off under a path
 #         - path: testutil/
 #           linters: [gosec]
-#     settings:
-#       wrapcheck:
-#         ignore-package-globs:
+#     settings:                      # per linter, merged key by key into the baseline's:
+#       wrapcheck:                   #   a scalar overrides, a mapping recurses, a list appends,
+#         ignore-package-globs:      #   a named entry (a revive rule) overrides its namesake
 #           - github.com/example/project/*
+#   formatters:
+#     enable:                        # adds a formatter
+#       - goimports
+#     exclusions:
+#       paths:                       # appends: files the formatters skip
+#         - internal/generated/
+#     settings:                      # per formatter, merged like the linters'
+#       golines:
+#         max-len: 100
 # licenses:
-#   ignore:
+#   allowed:                         # replaces the baseline's list of accepted dependency licenses
+#     - Apache-2.0
+#     - MIT
+#   ignore:                          # appends modules go-licenses skips (its known false positives)
 #     - gotest.tools/v3
 # nilaway:
-#   blocking: false           # print the findings without failing the lane, while a backlog is worked off
-#   exclude-errors-in-files:  # NilAway has no per-line suppression: a false positive is carried by file
+#   blocking: false                  # findings print without failing the lane, while a backlog is worked off
+#   exclude-pkgs:                    # appends package prefixes NilAway leaves out
+#     - github.com/example/project/internal/generated
+#   exclude-errors-in-files:         # appends file prefixes: NilAway has no per-line suppression
 #     - internal/legacy/
 `
 
