@@ -375,7 +375,7 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 	}
 
 	// It is content-pinned: even the canonical plus an extra setting fails — a
-	// project's own exclusions belong in a root .lychee.toml.
+	// project's own exclusions belong in a root .lint-links.toml.
 	extra := compliantFiles()
 
 	extra[".limen/lychee.toml"] = rules.CanonicalLychee + "\ncache = true\n"
@@ -383,12 +383,23 @@ func TestLycheeMustMatchExactly(t *testing.T) {
 		t.Error("canonical + an extra setting should fail (content-pinned, no extras)")
 	}
 
-	// A root lychee.toml is the project's own: its presence changes nothing.
+	// A root .lint-links.toml is the project's own: its presence changes nothing.
 	own := compliantFiles()
 
-	own[".lychee.toml"] = "exclude = ['https://example\\.internal/']\n"
+	own[".lint-links.toml"] = "exclude = ['https://example\\.internal/']\n"
 	if f := findingByRule(rules.Check(writeRepo(t, own), rules.DefaultPolicy()), "lychee"); !f.OK() {
-		t.Errorf("a project's own root .lychee.toml should not affect the rule: %s", f.Message)
+		t.Errorf("a project's own root .lint-links.toml should not affect the rule: %s", f.Message)
+	}
+
+	// The overlay's former name is a stray the recipe no longer reads: it fails,
+	// naming the file to rename it to.
+	stray := compliantFiles()
+
+	stray[".lychee.toml"] = "exclude = ['https://example\\.internal/']\n"
+
+	f := findingByRule(rules.Check(writeRepo(t, stray), rules.DefaultPolicy()), "lychee")
+	if f.OK() || f.Path != ".lychee.toml" || !strings.Contains(f.Message, ".lint-links.toml") {
+		t.Errorf("a stray root .lychee.toml should fail naming .lint-links.toml, got %+v", f)
 	}
 }
 

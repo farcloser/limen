@@ -166,12 +166,12 @@ links: (_banner "lint" "links")
     #!/usr/bin/env bash
     set -euo pipefail
     # Canonical exclusions (and their rationale) live in .limen/lychee.toml; a
-    # repository adds its own in a root .lychee.toml. Both must be passed
+    # repository adds its own in a root .lint-links.toml. Both must be passed
     # explicitly — any --config disables lychee's ./lychee.toml auto-discovery —
     # and lychee merges them, concatenating the exclude lists.
     args=(--config .limen/lychee.toml)
-    if [ -f .lychee.toml ]; then
-        args+=(--config .lychee.toml)
+    if [ -f .lint-links.toml ]; then
+        args+=(--config .lint-links.toml)
     fi
     lychee --no-progress "${args[@]}" .
 

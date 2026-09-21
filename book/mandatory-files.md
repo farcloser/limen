@@ -362,10 +362,12 @@ reliably), each documented in the file itself. The source of truth is this repos
 `rules.CanonicalLychee`. The rule is unconditional: every repository carries a README, so
 every repository has links worth checking.
 
-**Per-project exclusions go in a root `.lychee.toml`.** The `lint links` recipe passes both
+**Per-project exclusions go in a root `.lint-links.toml`.** The `lint links` recipe passes both
 files to lychee, which merges them — the exclude lists concatenate — so a project extends the
 baseline without touching it. Like the root `Justfile`, the root file is the project's own: `limen`
-neither checks nor overwrites it. (Both configs must be passed explicitly; passing any
+neither checks nor overwrites it. The name follows the lane, as `.lint-go.yaml` does for the Go
+lint baseline, in the tool's own format; its former name, `.lychee.toml`, is reported as a stray,
+since nothing reads it any more. (Both configs must be passed explicitly; passing any
 `--config` disables lychee's automatic discovery of `./lychee.toml`, which is why the recipe
 names both.)
 

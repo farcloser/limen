@@ -57,7 +57,7 @@ from their root Justfile to add `--ignore` entries. A hidden per-project overrid
 2. **One overlay per repository, `.lint-go.yaml` at the root**, project-owned,
    seeded once. It covers every Go lint lane that has a per-project knob, not
    only golangci-lint. Root placement follows the lychee precedent (canonical
-   `.limen/lychee.toml`, project's own `.lychee.toml`); a `config/` directory would
+   `.limen/lychee.toml`, project's own `.lint-links.toml`); a `config/` directory would
    be a new convention and is not introduced for one file. Root-file
    proliferation is a watched cost.
 3. **The effective golangci config is a build artifact**, `build/golangci.yml`,

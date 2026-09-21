@@ -446,14 +446,28 @@ func TestFixLychee(t *testing.T) {
 		t.Errorf("lychee should pass after overwrite: %s", f.Message)
 	}
 
-	// A project's own root lychee.toml is never touched.
+	// A project's own root .lint-links.toml is never touched.
 	own := "exclude = ['https://example\\.internal/']\n"
-	withOwn := writeRepo(t, map[string]string{".lychee.toml": own})
+	withOwn := writeRepo(t, map[string]string{".lint-links.toml": own})
 	rules.Fix(t.Context(), withOwn, bootstrapOpts())
 
-	data, _ = os.ReadFile(filepath.Join(withOwn, ".lychee.toml"))
+	data, _ = os.ReadFile(filepath.Join(withOwn, ".lint-links.toml"))
 	if string(data) != own {
-		t.Error("fix modified the project's own root .lychee.toml")
+		t.Error("fix modified the project's own root .lint-links.toml")
+	}
+
+	// The overlay's former name is reported as an advisory and left alone: the
+	// exclusions in it are the project's to move.
+	withStray := writeRepo(t, map[string]string{".lychee.toml": own})
+	outcomes := outcomesFor(rules.Fix(t.Context(), withStray, bootstrapOpts()), "lychee")
+
+	if len(outcomes) != 2 || outcomes[1].Action != rules.ActionAdvisory || outcomes[1].Path != ".lychee.toml" {
+		t.Errorf("a stray root .lychee.toml should be an advisory, got %+v", outcomes)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(withStray, ".lychee.toml"))
+	if string(data) != own {
+		t.Error("fix modified the stray root .lychee.toml")
 	}
 }
 
