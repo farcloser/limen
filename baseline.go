@@ -116,6 +116,14 @@ var CanonicalActionSetupAqua string
 //go:embed .github/workflows/ci.yaml
 var CanonicalWorkflowCI string
 
+// CanonicalWorkflowSecurity seeds .github/workflows/security.yaml once: the
+// vulnerability scans' lane, apart from ci.yaml because a scan's verdict
+// moves with a database rather than with the tree. The project's own
+// afterwards, like ci.yaml.
+//
+//go:embed .github/workflows/security.yaml
+var CanonicalWorkflowSecurity string
+
 // CanonicalWorkflowRelease seeds .github/workflows/release.yaml — only into
 // repositories that carry a .goreleaser.yaml (releasing is opt-in).
 //

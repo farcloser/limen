@@ -33,6 +33,7 @@ const (
 	pathWorkflowChecksum = ".github/workflows/update-aqua-checksum.yaml"
 	pathActionSetupAqua  = ".github/actions/setup-aqua/action.yaml"
 	pathWorkflowCI       = ".github/workflows/ci.yaml"
+	pathWorkflowSecurity = ".github/workflows/security.yaml"
 	pathWorkflowRelease  = ".github/workflows/release.yaml"
 	pathRenovate         = "renovate.json"
 )
@@ -485,9 +486,9 @@ func checkLychee(root string) Finding {
 // checkWorkflows verifies the .github surface in its two regimes: the
 // checksum-update workflow and the setup-aqua action are content-pinned
 // (limen machinery — the write-capable workflow's hardening must never
-// drift), while the CI workflow and renovate config need only exist (limen
-// fix seeds the canonical ones; their content is the project's own after
-// that). The release workflow is required exactly when the repository
+// drift), while the CI and security workflows and the renovate config need
+// only exist (limen fix seeds the canonical ones; their content is the
+// project's own after that). The release workflow is required exactly when the repository
 // carries a goreleaser config — releasing is opt-in.
 func checkWorkflows(root string) Finding {
 	const rule = "workflows"
@@ -500,7 +501,7 @@ func checkWorkflows(root string) Finding {
 		return *f
 	}
 
-	for _, seeded := range []string{pathWorkflowCI, pathRenovate} {
+	for _, seeded := range []string{pathWorkflowCI, pathWorkflowSecurity, pathRenovate} {
 		if !exists(filepath.Join(root, filepath.FromSlash(seeded))) {
 			return fail(
 				rule,

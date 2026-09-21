@@ -16,6 +16,9 @@ mod tools 'tools.just'
 mod lint 'lint.just'
 mod test 'test.just'
 mod fix 'fix.just'
+# Scans against a moving database, apart from lint's verdicts on the tree
+# (security.just).
+mod security 'security.just'
 
 # Flat (imported, not a module) so it takes arguments: `just do release v1.2.3`.
 import 'release.just'
