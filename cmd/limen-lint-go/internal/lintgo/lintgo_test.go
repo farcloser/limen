@@ -581,8 +581,12 @@ func TestBaselineShipped(t *testing.T) {
 		t.Errorf("the shipped baseline did not render for the module:\n%s", config)
 	}
 
-	if _, _, code := run(t, t.TempDir(), string(raw), checkCmd, "v2.13.0"); code != 0 {
-		t.Error("the shipped floor should accept v2.13.0")
+	if _, _, code := run(t, t.TempDir(), string(raw), checkCmd, "v2.14.0"); code != 0 {
+		t.Error("the shipped floor should accept v2.14.0")
+	}
+
+	if _, _, code := run(t, t.TempDir(), string(raw), checkCmd, "v2.13.2"); code == 0 {
+		t.Error("the shipped floor should refuse v2.13.2: its revive has no multiline-if-init to disable")
 	}
 
 	stdout, _, code := run(t, writeModule(t, ""), string(raw), flagsCmd, licenseLane)

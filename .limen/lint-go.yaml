@@ -36,7 +36,7 @@ lint-go:
   # The oldest golangci-lint release every linter name below exists in: a
   # renamed or new linter moves this floor with it, and `limen-lint-go check`
   # refuses an older binary, which would fail on the unknown name.
-  golangci-lint: v2.13.0
+  golangci-lint: v2.14.0
 
 licenses:
   # What go-licenses accepts in the dependency graph; a project's .lint-go.yaml
@@ -288,6 +288,11 @@ golangci:
           # A boolean parameter that selects behaviour is a design choice this
           # codebase makes on purpose: 31 suppressions of this rule say so.
           - name: flag-parameter
+            disabled: true
+          # golines wraps a long if-init into exactly the shape this rejects,
+          # with no auto-fix to undo it, so fix and lint never converge; the
+          # hoist it demands widens the error's scope. No bug class.
+          - name: multiline-if-init
             disabled: true
 
           - name: max-public-structs
