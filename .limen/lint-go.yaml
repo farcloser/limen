@@ -406,16 +406,17 @@ golangci:
 
       usestdlibvars:
         # Every constant the standard library names, not only http. Not
-        # crypto-hash: its fix rewrites a displayed "SHA-256" to
+        # crypto-hash: it rewrites a displayed "SHA-256" to
         # crypto.SHA256.String(), how a user-facing string is spelled, which
-        # is a judgment call and not a modernization.
+        # is a judgment call and not a modernization. Not constant-kind: it
+        # takes any "Bool", "Int" or "String" for a go/constant kind, flag-set
+        # labels included, and asks to couple them to a compiler package.
         time-date-month: true
         time-month: true
         time-layout: true
         default-rpc-path: true
         sql-isolation-level: true
         tls-signature-scheme: true
-        constant-kind: true
 
       iface:
         enable:
