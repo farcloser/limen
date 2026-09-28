@@ -180,7 +180,12 @@ What each shared module is *for* — mechanics live in the module files themselv
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
   (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate `aqua-checksums.json`)
   in the default, plus the `go`, `rust`, and `homebrew` submodules and `github` (plan shown,
-  applied on consent). What `lint` reports, `fix` repairs — nothing mutates under a lint name.
+  applied on consent). Nothing mutates under a lint name, and `fix` applies only what cannot
+  change behaviour: for Go, the formatters plus the linter fixes that touch layout alone (blank
+  lines, a comment's period, struct-tag alignment, `//nolint` directives). Every other linter
+  fix is a pattern rewrite with no promise to preserve meaning, and several have broken code:
+  a loop shortened by one iteration, a path losing its separator. Those findings stay
+  findings, and a person fixes them.
 
 Two roles deserve emphasis because they close the enforcement loop:
 
