@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,7 +46,7 @@ golangci:
     enable: [gci]
     settings:
       gci:
-        sections: [standard, "prefix(${MODULE_PREFIX})"]
+        sections: [standard, "prefix(${MODULE_PREFIX})", localmodule]
 `
 
 const (
@@ -333,6 +334,52 @@ func TestMergeSettings(t *testing.T) {
 
 	if !strings.Contains(stderr, "already lists $gostd") || !strings.Contains(stderr, "4 carve-out(s)") {
 		t.Errorf("expected the repeat noted and four tools counted: %s", stderr)
+	}
+}
+
+// TestMergeGciSections: a project's gci sections go in before the baseline's
+// localmodule, in the overlay's order, so a sibling organization's prefix
+// groups with the project's own instead of landing after the module; one the
+// baseline already lists is a note, not a second group.
+func TestMergeGciSections(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, code := run(t, writeModule(t, `golangci:
+  formatters:
+    settings:
+      gci:
+        sections: ["prefix(github.com/sibling)", "prefix(github.com/other)", standard]
+`), baselineSmall, renderCmd)
+	if code != 0 {
+		t.Fatal(stderr)
+	}
+
+	// The section list is the run of "- " lines right after "sections:".
+	var got []string
+
+	_, rest, _ := strings.Cut(stdout, "sections:\n")
+	for line := range strings.SplitSeq(rest, "\n") {
+		item, isItem := strings.CutPrefix(strings.TrimSpace(line), "- ")
+		if !isItem {
+			break
+		}
+
+		got = append(got, item)
+	}
+
+	want := []string{
+		"standard",
+		"prefix(github.com/acme)",
+		"prefix(github.com/sibling)",
+		"prefix(github.com/other)",
+		"localmodule",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("sections %v, want %v:\n%s", got, want, stdout)
+	}
+
+	if !strings.Contains(stderr, "already lists standard") {
+		t.Errorf("a section the baseline lists should be noted: %s", stderr)
 	}
 }
 

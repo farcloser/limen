@@ -18,6 +18,8 @@ import (
 //	                                 list of named mappings (revive's rules)
 //	                                 a name the baseline has overrides that
 //	                                 entry's keys, a new name appends
+//	formatters.settings.gci.sections goes in before the baseline's
+//	                                 localmodule, not after it
 //	licenses.allowed                 replaces the allowed list
 //	licenses.ignore                  appends ignored modules
 //
@@ -46,6 +48,11 @@ const (
 
 	// policyOwned rejects an overlay key the baseline owns.
 	policyOwned = "%w: %s.%s is policy the baseline owns, not a carve-out"
+
+	// gciSections is gci's section list, whose order is the import layout,
+	// and gciLocalModule the section a project's sibling prefixes precede.
+	gciSections    = keyGolangci + keyJoin + keyFormatters + keyJoin + keySettings + ".gci.sections"
+	gciLocalModule = "localmodule"
 )
 
 // report is what a render says about the overlay it applied.
@@ -323,12 +330,7 @@ func (m *merger) value(base, over any, path string) (any, error) {
 
 		return target, nil
 	case []any:
-		current, err := list(base, path)
-		if err != nil {
-			return nil, err
-		}
-
-		return m.lists(current, over, path)
+		return m.listValue(base, over, path)
 	default:
 		if !scalar(base) {
 			return nil, fmt.Errorf("%w: %s is a mapping or a list in the baseline, not a scalar", ErrOverlay, path)
@@ -361,6 +363,45 @@ func (m *merger) lists(base, over []any, path string) ([]any, error) {
 	}
 
 	return base, nil
+}
+
+// listValue merges an overlay list into its baseline counterpart: gci's
+// sections by position, every other list by lists' rules.
+func (m *merger) listValue(base any, over []any, path string) ([]any, error) {
+	current, err := list(base, path)
+	if err != nil {
+		return nil, err
+	}
+
+	if path == gciSections {
+		return m.sections(current, over, path), nil
+	}
+
+	return m.lists(current, over, path)
+}
+
+// sections places a project's gci sections just before the baseline's
+// localmodule, so a sibling organization's prefix groups with the project's
+// own prefix rather than after the module itself; with no localmodule in the
+// baseline they append. A section the baseline already has is a note.
+func (m *merger) sections(base, over []any, path string) []any {
+	insertAt := slices.Index(base, any(gciLocalModule))
+	if insertAt < 0 {
+		insertAt = len(base)
+	}
+
+	for _, element := range over {
+		if slices.Contains(base, element) {
+			m.note(fmt.Sprintf("%s already lists %v", path, element))
+
+			continue
+		}
+
+		base = slices.Insert(base, insertAt, element)
+		insertAt++
+	}
+
+	return base
 }
 
 // byName appends the named mappings the baseline lacks; one it has takes the
