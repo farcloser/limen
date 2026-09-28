@@ -268,6 +268,28 @@ The forms, per linter:
 of a directive, not which linter it names, so the recipe greps the tracked Go files for
 every banned form and fails with the fix spelled out.
 
+## Go — fixing a shadowed error
+
+govet's `shadow` reports an inner declaration hiding an outer variable that is read again,
+and in practice that is almost always an `err`. The fix keeps the `if` and assigns instead
+of declaring, so the function's own `err` carries the value:
+
+```go
+if err = f(); err != nil {           // was: if err := f(); err != nil {
+if _, err = w.Write(b); err != nil { // was: if _, err := w.Write(b); err != nil {
+```
+
+Reuse the variable; do not invent new ones. A fix that renames (`closeErr`, `parseErr`,
+`err2`, one per site) fills a function with near-identical names for one value, so the
+reader has to check which one each check reads. Not a split into `err = f()` and a separate
+`if err != nil {` either: that doubles the diff, and wsl_v5 then wants blank lines around the
+pair. When the `if` also declares a new value (`if ok, err := …`), declare that value on the
+line above and keep the assignment. A new name only where writing the outer variable would
+itself be a bug, typically a goroutine that must not write the enclosing `err`: then one
+plain name, and the reason in the commit message. gocritic's `sloppyReassign` reports
+exactly the assigning form, which is why it is off in the baseline: the two cannot both
+pass.
+
 ## Go — what golangci-lint cannot see
 
 golangci-lint's `govet` runs the same analyzers as `go vet`, with one structural gap: its

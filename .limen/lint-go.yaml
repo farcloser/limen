@@ -163,7 +163,9 @@ golangci:
         settings:
           shadow:
             # Strict mode also reports a shadow whose outer variable is never
-            # read again, which is the harmless case.
+            # read again, which is the harmless case. A finding is fixed by
+            # reusing the variable, `if err = f(); …`, never by a new name or
+            # a two-line split (book/per-language.md, "fixing a shadowed error").
             strict: false
 
       staticcheck:
