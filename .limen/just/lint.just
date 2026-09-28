@@ -173,7 +173,36 @@ links: (_banner "lint" "links")
     if [ -f .lint-links.toml ]; then
         args+=(--config .lint-links.toml)
     fi
-    lychee --no-progress "${args[@]}" .
+    # WORKAROUND, lychee through 0.24.2 (lychee-lib/src/retry.rs): a rejected
+    # status is judged retryable only when it is 429, so a 5xx is never
+    # retried whatever max_retries says, and one GitHub 503 blip fails the
+    # lane. Server errors alone get a second pass, re-checked once a minute
+    # later; any other failure is a finding at once. Drop this when lychee
+    # retries 5xx itself.
+    scratch=$(mktemp -d "${TMPDIR:-/tmp}/lint-links.XXXXXX")
+    trap 'rm -rf "$scratch"' EXIT
+    report="$scratch/report.json"
+    status=0
+    lychee --no-progress "${args[@]}" --format json --output "$report" . || status=$?
+    if [ "$status" = 0 ]; then
+        jq -r '"\(.total) links: \(.successful) ok, \(.excludes) excluded, \(.redirects) redirected"' "$report"
+        exit 0
+    fi
+    # 2 is "links failed"; anything else (a config or input error) is final.
+    [ "$status" = 2 ] || exit "$status"
+    jq -r '(.error_map, .timeout_map) | to_entries[] | .key as $file | .value[]
+        | "[\(.status.code // "timeout")] \(.url) (\($file):\(.span.line // 0)) | \(.status.text)"' "$report"
+    servers=$(jq '[.error_map[][] | select(.status.code != null and .status.code >= 500 and .status.code < 600)] | length' "$report")
+    failures=$(jq '[.error_map[][], .timeout_map[][]] | length' "$report")
+    if [ "$servers" = 0 ] || [ "$servers" != "$failures" ]; then
+        exit 2
+    fi
+    # The links go back in as a document: a URL given as an input is a page to
+    # read links out of, not a link to check.
+    jq -r '[.error_map[][] | .url] | unique[] | "<\(.)>"' "$report" > "$scratch/recheck.md"
+    echo "only server errors, which lychee does not retry: re-checking $(wc -l < "$scratch/recheck.md" | tr -d ' ') link(s) once, in 60s" >&2
+    sleep 60
+    lychee --no-progress "${args[@]}" "$scratch/recheck.md"
 
 # Validate commit hygiene — DCO sign-off, subject length, dangling whitespace —
 # over a commit range (default: everything ahead of the upstream default branch;
