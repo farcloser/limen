@@ -129,7 +129,9 @@ shell: (_banner "lint" "shell")
     # byte and splits its own record. The tr is load-bearing: native windows
     # jq writes CRLF. Every record after the first starts with the newline jq
     # prints after the separator. ':' is illegal in windows filenames; the
-    # name is only a label, so module separators are flattened.
+    # name is only a label, so module separators are flattened. The directory
+    # reaches awk through ENVIRON, never -v: -v processes escapes, and a
+    # windows temp path's backslashes are eaten (\l becomes l).
     while IFS= read -r name; do recipes+=("$tmpdir/$name"); done < <(
         printf '%s' "$dump" | jq -r '
             def recipes_of(prefix):
@@ -140,7 +142,7 @@ shell: (_banner "lint" "shell")
                     | prefix + .key, ($lines | join("\n")), ([30] | implode)),
                 ((.modules // {}) | to_entries[]
                     | .key as $mod | .value | recipes_of(prefix + $mod + "::"));
-            recipes_of("")' | tr -d '\r' | awk -v dir="$tmpdir" '
+            recipes_of("")' | tr -d '\r' | LINT_SHELL_DIR="$tmpdir" awk '
             BEGIN { RS = "\036" }
             {
                 sub(/^\n/, "")
@@ -148,7 +150,7 @@ shell: (_banner "lint" "shell")
                 if (n == 0) next
                 name = substr($0, 1, n - 1)
                 gsub(/:/, "_", name)
-                out = dir "/" name
+                out = ENVIRON["LINT_SHELL_DIR"] "/" name
                 printf "%s", substr($0, n + 1) > out
                 close(out)
                 print name
