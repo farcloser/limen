@@ -59,7 +59,7 @@ func compliantOrgResponses() map[string]stubResponse {
 		"GET orgs/test-org/teams?per_page=100":                {Body: `[{"slug":"agents"}]`},
 		"GET orgs/test-org/teams/agents/members?per_page=100": {Body: `[{"login":"bot"}]`},
 		"GET orgs/test-org/teams/agents/repos?per_page=100": {
-			Body: `[{"name":"alpha","permissions":{"push":true}}]`,
+			Body: `[{"name":"alpha","role_name":"write"}]`,
 		},
 		"GET orgs/test-org/repos?per_page=100&type=all":         {Body: `[{"name":"alpha"}]`},
 		"GET orgs/test-org/personal-access-tokens?per_page=100": {Body: `[]`},
