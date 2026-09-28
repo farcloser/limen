@@ -224,6 +224,10 @@ golangci:
           - rangeValCopy # same
           - ruleguard # no rule files
           - todoCommentWithoutDetail # see godox
+          # Its fix, filepath.Join, cleans the path: it drops a trailing
+          # separator and collapses "..", so the rewrite changes behavior,
+          # while code that spells os.PathSeparator is already portable.
+          - preferFilepathJoin
 
       revive:
         # revive is the one style bag because `//revive:disable-next-line:<rule>`
