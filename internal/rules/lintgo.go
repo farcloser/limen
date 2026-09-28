@@ -75,14 +75,17 @@ const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline
 #         ignore-package-globs:      #   a named entry (a revive rule) overrides its namesake
 #           - github.com/example/project/*
 #   formatters:
-#     enable:                        # adds a formatter
-#       - goimports
+#     enable:                        # adds a formatter (the baseline runs gci, gofumpt, golines, goimports)
+#       - swaggo
 #     exclusions:
 #       paths:                       # appends: files the formatters skip
 #         - internal/generated/
 #     settings:                      # per formatter, merged like the linters'
 #       golines:
 #         max-len: 100
+#       gci:
+#         sections:                  # go in before the module's own group: a sibling
+#           - prefix(github.com/example-sibling)  # organization's imports group next to this one's
 # licenses:
 #   allowed:                         # replaces the baseline's list of accepted dependency licenses
 #     - Apache-2.0
