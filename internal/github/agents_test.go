@@ -185,13 +185,17 @@ func TestAuditOrgAgentsTeam(t *testing.T) { //nolint:paralleltest // serial: set
 
 	// Two repositories without the grant (one of them read-only), one
 	// archived and ungranted, which does not count: fail, and one change that
-	// grants exactly the two.
+	// grants exactly the two. The entries carry the permissions an owner
+	// running the audit sees — admin everywhere, the caller's own access —
+	// and only role_name says what the team holds: a read-only team on a
+	// repository the owner administers is still missing its grant.
 	responses := compliantOrgResponses()
 	responses[orgReposKey] = stubResponse{
 		Body: `[{"name":"alpha"},{"name":"beta"},{"name":"gamma"},{"name":"old","archived":true}]`,
 	}
 	responses[orgTeamReposKey] = stubResponse{
-		Body: `[{"name":"alpha","permissions":{"push":true}},{"name":"gamma","permissions":{"push":false}}]`,
+		Body: `[{"name":"alpha","role_name":"write","permissions":{"admin":true,"push":true}},` +
+			`{"name":"gamma","role_name":"read","permissions":{"admin":true,"push":true}}]`,
 	}
 	responses["PUT orgs/test-org/teams/agents/repos/test-org/beta"] = stubResponse{Body: `{}`}
 	responses["PUT orgs/test-org/teams/agents/repos/test-org/gamma"] = stubResponse{Body: `{}`}

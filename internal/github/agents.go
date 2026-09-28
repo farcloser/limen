@@ -29,6 +29,11 @@ const (
 	agentsTeamSlug = "agents"
 	// teamPermissionPush is GitHub's API name for the "Write" team role.
 	teamPermissionPush = "push"
+	// The team roles, as the team-repositories list names them, that carry
+	// write: GitHub's roles nest.
+	roleWrite    = "write"
+	roleMaintain = "maintain"
+	roleAdmin    = "admin"
 	// teamsListPath lists an organization's teams, or a repository's team
 	// grants; teamPath is the prefix of one team's resources.
 	teamsListPath = "/teams?per_page=100"
@@ -56,10 +61,13 @@ type repoTeamGrant struct {
 	Permission string `json:"permission"`
 }
 
-// teamRepoGrant is one entry of GET /orgs/{o}/teams/{t}/repos.
+// teamRepoGrant is one entry of GET /orgs/{o}/teams/{t}/repos. The team's
+// role is role_name: the entry's permissions object is the caller's own
+// access to the repository, so an owner auditing reads admin on every one of
+// them, whatever the team holds.
 type teamRepoGrant struct {
-	Name        string                  `json:"name"`
-	Permissions collaboratorPermissions `json:"permissions"`
+	Name     string `json:"name"`
+	RoleName string `json:"role_name"`
 }
 
 // orgRepo is the subset of GET /orgs/{o}/repos the audit reads.
@@ -77,7 +85,19 @@ type teamMember struct {
 // push: GitHub's roles nest, so maintain and admin carry write as well.
 func grantsWrite(permission string) bool {
 	switch permission {
-	case teamPermissionPush, "maintain", "admin":
+	case teamPermissionPush, roleMaintain, roleAdmin:
+		return true
+	default:
+		return false
+	}
+}
+
+// roleGrantsWrite reports whether a team's role on a repository, as the
+// team-repositories list names it (read, triage, write, maintain, admin),
+// includes write.
+func roleGrantsWrite(role string) bool {
+	switch role {
+	case roleWrite, roleMaintain, roleAdmin:
 		return true
 	default:
 		return false
@@ -299,12 +319,12 @@ func (a *auditor) auditOrgAgentsTeam(org string) {
 }
 
 // reposWithoutWrite is every live repository the grants give no write on,
-// sorted: push, maintain or admin all count as write.
+// sorted: write, maintain or admin all count as write.
 func reposWithoutWrite(granted []teamRepoGrant, repos []orgRepo) []string {
 	writable := map[string]bool{}
 
 	for _, grant := range granted {
-		if grant.Permissions.Push || grant.Permissions.Maintain || grant.Permissions.Admin {
+		if roleGrantsWrite(grant.RoleName) {
 			writable[grant.Name] = true
 		}
 	}
