@@ -146,11 +146,11 @@ golangci:
           - fmt.Fprintln
 
       errorlint:
-        # err113 already reports `err == target` and demands errors.Is, so the
-        # comparison check here would report each one twice — and its auto-fix
-        # rewrites without adding the errors import (go-errorlint#111, open),
-        # which `just do fix go` would apply.
-        comparison: false
+        # On although err113 reports `err == target` too, so that line shows
+        # twice: only this check catches a switch on an error, and io.EOF from
+        # a function that may wrap it. Silencing err113's copy instead takes a
+        # baseline exclusion, which warn-unused flags on every clean project.
+        comparison: true
 
       govet:
         # Every analyzer, including the ten vet leaves off by default:
