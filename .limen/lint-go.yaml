@@ -228,6 +228,10 @@ golangci:
           # separator and collapses "..", so the rewrite changes behavior,
           # while code that spells os.PathSeparator is already portable.
           - preferFilepathJoin
+          # It asks for `if err := f(); ...` where a named err is reassigned,
+          # and govet's shadow reports exactly that form: the two cannot both
+          # pass, and shadow is the one that catches a bug.
+          - sloppyReassign
 
       revive:
         # revive is the one style bag because `//revive:disable-next-line:<rule>`
