@@ -12,18 +12,27 @@ import 'lib.just'
 
 default: code mod
 
-# golangci-lint auto-fixes, once per supported platform (see _per-platform in
-# lib.just). The formatter runs LAST and to CONVERGENCE: `golangci-lint fmt`
-# applies every formatter in one pass and the set is not confluent (one
+# Only the linter fixes that cannot change what the program does: blank lines
+# (wsl_v5), a comment's final period (godot), struct-tag alignment and order
+# (tagalign, which tag lookup ignores), and the //nolint directives themselves
+# (nolintlint, judging only the linters this pass runs). Every other fixer is
+# a pattern rewrite whose author does not promise to preserve meaning, and
+# several did not: intrange shortened a `<=` loop by one iteration, gocritic's
+# preferFilepathJoin dropped a separator a path needed, usestdlibvars spelled
+# labels as stdlib constants. Their findings stay findings, fixed by a person.
+# golangci-lint has no per-linter fix switch, so the pass enables only these.
+go_fixers := "wsl_v5,godot,tagalign,nolintlint"
+
+# The admitted linter fixes, once per supported platform (see _per-platform in
+# lib.just; a fixer only sees a platform's files on that platform's leg), then
+# the formatters. The formatters run LAST and to CONVERGENCE: `golangci-lint
+# fmt` applies every formatter in one pass and the set is not confluent (one
 # formatter's output can be another's work), so a single pass can leave a tree
 # `fmt --diff` still rejects — `just fix` green, `just lint` red. Bounded,
 # because two formatters undoing each other never settle: loop for the benign
 # case, fail loudly for the other. Then the tree is proven to still compile,
-# tests included: a fixer can drop a package's last use or introduce one
-# (goimports in the fmt pass repairs the import list, which is what it is
-# there for), and a fix that returns green over a tree that no longer builds
-# has failed its one promise. `go vet` is the type-check that covers _test.go.
-code: (_banner "fix go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") _golangci-config (_per-platform "build/tools/golangci-lint run --fix -c build/golangci.yml")
+# tests included, with `go vet`, the type-check that covers _test.go.
+code: (_banner "fix go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") _golangci-config (_per-platform "build/tools/golangci-lint run --fix --enable-only " + go_fixers + " -c build/golangci.yml")
     #!/usr/bin/env bash
     set -euo pipefail
     max=5

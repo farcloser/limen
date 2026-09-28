@@ -494,10 +494,10 @@ golangci:
       - gci
       - gofumpt
       - golines
-      # The one formatter that edits the import list: a fixer that drops a
-      # package's last use or introduces one leaves the tree not compiling
-      # (usetesting, perfsprint have), and the fmt pass the fix recipe runs
-      # to convergence is where goimports repairs it. gci keeps the grouping.
+      # The one formatter that edits the import list: an edit that drops a
+      # package's last use or introduces one leaves the tree not compiling,
+      # and the fmt pass the fix recipe runs to convergence is where goimports
+      # repairs it. gci keeps the grouping.
       - goimports
     settings:
       gci:
