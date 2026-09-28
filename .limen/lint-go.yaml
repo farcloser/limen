@@ -294,6 +294,13 @@ golangci:
           # hoist it demands widens the error's scope. No bug class.
           - name: multiline-if-init
             disabled: true
+          # goimports names a package explicitly when its import path ends in
+          # a version element (`v1 ".../pkg/v1"`), and this rule then calls
+          # that name redundant: the two cannot both be satisfied, and a
+          # directive does not settle it (gci and goimports fight over the
+          # comment's blank line). goimports owns the import form.
+          - name: redundant-import-alias
+            disabled: true
 
           - name: max-public-structs
             arguments: [10]
