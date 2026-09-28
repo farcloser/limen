@@ -439,6 +439,14 @@ golangci:
         # `exclude` is refused too, being a replace by other means.
         exclude-forbidden: true
 
+      reassign:
+        # Every package variable, not only EOF and Err*: another package
+        # overwriting any of them is the same hidden side effect. It sees an
+        # assignment to the whole variable from outside its package, never a
+        # write inside it or to an element of it.
+        patterns:
+          - ".*"
+
       wsl_v5:
         allow-first-in-block: true # Allow cuddling if variable used first in following block
         allow-whole-block: false # Allow cuddling if variable used anywhere in block
