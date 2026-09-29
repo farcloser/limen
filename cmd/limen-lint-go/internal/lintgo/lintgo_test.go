@@ -544,6 +544,40 @@ func TestDisabledRevive(t *testing.T) {
 	}
 }
 
+// TestDisabledLinters lists the linters the rendered configuration turns
+// off, sorted: the baseline's, plus the overlay's disables, minus what the
+// overlay enables.
+func TestDisabledLinters(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, code := run(t, writeModule(t, ""), baselineSmall, "disabled", "linters")
+	if code != 0 || stdout != "dupl\n" {
+		t.Fatalf("baseline: %d %q %s", code, stdout, stderr)
+	}
+
+	stdout, _, code = run(
+		t,
+		writeModule(t, "golangci:\n  linters:\n    disable: [zerologlint]\n"),
+		baselineSmall,
+		"disabled",
+		"linters",
+	)
+	if code != 0 || stdout != "dupl\nzerologlint\n" {
+		t.Fatalf("overlay disable: %d %q", code, stdout)
+	}
+
+	stdout, _, code = run(
+		t,
+		writeModule(t, "golangci:\n  linters:\n    enable: [dupl]\n"),
+		baselineSmall,
+		"disabled",
+		"linters",
+	)
+	if code != 0 || stdout != "" {
+		t.Fatalf("overlay enable: %d %q", code, stdout)
+	}
+}
+
 // TestCheck: a version below the floor fails naming both, one at or above
 // passes; a path that is not a golangci-lint build fails as such.
 func TestCheck(t *testing.T) {

@@ -51,7 +51,6 @@ func noopBrowser(t *testing.T) string {
 
 	path := filepath.Join(dir, "browser.sh")
 
-	// #nosec G306 -- an executable stub must be executable.
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}

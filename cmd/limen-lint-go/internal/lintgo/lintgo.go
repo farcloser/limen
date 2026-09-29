@@ -65,6 +65,7 @@ const usage = `usage:
   limen-lint-go [-C DIR] flags nilaway           the NilAway flags: the module to analyze and the exclusions
   limen-lint-go [-C DIR] mode nilaway            whether NilAway's findings fail the run: blocking or informational
   limen-lint-go [-C DIR] disabled revive         the revive rules the configuration turns off, one per line
+  limen-lint-go [-C DIR] disabled linters        the linters the configuration turns off, one per line
   limen-lint-go [-C DIR] check GOLANGCI-BINARY   fail when the binary is older than the baseline's floor
 -C DIR is the module to run in (its go.mod and ` + OverlayFile + `); the working directory by default.
 The baseline is ` + BaselineFile + ` in the nearest .limen/ at or above DIR: the repository's, placed by limen fix.`

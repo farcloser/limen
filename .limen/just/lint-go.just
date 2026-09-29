@@ -62,6 +62,22 @@ _suppression-check:
         ban "revive's ${rule} is off in the baseline: this directive silences nothing — remove it (or move the finding to the linter that owns the check now)" \
             "//revive:(disable|enable)[a-z-]*:${rule}([^a-z-]|$)"
     done < <(${LIMEN_LINT_GO_BIN:-limen-lint-go} disabled revive)
+    # Same for a //nolint naming a linter the configuration turns off:
+    # nolintlint judges a directive only for a linter that runs.
+    while IFS= read -r linter; do
+        [ -n "$linter" ] || continue
+        ban "${linter} is off in the configuration: naming it in //nolint silences nothing — remove it from the directive" \
+            "//nolint:([a-z0-9_]+,)*${linter}([^a-z0-9_]|$)"
+    done < <(${LIMEN_LINT_GO_BIN:-limen-lint-go} disabled linters)
+    # The baseline exempts _test.go from gosec, and nolintlint never reads
+    # gosec's own directive: a #nosec in a test file silences nothing. Tied
+    # to that exclusion: drop this if the baseline ever lints tests with gosec.
+    hits="$(git grep -nE '#nosec' -- '*_test.go' || true)"
+    if [ -n "$hits" ]; then
+        printf '%s\n' "$hits" >&2
+        echo 'tests are exempt from gosec in the baseline: this #nosec silences nothing — remove it' >&2
+        fail=1
+    fi
     exit "$fail"
 
 # The two `go vet` analyzers golangci-lint cannot run: its package loader never
