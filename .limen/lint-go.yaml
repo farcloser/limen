@@ -122,11 +122,23 @@ golangci:
       - prealloc # premature optimization
 
     exclusions:
-      # No rules: the baseline excludes nothing, in tests or anywhere. What a
-      # project tolerates in its _test.go files is its own, stated in its
-      # .lint-go.yaml (the seed shows the reviewed rule to tailor from). An
-      # overlay rule that excludes nothing is then the project's own dead
-      # rule, and this warns about it.
+      # Tests are held to the production bar except for the five linters
+      # every enrolled repository found to be noise there: decided here,
+      # before a project silences a single test finding, because a silence
+      # written first and an exemption added later leaves every silence dead.
+      # Anything else a project tolerates in _test.go is its own, in its
+      # .lint-go.yaml.
+      rules:
+        - path: _test\.go
+          linters:
+            - gocognit # a table-driven test is one long, flat function by design
+            - goconst # fixture values repeat on purpose
+            - gosec # file and command handling on test fixtures
+            - varnamelen # tt, tc and friends
+            - wrapcheck # a test returns what it asserts on
+      # On although this rule matches nothing in a repository whose tests are
+      # clean of all five: the warning then says so, and a project's own dead
+      # rule still gets reported.
       warn-unused: true
 
     settings:
@@ -334,9 +346,8 @@ golangci:
             arguments: [allowNoDefault]
 
       # Complexity: gocognit alone, at Sonar's default of 15 (gocyclo and
-      # funlen are off, see the disable list). Tests are held to the same bar
-      # here: a project whose table-driven tests run long carves them out in
-      # its .lint-go.yaml (see exclusions).
+      # funlen are off, see the disable list), production code only (see
+      # exclusions).
       gocognit:
         min-complexity: 15
 
