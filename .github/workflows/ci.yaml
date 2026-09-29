@@ -1,7 +1,10 @@
-# DO NOT EDIT MANUALLY.
-# Generic, no project content. Minimal glue: GitHub's own actions pinned by
-# SHA, aqua at aqua.yaml's pins, `just` running the recipes a laptop runs. No
-# third-party actions, hence no egress-filtering action either.
+# Seeded once by `limen fix`, then the project's own: limen never updates it.
+# Realign it by hand when limen's canonical moves, and comment every project
+# line so the next alignment keeps it.
+#
+# Minimal glue: GitHub's own actions pinned by SHA, aqua at aqua.yaml's pins,
+# `just` running the recipes a laptop runs. No third-party actions, hence no
+# egress-filtering action either.
 name: ci
 
 on:

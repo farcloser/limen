@@ -1,10 +1,12 @@
-# DO NOT EDIT MANUALLY.
-# Generic, no project content. The workflow half of the release lane:
-# `just do release vX.Y.Z` verifies the tree, creates the SIGNED tag and
-# pushes it; that push runs `just do release --ci`, which builds, signs
-# keyless and publishes (defined in .limen/just/release.just, not here). Pair
-# with a ruleset restricting who can create v* tags: the tag push is the
-# release button.
+# Seeded once by `limen fix`, then the project's own: limen never updates it.
+# Realign it by hand when limen's canonical moves, and comment every project
+# line so the next alignment keeps it.
+#
+# The workflow half of the release lane: `just do release vX.Y.Z` verifies
+# the tree, creates the SIGNED tag and pushes it; that push runs
+# `just do release --ci`, which builds, signs keyless and publishes (defined
+# in .limen/just/release.just, not here). Pair with a ruleset restricting who
+# can create v* tags: the tag push is the release button.
 name: release
 
 on:

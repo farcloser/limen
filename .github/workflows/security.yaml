@@ -1,11 +1,14 @@
-# DO NOT EDIT MANUALLY.
-# Generic, no project content. The security lane, apart from ci: a scan's
-# verdict moves with the vulnerability database, not with the tree, so this
-# runs on a schedule as well as on every push and pull request, and its check
-# stands alone — a new advisory reddens `security`, never `gate`, and the
-# answer is a dependency bump, never a code change. Same glue as ci: GitHub's
-# own actions pinned by SHA, aqua at aqua.yaml's pins, `just` running the
-# recipe a laptop runs. No third-party actions.
+# Seeded once by `limen fix`, then the project's own: limen never updates it.
+# Realign it by hand when limen's canonical moves, and comment every project
+# line so the next alignment keeps it.
+#
+# The security lane, apart from ci: a scan's verdict moves with the
+# vulnerability database, not with the tree, so this runs on a schedule as
+# well as on every push and pull request, and its check stands alone — a new
+# advisory reddens `security`, never `gate`, and the answer is a dependency
+# bump, never a code change. Same glue as ci: GitHub's own actions pinned by
+# SHA, aqua at aqua.yaml's pins, `just` running the recipe a laptop runs. No
+# third-party actions.
 name: security
 
 on:
