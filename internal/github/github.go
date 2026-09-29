@@ -148,7 +148,7 @@ func (c client) classify(outcome apiOutcome) apiOutcome {
 
 	org := c.orgOf()
 	outcome.err = fmt.Errorf(
-		"%w: run `limen github fix -org %s` — the repository endpoint refuses every attempt while the configuration stands", //nolint:lll // one sentence of guidance.
+		"%w: run `limen github fix -org %s` — the repository endpoint refuses every attempt while the configuration stands",
 		errOrgEnforced,
 		org,
 	)

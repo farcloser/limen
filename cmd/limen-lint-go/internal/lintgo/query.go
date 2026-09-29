@@ -11,6 +11,7 @@ const (
 	modeBlocking      = "blocking"
 	modeInformational = "informational"
 	linterRevive      = "revive"
+	argLinters        = "linters"
 	keyDisabled       = "disabled"
 	queryArgs         = 1
 )
@@ -38,13 +39,14 @@ func mode(args []string, dir string, stdout io.Writer) error {
 	return nil
 }
 
-// disabled prints the revive rules the rendered configuration turns off,
-// one per line, sorted: the suppression check fails a `//revive:disable`
-// directive naming one of them, since nothing else ever reports a revive
-// directive that silences nothing.
+// disabled prints what the rendered configuration turns off, one per line,
+// sorted: the revive rules, or the linters. The suppression check fails a
+// directive naming one of them, since nothing else ever reports a directive
+// that silences nothing there: nolintlint judges a nolint directive only for
+// a linter that runs.
 func disabled(args []string, dir string, stdout io.Writer) error {
-	if len(args) != queryArgs || args[0] != linterRevive {
-		return fmt.Errorf("%w: %s takes one linter, %s", ErrUsage, cmdDisabled, linterRevive)
+	if len(args) != queryArgs || (args[0] != linterRevive && args[0] != argLinters) {
+		return fmt.Errorf("%w: %s takes %s or %s", ErrUsage, cmdDisabled, linterRevive, argLinters)
 	}
 
 	base, _, err := load(dir)
@@ -57,30 +59,49 @@ func disabled(args []string, dir string, stdout io.Writer) error {
 		return err
 	}
 
-	settings, err := section(linters, keySettings, ErrBaseline)
+	var names []string
+
+	if args[0] == argLinters {
+		names, err = stringList(linters[keyDisable], keyLinters+keyJoin+keyDisable)
+	} else {
+		names, err = disabledReviveRules(linters)
+	}
+
 	if err != nil {
 		return err
 	}
 
-	revive, err := section(settings, linterRevive, ErrBaseline)
-	if err != nil {
-		return err
-	}
+	slices.Sort(names)
 
-	rules, err := list(revive[keyRules], keyLinters+keyJoin+keySettings+keyJoin+linterRevive+keyJoin+keyRules)
-	if err != nil {
-		return err
-	}
-
-	for _, name := range disabledRuleNames(rules) {
+	for _, name := range names {
 		_, _ = fmt.Fprintln(stdout, name)
 	}
 
 	return nil
 }
 
+// disabledReviveRules is the revive rules the linters section turns off.
+func disabledReviveRules(linters document) ([]string, error) {
+	settings, err := section(linters, keySettings, ErrBaseline)
+	if err != nil {
+		return nil, err
+	}
+
+	revive, err := section(settings, linterRevive, ErrBaseline)
+	if err != nil {
+		return nil, err
+	}
+
+	rules, err := list(revive[keyRules], keyLinters+keyJoin+keySettings+keyJoin+linterRevive+keyJoin+keyRules)
+	if err != nil {
+		return nil, err
+	}
+
+	return disabledRuleNames(rules), nil
+}
+
 // disabledRuleNames is the names of the named rule entries that carry
-// `disabled: true`, sorted.
+// `disabled: true`.
 func disabledRuleNames(rules []any) []string {
 	var names []string
 
@@ -96,8 +117,6 @@ func disabledRuleNames(rules []any) []string {
 			}
 		}
 	}
-
-	slices.Sort(names)
 
 	return names
 }
