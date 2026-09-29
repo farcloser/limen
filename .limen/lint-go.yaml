@@ -25,12 +25,11 @@
 # finding"); or judged to carry no engineering value. Inside the bag linters
 # (revive, gocritic, staticcheck, govet, gosec) the same rule applies check by
 # check: revive owns style and naming, because its directives are per rule;
-# the single-purpose linters own the measures (gocognit, gocyclo, funlen for
-# complexity and length, mnd and goconst for literals), because their
-# settings are richer and `//nolint:<linter>` is already rule-level; govet and
-# staticcheck own correctness, because their analyzers are stronger; the
-# modernizers with an auto-fix (modernize, perfsprint, staticcheck S/QF) own
-# rewrites.
+# the single-purpose linters own the measures (gocognit for complexity, mnd
+# and goconst for literals), because their settings are richer and
+# `//nolint:<linter>` is already rule-level; govet and staticcheck own
+# correctness, because their analyzers are stronger; the modernizers with an
+# auto-fix (modernize, perfsprint, staticcheck S/QF) own rewrites.
 
 lint-go:
   # The oldest golangci-lint release every linter name below exists in: a
@@ -73,9 +72,9 @@ golangci:
   issues:
     max-issues-per-linter: 0
     max-same-issues: 0
-    # Every finding on a line, not the first: gocognit and gocyclo both report
-    # on a function's declaration line, and the default keeps whichever came
-    # first, so the other waits for the next run.
+    # Every finding on a line, not the first: err113 and errorlint both report
+    # an `err == target`, and the default keeps whichever came first, so the
+    # other waits for the next run.
     uniq-by-line: false
 
   linters:
@@ -88,8 +87,15 @@ golangci:
       - wsl # superseded by wsl_v5
 
       # Duplicates. The check stays on, made once, by the tool named.
-      - cyclop # gocyclo, plus a package average nobody acts on
-      - maintidx # a blend of cyclomatic complexity and length, both measured by gocyclo and funlen
+      - cyclop # cyclomatic complexity, plus a package average nobody acts on; see gocyclo
+      - maintidx # a blend of cyclomatic complexity and length; see gocyclo and funlen
+      # Measured across the enrolled repositories: every gocyclo finding sat
+      # on a function gocognit also reported, and gocyclo alone flags the flat
+      # dispatch switch gocognit rightly passes.
+      - gocyclo # gocognit
+      # Nearly every funlen finding shared its function with gocognit; the
+      # rest were long, flat, deliberate code. Length alone is not a defect.
+      - funlen # gocognit
       - nestif # gocognit, and revive max-control-nesting
       - nakedret # revive bare-return
       - predeclared # revive redefines-builtin-id
@@ -290,9 +296,9 @@ golangci:
           - name: cognitive-complexity
             disabled: true # gocognit
           - name: cyclomatic
-            disabled: true # gocyclo
+            disabled: true # gocognit (see gocyclo in the disable list)
           - name: function-length
-            disabled: true # funlen
+            disabled: true # gocognit (see funlen in the disable list)
           - name: add-constant
             disabled: true # mnd for numbers, goconst for strings
           # A boolean parameter that selects behaviour is a design choice this
@@ -321,19 +327,12 @@ golangci:
           - name: enforce-switch-style
             arguments: [allowNoDefault]
 
-      # Complexity and length. Sonar's default for cognitive complexity is 15;
-      # cyclomatic follows it; funlen's 40 statements / 60 lines defaults are
-      # raised to 80 lines for the long-but-flat function. Tests are held to
-      # the same bar here: a project whose table-driven tests run long carves
-      # them out in its .lint-go.yaml (see exclusions).
+      # Complexity: gocognit alone, at Sonar's default of 15 (gocyclo and
+      # funlen are off, see the disable list). Tests are held to the same bar
+      # here: a project whose table-driven tests run long carves them out in
+      # its .lint-go.yaml (see exclusions).
       gocognit:
         min-complexity: 15
-      gocyclo:
-        min-complexity: 15
-      funlen:
-        lines: 80
-        statements: 40
-        ignore-comments: true
 
       # Literals. mnd reports a bare number where a named constant would say
       # what it means; the list below is what the codebase treats as

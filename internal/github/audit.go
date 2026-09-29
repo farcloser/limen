@@ -330,7 +330,7 @@ const boolTrue, boolFalse = "true", "false"
 // auditRepoObject covers every check answered by GET /repos/{owner}/{repo}:
 // merge and branch workflow (R3), features and metadata (R5), and the
 // security_and_analysis block of R1.
-func (a *auditor) auditRepoObject() { //nolint:funlen,gocognit,gocyclo // a linear catalog of independent checks, one block each.
+func (a *auditor) auditRepoObject() { //nolint:gocognit // a linear catalog of independent checks, one block each.
 	var settings repoSettings
 
 	outcome := a.client.getJSON(a.ctx, "", &settings)

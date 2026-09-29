@@ -66,8 +66,6 @@ const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline
 #             - perfsprint # readability over allocations
 #             - depguard # test-only dependencies
 #             - gocognit # a table-driven test is one long, flat function by design
-#             - gocyclo # same
-#             - funlen # same
 #             - mnd # fixture values
 #             - goconst # fixture values
 #     settings:                      # per linter, merged key by key into the baseline's:

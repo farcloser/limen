@@ -29,7 +29,5 @@ golangci:
             - perfsprint # readability over allocations
             - depguard # test-only dependencies
             - gocognit # a table-driven test is one long, flat function by design
-            - gocyclo # same
-            - funlen # same
             - mnd # fixture values
             - goconst # fixture values
