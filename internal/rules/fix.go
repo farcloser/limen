@@ -254,7 +254,8 @@ const justfileSeed = "# This file is the project's own.\n" +
 	"# The FIRST recipe defined here becomes `just`'s default.\n" +
 	"lint: do::lint::default\n" +
 	"fix: do::fix::default\n" +
-	"test:\n"
+	"test:\n" +
+	"security: do::security::default\n"
 
 // remediateJustfile handles the task runner's two regimes: the root Justfile
 // is the project's own — seeded when missing, and when present only ever

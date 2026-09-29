@@ -8,13 +8,14 @@ import '.limen/just/main.just'
 export LIMEN_BIN := 'go run ./cmd/limen'
 export LIMEN_LINT_GO_BIN := 'build/tools/limen-lint-go'
 
-# Bare `just` lists; `lint` and `test` below are what CI runs.
+# Bare `just` lists; `lint`, `test` and `security` below are what CI runs.
 default:
     @just --list
 
 lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode lint-lint-go
 fix: build-lint-go do::fix::default do::fix::go::default
 test: do::test::go::default test-lint-go
+security: do::security::default
 
 # limen-lint-go is the second binary of limen's release (see .goreleaser.yaml),
 # a nested module so its YAML parser never enters limen's own go.mod. The
