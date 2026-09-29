@@ -405,7 +405,14 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 	missing := missingGoModTools(string(toolsMod), requiredGoTools(rootMod))
 	retired := retiredGoModTools(string(toolsMod))
 
-	if len(missing) == 0 && len(retired) == 0 && len(done) == 0 {
+	// The isolated modules count toward "nothing to do": a complete
+	// tools/go.mod says nothing about them.
+	var isolated []string
+	if rootMod != nil {
+		isolated = missingIsolatedGoTools(root)
+	}
+
+	if len(missing) == 0 && len(retired) == 0 && len(isolated) == 0 && len(done) == 0 {
 		return Outcome{
 			Rule:    ruleGoTools,
 			Action:  ActionNone,

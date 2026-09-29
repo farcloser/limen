@@ -489,6 +489,37 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	}
 }
 
+// TestFixGoToolsSeedsIsolatedBesideCompleteTools: a Go module whose
+// tools/go.mod already declares every tool, but which carries neither
+// isolated module — every repository on a limen from before the isolated
+// modules — gets both seeded, and the rule then passes.
+func TestFixGoToolsSeedsIsolatedBesideCompleteTools(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files["go.mod"] = goModBare
+	files["tools/go.mod"] = goModWithTools
+	dir := writeRepo(t, files)
+
+	outcome := outcomeFor(
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		"gotools",
+	)
+	if outcome.Action != rules.ActionMerged {
+		t.Fatalf("got %s (%s), want merged", outcome.Action, outcome.Message)
+	}
+
+	for _, module := range []string{"golangci-lint", "nilaway"} {
+		if _, err := os.Stat(filepath.Join(dir, "tools", module, "go.mod")); err != nil {
+			t.Errorf("tools/%s/go.mod not created: %v", module, err)
+		}
+	}
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {
+		t.Fatalf("rule does not pass after fix: %s", f.Message)
+	}
+}
+
 // TestFixGoToolsMovesDirectivesOutOfRoot: directives in the project's go.mod
 // are stripped (go mod tidy is the fake go's no-op) and tools/go.mod ends
 // complete.
