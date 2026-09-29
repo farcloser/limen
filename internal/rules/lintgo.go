@@ -64,7 +64,6 @@ const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline
 #             - dogsled # multiple-return helpers are exercised for one value at a time
 #             - noctx # no cancellation to propagate
 #             - perfsprint # readability over allocations
-#             - depguard # test-only dependencies
 #             - gocognit # a table-driven test is one long, flat function by design
 #             - mnd # fixture values
 #             - goconst # fixture values

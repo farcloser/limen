@@ -401,15 +401,32 @@ golangci:
         require-specific: true
         allow-unused: false
 
+      # An import must pass every rule whose files match its file, so main
+      # leaves the tests out: were it to cover them, a test-only dependency
+      # would have to be allowed in production code too. A project lists its
+      # reviewed dependencies under main; tests may import any module go.mod
+      # carries (lax), minus the same bans.
       depguard:
         rules:
           main:
             files:
               - $all
+              - "!$test"
             allow:
               - $gostd
               - ${MODULE_PATH}
             # Standard-library packages the allow list would otherwise admit.
+            deny:
+              - pkg: log$
+                desc: logging is log/slog
+              - pkg: math/rand$
+                desc: use math/rand/v2
+              - pkg: io/ioutil$
+                desc: deprecated since Go 1.16; the functions moved to io and os
+          test:
+            files:
+              - $test
+            list-mode: lax
             deny:
               - pkg: log$
                 desc: logging is log/slog
