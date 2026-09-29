@@ -323,8 +323,9 @@ golangci:
 
       # Complexity and length. Sonar's default for cognitive complexity is 15;
       # cyclomatic follows it; funlen's 40 statements / 60 lines defaults are
-      # raised to 80 lines for the long-but-flat function. Tests are exempt
-      # (see exclusions): a table-driven test is one long function by design.
+      # raised to 80 lines for the long-but-flat function. Tests are held to
+      # the same bar here: a project whose table-driven tests run long carves
+      # them out in its .lint-go.yaml (see exclusions).
       gocognit:
         min-complexity: 15
       gocyclo:
