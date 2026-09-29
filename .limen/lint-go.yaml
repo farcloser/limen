@@ -340,6 +340,30 @@ golangci:
       gocognit:
         min-complexity: 15
 
+      # Go's own short names, by declaration: the name only these types carry
+      # (`w io.Writer`, `wg sync.WaitGroup`) says as much as a long one. A
+      # short name of any other type is still reported.
+      varnamelen:
+        ignore-type-assert-ok: true
+        ignore-map-index-ok: true
+        ignore-chan-recv-ok: true
+        ignore-decls:
+          - w io.Writer
+          - r io.Reader
+          - p []byte
+          - b []byte
+          - n int
+          - n int64
+          - i int
+          - f *os.File
+          - t *testing.T
+          - b *testing.B
+          - f *testing.F
+          - tb testing.TB
+          - wg sync.WaitGroup
+          - mu sync.Mutex
+          - ok bool
+
       # Literals. mnd reports a bare number where a named constant would say
       # what it means; the list below is what the codebase treats as
       # self-evident (0 and 1 always are). goconst reports a string repeated
