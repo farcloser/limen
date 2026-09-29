@@ -199,6 +199,10 @@ golangci:
           - -ST1023 # revive var-declaration
           - -QF1009 # revive time-equal
           - -QF1011 # revive var-declaration
+          # De Morgan's rewrite turns a range check, `!(lo <= x && x <= hi)`,
+          # into `x < lo || x > hi`, no clearer, and its fix writes Yoda
+          # conditions.
+          - -QF1001
 
       gosec:
         excludes:
@@ -290,6 +294,8 @@ golangci:
             disabled: true # wsl_v5 leading-whitespace, trailing-whitespace
           - name: line-length-limit
             disabled: true # golines
+          - name: useless-break
+            disabled: true # unnecessary-stmt reports the same break
           # Measures owned by the single-purpose linters (see the doctrine at
           # the top): their settings are richer and their suppression is
           # already per linter.
