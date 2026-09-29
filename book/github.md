@@ -252,8 +252,10 @@ The decided merge model, enforced by both the repository settings and the
 
   <a id="security"></a>
   **Security.** The vulnerability scans are not in `ci.yaml` at all. A canonical
-  `security.yaml`, seeded once like `ci.yaml`, runs `just do security` on one linux
-  leg (the scan loops over every supported platform itself) on every push and pull
+  `security.yaml`, seeded once like `ci.yaml`, runs the project's `just security`
+  (the shared `do::security::default`, plus whatever scans the project adds, as
+  `lint` and `test` do for `ci.yaml`) on one linux leg (the scan loops over every
+  supported platform itself) on every push and pull
   request, and once a day on a schedule. Apart on purpose: a linter's verdict is a
   function of the tree, a scan's is a function of a database that moves without it,
   so inside `ci.yaml` a new advisory would turn `gate` red on a pull request that
