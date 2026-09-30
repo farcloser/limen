@@ -252,7 +252,7 @@ whole global toolchain:
 
 1. Installs **aqua** via the pinned, checksum-verified official installer, into aqua's own
    root (`${AQUA_ROOT_DIR:-~/.local/share/aquaproj-aqua}/bin`). That directory is the one
-   every repo's hermetic `PATH` (see the canonical [`Justfile`](../Justfile)) points at, so
+   every repo's hermetic `PATH` (see the canonical [`.justfile`](../.justfile)) points at, so
    `aqua` — and every tool it proxies — resolves inside recipes *by construction*.
    **Never `brew install aqua`**: Homebrew's bin directory is deliberately not on the
    hermetic `PATH`, so a brew-installed aqua works in your shell but breaks every recipe.
@@ -465,7 +465,7 @@ git commit --message "tooling: bump golangci-lint"
 
 Some of what a build fetches is not a tool aqua knows: a kernel source tarball, a
 toolchain release archive, the sources of a C library the build compiles. Those used to be
-two variables in a Justfile or a build script — a URL with a version in it and a sha256 next
+two variables in a .justfile or a build script — a URL with a version in it and a sha256 next
 to it — with a Renovate regex manager per repository watching the version and a comment
 saying the sha256 is a hand step. A Renovate bump then arrived green with a stale digest,
 because nothing in CI read the pin, and failed at build time.
@@ -496,7 +496,7 @@ pins:
 ```
 
 - **The build reads it back**: `limen pins get llvm url` and `limen pins get llvm sha256`,
-  inside the recipe that fetches (not at Justfile load: every top-level `shell()` runs on
+  inside the recipe that fetches (not at .justfile load: every top-level `shell()` runs on
   every `just` invocation). The value exists once.
 - **Renovate reads it, from the shared preset.** The `renovate:` line names the datasource
   and the depName; `extract-version:` (a regexp pulling the version out of a tag such as

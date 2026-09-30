@@ -1,6 +1,6 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# Project recipes live in the root Justfile, below the shared-baseline import.
+# Project recipes live in the root .justfile, below the shared-baseline import.
 
 set working-directory := '../..'
 
@@ -40,7 +40,7 @@ style: (_banner "lint homebrew" "style")
         exit 0
     fi
     {{ _require_brew }}
-    # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical Justfile (main.just).
+    # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical .justfile (main.just).
     "$BREW_BIN" style "${files[@]}"
 
 # brew addresses formulas by TAP NAME, never by path: the project declares its
@@ -67,12 +67,12 @@ audit: (_banner "lint homebrew" "audit")
         */*) ;;
         *)
             echo "LINT_HOMEBREW_TAP is not set (or not 'user/name') — brew audit addresses formulas" >&2
-            echo "by tap name, not by path. Export it in the root Justfile, e.g.:" >&2
+            echo "by tap name, not by path. Export it in the root .justfile, e.g.:" >&2
             echo "  export LINT_HOMEBREW_TAP := 'farcloser/tap'" >&2
             exit 1
             ;;
     esac
-    # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical Justfile (main.just).
+    # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical .justfile (main.just).
     link="$("$BREW_BIN" --repository)/Library/Taps/${tap%%/*}/homebrew-${tap##*/}"
     created=""
     if [ -e "$link" ] || [ -L "$link" ]; then

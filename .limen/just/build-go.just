@@ -1,6 +1,6 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# Project recipes live in the root Justfile, below the shared-baseline import.
+# Project recipes live in the root .justfile, below the shared-baseline import.
 
 set working-directory := '../..'
 
@@ -12,7 +12,7 @@ import 'lib.just'
 
 # Binaries land in build/. Projects declare `var version = "dev"` in each main
 # package for the stamp. Extra flags: export BUILD_GO_FLAGS from the root
-# Justfile, or set it on the invocation.
+# .justfile, or set it on the invocation.
 #
 # BUILD_GO_LDFLAGS exists because -ldflags cannot ride BUILD_GO_FLAGS: go keeps
 # the LAST -ldflags, so a project's own would replace the version stamp and CGO

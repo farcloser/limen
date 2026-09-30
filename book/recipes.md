@@ -1,7 +1,7 @@
 # The shared recipes
 
-Every repository carries the same task-runner baseline: a root `Justfile` that mounts the
-shared `.limen/just/` modules, which `limen` content-pins (the root `Justfile` itself is the
+Every repository carries the same task-runner baseline: a root `.justfile` that mounts the
+shared `.limen/just/` modules, which `limen` content-pins (the root `.justfile` itself is the
 project's own — only its import line is required; the pinning rule and file layout are in
 [mandatory files](./mandatory-files.md#justfile)). This chapter documents what that baseline
 *is* — the architecture and the conventions every shared recipe obeys — so the behavior you
@@ -14,7 +14,7 @@ recipe disagree, the recipe is right and this chapter has a bug.
 
 ## The execution environment is hermetic
 
-Recipes do not run in your shell's environment; they run in one the `Justfile` constructs:
+Recipes do not run in your shell's environment; they run in one the `.justfile` constructs:
 
 - **Hermetic `PATH`** — the aqua tool directory plus base system paths, nothing else (no
   Homebrew). Every tool a recipe invokes resolves to the aqua-pinned version or fails
@@ -30,7 +30,7 @@ Recipes do not run in your shell's environment; they run in one the `Justfile` c
   neutralized so ambient flags or a cross-compile target can't rewrite a build; and
   `GOSUMDB`/`GOPROXY` pinned to their real defaults so an ambient `GOSUMDB=off` cannot
   defeat the checksum verification the `tools/go.mod` pins rely on. Each stays overridable
-  by a project's own `Justfile` — explicit and tracked, never ambient. **The one
+  by a project's own `.justfile` — explicit and tracked, never ambient. **The one
   exception is `GOWORK`:** a `go.work` in the tree (or a parent) deliberately puts recipes
   into workspace mode — Go workspaces are a supported way to work here, at the eyes-open
   cost that a build under an active workspace can differ from CI.
@@ -60,7 +60,7 @@ an explicit, documented decision before its recipes can work; the Rust one is in
   explicitly (`just do lint go`). The `test` and `perf` modules are the honest limit of that
   rule: *every* test and every report is language-bound, so bare `just do test` and
   `just do perf` refuse with guidance instead of guessing —
-  a project declares its suites as a `test` aggregate in the root `Justfile` (mirroring
+  a project declares its suites as a `test` aggregate in the root `.justfile` (mirroring
   `lint`), and that pair is what CI runs.
 - **Project knobs are exported variables, named after the task path.** A recipe that
   needs per-project configuration reads an environment variable named after its task path
@@ -70,7 +70,7 @@ an explicit, documented decision before its recipes can work; the Rust one is in
   — is declared in the project's `.lint-go.yaml`, a committed file with a defined vocabulary
   ([per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml)),
   never an exported variable. A
-  project sets them once in the root `Justfile` (`export NAME := 'value'` — exports propagate
+  project sets them once in the root `.justfile` (`export NAME := 'value'` — exports propagate
   into every module recipe), or on the invocation for a one-off. The exceptions that
   prove the rule carry the name of what they configure rather than one task's:
   `LIMEN_BIN` serves both `lint limen` and `fix limen`; `GO_CGO` declares that a project's
@@ -201,7 +201,7 @@ Two roles deserve emphasis because they close the enforcement loop:
   a repository without a `.release-go.yaml` — a Go module, a tap, a configuration — that
   signed tag **is** the release: there is nothing to build or publish, and Go's module
   proxy, Renovate and `go get` all read the tag. A `.release-go.yaml` (project-owned, like
-  the root Justfile) opts the repository into artifacts, and the two lanes below then share
+  the root .justfile) opts the repository into artifacts, and the two lanes below then share
   every guard. It is goreleaser's configuration under the lane's name, like `.lint-go.yaml`
   (the recipes pass it with `--config`), and its first line is
   `# yaml-language-server: $schema=https://goreleaser.com/static/schema.json`: away from
@@ -225,7 +225,7 @@ Two roles deserve emphasis because they close the enforcement loop:
 A new shared recipe goes into a module in limen's `.limen/just/` (a new concern gets a new
 module plus its `mod` line in `do.just`); the content-pin then carries it
 to every repository on the next `limen fix`. A recipe only one project needs goes in that
-project's root `Justfile` — the `do` namespace keeps the shared names off the top level, so a
+project's root `.justfile` — the `do` namespace keeps the shared names off the top level, so a
 project is free to define its own `lint`/`test`/`build` there. Global changes are
 proposed against limen itself, never edited locally: the shared files are locked by the
 content-pin, and drift is overwritten.

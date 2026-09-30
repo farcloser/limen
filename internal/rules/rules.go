@@ -1,6 +1,6 @@
 // Package rules verifies a repository against Farcloser's mandatory-files
 // policy: every repository must carry a recognized LICENSE, an .editorconfig, a
-// .gitignore, a .gitattributes, a README, a Justfile, and an aqua manifest
+// .gitignore, a .gitattributes, a README, a .justfile, and an aqua manifest
 // pinning its tooling.
 // The policy is documented in book/mandatory-files.md and book/tooling.md.
 package rules
@@ -21,7 +21,7 @@ import (
 // Well-known file names the rules act on, shared between check and fix.
 const (
 	gitDirName      = ".git"
-	justfileName    = "Justfile"
+	justfileName    = ".justfile"
 	carriageReturn  = "\r"
 	readmeFileName  = "README.md"
 	licenseFileName = "LICENSE"
@@ -62,7 +62,7 @@ const matchesCanonicalMsg = " matches the canonical baseline"
 //
 // Each file type uses the indentation its own tooling treats as canonical, so
 // the config never fights the formatter: tabs for Go (gofmt) and Makefiles,
-// four spaces for Justfiles (just --fmt) and Rust (rustfmt, 100-col), two
+// four spaces for .justfiles (just --fmt) and Rust (rustfmt, 100-col), two
 // spaces for the data formats (jq/prettier/yamllint) and the JS/TS, CSS, and
 // HTML families (Prettier/Biome). The [*] fallback (two-space) applies to
 // everything without a section of its own. Sections only ever match files that
@@ -111,9 +111,9 @@ var CanonicalLintGo = limen.CanonicalLintGo //nolint:gochecknoglobals // immutab
 // is not checked.
 var CanonicalLychee = limen.CanonicalLycheeToml //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 
-// CanonicalJustfileImport is the one line every repository's root Justfile
+// CanonicalJustfileImport is the one line every repository's root .justfile
 // must carry: the import that mounts the shared baseline. The rest of the
-// root Justfile is the project's own.
+// root .justfile is the project's own.
 const CanonicalJustfileImport = "import '.limen/just/main.just'"
 
 // CanonicalAquaPolicy and CanonicalAquaRegistry are the canonical aqua policy
@@ -329,21 +329,22 @@ func checkGitignore(root string) Finding {
 }
 
 // checkJustfile verifies the task runner in its two regimes: the root
-// Justfile is the PROJECT's own — a shim that must carry the canonical
+// .justfile is the PROJECT's own — a shim that must carry the canonical
 // import line (mounting the shared baseline) and is otherwise never judged —
 // while every *.just file under .limen/just/ is a shared module that must
 // match the embedded canonical exactly.
 func checkJustfile(root string) Finding {
 	const rule = "justfile"
 
-	name, ok := findFirst(root, justfileName, "justfile", ".justfile")
-	if !ok {
-		return fail(rule, "", "no Justfile found")
+	if legacy, found := findFirstFold(root, legacyJustfileName); found {
+		return fail(rule, legacy, legacy+legacyJustfileMessage)
 	}
+
+	name := justfileName
 
 	data, err := readRepoFile(root, name)
 	if err != nil {
-		return fail(rule, name, fmt.Sprintf("could not read Justfile: %v", err))
+		return fail(rule, "", "no "+name+" found")
 	}
 
 	if !containsLine(string(data), CanonicalJustfileImport) {
@@ -378,26 +379,35 @@ func checkJustfile(root string) Finding {
 		Rule:    rule,
 		Status:  StatusOK,
 		Path:    name,
-		Message: "Justfile carries the shared-baseline import; the shared just modules match the canonical baseline",
+		Message: ".justfile carries the shared-baseline import; the shared just modules match the canonical baseline",
 	}
 }
 
-// securityRecipeLine is the root Justfile's `security` recipe as the seed
+// legacyJustfileName is the root justfile's former name, matched
+// case-insensitively as just matches it (Justfile, justfile, JUSTFILE): just
+// refuses a directory holding it beside .justfile.
+const (
+	legacyJustfileName    = "justfile"
+	legacyJustfileMessage = " is the root justfile's former name: it is " + justfileName +
+		" now, beside the other dot-named tooling — rename it (limen fix does)"
+)
+
+// securityRecipeLine is the root .justfile's `security` recipe as the seed
 // writes it: the shared scans, which a project extends with its own.
 const securityRecipeLine = "security: do::security::default"
 
 // securityWorkflowStep is the canonical security workflow's step, trimmed.
 const securityWorkflowStep = "run: just security"
 
-// securityRecipe matches a root Justfile line defining a `security` recipe,
+// securityRecipe matches a root .justfile line defining a `security` recipe,
 // with or without parameters or dependencies, and not a `security :=`
 // assignment.
 var securityRecipe = regexp.MustCompile(`^security(\s[^:=]*)?:([^=]|$)`)
 
-// needsSecurityRecipe reports whether the root Justfile must define
+// needsSecurityRecipe reports whether the root .justfile must define
 // `security`: the security workflow runs `just security`. A missing workflow
 // counts, since limen fix seeds the canonical one, possibly after the
-// Justfile's turn in the same run.
+// .justfile's turn in the same run.
 func needsSecurityRecipe(root string) bool {
 	data, err := readRepoFile(root, pathWorkflowSecurity)
 	if err != nil {
@@ -407,7 +417,7 @@ func needsSecurityRecipe(root string) bool {
 	return containsLine(string(data), securityWorkflowStep)
 }
 
-// definesSecurityRecipe reports whether a root Justfile defines `security`.
+// definesSecurityRecipe reports whether a root .justfile defines `security`.
 func definesSecurityRecipe(justfile string) bool {
 	for raw := range strings.SplitSeq(justfile, "\n") {
 		if securityRecipe.MatchString(strings.TrimSuffix(raw, carriageReturn)) {

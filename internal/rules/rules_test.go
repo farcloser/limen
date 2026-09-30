@@ -63,7 +63,7 @@ func compliantFiles() map[string]string {
 		".gitattributes":            rules.CanonicalGitattributes,
 		"AGENTS.md":                 rules.CanonicalAgents,
 		"CLAUDE.md":                 limen.CanonicalClaudeSeed,
-		"Justfile":                  rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
+		".justfile":                 rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
 		".aqua/aqua.yaml":           limen.CanonicalAquaYAML,
 		".aqua/aqua-checksums.json": "{}\n",
 		// Every repository declares the Go-built tools the recipes run (the
@@ -521,7 +521,7 @@ func TestJustfileRequiresImport(t *testing.T) {
 
 	// A Justfile without the shared-baseline import fails.
 	files := compliantFiles()
-	files["Justfile"] = "info:\n\t@echo hand-rolled\n"
+	files[".justfile"] = "info:\n\t@echo hand-rolled\n"
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile")
 	if f.OK() {
@@ -532,7 +532,7 @@ func TestJustfileRequiresImport(t *testing.T) {
 	// root Justfile is the project's own.
 	files = compliantFiles()
 
-	files["Justfile"] = "# mine\n" + rules.CanonicalJustfileImport + "\n\nstray:\n\t@echo x\n\nsecurity: stray\n"
+	files[".justfile"] = "# mine\n" + rules.CanonicalJustfileImport + "\n\nstray:\n\t@echo x\n\nsecurity: stray\n"
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
 		t.Errorf("a Justfile with the import and its own recipes should pass: %s", f.Message)
 	}
@@ -575,7 +575,7 @@ func TestJustfileOwnRecipesNotJudged(t *testing.T) {
 
 	// Whatever the project puts around the import line is its own business.
 	files := compliantFiles()
-	files["Justfile"] = rules.CanonicalJustfileImport + "\n\nwhatever:\n\t@echo project-specific\n\nsecurity *args: whatever\n"
+	files[".justfile"] = rules.CanonicalJustfileImport + "\n\nwhatever:\n\t@echo project-specific\n\nsecurity *args: whatever\n"
 
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
 		t.Errorf("project recipes in the root Justfile must not be judged: %s", f.Message)
@@ -590,7 +590,7 @@ func TestJustfileRequiresSecurityRecipe(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files["Justfile"] = rules.CanonicalJustfileImport + "\n\nsecurity := \"x\"\n"
+	files[".justfile"] = rules.CanonicalJustfileImport + "\n\nsecurity := \"x\"\n"
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile")
 	if f.OK() || !strings.Contains(f.Message, "security") {
