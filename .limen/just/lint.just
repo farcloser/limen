@@ -39,11 +39,19 @@ just: (_banner "lint" "just")
     # files. The index half also lists files deleted but unstaged, hence the
     # existence check. Literal names need their '**/' twins: git pathspec
     # literals do not match across directories.
+    # The list goes through a file, never a process substitution: on the
+    # windows-11-arm runners, bash runs emulated, and a `< <(...)` whose child
+    # runs a program intermittently crashes it mid-recipe — exit 4 or 127, no
+    # output. A pipeline does not. Same in every shared recipe
+    # (design/WINDOWS-ARM-EXIT-4.md).
+    list=$(mktemp "${TMPDIR:-/tmp}/lint-just.XXXXXX")
+    trap 'rm -f "$list"' EXIT
+    git ls-files -z --cached --others --exclude-standard \
+        'justfile' '**/justfile' 'Justfile' '**/Justfile' '.justfile' '**/.justfile' '*.just' > "$list"
     while IFS= read -r -d '' f; do
         [ -f "$f" ] || continue
         just --fmt --check --justfile "$f"
-    done < <(git ls-files -z --cached --others --exclude-standard \
-        'justfile' '**/justfile' 'Justfile' '**/Justfile' '.justfile' '**/.justfile' '*.just')
+    done < "$list"
 
 # godolint — hadolint as pure Go (https://github.com/farcloser/godolint) —
 # over every Dockerfile in the repository; passes vacuously when there are
@@ -53,21 +61,20 @@ just: (_banner "lint" "just")
 dockerfile: (_banner "lint" "dockerfile") (_go-tool "godolint" "github.com/farcloser/godolint/cmd/godolint")
     #!/usr/bin/env bash
     set -euo pipefail
-    # Twice on windows-11-arm this body exited 4 within a second of starting,
-    # before any tool ran, with no output; the trap makes the next one say
-    # which line, since a silent exit cannot be diagnosed from a log.
-    trap 'echo "lint dockerfile: line $LINENO exited $?" >&2' ERR
-    # Same enumeration as `lint just`, over both Dockerfile and Containerfile
-    # spellings. '*.Dockerfile' needs no '**/' twin: a wildcard already matches
-    # across directories.
+    # Same enumeration as `lint just` (through a file, see there), over both
+    # Dockerfile and Containerfile spellings. '*.Dockerfile' needs no '**/'
+    # twin: a wildcard already matches across directories.
+    list=$(mktemp "${TMPDIR:-/tmp}/lint-dockerfile.XXXXXX")
+    trap 'rm -f "$list"' EXIT
+    git ls-files -z --cached --others --exclude-standard \
+        'Dockerfile' '**/Dockerfile' 'Dockerfile.*' '**/Dockerfile.*' '*.Dockerfile' \
+        'Containerfile' '**/Containerfile' 'Containerfile.*' '**/Containerfile.*' '*.Containerfile' > "$list"
     files=()
     while IFS= read -r -d '' f; do
         # Tracked-but-deleted files are skipped (see `lint just`).
         [ -f "$f" ] || continue
         files+=("$f")
-    done < <(git ls-files -z --cached --others --exclude-standard \
-        'Dockerfile' '**/Dockerfile' 'Dockerfile.*' '**/Dockerfile.*' '*.Dockerfile' \
-        'Containerfile' '**/Containerfile' 'Containerfile.*' '**/Containerfile.*' '*.Containerfile')
+    done < "$list"
     # godolint runs shellcheck on RUN lines when it finds one on PATH — the
     # pinned one, here.
     [ ${#files[@]} -eq 0 ] || build/tools/godolint "${files[@]}"
@@ -89,7 +96,12 @@ shell: (_banner "lint" "shell")
     # times slower on windows than on linux. The loop below is builtins only,
     # and one awk per hundred candidates (windows caps a command line at 32K)
     # reads their first lines. No \b in awk regexes — the word boundary is
-    # spelled out.
+    # spelled out. Every list goes through a file in the scratch directory
+    # (see `lint just`), under a dot-name no recipe body below can take.
+    # mktemp gets an explicit template: macOS ignores $TMPDIR.
+    tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lint-shell.XXXXXX")
+    trap 'rm -rf "$tmpdir"' EXIT
+    git ls-files -z --cached --others --exclude-standard > "$tmpdir/.files"
     files=()
     candidates=()
     while IFS= read -r -d '' f; do
@@ -99,26 +111,22 @@ shell: (_banner "lint" "shell")
             *.sh|*.bash) files+=("$f"); continue ;;
         esac
         candidates+=("$f")
-    done < <(git ls-files -z --cached --others --exclude-standard)
-    while IFS= read -r -d '' f; do files+=("$f"); done < <(
-        for ((i = 0; i < ${#candidates[@]}; i += 100)); do
-            awk '
-                FNR == 1 {
-                    # %c with 0, not "\0" in the format: a NUL inside an awk
-                    # string ends it, and the names would run together unterminated.
-                    if ($0 ~ /^#!.*[^[:alnum:]_](bash|dash|ksh|sh)([^[:alnum:]_]|$)/) printf "%s%c", FILENAME, 0
-                    nextfile
-                }' "${candidates[@]:i:100}"
-        done
-    )
+    done < "$tmpdir/.files"
+    for ((i = 0; i < ${#candidates[@]}; i += 100)); do
+        awk '
+            FNR == 1 {
+                # %c with 0, not "\0" in the format: a NUL inside an awk
+                # string ends it, and the names would run together unterminated.
+                if ($0 ~ /^#!.*[^[:alnum:]_](bash|dash|ksh|sh)([^[:alnum:]_]|$)/) printf "%s%c", FILENAME, 0
+                nextfile
+            }' "${candidates[@]:i:100}"
+    done > "$tmpdir/.shebang"
+    while IFS= read -r -d '' f; do files+=("$f"); done < "$tmpdir/.shebang"
     [ ${#files[@]} -eq 0 ] || shellcheck --rcfile .limen/.shellcheckrc "${files[@]}"
     # Shebang recipes inside justfiles are shell scripts too: extract each body
     # from the JSON dump and shellcheck it. Interpolations (just syntax, not
     # shell) are masked as INTERP. One dump of the root justfile covers imports
-    # and every nested `mod`. mktemp gets an explicit template: macOS ignores
-    # $TMPDIR.
-    tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lint-shell.XXXXXX")
-    trap 'rm -rf "$tmpdir"' EXIT
+    # and every nested `mod`.
     recipes=()
     dump=$(just --dump --dump-format json)
     # jq keeps the shebang recipes and emits each as a record — name, body,
@@ -132,8 +140,7 @@ shell: (_banner "lint" "shell")
     # name is only a label, so module separators are flattened. The directory
     # reaches awk through ENVIRON, never -v: -v processes escapes, and a
     # windows temp path's backslashes are eaten (\l becomes l).
-    while IFS= read -r name; do recipes+=("$tmpdir/$name"); done < <(
-        printf '%s' "$dump" | jq -r '
+    printf '%s' "$dump" | jq -r '
             def recipes_of(prefix):
                 ((.recipes // {}) | to_entries[]
                     | (.value.body
@@ -154,8 +161,8 @@ shell: (_banner "lint" "shell")
                 printf "%s", substr($0, n + 1) > out
                 close(out)
                 print name
-            }'
-    )
+            }' > "$tmpdir/.recipes"
+    while IFS= read -r name; do recipes+=("$tmpdir/$name"); done < "$tmpdir/.recipes"
     # SC1010 is excluded for recipe bodies only: `just do <task>` is our shared
     # namespace, and shellcheck misreads the argument "do" as the shell keyword.
     # The constant-word checks (SC2050/SC2078/SC2157/SC2194) are excluded for

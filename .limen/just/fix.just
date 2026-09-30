@@ -26,12 +26,15 @@ github *args: (_banner "fix" "github")
 just: (_banner "fix" "just")
     #!/usr/bin/env bash
     set -euo pipefail
-    # Same enumeration and pathspecs as `lint just`.
+    # Same enumeration and pathspecs as `lint just`, through a file likewise.
+    list=$(mktemp "${TMPDIR:-/tmp}/fix-just.XXXXXX")
+    trap 'rm -f "$list"' EXIT
+    git ls-files -z --cached --others --exclude-standard \
+        'justfile' '**/justfile' 'Justfile' '**/Justfile' '.justfile' '**/.justfile' '*.just' > "$list"
     while IFS= read -r -d '' f; do
         [ -f "$f" ] || continue
         just --fmt --justfile "$f"
-    done < <(git ls-files -z --cached --others --exclude-standard \
-        'justfile' '**/justfile' 'Justfile' '**/Justfile' '.justfile' '**/.justfile' '*.just')
+    done < "$list"
 
 yaml: (_banner "fix" "yaml")
     yamlfmt -conf .limen/.yamlfmt
