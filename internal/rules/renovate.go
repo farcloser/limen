@@ -13,9 +13,10 @@ import (
 	"github.com/farcloser/limen"
 )
 
-// The renovate rule maintains three things in renovate.json: the `extends`
-// reference to the shared canonical preset (see presetRepo below),
-// forkProcessing, and the gitIgnoredAuthors array, kept in step with the
+// The renovate rule content-pins the shared configuration at
+// .limen/renovate.json and maintains three things in renovate.json: the
+// `extends` reference to it (see selfPresetRef below), forkProcessing, and
+// the gitIgnoredAuthors array, kept in step with the
 // identities that commit onto Renovate's branches. Renovate treats a commit
 // by any other author as a human edit and stops rebasing the branch — so the
 // update-aqua-checksum fix-up commit, made as the org's update-App bot user
@@ -46,29 +47,27 @@ const (
 // silent: no PR, no issue, no log the repository can see.
 const forkProcessingValue = "enabled"
 
-// The rule's first charge: the `extends` reference to the shared preset.
-// The canonical Renovate configuration lives in limen's default.json, and
-// each repository's renovate.json extends it — pinned to the repository's
-// own limen version (the farcloser/limen pin in aqua.yaml), so the preset
-// moves with the release exactly like the content-pinned files do, and a
-// fix to the canonical configuration reaches every repository at its next
-// limen bump instead of waiting on a seeded-once file nobody rewrites.
-// limen itself, the preset's author, extends its own default branch.
-const (
-	presetRepo       = "farcloser/limen"
-	presetLocalRef   = "local>" + presetRepo
-	presetModulePath = "github.com/farcloser/limen"
+// The shared configuration, content-pinned in every repository.
+const pathRenovatePreset = ".limen/renovate.json"
+
+// selfPresetRef is the `extends` entry that reads the shared configuration:
+// Renovate refuses a relative reference in a repository's own config, so the
+// repository names itself, and the entry is wrong the moment the repository
+// is renamed, transferred or forked — which is why the rule rewrites it from
+// the origin remote rather than seeding it once.
+func selfPresetRef(repository string) string {
+	return "local>" + repository + "//" + strings.TrimSuffix(pathRenovatePreset, ".json")
+}
+
+// presetRefPattern matches any reference to the shared configuration: the
+// in-repository form under any name, and the retired farcloser/limen preset
+// (default.json at limen's root, gone from every later release).
+var presetRefPattern = regexp.MustCompile(
+	`^(?:(?:github|local)>farcloser/limen|local>[^/\s]+/[^/\s]+//\.limen/renovate)(?:#.*)?$`,
 )
 
-// presetRefPattern matches a reference to the shared preset, tagged or not,
-// from either source.
-var presetRefPattern = regexp.MustCompile(`^(?:github|local)>` + regexp.QuoteMeta(presetRepo) + `(?:#.*)?$`)
-
-// limenPinPattern finds the repository's farcloser/limen pin in aqua.yaml.
-var limenPinPattern = regexp.MustCompile(`(?m)^\s*-\s+name:\s*"?` + regexp.QuoteMeta(presetRepo) + `@([^"\s#]+)`)
-
-// goModulePattern reads the module path off go.mod.
-var goModulePattern = regexp.MustCompile(`(?m)^module\s+(\S+)`)
+// retiredPresetPattern matches the retired farcloser/limen preset alone.
+var retiredPresetPattern = regexp.MustCompile(`^(?:github|local)>farcloser/limen(?:#.*)?$`)
 
 // config is a parsed renovate.json. Renovate's schema is open-ended and most
 // of the file is the project's own, so it is carried as a map and written
@@ -142,44 +141,13 @@ func (cfg config) strings(key string) ([]string, bool) {
 	return out, true
 }
 
-// canonicalPresetRef returns the preset reference this repository must
-// extend: the local default branch when the repository IS limen, else the
-// preset at the repository's pinned limen version. Empty when no limen pin
-// can be read: nothing to pin to, nothing enforced.
-func canonicalPresetRef(root string) string {
-	if gomod, err := readRepoFile(root, goModFile); err == nil {
-		if m := goModulePattern.FindSubmatch(gomod); len(m) > 1 && string(m[1]) == presetModulePath {
-			return presetLocalRef
-		}
-	}
-
-	manifest, err := readAquaManifest(root)
-	if err != nil {
-		return ""
-	}
-
-	return presetRefFor(string(manifest))
-}
-
-// presetRefFor returns the pinned preset reference for a manifest's
-// farcloser/limen pin, or "" when the manifest carries none.
-func presetRefFor(manifest string) string {
-	m := limenPinPattern.FindStringSubmatch(manifest)
-	if m == nil {
-		return ""
-	}
-
-	return "github>" + presetRepo + "#" + m[1]
-}
-
 // CanonicalRenovateFor returns the seeded renovate.json as `limen fix` leaves
-// it in a repository whose aqua.yaml is the given manifest: the seed with its
-// preset reference pinned to that manifest's limen version. A manifest
-// without a limen pin gets the seed as is. Exported for the command's tests,
-// which build compliant repositories from the canonical files.
-func CanonicalRenovateFor(manifest string) string {
-	ref := presetRefFor(manifest)
-	if ref == "" {
+// it in the named repository ("owner/name"): the seed extending the shared
+// configuration by that name. An unknown repository ("") gets the seed as is.
+// Exported for the command's tests, which build compliant repositories from
+// the canonical files.
+func CanonicalRenovateFor(repository string) string {
+	if repository == "" {
 		return limen.CanonicalRenovate
 	}
 
@@ -188,7 +156,7 @@ func CanonicalRenovateFor(manifest string) string {
 		return limen.CanonicalRenovate
 	}
 
-	cfg.setPresetRef(ref)
+	cfg.setPresetRef(selfPresetRef(repository))
 
 	pinned, err := render(cfg)
 	if err != nil {
@@ -198,8 +166,16 @@ func CanonicalRenovateFor(manifest string) string {
 	return pinned
 }
 
+// hasRetiredPreset reports whether extends still names the retired
+// farcloser/limen preset.
+func (cfg config) hasRetiredPreset() bool {
+	refs, _ := cfg.strings(extendsKey)
+
+	return slices.ContainsFunc(refs, retiredPresetPattern.MatchString)
+}
+
 // hasPresetRef reports whether extends carries exactly the given reference
-// and no other reference to the preset.
+// and no other reference to the shared configuration.
 func (cfg config) hasPresetRef(ref string) bool {
 	refs, ok := cfg.strings(extendsKey)
 	if !ok {
@@ -334,10 +310,47 @@ func deadConfigsMessage(dead []string) string {
 		" move anything still wanted into renovate.json and remove it (limen fix removes nothing)"
 }
 
-// checkRenovate verifies the preset reference, forkProcessing, and — when the
-// identity is known — that it is among gitIgnoredAuthors; and that no
-// superseded config file sits beside renovate.json.
+// repositoryUnknownMessage names why the reference cannot be enforced.
+const repositoryUnknownMessage = "repository unknown (no github.com origin remote)"
+
+// retiredPresetMessage names the retired preset and what replaces it.
+const retiredPresetMessage = "extends names the retired farcloser/limen preset; the shared configuration is " +
+	pathRenovatePreset + " now, read as " + "local>owner/name//.limen/renovate"
+
+// checkPresetRef verifies extends: exactly this repository's reference to the
+// shared configuration when the repository is known; otherwise only that the
+// retired preset is gone, since nothing else can be told apart offline.
+func checkPresetRef(cfg config, repository string) *Finding {
+	if repository == "" {
+		if cfg.hasRetiredPreset() {
+			f := fail(ruleRenovate, pathRenovate, retiredPresetMessage+
+				" — "+repositoryUnknownMessage+", so limen fix cannot set it")
+
+			return &f
+		}
+
+		return nil
+	}
+
+	if ref := selfPresetRef(repository); !cfg.hasPresetRef(ref) {
+		f := fail(ruleRenovate, pathRenovate, "extends must carry "+ref+
+			", this repository's reference to the shared configuration, and no other (limen fix sets it)")
+
+		return &f
+	}
+
+	return nil
+}
+
+// checkRenovate verifies the shared configuration's content pin, and in
+// renovate.json the reference to it (when the repository is known),
+// forkProcessing, and the update-App identity among gitIgnoredAuthors (when
+// known); and that no superseded config file sits beside renovate.json.
 func checkRenovate(root string, policy Policy) Finding {
+	if f := checkPinned(root, ruleRenovate, pathRenovatePreset, limen.CanonicalRenovatePreset); f != nil {
+		return *f
+	}
+
 	data, err := readRepoFile(root, pathRenovate)
 	if err != nil {
 		// Presence is the workflows rule's verdict; do not double-report.
@@ -358,13 +371,8 @@ func checkRenovate(root string, policy Policy) Finding {
 		return fail(ruleRenovate, pathRenovate, err.Error())
 	}
 
-	if ref := canonicalPresetRef(root); ref != "" && !cfg.hasPresetRef(ref) {
-		return fail(
-			ruleRenovate,
-			pathRenovate,
-			"extends must carry the shared preset at the repository's limen pin, "+ref+
-				" — the canonical Renovate configuration is inherited from there (limen fix sets it)",
-		)
+	if f := checkPresetRef(cfg, policy.Repository); f != nil {
+		return *f
 	}
 
 	if !cfg.hasForkProcessing() {
@@ -377,12 +385,17 @@ func checkRenovate(root string, policy Policy) Finding {
 		)
 	}
 
+	extends := "extends the shared configuration"
+	if policy.Repository == "" {
+		extends = repositoryUnknownMessage + " — extends not enforced"
+	}
+
 	if policy.UpdateAppIdentity == "" {
 		return Finding{
 			Rule:   ruleRenovate,
 			Status: StatusOK,
 			Path:   pathRenovate,
-			Message: "extends the shared preset; forks are processed; update-App identity unknown " +
+			Message: extends + "; forks are processed; update-App identity unknown " +
 				"(no org or App resolvable) — gitIgnoredAuthors not enforced",
 		}
 	}
@@ -392,7 +405,7 @@ func checkRenovate(root string, policy Policy) Finding {
 			Rule:   ruleRenovate,
 			Status: StatusOK,
 			Path:   pathRenovate,
-			Message: "extends the shared preset; forks are processed; gitIgnoredAuthors carries the " +
+			Message: extends + "; forks are processed; gitIgnoredAuthors carries the " +
 				"update-App identity " + policy.UpdateAppIdentity,
 		}
 	}
@@ -405,11 +418,13 @@ func checkRenovate(root string, policy Policy) Finding {
 	)
 }
 
-// remediateRenovate sets the preset reference and forkProcessing, and adds
-// the update-App identity to gitIgnoredAuthors when it is known and missing.
-// A superseded config file beside renovate.json is named, never removed: what
+// remediateRenovate content-pins the shared configuration, sets the reference
+// to it (when the repository is known) and forkProcessing, and adds the
+// update-App identity to gitIgnoredAuthors when it is known and missing. A
+// superseded config file beside renovate.json is named, never removed: what
 // it carries is the project's to move over or drop.
-func remediateRenovate(root string, opts FixOptions) Outcome {
+func remediateRenovate(root string, opts FixOptions) []Outcome {
+	pinned := pinExact(root, ruleRenovate, pathRenovatePreset, limen.CanonicalRenovatePreset)
 	out := remediateRenovateValues(root, opts)
 
 	if dead := deadConfigs(root); len(dead) > 0 && out.Action != ActionFailed {
@@ -417,7 +432,7 @@ func remediateRenovate(root string, opts FixOptions) Outcome {
 		out.Message += doneSeparator + deadConfigsMessage(dead)
 	}
 
-	return out
+	return []Outcome{pinned, out}
 }
 
 // remediateRenovateValues is the edit itself: the three maintained keys.
@@ -443,16 +458,25 @@ func remediateRenovateValues(root string, opts FixOptions) Outcome {
 	}
 
 	var (
-		done    []string
-		changed bool
+		done       []string
+		changed    bool
+		unresolved bool
 	)
 
-	if ref := canonicalPresetRef(root); ref != "" && !cfg.hasPresetRef(ref) {
+	switch ref := selfPresetRef(opts.Policy.Repository); {
+	case opts.Policy.Repository == "" && cfg.hasRetiredPreset():
+		unresolved = true
+
+		done = append(done, retiredPresetMessage+" — "+repositoryUnknownMessage+
+			": set it by hand, or add the origin remote and run limen fix again")
+	case opts.Policy.Repository == "":
+		done = append(done, repositoryUnknownMessage+" — extends left as is")
+	case !cfg.hasPresetRef(ref):
 		cfg.setPresetRef(ref)
 
 		changed = true
 
-		done = append(done, "set extends to the shared preset "+ref)
+		done = append(done, "set extends to the shared configuration "+ref)
 	}
 
 	if !cfg.hasForkProcessing() {
@@ -480,27 +504,28 @@ func remediateRenovateValues(root string, opts FixOptions) Outcome {
 	// (sorted keys, raw UTF-8), not the project's, and comparing it to the
 	// file rewrote every hand-edited config on every run — the checksum
 	// workflow then carried that formatting diff into each Renovate branch.
-	if !changed {
-		return Outcome{
-			Rule:    ruleRenovate,
-			Action:  ActionNone,
-			Path:    pathRenovate,
-			Message: strings.Join(done, doneSeparator),
+	action := ActionNone
+
+	if changed {
+		content, err := render(cfg)
+		if err != nil {
+			return Outcome{Rule: ruleRenovate, Action: ActionFailed, Path: pathRenovate, Message: err.Error()}
 		}
+
+		if err := writeFile(root, pathRenovate, content); err != nil {
+			return Outcome{Rule: ruleRenovate, Action: ActionFailed, Path: pathRenovate, Message: err.Error()}
+		}
+
+		action = ActionMerged
 	}
 
-	content, err := render(cfg)
-	if err != nil {
-		return Outcome{Rule: ruleRenovate, Action: ActionFailed, Path: pathRenovate, Message: err.Error()}
-	}
-
-	if err := writeFile(root, pathRenovate, content); err != nil {
-		return Outcome{Rule: ruleRenovate, Action: ActionFailed, Path: pathRenovate, Message: err.Error()}
+	if unresolved {
+		action = ActionAdvisory
 	}
 
 	return Outcome{
 		Rule:    ruleRenovate,
-		Action:  ActionMerged,
+		Action:  action,
 		Path:    pathRenovate,
 		Message: strings.Join(done, doneSeparator),
 	}

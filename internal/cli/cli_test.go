@@ -172,7 +172,8 @@ func compliantRepo(t *testing.T) string {
 		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
 		".github/workflows/security.yaml":             limen.CanonicalWorkflowSecurity,
-		"renovate.json":                               rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
+		".limen/renovate.json":                        limen.CanonicalRenovatePreset,
+		"renovate.json":                               rules.CanonicalRenovateFor(""),
 		// The Go-built tools every repository declares (the gotools rule).
 		"tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
 			"\tgithub.com/vbatts/git-validation\n" +
@@ -513,6 +514,13 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) { // Serial by design:
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Skipf("git %v unavailable: %v (%s)", args, err, out)
 		}
+	}
+
+	// With the origin remote the repository is known, and so is the
+	// reference its renovate.json must carry.
+	if err := os.WriteFile(filepath.Join(dir, "renovate.json"),
+		[]byte(rules.CanonicalRenovateFor("test-org/thing")), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
 	// gh fails every call until the renamed scenario is switched on.

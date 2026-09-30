@@ -92,7 +92,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateLintGo(root)...)
 	add(remediateLychee(root)...)
 	add(remediateWorkflows(root)...)
-	add(remediateRenovate(root, opts))
+	add(remediateRenovate(root, opts)...)
 
 	add(remediateShellcheck(root))
 

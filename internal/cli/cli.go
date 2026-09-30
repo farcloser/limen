@@ -245,15 +245,29 @@ func runFix(ctx context.Context, version string, args []string, stdout, stderr i
 }
 
 // policyFor is the default policy plus whatever the repository's context
-// contributes: today the org's update-App commit identity, resolved from the
-// origin remote through the given resolver (best-effort; see
-// updateAppIdentity). Which resolver is the command's contract: check gets
-// the deterministic one, fix the discovering one — see identityResolver.
+// contributes: its own name and the org's update-App commit identity, both
+// from the origin remote, the identity through the given resolver
+// (best-effort; see updateAppIdentity). Which resolver is the command's
+// contract: check gets the deterministic one, fix the discovering one — see
+// identityResolver.
 func policyFor(ctx context.Context, root string, resolve identityResolver) rules.Policy {
 	policy := rules.DefaultPolicy()
+	policy.Repository = repositoryOf(ctx, root)
 	policy.UpdateAppIdentity = updateAppIdentity(ctx, "", root, resolve)
 
 	return policy
+}
+
+// repositoryOf is the repository's "owner/name" from its origin remote, or
+// "" when there is none — best-effort like the identity: the renovate rule
+// then leaves its reference unenforced rather than fail.
+func repositoryOf(ctx context.Context, root string) string {
+	slug, err := github.InferRepo(ctx, root)
+	if err != nil {
+		return ""
+	}
+
+	return slug
 }
 
 // bootstrapOptions is a parsed and validated `limen bootstrap` command line.
@@ -380,6 +394,7 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 	// remediation pass — every other rule is already resolved and reports none.
 	if identity := updateAppIdentity(ctx, opts.org, root, discoverIdentity); identity != "" {
 		policy := rules.DefaultPolicy()
+		policy.Repository = repositoryOf(ctx, root)
 		policy.UpdateAppIdentity = identity
 
 		for _, outcome := range rules.Fix(ctx, root, rules.FixOptions{Policy: policy, SelfVersion: releaseVersion(version)}) {

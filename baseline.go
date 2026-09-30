@@ -140,6 +140,12 @@ var CanonicalWorkflowRelease string
 //go:embed renovate-seed.json
 var CanonicalRenovate string
 
+// CanonicalRenovatePreset is the shared Renovate configuration, content-pinned
+// in every repository at .limen/renovate.json and extended from renovate.json.
+//
+//go:embed .limen/renovate.json
+var CanonicalRenovatePreset string
+
 // CanonicalAgents is the repository's AGENTS.md — the working agreement for a
 // coding agent, content-pinned in every repo so the same rules hold wherever
 // an agent starts. Harness-neutral: AGENTS.md is the file every agent reads.

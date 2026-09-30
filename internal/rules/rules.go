@@ -155,6 +155,11 @@ type Policy struct {
 	// resolved by the caller (see cmd/limen; the rules package is offline).
 	// Empty means unknown, and the renovate rule then passes without enforcing.
 	UpdateAppIdentity string
+	// Repository is the repository's own "owner/name", resolved by the caller
+	// from the origin remote: renovate.json extends the shared configuration
+	// by that name. Empty means unknown, and the renovate rule then does not
+	// enforce the reference.
+	Repository string
 }
 
 // DefaultPolicy returns the policy described in book/mandatory-files.md: the
