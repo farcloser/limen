@@ -125,8 +125,8 @@ func AllResolved(outcomes []Outcome) bool {
 
 func remediateGit(ctx context.Context, root string) Outcome {
 	const rule = "git"
-	if checkGit(root).OK() {
-		return Outcome{Rule: rule, Action: ActionNone, Path: gitDirName, Message: "already a git repository"}
+	if _, err := os.Stat(filepath.Join(root, gitDirName)); err == nil {
+		return renameStraySigners(root, rule)
 	}
 
 	// The rules API carries no context; Background is the honest choice.
@@ -142,6 +142,35 @@ func remediateGit(ctx context.Context, root string) Outcome {
 	}
 
 	return Outcome{Rule: rule, Action: ActionCreated, Path: gitDirName, Message: "git init"}
+}
+
+// renameStraySigners moves the signers file from its former name to the one
+// `lint commits` reads; with both present, the project merges them by hand.
+func renameStraySigners(root, rule string) Outcome {
+	stray := filepath.Join(root, straySignersFile)
+	if !exists(stray) {
+		return Outcome{Rule: rule, Action: ActionNone, Path: gitDirName, Message: "already a git repository"}
+	}
+
+	if exists(filepath.Join(root, signersFile)) {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionAdvisory,
+			Path:    straySignersFile,
+			Message: "both " + straySignersFile + " and " + signersFile + " exist: merge the first into the second and delete it",
+		}
+	}
+
+	if err := os.Rename(stray, filepath.Join(root, signersFile)); err != nil {
+		return failed(rule, straySignersFile, err)
+	}
+
+	return Outcome{
+		Rule:    rule,
+		Action:  ActionMerged,
+		Path:    signersFile,
+		Message: "renamed " + straySignersFile + " to " + signersFile + " (the name `lint commits` reads)",
+	}
 }
 
 func remediateReadme(root string) Outcome {
