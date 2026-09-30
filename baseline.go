@@ -160,13 +160,6 @@ var CanonicalAgents string
 // notes for the agent go below the import.
 const CanonicalClaudeSeed = "@AGENTS.md\n"
 
-// CanonicalOverrideExample is the reference limen.yaml — every configurable
-// declaration key, commented. Seeded by bootstrap only, for documentation:
-// fix never touches it and no check requires it. See book/github.md.
-//
-//go:embed limen-example.yaml
-var CanonicalOverrideExample string
-
 // justFS embeds the whole .limen/ directory. The *.just files directly under
 // .limen/just/ are the shared, content-pinned modules (see JustModules); a
 // project's own recipes live in the root .justfile, which is neither embedded

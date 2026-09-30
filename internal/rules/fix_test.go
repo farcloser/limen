@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1037,48 +1038,64 @@ func TestFixWorkflows(t *testing.T) {
 	}
 }
 
-// TestBootstrapSeedsOverrideExample: the reference declarations file is
-// bootstrap-only documentation — bootstrap writes it once (and never
-// overwrites an existing one), while fix (no License) must not seed it, and
-// no check requires it (a project that deleted it meant it).
-func TestBootstrapSeedsOverrideExample(t *testing.T) {
+// TestLintGithubFormerName: limen.yaml is the audit's exceptions file under
+// its former name, entries indented under `github:`. check fails naming it;
+// fix renames it and brings the entries out of the section, comments kept;
+// with both files, or with content that is not the former format, fix leaves
+// it to the project.
+func TestLintGithubFormerName(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	const (
+		former    = "# why we deviate\ngithub:\n  wiki: hosts the runbook  # kept\n  # a comment\n  pages: docs site\n"
+		converted = "# why we deviate\nwiki: hosts the runbook  # kept\n# a comment\npages: docs site\n"
+	)
 
-	rules.Fix(t.Context(), dir, bootstrapOpts())
+	files := compliantFiles()
+	files["limen.yaml"] = former
+	root := writeRepo(t, files)
 
-	data, err := os.ReadFile(filepath.Join(dir, "limen-example.yaml"))
-	if err != nil {
-		t.Fatalf("bootstrap did not seed limen-example.yaml: %v", err)
+	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); f.OK() || f.Path != "limen.yaml" {
+		t.Errorf("check must fail naming limen.yaml, got: %+v", f)
 	}
 
-	if string(data) != limen.CanonicalOverrideExample {
-		t.Error("the seeded example does not match the embedded canonical")
+	rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	data, err := os.ReadFile(filepath.Join(root, ".lint-github.yaml"))
+	if err != nil || string(data) != converted {
+		t.Errorf("fix must convert the file (err %v), got:\n%s", err, data)
 	}
 
-	// Re-running with the file replaced must leave it alone: seeded once.
-	if err := os.WriteFile(filepath.Join(dir, "limen-example.yaml"), []byte("mine\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Join(root, "limen.yaml")); err == nil {
+		t.Error("fix must remove limen.yaml once converted")
 	}
 
-	rules.Fix(t.Context(), dir, bootstrapOpts())
-
-	data, _ = os.ReadFile(filepath.Join(dir, "limen-example.yaml"))
-	if string(data) != "mine\n" {
-		t.Error("bootstrap overwrote an existing limen-example.yaml")
+	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); !f.OK() {
+		t.Errorf("after fix: %s", f.Message)
 	}
-}
 
-// TestFixDoesNotSeedOverrideExample: fix is not bootstrap — no example file.
-func TestFixDoesNotSeedOverrideExample(t *testing.T) {
-	t.Parallel()
+	for name, extra := range map[string]map[string]string{
+		"both files":   {"limen.yaml": former, ".lint-github.yaml": converted},
+		"other format": {"limen.yaml": "rules:\n  something: else\n"},
+	} {
+		files := compliantFiles()
+		maps.Copy(files, extra)
+		root := writeRepo(t, files)
 
-	dir := t.TempDir()
+		var outcome rules.Outcome
 
-	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+		for _, o := range rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}) {
+			if o.Rule == "workflows" && o.Path == "limen.yaml" {
+				outcome = o
+			}
+		}
 
-	if _, err := os.Stat(filepath.Join(dir, "limen-example.yaml")); err == nil {
-		t.Error("fix must not seed limen-example.yaml")
+		if outcome.Action != rules.ActionAdvisory {
+			t.Errorf("%s: fix: %s (%s), want advisory", name, outcome.Action, outcome.Message)
+		}
+
+		if data, _ := os.ReadFile(filepath.Join(root, "limen.yaml")); string(data) != extra["limen.yaml"] {
+			t.Errorf("%s: fix must leave limen.yaml untouched", name)
+		}
 	}
 }

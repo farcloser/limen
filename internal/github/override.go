@@ -8,42 +8,42 @@ import (
 	"strings"
 )
 
-// OverridePath is the committed, project-owned declarations file, at the
-// repository root: the single place a project records where — and WHY — it
-// deviates from what limen enforces. Sectioned by concern; `github:` holds
-// the settings-audit exceptions today, and future limen judgments get their
-// own sections rather than their own files. Each entry names a check
+// OverridePath is the committed, project-owned exceptions file for the
+// settings audit, at the repository root: where — and WHY — the project
+// deviates from what `limen github check` enforces. Each entry names a check
 // identifier and the reason it is exempt:
 //
-//	github:
-//	  wiki: hosts the operations runbook
-//	  org-admins: apostasie is the sole owner
+//	wiki: hosts the operations runbook
+//	org-admins: apostasie is the sole owner
 //
 // An exempted check reports ok (with the reason), visibly — the escape hatch
-// lives in review, never in a UI click. Unknown sections, unknown
-// identifiers, and empty reasons fail the file: a broken escape hatch must
-// not silently exempt nothing — or everything.
+// lives in review, never in a UI click. Unknown identifiers and empty reasons
+// fail the file: a broken escape hatch must not silently exempt nothing — or
+// everything.
 //
 // One entry is not an escape hatch at all: `org-admins` keeps enforcing after
 // it is written. Its reason is parsed for owner logins and compared against
 // the live roster on every run, so an owner the text does not name re-raises
 // the finding (see auditOrgAdmins). A reason that names nobody therefore
 // silences nothing — it reports every owner as undeclared.
-const OverridePath = "limen.yaml"
+const OverridePath = ".lint-github.yaml"
+
+// FormerOverridePath is the file's former name, whose entries sat indented
+// under a `github:` section. Read as absent, its exceptions would vanish and
+// every exempted check fail with no word about why — so its presence is an
+// error of its own.
+const FormerOverridePath = "limen.yaml"
 
 var (
 	errUnknownCheck   = errors.New("unknown check identifier")
 	errEmptyReason    = errors.New("an exception requires a reason")
-	errUnknownSection = errors.New("unknown section (known: github)")
-	errNoSection      = errors.New("entries live under a section (e.g. github:)")
+	errFormerSection  = errors.New("the github: section is gone: entries are top-level `check: reason` lines")
+	errFormerOverride = errors.New(FormerOverridePath + " is the former name of " + OverridePath +
+		" — rename it and drop its github: line (limen fix does)")
 )
 
-// sectionGithub is the settings-audit section of the override file, and
-// overrideErrFormat the uniform file:line prefix its parse errors carry.
-const (
-	sectionGithub     = "github"
-	overrideErrFormat = "%s:%d: %w"
-)
+// overrideErrFormat is the uniform file:line prefix the parse errors carry.
+const overrideErrFormat = "%s:%d: %w"
 
 // stripInlineComment drops a YAML-style inline comment — everything from the
 // first '#' preceded by whitespace. The file advertises .yaml and editors
@@ -59,21 +59,25 @@ func stripInlineComment(line string) string {
 	return line
 }
 
-// LoadOverrides reads the github section of the declarations file under dir.
-// A missing file means no exceptions; a malformed one is an error. The format
-// is a deliberately tiny YAML subset — unindented `section:` headers, indented
-// `key: reason` entries, comments (full-line and inline) and blank lines —
-// parsed by hand so limen keeps zero dependencies.
+// LoadOverrides reads the exceptions file under dir. A missing file means no
+// exceptions; a malformed one is an error, and so is the file under its former
+// name. The format is a deliberately tiny YAML subset — `check: reason`
+// entries, comments (full-line and inline) and blank lines — parsed by hand so
+// limen keeps zero dependencies.
 func LoadOverrides(dir string) (map[string]string, error) {
 	path := filepath.Join(dir, filepath.FromSlash(OverridePath))
 
 	data, err := os.ReadFile(path) // #nosec G304 -- caller-designated repository, the tool's contract.
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return map[string]string{}, nil
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("reading %s: %w", OverridePath, err)
 		}
 
-		return nil, fmt.Errorf("reading %s: %w", OverridePath, err)
+		if _, statErr := os.Stat(filepath.Join(dir, FormerOverridePath)); statErr == nil {
+			return nil, errFormerOverride
+		}
+
+		return map[string]string{}, nil
 	}
 
 	parser := overrideParser{known: knownChecks(), overrides: map[string]string{}}
@@ -87,13 +91,11 @@ func LoadOverrides(dir string) (map[string]string, error) {
 	return parser.overrides, nil
 }
 
-// overrideParser walks the declarations file line by line: a section header
-// opens the one known section, an indented `check: reason` under it is an
-// override.
+// overrideParser walks the exceptions file line by line: each `check: reason`
+// is an override.
 type overrideParser struct {
 	known     map[string]bool
 	overrides map[string]string
-	section   string
 }
 
 // line consumes one line, numbered from one for the messages.
@@ -106,29 +108,12 @@ func (p *overrideParser) line(lineNumber int, line string) error {
 
 	trimmed = stripInlineComment(trimmed)
 
-	indented := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
-
 	key, value, found := strings.Cut(trimmed, ":")
 	key = strings.TrimSpace(key)
 	value = strings.TrimSpace(value)
 
-	if !indented {
-		// A section header: a bare `name:` with nothing after the colon.
-		if !found || value != "" {
-			return fmt.Errorf(overrideErrFormat, OverridePath, lineNumber, errNoSection)
-		}
-
-		if key != sectionGithub {
-			return fmt.Errorf(overrideErrFormat+": %q", OverridePath, lineNumber, errUnknownSection, key)
-		}
-
-		p.section = key
-
-		return nil
-	}
-
-	if p.section != sectionGithub {
-		return fmt.Errorf(overrideErrFormat, OverridePath, lineNumber, errNoSection)
+	if key == "github" && value == "" {
+		return fmt.Errorf(overrideErrFormat, OverridePath, lineNumber, errFormerSection)
 	}
 
 	if !found || value == "" {

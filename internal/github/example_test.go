@@ -1,5 +1,5 @@
-// Keeps limen-example.yaml honest: the reference file and the live check
-// catalog must never drift apart.
+// Keeps the book's list of declarable identifiers honest: the reference and
+// the live check catalog must never drift apart.
 
 package github_test
 
@@ -11,42 +11,54 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/farcloser/limen"
 	"github.com/farcloser/limen/internal/github"
 )
 
-// exampleEntryRE matches one commented-out declaration entry in the example
-// file: `#   check-id: …`.
-var exampleEntryRE = regexp.MustCompile(`(?m)^# {3}([a-z0-9-]+): `)
+// referenceBlockRE finds the book's reference block: the fenced YAML that
+// opens with its own title line.
+var referenceBlockRE = regexp.MustCompile(
+	"(?s)```yaml\n# \\.lint-github\\.yaml — every declarable identifier\n(.*?)```",
+)
 
-// documentedChecks returns every check identifier limen-example.yaml documents.
+// referenceEntryRE matches one commented-out entry in it: `# check-id: …`.
+var referenceEntryRE = regexp.MustCompile(`(?m)^# ([a-z0-9-]+): `)
+
+// documentedChecks returns every check identifier the book documents.
 func documentedChecks(t *testing.T) map[string]bool {
 	t.Helper()
 
+	book, err := os.ReadFile(filepath.Join("..", "..", "book", "github.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	block := referenceBlockRE.FindSubmatch(book)
+	if block == nil {
+		t.Fatal("book/github.md carries no reference block — did its title line change?")
+	}
+
 	documented := map[string]bool{}
-	for _, match := range exampleEntryRE.FindAllStringSubmatch(limen.CanonicalOverrideExample, -1) {
-		documented[match[1]] = true
+	for _, match := range referenceEntryRE.FindAllSubmatch(block[1], -1) {
+		documented[string(match[1])] = true
 	}
 
 	if len(documented) == 0 {
-		t.Fatal("no declaration entries found in limen-example.yaml — did its format change?")
+		t.Fatal("no entries found in the book's reference block — did its format change?")
 	}
 
 	return documented
 }
 
-// TestOverrideExampleEntriesAreChecks: every entry the example shows is a
-// real identifier — the override loader, which validates identifiers,
-// accepts a file declaring all of them. Documenting a phantom fails here.
-func TestOverrideExampleEntriesAreChecks(t *testing.T) {
+// TestReferenceEntriesAreChecks: every entry the book lists is a real
+// identifier — the loader, which validates identifiers, accepts a file
+// declaring all of them. Documenting a phantom fails here.
+func TestReferenceEntriesAreChecks(t *testing.T) {
 	t.Parallel()
 
 	var file strings.Builder
 
-	file.WriteString("github:\n")
-
 	for entry := range documentedChecks(t) {
-		file.WriteString("  " + entry + ": documented\n")
+		file.WriteString(entry + ": documented\n")
 	}
 
 	dir := t.TempDir()
@@ -55,20 +67,16 @@ func TestOverrideExampleEntriesAreChecks(t *testing.T) {
 	}
 
 	if _, err := github.LoadOverrides(dir); err != nil {
-		t.Errorf("limen-example.yaml documents an entry that is not a known check: %v", err)
-	}
-
-	if !strings.Contains(limen.CanonicalOverrideExample, "github:") {
-		t.Error("the example lacks the github: section header")
+		t.Errorf("the book documents an entry that is not a known check: %v", err)
 	}
 }
 
-// TestOverrideExampleCoversEveryCheck: every check a compliant audit reports,
-// repository and organization alike, appears in limen-example.yaml — adding
-// a check without documenting it fails here.
+// TestReferenceCoversEveryCheck: every check a compliant audit reports,
+// repository and organization alike, appears in the book's list — adding a
+// check without documenting it fails here.
 //
 //nolint:paralleltest // serial by design: sets the process environment.
-func TestOverrideExampleCoversEveryCheck(t *testing.T) {
+func TestReferenceCoversEveryCheck(t *testing.T) {
 	documented := documentedChecks(t)
 
 	responses := compliantResponses()
@@ -81,7 +89,7 @@ func TestOverrideExampleCoversEveryCheck(t *testing.T) {
 
 	for _, finding := range append(findings, orgFindings...) {
 		if !documented[finding.Check] {
-			t.Errorf("check %q is missing from limen-example.yaml", finding.Check)
+			t.Errorf("check %q is missing from the book's list in book/github.md", finding.Check)
 		}
 	}
 }

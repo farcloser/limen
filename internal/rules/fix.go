@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/farcloser/limen"
@@ -98,14 +99,6 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 
 	if o, ok := remediateYamlfmt(root); ok {
 		add(o)
-	}
-
-	// Bootstrap-only (License set): the reference declarations file —
-	// documentation, not a rule. fix never seeds it (a project that deleted
-	// it meant it), and no check requires it.
-	if opts.License != "" {
-		add(seedIfMissing(root, "example", "limen-example.yaml", limen.CanonicalOverrideExample,
-			"wrote limen-example.yaml (reference for the limen.yaml declarations file)"))
 	}
 
 	return outcomes
@@ -424,7 +417,7 @@ func remediateWorkflows(root string) []Outcome {
 			"seeded the canonical renovate config (the content is the project's own from here)"),
 	}
 
-	out = append(out, remediateReleaseGo(root, rule))
+	out = append(out, remediateReleaseGo(root, rule), remediateLintGithub(root, rule))
 
 	if exists(filepath.Join(root, releaseGoFile)) {
 		out = append(out, seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
@@ -439,6 +432,66 @@ func remediateWorkflows(root string) []Outcome {
 	}
 
 	return out
+}
+
+// formerSectionLine is the `github:` header of the former file, a trailing
+// comment allowed.
+var formerSectionLine = regexp.MustCompile(`^github:\s*(?:#.*)?$`)
+
+// remediateLintGithub moves the audit's exceptions from limen.yaml to
+// .lint-github.yaml: the `github:` header goes and its entries come out to
+// the top level, comments kept. Anything else unindented is not the former
+// format, and neither is two files at once: both are left to the project.
+func remediateLintGithub(root, rule string) Outcome {
+	data, err := readRepoFile(root, formerLintGithubFile)
+	if err != nil {
+		return Outcome{Rule: rule, Action: ActionNone, Path: lintGithubFile, Message: "no " + formerLintGithubFile}
+	}
+
+	if exists(filepath.Join(root, lintGithubFile)) {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionAdvisory,
+			Path:    formerLintGithubFile,
+			Message: "both " + formerLintGithubFile + " and " + lintGithubFile + " exist: merge the first into the second and delete it",
+		}
+	}
+
+	lines := strings.Split(string(data), "\n")
+	converted := make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		switch {
+		case formerSectionLine.MatchString(trimmed) && line == strings.TrimLeft(line, " \t"):
+			continue
+		case trimmed != "" && !strings.HasPrefix(trimmed, "#") && line == strings.TrimLeft(line, " \t"):
+			return Outcome{
+				Rule:    rule,
+				Action:  ActionAdvisory,
+				Path:    formerLintGithubFile,
+				Message: formerLintGithubMessage + " — `" + trimmed + "` is not an entry under github:, so convert it by hand",
+			}
+		}
+
+		converted = append(converted, strings.TrimLeft(line, " \t"))
+	}
+
+	if err := writeFile(root, lintGithubFile, strings.Join(converted, "\n")); err != nil {
+		return failed(rule, lintGithubFile, err)
+	}
+
+	if err := os.Remove(filepath.Join(root, formerLintGithubFile)); err != nil {
+		return failed(rule, formerLintGithubFile, err)
+	}
+
+	return Outcome{
+		Rule:    rule,
+		Action:  ActionMerged,
+		Path:    lintGithubFile,
+		Message: "renamed " + formerLintGithubFile + " to " + lintGithubFile + " and brought its entries out of the github: section",
+	}
 }
 
 // remediateReleaseGo moves a goreleaser configuration from a default name to

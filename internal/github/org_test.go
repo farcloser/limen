@@ -437,7 +437,7 @@ func TestOrgOverridesValidate(t *testing.T) {
 
 	dir := t.TempDir()
 
-	file := "github:\n  org-admins: alice is the org\n  org-actions-sha-pinning: pinned by hand\n"
+	file := "org-admins: alice is the org\norg-actions-sha-pinning: pinned by hand\n"
 	if err := os.WriteFile(filepath.Join(dir, github.OverridePath), []byte(file), 0o600); err != nil {
 		t.Fatal(err)
 	}

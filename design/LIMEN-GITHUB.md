@@ -74,9 +74,10 @@ checkable).
 
 Per-repo deviations that must be legal (a repo that genuinely needs wikis) get the same
 treatment as `LINT_GO_LICENSES_FLAGS`: an explicit, committed override file —
-`limen.yaml` at the repository root (`github:` section; relocated from
-`.github/limen-github.yaml` on 2026-07-06 — one project-owned declarations
-file, sectioned by concern) — that is a **delta, exceptions only**, never a full
+`.lint-github.yaml` at the repository root (relocated from
+`.github/limen-github.yaml` to a sectioned root `limen.yaml` on 2026-07-06, then
+to its own file on 2026-09-29, named for its lane like `.lint-go.yaml`) — that is
+a **delta, exceptions only**, never a full
 settings copy. Each entry names the setting and carries a required reason:
 
 ```yaml
@@ -394,6 +395,9 @@ already pending for `UPDATE_AQUA_CHECKSUM_TOKEN`; solve once, reuse.
 4. **Override file**: delta-only with required reasons, as specified above.
    Amended 2026-07-06: consolidated to root `limen.yaml` (`github:` section) — the
    single project-owned declarations file for everything limen judges.
+   Amended 2026-09-29: `.lint-github.yaml`, entries at top level — the other
+   judgments grew their own files (`.lint-go.yaml`, `.lint-links.toml`), so this
+   one has its own too.
 5. **Command name**: `limen github`, never `limen gh` — per the naming doctrine (no
    shorthand, no abbreviations; explicit qualified names readable without a syllabus),
    now recorded in book/recipes.md. `gh` remains only the *transport binary's* name.

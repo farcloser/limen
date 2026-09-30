@@ -626,6 +626,10 @@ func checkWorkflows(root string) Finding {
 		return *f
 	}
 
+	if exists(filepath.Join(root, formerLintGithubFile)) {
+		return fail(rule, formerLintGithubFile, formerLintGithubMessage)
+	}
+
 	if exists(filepath.Join(root, releaseGoFile)) &&
 		!exists(filepath.Join(root, filepath.FromSlash(pathWorkflowRelease))) {
 		return fail(
@@ -650,6 +654,17 @@ func checkWorkflows(root string) Finding {
 const (
 	releaseGoFile   = ".release-go.yaml"
 	releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/static/schema.json"
+)
+
+// lintGithubFile is the project's exceptions to `limen github check`, one
+// `check: reason` per line. formerLintGithubFile is its former name, whose
+// entries sat indented under a `github:` line; the audit refuses to run while
+// it is there rather than read no exceptions.
+const (
+	lintGithubFile          = ".lint-github.yaml"
+	formerLintGithubFile    = "limen.yaml"
+	formerLintGithubMessage = formerLintGithubFile + " is the former name of " + lintGithubFile +
+		", which `limen github check` reads — rename it and drop its github: line (limen fix does)"
 )
 
 // strayGoreleaserFiles are goreleaser's default names, which nothing reads
