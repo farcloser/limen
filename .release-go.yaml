@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # goreleaser — https://goreleaser.com — release automation for the limen CLI.
 # Local dry-run: `just do release --local --dry-run` (no tag, no publish, artifacts under
 # build/). Real release: `just do release vX.Y.Z` (see the root Justfile).

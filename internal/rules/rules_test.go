@@ -1081,14 +1081,92 @@ func TestWorkflowsRule(t *testing.T) {
 
 	// The release workflow is required exactly when goreleaser config exists.
 	releasing := compliantFiles()
-	releasing[".goreleaser.yaml"] = "version: 2\n"
+	releasing[".release-go.yaml"] = releaseGoHeader + "\nversion: 2\n"
 
 	if f := findingByRule(rules.Check(writeRepo(t, releasing), rules.DefaultPolicy()), "workflows"); f.OK() {
-		t.Error(".goreleaser.yaml without a release workflow should fail")
+		t.Error(".release-go.yaml without a release workflow should fail")
 	}
 
 	releasing[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
 	if f := findingByRule(rules.Check(writeRepo(t, releasing), rules.DefaultPolicy()), "workflows"); !f.OK() {
 		t.Errorf("goreleaser with a release workflow should pass, got: %s", f.Message)
 	}
+}
+
+// releaseGoHeader is the schema pointer .release-go.yaml opens with.
+const releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/static/schema.json"
+
+// TestReleaseGoNameAndHeader: a goreleaser configuration under a default name
+// fails naming .release-go.yaml, as does a .release-go.yaml without its
+// schema header; fix renames the first and adds the header to both, content
+// intact; with both names present fix leaves them for a hand merge.
+func TestReleaseGoNameAndHeader(t *testing.T) {
+	t.Parallel()
+
+	const body = "version: 2\nproject_name: x\n"
+
+	for _, stray := range []string{".goreleaser.yaml", ".goreleaser.yml"} {
+		files := compliantFiles()
+		files[stray] = body
+		files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
+		dir := writeRepo(t, files)
+
+		f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows")
+		if f.OK() || !strings.Contains(f.Message, ".release-go.yaml") {
+			t.Fatalf("%s should fail naming .release-go.yaml: %v %s", stray, f.OK(), f.Message)
+		}
+
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+		data, err := os.ReadFile(filepath.Join(dir, ".release-go.yaml"))
+		if err != nil || string(data) != releaseGoHeader+"\n"+body {
+			t.Fatalf("after fix, .release-go.yaml: %q, %v", data, err)
+		}
+
+		if exists(filepath.Join(dir, stray)) {
+			t.Errorf("fix left %s behind", stray)
+		}
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); !f.OK() {
+			t.Errorf("after fix: %s", f.Message)
+		}
+	}
+
+	headless := compliantFiles()
+	headless[".release-go.yaml"] = body
+	headless[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
+	dir := writeRepo(t, headless)
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); f.OK() {
+		t.Error("a .release-go.yaml without the schema header should fail")
+	}
+
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	if data, _ := os.ReadFile(filepath.Join(dir, ".release-go.yaml")); string(data) != releaseGoHeader+"\n"+body {
+		t.Errorf("fix should add the header, content intact: %q", data)
+	}
+
+	both := compliantFiles()
+	both[".goreleaser.yaml"] = body
+	both[".release-go.yaml"] = releaseGoHeader + "\n" + body
+
+	var advised bool
+
+	for _, o := range rules.Fix(t.Context(), writeRepo(t, both), rules.FixOptions{Policy: rules.DefaultPolicy()}) {
+		if o.Rule == "workflows" && o.Path == ".goreleaser.yaml" && o.Action == rules.ActionAdvisory {
+			advised = true
+		}
+	}
+
+	if !advised {
+		t.Error("fix with both names should leave an advisory")
+	}
+}
+
+// exists reports whether a path is present.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+
+	return err == nil
 }

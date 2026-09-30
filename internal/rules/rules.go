@@ -557,14 +557,17 @@ func checkWorkflows(root string) Finding {
 		}
 	}
 
-	if _, hasGoreleaser := findFirst(root, ".goreleaser.yaml", ".goreleaser.yml"); hasGoreleaser {
-		if !exists(filepath.Join(root, filepath.FromSlash(pathWorkflowRelease))) {
-			return fail(
-				rule,
-				"",
-				".goreleaser.yaml is present but "+pathWorkflowRelease+" is missing (limen fix seeds it)",
-			)
-		}
+	if f := checkReleaseGo(root, rule); f != nil {
+		return *f
+	}
+
+	if exists(filepath.Join(root, releaseGoFile)) &&
+		!exists(filepath.Join(root, filepath.FromSlash(pathWorkflowRelease))) {
+		return fail(
+			rule,
+			"",
+			releaseGoFile+" is present but "+pathWorkflowRelease+" is missing (limen fix seeds it)",
+		)
 	}
 
 	return Finding{
@@ -573,6 +576,45 @@ func checkWorkflows(root string) Finding {
 		Path:    pathWorkflowCI,
 		Message: "workflows present; the canonical pieces match the baseline",
 	}
+}
+
+// releaseGoFile is the project's goreleaser configuration, named for its
+// lane like .lint-go.yaml; the release recipes pass it with --config. Away
+// from goreleaser's default name, an editor finds the schema only through the
+// header on its first line.
+const (
+	releaseGoFile   = ".release-go.yaml"
+	releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/static/schema.json"
+)
+
+// strayGoreleaserFiles are goreleaser's default names, which nothing reads
+// anymore.
+var strayGoreleaserFiles = []string{".goreleaser.yaml", ".goreleaser.yml"} //nolint:gochecknoglobals // read-only list.
+
+// checkReleaseGo fails a goreleaser configuration under a default name, or a
+// .release-go.yaml without its schema header; nil when neither applies
+// (releasing is opt-in).
+func checkReleaseGo(root, rule string) *Finding {
+	if stray, found := findFirst(root, strayGoreleaserFiles...); found {
+		f := fail(rule, stray, stray+" is goreleaser's default name, which nothing reads: the release lane reads "+
+			releaseGoFile+" — rename it and add the schema line (limen fix does)")
+
+		return &f
+	}
+
+	data, err := readRepoFile(root, releaseGoFile)
+	if err != nil {
+		return nil
+	}
+
+	if first, _, _ := strings.Cut(string(data), "\n"); strings.TrimSuffix(first, carriageReturn) != releaseGoHeader {
+		f := fail(rule, releaseGoFile, releaseGoFile+" must open with `"+releaseGoHeader+
+			"`: without goreleaser's own filename, the editor finds the schema only through it (limen fix adds it)")
+
+		return &f
+	}
+
+	return nil
 }
 
 // checkShellcheck requires .limen/.shellcheckrc in every repository, matching
@@ -775,7 +817,7 @@ func findFirst(root string, names ...string) (string, bool) {
 // findFirstFold is findFirst matched case-insensitively, returning the name as
 // it is on disk. Only for files whose readers do not care about case (a
 // README, a LICENSE) — never for one a tool looks up by exact name (aqua.yaml,
-// .goreleaser.yaml), where a folded match would pass a file the tool ignores.
+// .release-go.yaml), where a folded match would pass a file the tool ignores.
 // The on-disk name comes from the directory listing, not from a Stat of the
 // wanted name: on a case-insensitive filesystem that Stat succeeds for
 // readme.md too and would report README.md. The exact spelling wins when a

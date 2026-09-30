@@ -17,7 +17,7 @@ fix: build-lint-go do::fix::default do::fix::go::default
 test: do::test::go::default test-lint-go
 security: do::security::default
 
-# limen-lint-go is the second binary of limen's release (see .goreleaser.yaml),
+# limen-lint-go is the second binary of limen's release (see .release-go.yaml),
 # a nested module so its YAML parser never enters limen's own go.mod. The
 # shared Go lanes stop at the root module, so this repository builds, lints
 # and tests it itself: the lint runs on the baseline rendered for that module
