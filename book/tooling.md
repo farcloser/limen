@@ -504,7 +504,7 @@ pins:
   `-ossein.N` suffix that semver takes for a prerelease) may follow it; the `version:` line
   closes the block and is what moves. The four come in that order with nothing else between
   them — the preset's regex reads the block as one — and the `pins` rule refuses another
-  order. One custom manager in `default.json` watches every `pins.yaml`; no repository
+  order. One custom manager in `.limen/renovate.json` watches every `pins.yaml`; no repository
   writes a regex manager per pin.
 - **limen owns the digest.** `digest.version` records the version the sha256 was computed
   for, so a digest left behind by a bump is visible offline: the `pins` rule fails it, naming
