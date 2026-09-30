@@ -20,13 +20,25 @@ import (
 
 // Well-known file names the rules act on, shared between check and fix.
 const (
-	gitDirName        = ".git"
-	justfileName      = "Justfile"
-	carriageReturn    = "\r"
-	readmeFileName    = "README.md"
-	licenseFileName   = "LICENSE"
-	aquaChecksumsFile = "aqua-checksums.json"
-	ruleAqua          = "aqua"
+	gitDirName      = ".git"
+	justfileName    = "Justfile"
+	carriageReturn  = "\r"
+	readmeFileName  = "README.md"
+	licenseFileName = "LICENSE"
+	ruleAqua        = "aqua"
+
+	// aqua's files live in .aqua/, one of the directories aqua itself
+	// searches; a local registry path inside them is relative to .aqua/.
+	aquaDir           = ".aqua"
+	aquaManifestFile  = aquaDir + "/" + legacyAquaManifest
+	aquaChecksumsFile = aquaDir + "/" + legacyAquaChecksums
+	aquaPolicyFile    = aquaDir + "/" + legacyAquaPolicy
+
+	// The same files at the repository root, where limen kept them before.
+	legacyAquaManifest    = "aqua.yaml"
+	legacyAquaManifestYml = "aqua.yml"
+	legacyAquaChecksums   = "aqua-checksums.json"
+	legacyAquaPolicy      = "aqua-policy.yaml"
 
 	// The .github surface (see book/mandatory-files.md): the first two are
 	// content-pinned limen machinery, the rest are seeded once and then the
@@ -105,7 +117,7 @@ var CanonicalLychee = limen.CanonicalLycheeToml //nolint:gochecknoglobals // imm
 const CanonicalJustfileImport = "import '.limen/just/main.just'"
 
 // CanonicalAquaPolicy and CanonicalAquaRegistry are the canonical aqua policy
-// (aqua-policy.yaml, root) and local registry (.limen/aqua-registry.yaml) every
+// (.aqua/aqua-policy.yaml) and local registry (.limen/aqua-registry.yaml) every
 // repository must carry verbatim — the shared catalog of authorized registries
 // and local tools. Unlike aqua.yaml (a per-project package list) they are
 // content-pinned. They are this repo's own files, embedded.
@@ -428,14 +440,19 @@ func containsLine(text, want string) bool {
 func checkAqua(root string) Finding {
 	const rule = "aqua"
 
-	name, ok := findFirst(root, "aqua.yaml", "aqua.yml")
-	if !ok {
-		return fail(rule, "", "no aqua.yaml found (project tooling must be pinned via aqua)")
+	if stray, found := findFirst(root, legacyAquaFiles...); found {
+		return fail(
+			rule,
+			stray,
+			stray+" belongs in "+aquaDir+"/, where limen keeps aqua's files (limen fix moves them)",
+		)
 	}
+
+	name := aquaManifestFile
 
 	data, err := readRepoFile(root, name)
 	if err != nil {
-		return fail(rule, name, fmt.Sprintf("could not read aqua.yaml: %v", err))
+		return fail(rule, "", "no "+name+" found (project tooling must be pinned via aqua)")
 	}
 
 	manifest, parsed := parseAquaManifest(string(data))
@@ -451,11 +468,11 @@ func checkAqua(root string) Finding {
 		return *f
 	}
 
-	if !exists(filepath.Join(root, aquaChecksumsFile)) {
-		return fail(rule, name, "aqua-checksums.json is missing (run `aqua update-checksum` and commit it)")
+	if !exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile))) {
+		return fail(rule, name, aquaChecksumsFile+" is missing (run `aqua update-checksum` and commit it)")
 	}
 
-	if f := checkPinned(root, rule, "aqua-policy.yaml", CanonicalAquaPolicy); f != nil {
+	if f := checkPinned(root, rule, aquaPolicyFile, CanonicalAquaPolicy); f != nil {
 		return *f
 	}
 
@@ -467,8 +484,27 @@ func checkAqua(root string) Finding {
 		Rule:    rule,
 		Status:  StatusOK,
 		Path:    name,
-		Message: "aqua.yaml carries the canonical baseline with checksum enforcement; policy, registry, and checksums committed",
+		Message: name + " carries the canonical baseline with checksum enforcement; policy, registry, and checksums committed",
 	}
+}
+
+// readAquaManifest reads the project's aqua manifest: .aqua/aqua.yaml, or a
+// root one a repository not yet migrated still carries, so the rules that only
+// read it do not fail twice for a move the aqua rule already reports.
+func readAquaManifest(root string) (data []byte, err error) {
+	for _, candidate := range []string{aquaManifestFile, legacyAquaManifest, legacyAquaManifestYml} {
+		if data, err = readRepoFile(root, candidate); err == nil {
+			return data, nil
+		}
+	}
+
+	return nil, err
+}
+
+// legacyAquaFiles are aqua's files at the repository root, where limen kept
+// them before .aqua/.
+var legacyAquaFiles = []string{ //nolint:gochecknoglobals // read-only list.
+	legacyAquaManifest, legacyAquaManifestYml, legacyAquaChecksums, legacyAquaPolicy,
 }
 
 // checkGitattributes content-pins .gitattributes (see CanonicalGitattributes:

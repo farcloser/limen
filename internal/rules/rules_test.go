@@ -56,21 +56,21 @@ func writeRepo(t *testing.T, files map[string]string) string {
 // individual tests can mutate to exercise a single failing rule.
 func compliantFiles() map[string]string {
 	files := map[string]string{
-		"README.md":           "# Thing",
-		"LICENSE":             mitText,
-		".editorconfig":       rules.CanonicalEditorconfig,
-		".gitignore":          "*.log\n", // any present .gitignore satisfies the rule
-		".gitattributes":      rules.CanonicalGitattributes,
-		"AGENTS.md":           rules.CanonicalAgents,
-		"CLAUDE.md":           limen.CanonicalClaudeSeed,
-		"Justfile":            rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
-		"aqua.yaml":           limen.CanonicalAquaYAML,
-		"aqua-checksums.json": "{}\n",
+		"README.md":                 "# Thing",
+		"LICENSE":                   mitText,
+		".editorconfig":             rules.CanonicalEditorconfig,
+		".gitignore":                "*.log\n", // any present .gitignore satisfies the rule
+		".gitattributes":            rules.CanonicalGitattributes,
+		"AGENTS.md":                 rules.CanonicalAgents,
+		"CLAUDE.md":                 limen.CanonicalClaudeSeed,
+		"Justfile":                  rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
+		".aqua/aqua.yaml":           limen.CanonicalAquaYAML,
+		".aqua/aqua-checksums.json": "{}\n",
 		// Every repository declares the Go-built tools the recipes run (the
 		// gotools rule); without a root go.mod, the everywhere set is enough.
 		"tools/go.mod": goModToolsEverywhere,
 		// The aqua policy, local registry, and lychee config are content-pinned exactly.
-		"aqua-policy.yaml":          rules.CanonicalAquaPolicy,
+		".aqua/aqua-policy.yaml":    rules.CanonicalAquaPolicy,
 		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
 		".limen/lychee.toml":        rules.CanonicalLychee,
 		// aqua.yaml is YAML, so the conditional yamlfmt rule fires; satisfy it
@@ -607,7 +607,7 @@ func TestAquaRequiresManifest(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	delete(files, "aqua.yaml")
+	delete(files, ".aqua/aqua.yaml")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
@@ -619,14 +619,14 @@ func TestAquaRequiresChecksumsFile(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	delete(files, "aqua-checksums.json")
+	delete(files, ".aqua/aqua-checksums.json")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("aqua.yaml without a committed aqua-checksums.json should fail")
 	}
 
-	if !strings.Contains(f.Message, "aqua-checksums.json") {
+	if !strings.Contains(f.Message, ".aqua/aqua-checksums.json") {
 		t.Errorf("message did not name the missing file: %s", f.Message)
 	}
 }
@@ -637,7 +637,7 @@ func TestAquaRequiresCanonicalChecksumSection(t *testing.T) {
 	// Dropping require_checksum from the section is drift from the canonical:
 	// a missing/mismatched checksum would then not fail the install.
 	files := compliantFiles()
-	files["aqua.yaml"] = canonicalAquaWith(t, "  require_checksum: true\n", "")
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, "  require_checksum: true\n", "")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
@@ -649,20 +649,71 @@ func TestAquaRequiresCanonicalChecksumSection(t *testing.T) {
 	}
 }
 
-func TestAquaAcceptsYmlVariant(t *testing.T) {
-	t.Parallel()
-
+// legacyAquaLayout is a compliant repository with aqua's files where limen
+// kept them before .aqua/: at the root, the registry path relative to it.
+func legacyAquaLayout(manifestName string) map[string]string {
 	files := compliantFiles()
-	delete(files, "aqua.yaml")
-	files["aqua.yml"] = limen.CanonicalAquaYAML
 
-	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
-	if !f.OK() {
-		t.Errorf("a canonical aqua.yml should pass: %s", f.Message)
+	for _, name := range []string{"aqua.yaml", "aqua-checksums.json", "aqua-policy.yaml"} {
+		content := files[".aqua/"+name]
+		delete(files, ".aqua/"+name)
+
+		if name == "aqua.yaml" {
+			name = manifestName
+		}
+
+		files[name] = strings.ReplaceAll(content, "../.limen/aqua-registry.yaml", ".limen/aqua-registry.yaml")
 	}
 
-	if f.Path != "aqua.yml" {
-		t.Errorf("path = %q, want aqua.yml", f.Path)
+	return files
+}
+
+// TestAquaLegacyRootLayout: aqua files at the root fail the rule naming the
+// file, and a root aqua.yml is legacy too; fix moves the three into .aqua/,
+// the registry path corrected by the merge, and the rule passes. With both
+// layouts present, fix leaves them for a hand merge.
+func TestAquaLegacyRootLayout(t *testing.T) {
+	t.Parallel()
+
+	for _, manifest := range []string{"aqua.yaml", "aqua.yml"} {
+		dir := writeRepo(t, legacyAquaLayout(manifest))
+
+		f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua")
+		if f.OK() || !strings.Contains(f.Message, ".aqua/") {
+			t.Fatalf("%s at the root should fail naming .aqua/: %v %s", manifest, f.OK(), f.Message)
+		}
+
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+		for _, gone := range []string{manifest, "aqua-checksums.json", "aqua-policy.yaml"} {
+			if _, err := os.Stat(filepath.Join(dir, gone)); err == nil {
+				t.Errorf("fix left %s at the root", gone)
+			}
+		}
+
+		data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+		if err != nil || !strings.Contains(string(data), "path: ../.limen/aqua-registry.yaml") {
+			t.Fatalf("moved manifest must point at ../.limen/aqua-registry.yaml: %v\n%s", err, data)
+		}
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
+			t.Errorf("after fix (%s): %s", manifest, f.Message)
+		}
+	}
+
+	both := legacyAquaLayout("aqua.yaml")
+	both[".aqua/aqua.yaml"] = limen.CanonicalAquaYAML
+
+	var advised bool
+
+	for _, o := range rules.Fix(t.Context(), writeRepo(t, both), rules.FixOptions{Policy: rules.DefaultPolicy()}) {
+		if o.Rule == "aqua" && o.Action == rules.ActionAdvisory && strings.Contains(o.Message, "both at the root") {
+			advised = true
+		}
+	}
+
+	if !advised {
+		t.Error("both layouts present should leave an advisory")
 	}
 }
 
@@ -694,7 +745,7 @@ func TestAquaProjectOwnedParts(t *testing.T) {
 	manifest = strings.Replace(manifest, "packages:", "packages:\n  - name: junegunn/fzf@v0.60.0", 1)
 	manifest = replaceRef(t, manifest, "v9.9.9") // Renovate-bumped registry ref
 
-	files["aqua.yaml"] = manifest
+	files[".aqua/aqua.yaml"] = manifest
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua"); !f.OK() {
 		t.Errorf("project-owned versions/packages/ref should pass: %s", f.Message)
 	}
@@ -723,7 +774,7 @@ func TestAquaRejectsMovingRegistryRef(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files["aqua.yaml"] = replaceRef(t, limen.CanonicalAquaYAML, "main")
+	files[".aqua/aqua.yaml"] = replaceRef(t, limen.CanonicalAquaYAML, "main")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
@@ -740,7 +791,7 @@ func TestAquaRejectsExtraRegistry(t *testing.T) {
 
 	files := compliantFiles()
 
-	files["aqua.yaml"] = canonicalAquaWith(
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(
 		t,
 		"registries:",
 		"registries:\n  - name: rogue\n    type: github_content\n    repo_owner: evil\n    repo_name: registry\n    ref: v1.0.0\n    path: registry.yaml",
@@ -755,7 +806,7 @@ func TestAquaRequiresCanonicalPackages(t *testing.T) {
 
 	files := compliantFiles()
 	line := canonicalAquaLine(t, "koalaman/shellcheck@")
-	files["aqua.yaml"] = canonicalAquaWith(t, line+"\n", "")
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, line+"\n", "")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
@@ -772,7 +823,7 @@ func TestAquaRejectsDuplicatePackages(t *testing.T) {
 
 	files := compliantFiles()
 	line := canonicalAquaLine(t, "casey/just@")
-	files["aqua.yaml"] = canonicalAquaWith(t, line+"\n", line+"\n  - name: casey/just@v0.0.1\n")
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, line+"\n", line+"\n  - name: casey/just@v0.0.1\n")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
@@ -789,7 +840,7 @@ func TestAquaRejectsUnparseableManifest(t *testing.T) {
 
 	files := compliantFiles()
 	// Flow-style sections are outside the shape the rule prescribes.
-	files["aqua.yaml"] = "checksum: {enabled: true, require_checksum: true}\nregistries: [{type: standard, ref: v4.530.0}]\npackages: []\n"
+	files[".aqua/aqua.yaml"] = "checksum: {enabled: true, require_checksum: true}\nregistries: [{type: standard, ref: v4.530.0}]\npackages: []\n"
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
@@ -828,7 +879,7 @@ func TestAquaParserRefusesUnboundedShapes(t *testing.T) {
 			t.Parallel()
 
 			files := compliantFiles()
-			files["aqua.yaml"] = tc.text
+			files[".aqua/aqua.yaml"] = tc.text
 
 			f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 			if f.OK() || !strings.Contains(f.Message, "parsed") {
@@ -841,7 +892,7 @@ func TestAquaParserRefusesUnboundedShapes(t *testing.T) {
 	// blanks at any level, and a flow-empty packages followed by only those.
 	// The manifest fails for what it lacks, never for its shape.
 	files := compliantFiles()
-	files["aqua.yaml"] = "# c\n\npackages: []\n  # commented-out pins\n"
+	files[".aqua/aqua.yaml"] = "# c\n\npackages: []\n  # commented-out pins\n"
 
 	if f := findingByRule(
 		rules.Check(writeRepo(t, files), rules.DefaultPolicy()),
@@ -859,7 +910,7 @@ func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 
 	// Missing aqua-policy.yaml fails.
 	noPolicy := compliantFiles()
-	delete(noPolicy, "aqua-policy.yaml")
+	delete(noPolicy, ".aqua/aqua-policy.yaml")
 
 	if f := findingByRule(rules.Check(writeRepo(t, noPolicy), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("a missing aqua-policy.yaml should fail the aqua rule")
@@ -868,7 +919,7 @@ func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 	// A drifted aqua-policy.yaml fails (content-pinned).
 	badPolicy := compliantFiles()
 
-	badPolicy["aqua-policy.yaml"] = rules.CanonicalAquaPolicy + "\n# local edit\n"
+	badPolicy[".aqua/aqua-policy.yaml"] = rules.CanonicalAquaPolicy + "\n# local edit\n"
 	if f := findingByRule(rules.Check(writeRepo(t, badPolicy), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("a drifted aqua-policy.yaml should fail (content-pinned)")
 	}
@@ -896,7 +947,7 @@ func TestYamlfmtConditional(t *testing.T) {
 	// No YAML anywhere: the yamlfmt rule produces no finding.
 	noYAML := compliantFiles()
 	for _, y := range []string{
-		"aqua.yaml", "aqua-policy.yaml", ".limen/aqua-registry.yaml",
+		".aqua/aqua.yaml", ".aqua/aqua-policy.yaml", ".limen/aqua-registry.yaml",
 		".github/workflows/update-aqua-checksum.yaml", ".github/actions/setup-aqua/action.yaml", ".github/workflows/ci.yaml",
 		".github/workflows/security.yaml",
 	} {
@@ -1076,7 +1127,7 @@ func TestPinsRule(t *testing.T) {
 		t.Errorf("a pinned verifier must pass: %s", f.Message)
 	}
 
-	files["aqua.yaml"] = canonicalAquaWith(t, canonicalAquaLine(t, "sigstore/cosign@")+"\n", "")
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, canonicalAquaLine(t, "sigstore/cosign@")+"\n", "")
 
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); f.OK() ||
 		!strings.Contains(f.Message, "sigstore/cosign") {

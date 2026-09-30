@@ -271,7 +271,7 @@ commits range="": (_banner "lint" "commits") (_go-tool "git-validation" "github.
         echo "warning: no .lint-signers: commit signatures are not checked — list every author, <email> namespaces=\"git\" <public key>" >&2
     fi
 
-# Verify aqua-checksums.json is in sync with aqua.yaml — the working tree's
+# Verify .aqua/aqua-checksums.json is in sync with .aqua/aqua.yaml — the working tree's
 # pair, exactly as it stands: git state (staged, committed, neither) is
 # irrelevant to coherence. Recipes judge the working tree; git answers
 # enumeration and history questions only.
@@ -285,13 +285,13 @@ aqua: (_banner "lint" "aqua")
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lint-aqua.XXXXXX")
     trap 'rm -rf "$tmpdir"' EXIT
     had=""
-    if [ -f aqua-checksums.json ]; then
-        cp aqua-checksums.json "$tmpdir/snapshot"
+    if [ -f .aqua/aqua-checksums.json ]; then
+        cp .aqua/aqua-checksums.json "$tmpdir/snapshot"
         had=1
     fi
     # Restore the working tree from the snapshot on EVERY exit — success, drift,
     # an aqua failure (set -e), or an interrupt. update-checksum mutates
-    # aqua-checksums.json in place, and a lint must never leave that behind; an
+    # .aqua/aqua-checksums.json in place, and a lint must never leave that behind; an
     # inline restore only runs on the paths it is written on, so it belongs in the
     # trap. Installed AFTER the snapshot so `had` is known — restoring before that
     # would wrongly rm a file we had not yet copied.
@@ -300,17 +300,17 @@ aqua: (_banner "lint" "aqua")
     # shellcheck disable=SC2329
     restore() {
         if [ -n "$had" ]; then
-            cp "$tmpdir/snapshot" aqua-checksums.json
+            cp "$tmpdir/snapshot" .aqua/aqua-checksums.json
         else
-            rm -f aqua-checksums.json
+            rm -f .aqua/aqua-checksums.json
         fi
         rm -rf "$tmpdir"
     }
     trap restore EXIT
     # --log-level warn: the per-package INFO lines are noise when nothing is wrong.
     aqua --log-level warn update-checksum --prune
-    if [ -n "$had" ] && cmp -s aqua-checksums.json "$tmpdir/snapshot"; then
+    if [ -n "$had" ] && cmp -s .aqua/aqua-checksums.json "$tmpdir/snapshot"; then
         exit 0
     fi
-    echo "aqua-checksums.json is out of sync with aqua.yaml — run 'just do fix aqua'." >&2
+    echo ".aqua/aqua-checksums.json is out of sync with .aqua/aqua.yaml — run 'just do fix aqua'." >&2
     exit 1

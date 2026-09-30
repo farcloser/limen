@@ -321,7 +321,7 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files["aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
 		"packages:\n  - name: github.com/vbatts/git-validation@v1.2.2\n    registry: local\n")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
@@ -335,7 +335,7 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 
 	// The prebuilt golangci-lint is retired the same way: an isolated module
 	// builds it now, and a manifest still pinning the binary fails.
-	files["aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
 		"packages:\n  - name: golangci/golangci-lint@v2.0.0\n")
 
 	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
@@ -350,7 +350,7 @@ func TestFixRemovesRetiredPackages(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files["aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
+	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
 		"packages:\n  - name: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n    registry: local\n")
 	dir := writeRepo(t, files)
 
@@ -359,7 +359,7 @@ func TestFixRemovesRetiredPackages(t *testing.T) {
 		t.Fatalf("aqua fix unresolved: %s (%s)", outcome.Action, outcome.Message)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
 
 	manifest := string(data)
 	if strings.Contains(manifest, "- name: golang.org/x/vuln/cmd/govulncheck") {
@@ -609,7 +609,7 @@ func TestAquaGoDirective(t *testing.T) {
 			t.Parallel()
 
 			files := compliantFiles()
-			files["aqua.yaml"] = testCase.manifest
+			files[".aqua/aqua.yaml"] = testCase.manifest
 			delete(files, "tools/go.mod")
 			dir := writeRepo(t, files)
 

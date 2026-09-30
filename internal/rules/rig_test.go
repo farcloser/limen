@@ -129,7 +129,7 @@ func installStubs() (string, error) {
 func runAquaStub() int {
 	for _, arg := range os.Args[1:] {
 		if arg == "update-checksum" {
-			if err := os.WriteFile("aqua-checksums.json", []byte(stubChecksums), 0o600); err != nil {
+			if err := os.WriteFile(".aqua/aqua-checksums.json", []byte(stubChecksums), 0o600); err != nil {
 				fmt.Fprintf(os.Stderr, "aqua stub: %v\n", err)
 
 				return 1

@@ -62,12 +62,10 @@ func checkPins(root string) (Finding, bool) {
 func unpinnedVerifiers(root string, manifest pins.Manifest) []string {
 	var declared []string
 
-	if name, ok := findFirst(root, "aqua.yaml", "aqua.yml"); ok {
-		if data, err := readRepoFile(root, name); err == nil {
-			if aqua, parsed := parseAquaManifest(string(data)); parsed {
-				for _, pkg := range aqua.pkgs {
-					declared = append(declared, pkg.name)
-				}
+	if data, err := readAquaManifest(root); err == nil {
+		if aqua, parsed := parseAquaManifest(string(data)); parsed {
+			for _, pkg := range aqua.pkgs {
+				declared = append(declared, pkg.name)
 			}
 		}
 	}

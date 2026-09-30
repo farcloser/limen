@@ -153,12 +153,7 @@ func canonicalPresetRef(root string) string {
 		}
 	}
 
-	name, ok := findFirst(root, "aqua.yaml", "aqua.yml")
-	if !ok {
-		return ""
-	}
-
-	manifest, err := readRepoFile(root, name)
+	manifest, err := readAquaManifest(root)
 	if err != nil {
 		return ""
 	}

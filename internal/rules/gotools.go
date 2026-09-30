@@ -592,7 +592,7 @@ func bareGoMod(rootMod, goDirective, relDir, comment string) string {
 // never ask for a newer go than the one on the hermetic PATH. Without a
 // manifest or a pin, the fallback.
 func aquaGoDirective(root string) string {
-	manifest, err := readRepoFile(root, "aqua.yaml")
+	manifest, err := readAquaManifest(root)
 	if err != nil {
 		return fallbackGoDirective
 	}

@@ -37,7 +37,7 @@ builds:
       - osusergo
     ldflags:
       - -s -w -X main.version={{ .Version }}
-    # Exactly the platforms aqua.yaml lists under checksum.supported_envs.
+    # Exactly the platforms .aqua/aqua.yaml lists under checksum.supported_envs.
     targets:
       - darwin_arm64
       - linux_amd64

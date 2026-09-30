@@ -137,7 +137,7 @@ What each shared module is *for* — mechanics live in the module files themselv
   a change to either must land in both (each file's comment names the other). Pure Go by
   default; CGO is an explicit opt-in that adds the hardening flag set.
 - **`tools`** — the aqua manifest operations (`add`, `set`, `update`, `remove`) that keep
-  `aqua.yaml` and `aqua-checksums.json` changing together; see
+  `.aqua/aqua.yaml` and `.aqua/aqua-checksums.json` changing together; see
   [tooling](./tooling.md#day-to-day-changes--the-just-do-tools-recipes).
 - **`lint`** — read-only verifiers: `limen` (this repository against the rules — the
   first thing the default runs, since every other linter trusts the canonical files it
@@ -178,7 +178,7 @@ What each shared module is *for* — mechanics live in the module files themselv
   nothing in CI runs them. No default, for the reason `test` has none: every report is
   language-bound, so bare `just do perf` refuses.
 - **`fix`** — the mutating counterparts, deliberately separate from `lint`: `limen`
-  (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate `aqua-checksums.json`)
+  (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate `.aqua/aqua-checksums.json`)
   in the default, plus the `go`, `rust`, and `homebrew` submodules and `github` (plan shown,
   applied on consent). Nothing mutates under a lint name, and `fix` applies only what cannot
   change behaviour: for Go, the formatters plus the linter fixes that touch layout alone (blank

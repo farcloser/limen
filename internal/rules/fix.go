@@ -562,23 +562,40 @@ func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 		pristine      bool
 	)
 
-	name, had := findFirst(root, "aqua.yaml", "aqua.yml")
-	if !had {
+	moved, stop := moveLegacyAqua(root)
+	if stop != nil {
+		return []Outcome{*stop}
+	}
+
+	if moved != nil {
+		out = append(out, *moved)
+	}
+
+	name := aquaManifestFile
+	if !exists(filepath.Join(root, filepath.FromSlash(name))) {
 		// A seed that is not an advisory wrote the manifest.
-		name = "aqua.yaml"
-		out, pristine, advised = seedAqua(root, name, selfVersion)
+		var seeded []Outcome
+
+		seeded, pristine, advised = seedAqua(root, name, selfVersion)
+		out = append(out, seeded...)
 		manifestWrote = !advised
 	} else {
-		out, manifestWrote, advised = mergeAquaFile(root, name, selfVersion)
+		var merged []Outcome
+
+		merged, manifestWrote, advised = mergeAquaFile(root, name, selfVersion)
+		out = append(out, merged...)
 	}
 
 	// Canonical everywhere: content-pinned exactly.
 	out = append(out,
-		pinExact(root, ruleAqua, "aqua-policy.yaml", limen.CanonicalAquaPolicy),
+		pinExact(root, ruleAqua, aquaPolicyFile, limen.CanonicalAquaPolicy),
 		pinExact(root, ruleAqua, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry),
 	)
 
-	if !advised && !pristine && (manifestWrote || !exists(filepath.Join(root, aquaChecksumsFile))) {
+	// A move always regenerates: it is what allows the policy at its new path,
+	// which every aqua command run after this one in the same job needs.
+	if !advised && !pristine &&
+		(moved != nil || manifestWrote || !exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile)))) {
 		outcome := regenerateAquaChecksumsOutcome(ctx, root)
 		out = append(out, outcome)
 		advised = outcome.Action == ActionAdvisory
@@ -594,6 +611,68 @@ func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 	}
 
 	return out
+}
+
+// moveLegacyAqua moves aqua's files from the repository root, where limen kept
+// them before, into .aqua/: the manifest, its checksums, and the policy (which
+// pinExact then resets to the canonical). The registries section, local path
+// included, is reset by the merge that follows. Reports the move (nil when
+// there was nothing to move), or the outcome that stops the rule: both
+// locations populated, which the project merges by hand, or a failed move.
+func moveLegacyAqua(root string) (moved, stop *Outcome) {
+	legacy, found := findFirst(root, legacyAquaFiles...)
+	if !found {
+		return nil, nil
+	}
+
+	if exists(filepath.Join(root, filepath.FromSlash(aquaManifestFile))) {
+		return nil, &Outcome{
+			Rule:    ruleAqua,
+			Action:  ActionAdvisory,
+			Path:    legacy,
+			Message: "aqua files exist both at the root and in " + aquaDir + "/: merge " + legacy + " into " + aquaDir + "/ and delete it",
+		}
+	}
+
+	targets := map[string]string{
+		legacyAquaManifest:    aquaManifestFile,
+		legacyAquaManifestYml: aquaManifestFile,
+		legacyAquaChecksums:   aquaChecksumsFile,
+		legacyAquaPolicy:      aquaPolicyFile,
+	}
+
+	var names []string
+
+	for _, from := range legacyAquaFiles {
+		if !exists(filepath.Join(root, from)) {
+			continue
+		}
+
+		destination := filepath.Join(root, filepath.FromSlash(targets[from]))
+		if err := os.MkdirAll(filepath.Dir(destination), dirPermissions); err != nil {
+			f := failed(ruleAqua, from, err)
+
+			return nil, &f
+		}
+
+		if err := os.Rename(filepath.Join(root, from), destination); err != nil {
+			f := failed(ruleAqua, from, err)
+
+			return nil, &f
+		}
+
+		names = append(names, from)
+	}
+
+	return &Outcome{
+		Rule:   ruleAqua,
+		Action: ActionMerged,
+		Path:   aquaDir,
+		Message: "moved " + strings.Join(
+			names,
+			", ",
+		) + " into " + aquaDir + "/ (allow the policy at its new path: aqua policy allow " + aquaPolicyFile + ")",
+	}, nil
 }
 
 // seedAqua writes the canonical manifest a repository without one starts
@@ -623,7 +702,7 @@ func seedAqua(root, name, selfVersion string) (out []Outcome, pristine, advised 
 		Rule:    ruleAqua,
 		Action:  ActionCreated,
 		Path:    aquaChecksumsFile,
-		Message: "wrote canonical aqua-checksums.json (matches the seeded aqua.yaml)",
+		Message: "wrote canonical " + aquaChecksumsFile + " (matches the seeded " + aquaManifestFile + ")",
 	}), true, false
 }
 
@@ -674,15 +753,15 @@ func regenerateAquaChecksumsOutcome(ctx context.Context, root string) Outcome {
 			Action: ActionAdvisory,
 			Path:   aquaChecksumsFile,
 			Message: fmt.Sprintf(
-				"could not regenerate checksums (%v) — run `aqua policy allow aqua-policy.yaml && aqua update-checksum --prune` and commit the result",
+				"could not regenerate checksums (%v) — run `aqua policy allow "+aquaPolicyFile+" && aqua update-checksum --prune` and commit the result",
 				err,
 			),
 		}
 	}
 
-	action, msg := ActionCreated, "generated aqua-checksums.json (aqua update-checksum --prune)"
+	action, msg := ActionCreated, "generated "+aquaChecksumsFile+" (aqua update-checksum --prune)"
 	if existed {
-		action, msg = ActionOverwrote, "regenerated aqua-checksums.json (aqua update-checksum --prune)"
+		action, msg = ActionOverwrote, "regenerated "+aquaChecksumsFile+" (aqua update-checksum --prune)"
 	}
 
 	return Outcome{Rule: ruleAqua, Action: action, Path: aquaChecksumsFile, Message: msg}
@@ -694,12 +773,12 @@ func regenerateAquaChecksumsOutcome(ctx context.Context, root string) Outcome {
 // FixOptions.SelfVersion).
 func seededAquaManifest(selfVersion string) (seed, message string) {
 	if selfVersion == "" {
-		return limen.CanonicalAquaYAML, "wrote canonical aqua.yaml"
+		return limen.CanonicalAquaYAML, "wrote canonical " + aquaManifestFile
 	}
 
 	seed = strings.Join(rewriteSelfPin(strings.Split(limen.CanonicalAquaYAML, "\n"), selfVersion), "\n")
 
-	return seed, "wrote canonical aqua.yaml (limen pinned at the running " + selfVersion + ")"
+	return seed, "wrote canonical " + aquaManifestFile + " (limen pinned at the running " + selfVersion + ")"
 }
 
 // regenerateAquaChecksums authorizes the (content-pinned) policy, then has aqua
@@ -708,7 +787,7 @@ func regenerateAquaChecksums(ctx context.Context, root string) error {
 	// --log-level warn: on failure the output lands in the advisory message, and
 	// aqua's per-package INFO lines would drown the actual error there.
 	for _, args := range [][]string{
-		{"--log-level", "warn", "policy", "allow", "aqua-policy.yaml"},
+		{"--log-level", "warn", "policy", "allow", aquaPolicyFile},
 		{"--log-level", "warn", "update-checksum", "--prune"},
 	} {
 		// aqua on the hermetic PATH; args come from the fixed lists above.

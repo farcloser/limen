@@ -277,7 +277,7 @@ The decided merge model, enforced by both the repository settings and the
   asset missing from a release, or failing its checksum, merges green and
   fails months later at first use, in whichever recipe happens to run the
   tool. The job caches aqua's package store keyed on the exact pins
-  (`aqua.yaml`, `aqua-checksums.json`, the registry), so an unchanged pin set
+  (`.aqua/aqua.yaml`, `.aqua/aqua-checksums.json`, the registry), so an unchanged pin set
   costs seconds and a changed one is always a real install; it feeds `gate`,
   so a pin that does not install blocks a merge. (The Go-built tools are
   `tools/go.mod` directives; the verify legs build them.)
@@ -443,7 +443,7 @@ canonically the org's `.github` repository). The catalog:
   governed repository carries a seeded `renovate.json` and the content-pinned
   checksum-refresh workflow that serves Renovate's branches; without the app on
   the organization none of it runs, and every pin (tool versions in
-  `aqua.yaml`, action SHAs in the workflows) silently stops moving. A failing
+  `.aqua/aqua.yaml`, action SHAs in the workflows) silently stops moving. A failing
   verdict, but never auto-fixed: installing a GitHub App is a browser-only
   consent flow with no API. A self-hosted Renovate is an exemption to declare
   in `limen.yaml`.

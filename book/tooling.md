@@ -4,7 +4,7 @@ Every Farcloser repository pins its build/CI tooling — `just`, `shellcheck`, `
 `golangci-lint`, `go-licenses`, and the handful of other Go "sanity" binaries — through
 [aqua](https://aquaproj.github.io/). This is mandatory, with no exception, the same way the
 [mandatory files](./mandatory-files.md) are: a repository declares its tools in a committed
-`aqua.yaml`, and every human and agent who touches it gets the exact same verified versions.
+`.aqua/aqua.yaml`, and every human and agent who touches it gets the exact same verified versions.
 
 ## The requirements
 
@@ -31,7 +31,7 @@ against the requirements above.
 | Axis | Nix | aqua |
 |---|---|---|
 | Exact **per-tool** version pin | Clunky — one `nixpkgs` commit pins *everything* together; independent versions require separate inputs | **Native** — `owner/repo@version` |
-| Per-project | Yes (flake) | Yes (`aqua.yaml`) |
+| Per-project | Yes (flake) | Yes (`.aqua/aqua.yaml`) |
 | Unifies Go + non-Go tools | Yes, but via a heavy apparatus | Yes, one manifest |
 | Security model | Hermetic, source-hash-pinned builds (strongest for *source*) | Checksum + cosign/SLSA for binaries; GOSUMDB for the `go.mod` tools |
 | Update automation | Manual / multi-input juggling | **Renovate-native**, per-tool PRs |
@@ -50,13 +50,13 @@ means adding a second `nixpkgs` input frozen at the right commit; in aqua it is 
 aqua matches every paramount requirement directly:
 
 - **Exact per-tool pinning** is native: `goreleaser/goreleaser@<version>`.
-- **Per-project** via a committed `aqua.yaml`; projects never collide.
+- **Per-project** via a committed `.aqua/aqua.yaml`; projects never collide.
 - **Security**: binary-release tools are checksum-verified and, where the vendor publishes
   them, cosign/SLSA/attestation-verified. Go-built tools — the `go.mod` tools below — fall
   back to **GOSUMDB**, the *same* trust root the old `Makefile` already relied on, now pinned
   and declarative. A net improvement over the status quo, never a regression.
 - **Maintenance**: Renovate opens per-tool version-bump PRs; a checksum-refresh workflow
-  keeps `aqua-checksums.json` in sync automatically.
+  keeps `.aqua/aqua-checksums.json` in sync automatically.
 
 **The one tradeoff we accept:** Go-only tools are not aqua-checksum-verified (GOSUMDB
 instead of a pinned binary checksum). If hermetic rebuild verification of those *specific* Go
@@ -83,7 +83,7 @@ a tool directive: the analyzers, because their correctness also depends on the c
 the toolchain; the tools whose upstream ships no binary to pin — `git-validation`, `godolint`,
 `dot` (`forkcloser/dot` publishes a tag, not binaries); and `golangci-lint`, which embeds Go's
 type checker and, built with the toolchain it analyzes, can no longer skew from it. What stays
-in `aqua.yaml` is what nothing here compiles: tools in other languages, limen's own binaries —
+in `.aqua/aqua.yaml` is what nothing here compiles: tools in other languages, limen's own binaries —
 `limen` and `limen-lint-go`, one release, one archive, the checksums and signature of which
 are what every repository pins (the release workflow builds both with the pinned toolchain,
 so the provenance argument does not apply, and neither loads Go source; see
@@ -284,21 +284,24 @@ machine up so a coding agent can commit and push as its own identity — see
 
 ## Scaffolding a new project
 
-Create these files at the repo root. This repository's own aqua files
-([`aqua.yaml`](../aqua.yaml), [`.limen/aqua-registry.yaml`](../.limen/aqua-registry.yaml),
-[`aqua-policy.yaml`](../aqua-policy.yaml)) are the canonical reference — we dogfood this rule.
+Create these files. aqua's own three live in `.aqua/`, one of the directories aqua searches
+(a local registry path inside them is relative to `.aqua/`, hence `../.limen/…`). This
+repository's own aqua files
+([`.aqua/aqua.yaml`](../.aqua/aqua.yaml), [`.limen/aqua-registry.yaml`](../.limen/aqua-registry.yaml),
+[`.aqua/aqua-policy.yaml`](../.aqua/aqua-policy.yaml)) are the canonical reference — we dogfood this rule.
 
 ```
 repo/
-├── aqua.yaml                              # the manifest: pinned tool versions
-├── aqua-checksums.json                    # GENERATED — commit it
-├── aqua-policy.yaml                       # authorizes the local registry
+├── .aqua/
+│   ├── aqua.yaml                          # the manifest: pinned tool versions
+│   ├── aqua-checksums.json                # GENERATED — commit it
+│   └── aqua-policy.yaml                   # authorizes the local registry
 ├── .limen/aqua-registry.yaml                     # local registry: farcloser/limen and the coreutils names
 ├── renovate.json                          # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
 
-What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
+What the `.aqua/aqua.yaml` must carry — the manifest is **subset-pinned** (see
 [Enforcement](#enforcement)):
 
 - The **canonical `checksum:` section, byte for byte** — `enabled: true` and
@@ -314,10 +317,10 @@ What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
   listed twice — and never a **retired** one: the Go-built tools moved to `tools/go.mod`
   (see [above](#go-source-analyzers-are-gomod-tools)); `limen fix` removes a lingering pin.
 
-> **Content-pinned files.** `aqua-policy.yaml` and `.limen/aqua-registry.yaml` are **canonical
+> **Content-pinned files.** `.aqua/aqua-policy.yaml` and `.limen/aqua-registry.yaml` are **canonical
 > everywhere** — `limen` requires them to match its embedded copies byte for byte (and `limen
-> fix` overwrites drift). `aqua.yaml` is subset-pinned as above; only its package versions,
-> extra packages, and the standard registry ref are project-owned. `aqua-checksums.json` is
+> fix` overwrites drift). `.aqua/aqua.yaml` is subset-pinned as above; only its package versions,
+> extra packages, and the standard registry ref are project-owned. `.aqua/aqua-checksums.json` is
 > **generated, never hand-edited**: `limen fix` regenerates it (`aqua update-checksum`)
 > whenever it changes the manifest or the file is missing. Consequence: the catalog of
 > local-registry packages is **shared** — to add one, it goes into limen's canonical registry,
@@ -327,9 +330,9 @@ What the `aqua.yaml` must carry — the manifest is **subset-pinned** (see
 Bootstrap, from the repo root:
 
 ```bash
-aqua policy allow aqua-policy.yaml   # explicit trust gate (one-time per machine)
+aqua policy allow .aqua/aqua-policy.yaml   # explicit trust gate (one-time per machine)
 
-aqua update-checksum      # generate aqua-checksums.json for the binary tools
+aqua update-checksum      # generate .aqua/aqua-checksums.json for the binary tools
 aqua install --only-link  # link every pinned tool (each downloads lazily on first use)
 
 git add aqua.yaml .limen/aqua-registry.yaml aqua-policy.yaml aqua-checksums.json \
@@ -348,7 +351,7 @@ git clone <repo-url>
 cd <repo>
 
 # Authorize the project's local registry (one-time per machine):
-aqua policy allow aqua-policy.yaml
+aqua policy allow .aqua/aqua-policy.yaml
 
 # Link the pinned tools (each downloads lazily on first use, verified against
 # the committed checksums at that moment):
@@ -366,13 +369,13 @@ golangci-lint version
 2. **`aqua policy allow` is required once per machine** because the project ships a
    non-standard (local) registry. aqua does not trust a custom registry until you explicitly
    authorize it — the same explicit-consent pattern we use everywhere. No environment
-   variable is needed: aqua auto-discovers an allowed `aqua-policy.yaml` at the **git
+   variable is needed: aqua auto-discovers an allowed `.aqua/aqua-policy.yaml` at the **git
    repository root**. (`AQUA_POLICY_CONFIG` exists for policies that have no git root to be
    discovered from — the machine-global one carrying `limen` is that case, and
    `limen-install` wires it into the shell rc.)
 
-What *genuinely* just works: **byte-identical tool versions.** Because `aqua.yaml` and
-`aqua-checksums.json` are committed, every developer (and CI) gets the same verified builds —
+What *genuinely* just works: **byte-identical tool versions.** Because `.aqua/aqua.yaml` and
+`.aqua/aqua-checksums.json` are committed, every developer (and CI) gets the same verified builds —
 no "works on my machine," no version drift. Lazy install also means tools auto-install on
 first invocation, so `aqua install --only-link` is optional warm-up rather than a hard prerequisite.
 
@@ -383,9 +386,9 @@ first invocation, so `aqua install --only-link` is optional warm-up rather than 
 The everyday operations — add, pin to a version, bump, remove — are wrapped as recipes in the
 `tools` just module so nobody has to remember the exact aqua incantation (or forget the
 checksum step). `add`, `set`, and `remove` take the **`owner/repo`** exactly as it appears in
-`aqua.yaml`; `update` takes the **command name** (the executable, e.g. `golangci-lint`, since
-it delegates to `aqua update`, which resolves commands). Each leaves `aqua.yaml` **and**
-`aqua-checksums.json` updated together, ready to commit:
+`.aqua/aqua.yaml`; `update` takes the **command name** (the executable, e.g. `golangci-lint`, since
+it delegates to `aqua update`, which resolves commands). Each leaves `.aqua/aqua.yaml` **and**
+`.aqua/aqua-checksums.json` updated together, ready to commit:
 
 ```bash
 just do tools add    junegunn/fzf                    # add a tool at its latest version
@@ -402,7 +405,7 @@ at first tool use. (`remove` ends at the checksum refresh — nothing is left to
 Commit both files afterward:
 
 ```bash
-git add aqua.yaml aqua-checksums.json
+git add .aqua/aqua.yaml .aqua/aqua-checksums.json
 git commit --message "tooling: add fzf"
 ```
 
@@ -413,7 +416,7 @@ rather than raw aliases:
   second entry for an already-present package (its merge is an unconditional list append), not
   update the existing one — so `tools set` rewrites the version on the existing line instead.
 - **`tools remove` edits the manifest too.** `aqua remove` only uninstalls the binary; it does not
-  touch `aqua.yaml`. The recipe removes the
+  touch `.aqua/aqua.yaml`. The recipe removes the
   package's entry, then `aqua remove`s the binary, then `aqua update-checksum --prune`s the orphaned checksum.
 
 These recipes are the preferred interface for any hand-made change. Renovate (below) still
@@ -430,7 +433,7 @@ The short path is `just do tools update <command>` (latest — the executable na
 (exact), as above. Spelled out, that is:
 
 ```bash
-# 1. Edit aqua.yaml — bump the version, e.g.
+# 1. Edit .aqua/aqua.yaml — bump the version, e.g.
 #      goreleaser/goreleaser@<old>  ->  @<new>
 # 2. Refresh the checksum for the new version:
 aqua update-checksum
@@ -438,22 +441,22 @@ aqua update-checksum
 aqua install --only-link
 golangci-lint version
 # 4. Commit BOTH files together:
-git add aqua.yaml aqua-checksums.json
+git add .aqua/aqua.yaml .aqua/aqua-checksums.json
 git commit --message "tooling: bump golangci-lint"
 ```
 
 ### Automated (Renovate — the intended workflow)
 
 1. Renovate detects the new release and opens a **per-tool** PR bumping the version in
-   `aqua.yaml` (e.g. "update goreleaser/goreleaser to a newer version").
+   `.aqua/aqua.yaml` (e.g. "update goreleaser/goreleaser to a newer version").
 2. The `update-aqua-checksum` workflow does the repo-specific follow-up **in the same PR**:
-   it regenerates `aqua-checksums.json`, and — when the bumped tool is `limen` itself — runs
+   it regenerates `.aqua/aqua-checksums.json`, and — when the bumped tool is `limen` itself — runs
    the newly pinned `limen fix` so the canonical files move with the pin (a repo is coherent
    only when the limen that wrote its files is the limen it pins; either half alone leaves
    the repo red).
 3. You review the changelog and merge — or don't. Each tool is bumped independently.
 
-> **Critical:** Renovate can update versions but **cannot** update `aqua-checksums.json` on
+> **Critical:** Renovate can update versions but **cannot** update `.aqua/aqua-checksums.json` on
 > its own. The checksum-refresh workflow is what keeps the two in sync. Without it, a version
 > bump would merge a stale checksum and **every install would fail**. The workflow is
 > load-bearing, not optional.
@@ -524,7 +527,7 @@ The methods, each a way to obtain a sha256 the entry can stand behind:
 `${version}` and `${major}` (the version up to its first dot, the way kernel.org names a
 series directory) expand in `url` and in the method's arguments. The arguments are split on
 whitespace, so an identity regexp carries none and a fingerprint is forty hex digits
-unbroken. The tool a method shells out to — `gh`, `cosign` — must be pinned in `aqua.yaml`,
+unbroken. The tool a method shells out to — `gh`, `cosign` — must be pinned in `.aqua/aqua.yaml`,
 and the `pins` rule says so when it is not: unpinned, aqua's proxy falls through to whatever
 binary the machine has, and the digest would be vouched for by a tool nobody chose. The PGP
 method shells out to nothing: the fingerprint in the entry is the whole trust decision, the
@@ -542,7 +545,7 @@ project.
 the pin has moved, the checksum has not. CI fires on it and `lint aqua` fails, truthfully —
 that tree *is* out of sync — and every tool that needs the new pin refuses to install.
 Minutes later the checksum workflow's fix-up commit lands and its run is the green one. A
-red run on a Renovate commit that touches `aqua.yaml`, followed by a green run on the bot's
+red run on a Renovate commit that touches `.aqua/aqua.yaml`, followed by a green run on the bot's
 fix-up, is therefore the expected shape of such a pull request, and the red says what it
 is (aqua's reason is printed, never swallowed). It is not made to look otherwise: a job
 that skipped the run as "neutral" would add a checkout to every run of every repository
@@ -608,15 +611,15 @@ tolerable without required checks, blocking with them.
 ## Enforcement
 
 `limen check [path]` verifies the aqua rule alongside the [mandatory files](./mandatory-files.md).
-It fails a repository that has no `aqua.yaml`; whose `checksum:` section differs from the
+It fails a repository that has no `.aqua/aqua.yaml`; whose `checksum:` section differs from the
 canonical baseline; whose `registries:` section differs (beyond the project-owned standard
 `ref`, which must itself be an exact pin); that lacks any canonical package (by name); that
-lists a package twice; or that is missing the committed `aqua-checksums.json`. A manifest
+lists a package twice; or that is missing the committed `.aqua/aqua-checksums.json`. A manifest
 `limen` cannot confidently parse (flow-style sections and the like) also fails — what cannot
 be verified does not pass.
 
 `limen fix` remediates all of that: a missing manifest is seeded from limen's own (and only
-then may the matching canonical `aqua-checksums.json` be seeded with it, so a fresh
+then may the matching canonical `.aqua/aqua-checksums.json` be seeded with it, so a fresh
 `bootstrap` is compliant offline); an existing manifest is **merged** — the canonical
 sections are reset (keeping a valid project `ref`), missing canonical packages are appended
 by name without ever duplicating one the project already pins, and the project's own
@@ -626,9 +629,12 @@ is baseline-owned, not project-owned — the enforcer that wrote the repo's cano
 must be the enforcer the repo pins, or the repo goes red in one direction or the other (a
 dev build has no version to stamp and moves nothing). Whenever the manifest changed or the checksums file is
 missing, `fix` regenerates the checksums with the real tool — `aqua policy allow
-aqua-policy.yaml` then `aqua update-checksum --prune` — rather than guessing; if aqua is
+.aqua/aqua-policy.yaml` then `aqua update-checksum --prune` — rather than guessing; if aqua is
 unavailable it says so and leaves the commands for you. Duplicate package entries are
-reported, not resolved: only a human knows which version was meant.
+reported, not resolved: only a human knows which version was meant. A repository still
+carrying aqua's files at its root, where limen kept them before `.aqua/`, fails the rule
+naming them; `fix` moves them into `.aqua/` and regenerates the checksums, which also allows
+the policy at its new path for the rest of the run.
 
 Beyond that baseline, *which* extra tools and versions a project pins is engineering
 judgment — the same division of labor as the license rule: the tool enforces the invariants,
