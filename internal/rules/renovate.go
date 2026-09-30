@@ -297,13 +297,17 @@ func (cfg config) hasForkProcessing() bool {
 //
 //nolint:gochecknoglobals // immutable table.
 var supersededConfigs = []string{
+	"renovate.jsonc",
 	"renovate.json5",
 	".github/renovate.json",
+	".github/renovate.jsonc",
 	".github/renovate.json5",
 	".gitlab/renovate.json",
+	".gitlab/renovate.jsonc",
 	".gitlab/renovate.json5",
 	".renovaterc",
 	".renovaterc.json",
+	".renovaterc.jsonc",
 	".renovaterc.json5",
 }
 

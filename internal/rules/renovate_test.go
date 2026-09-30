@@ -213,28 +213,35 @@ func TestCanonicalSeed(t *testing.T) {
 }
 
 // TestSupersededConfig: a renovate.json5 (or any other config file Renovate
-// would read only in renovate.json's absence) beside renovate.json is dead
-// config that still looks authoritative. check fails naming it; fix edits
-// renovate.json as usual but ends advisory, naming it, and never removes it.
+// would read only in renovate.json's absence, .jsonc included) beside
+// renovate.json is dead config that still looks authoritative. check fails
+// naming it; fix edits renovate.json as usual but ends advisory, naming it, and
+// never removes it.
 func TestSupersededConfig(t *testing.T) {
 	t.Parallel()
 
-	files := compliantFiles()
-	files["renovate.json5"] = "{ extends: ['config:recommended'] }\n"
-	root := writeRepo(t, files)
+	for _, name := range []string{"renovate.json5", ".github/renovate.jsonc"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	finding := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate")
-	if finding.OK() || finding.Path != "renovate.json5" || !strings.Contains(finding.Message, "dead config") {
-		t.Errorf("check must fail naming renovate.json5, got: %+v", finding)
-	}
+			files := compliantFiles()
+			files[name] = "{ extends: ['config:recommended'] }\n"
+			root := writeRepo(t, files)
 
-	outcome := renovateOutcome(rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}))
-	if outcome.Action != rules.ActionAdvisory || !strings.Contains(outcome.Message, "renovate.json5") {
-		t.Errorf("fix must end advisory naming renovate.json5, got: %s (%s)", outcome.Action, outcome.Message)
-	}
+			finding := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate")
+			if finding.OK() || finding.Path != name || !strings.Contains(finding.Message, "dead config") {
+				t.Errorf("check must fail naming %s, got: %+v", name, finding)
+			}
 
-	if _, err := os.Stat(filepath.Join(root, "renovate.json5")); err != nil {
-		t.Errorf("fix must leave renovate.json5 in place: %v", err)
+			outcome := renovateOutcome(rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}))
+			if outcome.Action != rules.ActionAdvisory || !strings.Contains(outcome.Message, name) {
+				t.Errorf("fix must end advisory naming %s, got: %s (%s)", name, outcome.Action, outcome.Message)
+			}
+
+			if _, err := os.Stat(filepath.Join(root, name)); err != nil {
+				t.Errorf("fix must leave %s in place: %v", name, err)
+			}
+		})
 	}
 }
 
