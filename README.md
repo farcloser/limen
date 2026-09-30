@@ -42,7 +42,7 @@ that *can* be verified gets a `limen` check and becomes policy.
 Everything else the recipes use — `go`, `just`, and the whole lint/test/release toolbelt
 (`shellcheck`, `golangci-lint`, `yamlfmt`, `lychee`, `jq`, `gotestsum`, `goreleaser`,
 `cosign`, and `limen` itself) — is pinned and installed **by aqua**, so it is not a manual
-prerequisite; [`aqua.yaml`](./aqua.yaml) is the authoritative list. Every Go-built tool
+prerequisite; [`.aqua/aqua.yaml`](./.aqua/aqua.yaml) is the authoritative list. Every Go-built tool
 (`git-validation`, `godolint`, `dot`, and the source analyzers `deadcode`, `govulncheck`,
 `go-licenses`) is a `tool` directive in [`tools/go.mod`](./tools/go.mod), built by the pinned
 `go` itself (see [`book/tooling.md`](./book/tooling.md#go-source-analyzers-are-gomod-tools)).
@@ -70,7 +70,7 @@ limen github fix              # repair the fixable settings, plan-then-apply
 ```
 
 `check` reports; `fix` repairs what it safely can and flags the rest as advisories — for the
-aqua rule that includes regenerating `aqua-checksums.json` with aqua itself (`aqua policy
+aqua rule that includes regenerating `.aqua/aqua-checksums.json` with aqua itself (`aqua policy
 allow` + `aqua update-checksum --prune`) whenever it changed the manifest or the file is
 missing. `bootstrap` is `fix` on an empty directory, and finishes by installing the pinned
 tooling (`aqua policy allow` + `aqua update-checksum --prune` + `aqua install --only-link`).
@@ -100,7 +100,7 @@ Early. We are bootstrapping from the ground floor:
 - [x] **Per-language rules** — conditional checks that fire only when a language is present:
       shell → `.limen/.shellcheckrc`, and YAML → `.limen/.yamlfmt`. See [`book/per-language.md`](./book/per-language.md).
 - [x] **Project tooling** — every repo pins its build/CI tooling through aqua: a committed
-      `aqua.yaml` with checksum enforcement on, plus a committed `aqua-checksums.json`. See
+      `.aqua/aqua.yaml` with checksum enforcement on, plus a committed `.aqua/aqua-checksums.json`. See
       [`book/tooling.md`](./book/tooling.md) and [`cmd/limen/`](./cmd/limen).
 - [x] **GitHub settings** — repository configuration audited and repaired like any other
       rule: merge doctrine, rulesets, Actions hardening, security features. See

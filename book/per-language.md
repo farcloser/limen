@@ -41,7 +41,7 @@ baseline is defined once and lives in one place: this repository's own
 `rules.CanonicalShellcheckrc`. **That file is the source of truth.** A repo may not add, remove,
 or reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to
 the canonical. (This is the same exact-match rule as the `.editorconfig`, the `Justfile`, and
-the `.limen/just/*.just` modules — only `aqua.yaml` uses the subset, "contains the baseline"
+the `.limen/just/*.just` modules — only `.aqua/aqua.yaml` uses the subset, "contains the baseline"
 model, and `.gitignore` is merely seeded once when absent.)
 
 **How to accommodate specific projects**
@@ -69,7 +69,7 @@ The scan skips `.git` and vendored dependency directories (`node_modules`, `vend
 dependency's manifests never trigger the rule — only YAML that is genuinely *ours* does.
 (`.yamlfmt` itself is not matched: its extension is `.yamlfmt`, not `.yaml`/`.yml`.)
 
-In practice the trigger always fires: every compliant repository carries `aqua.yaml`
+In practice the trigger always fires: every compliant repository carries `.aqua/aqua.yaml`
 ([tooling is mandatory](./tooling.md)), so the YAML rule is effectively universal. It stays a
 per-language rule because the *mechanism* is what limen checks — the trigger, not the mandate
 — and the uniform shape keeps the chapter honest if the trigger set ever changes.
@@ -130,7 +130,7 @@ brew, it has a pin story. The toolchain is pinned in two halves:
   published next to each installer. That is the sourcing ladder's rung 2 without the
   signature — rustup publishes no signature for the installer — so a bump is verified by
   hand like every other checksum-only pin, and the pin lives in the Rust repository's
-  `aqua.yaml`, not the baseline: no other repository pays for it.
+  `.aqua/aqua.yaml`, not the baseline: no other repository pays for it.
 - **The toolchain through `rust-toolchain.toml`.** rustup reads it from the working tree,
   so the channel and components are a committed, reviewed file — the same shape as
   `go.mod`'s `go` line — and rustup verifies what it downloads against the release

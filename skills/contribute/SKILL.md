@@ -17,7 +17,7 @@ git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_CO
 grep -qx '.claude/' <clone>/.git/info/exclude || echo '.claude/' >> <clone>/.git/info/exclude   # once per clone
 git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/main
 test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
-cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow aqua-policy.yaml && aqua install --only-link
+cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow .aqua/aqua-policy.yaml && aqua install --only-link
 ```
 
 One topic per branch and per pull request. The bot's login is the branch

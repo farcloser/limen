@@ -35,7 +35,7 @@ You do not hand-create these files: `limen bootstrap <path>` scaffolds a new rep
 all of them, and `limen fix` brings an existing repository up to the baseline — writing what
 is missing, resetting the content-pinned files (`.editorconfig`, `.gitattributes`, and the
 `.limen/*` files), seeding a `.gitignore` when none exists, and merging the baseline into the
-subset files (`aqua.yaml` and the root `Justfile`’s import line) without
+subset files (`.aqua/aqua.yaml` and the root `Justfile`’s import line) without
 discarding a repo's own additions. Anything it cannot fix safely — a disallowed `LICENSE`, a
 manifest it cannot parse — is reported for a human to resolve.
 
@@ -237,7 +237,7 @@ each project keeps room of its own:
 | File | Role | Checked? |
 |------|------|----------|
 | the root `Justfile` | Carries the shared-baseline import (`import '.limen/just/main.just'`) and this project's **own** recipes — its `lint`/`test` aggregates (what CI runs), `build`/`run`, anything else — at the repo root for visibility. `bootstrap`/`fix` add the import when absent, but never overwrite the project's recipes. | Only the **import line** is required; the rest is the project's own. |
-| `.limen/just/*.just` (shared modules) | The **shared recipe baseline**. `main.just` mounts the `do` tree, sets the hermetic environment, and carries the orientation recipes (`default`, `info`); under the `do` namespace sit `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe compares `aqua-checksums.json` against a fresh regeneration to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), `fix` (apply fixes in place, where the tool supports it — including `limen fix`), each loaded as a `mod`, plus `release` imported flat so it can take a tag argument. The same in every repo. | Content-pinned: **every `*.just` file under `.limen/just/`** must match the canonical exactly. |
+| `.limen/just/*.just` (shared modules) | The **shared recipe baseline**. `main.just` mounts the `do` tree, sets the hermetic environment, and carries the orientation recipes (`default`, `info`); under the `do` namespace sit `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe compares `.aqua/aqua-checksums.json` against a fresh regeneration to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), `fix` (apply fixes in place, where the tool supports it — including `limen fix`), each loaded as a `mod`, plus `release` imported flat so it can take a tag argument. The same in every repo. | Content-pinned: **every `*.just` file under `.limen/just/`** must match the canonical exactly. |
 
 The `.limen/` directory also parks a few non-recipe config files to keep the repo root uncluttered
 (`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/lint-go.yaml`, `.limen/aqua-registry.yaml`,

@@ -135,7 +135,7 @@ branches are the human's.
   (`claudio/<YYYYMMDD>-<topic>`, the day it was cut so a listing reads in
   date order), one topic per branch and per pull request. The
   worktree keeps the human's checkout untouched and lets several tasks run
-  side by side. Inside a new worktree: `aqua policy allow aqua-policy.yaml`
+  side by side. Inside a new worktree: `aqua policy allow .aqua/aqua-policy.yaml`
   then `aqua install --only-link` — aqua's policy is keyed by path.
 - **Never on `work`.** The human's `work` branch is the human's, or the
   human's with the agent pairing interactively at the human's request. The

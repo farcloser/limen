@@ -19,7 +19,7 @@
   (`vX.Y.Z`) when the value genuinely cannot be obtained, and say so. Never guess and present a
   guess as current.
 - **Never put specific version numbers in the book (`book/`).** Use generic placeholders in
-  prose and examples. The real, pinned versions live in `aqua.yaml` and are managed by
+  prose and examples. The real, pinned versions live in `.aqua/aqua.yaml` and are managed by
   aqua/Renovate — the book explains *how*, not *which*.
 
 ## Scope
