@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -327,6 +328,15 @@ func checkJustfile(root string) Finding {
 		)
 	}
 
+	if needsSecurityRecipe(root) && !definesSecurityRecipe(string(data)) {
+		return fail(
+			rule,
+			name,
+			name+" defines no `security` recipe, and the security workflow runs `just security` (limen fix appends `"+
+				securityRecipeLine+"`)",
+		)
+	}
+
 	for _, mod := range limen.JustModules() {
 		mdata, err := readRepoFile(root, mod.Path)
 		if err != nil {
@@ -344,6 +354,42 @@ func checkJustfile(root string) Finding {
 		Path:    name,
 		Message: "Justfile carries the shared-baseline import; the shared just modules match the canonical baseline",
 	}
+}
+
+// securityRecipeLine is the root Justfile's `security` recipe as the seed
+// writes it: the shared scans, which a project extends with its own.
+const securityRecipeLine = "security: do::security::default"
+
+// securityWorkflowStep is the canonical security workflow's step, trimmed.
+const securityWorkflowStep = "run: just security"
+
+// securityRecipe matches a root Justfile line defining a `security` recipe,
+// with or without parameters or dependencies, and not a `security :=`
+// assignment.
+var securityRecipe = regexp.MustCompile(`^security(\s[^:=]*)?:([^=]|$)`)
+
+// needsSecurityRecipe reports whether the root Justfile must define
+// `security`: the security workflow runs `just security`. A missing workflow
+// counts, since limen fix seeds the canonical one, possibly after the
+// Justfile's turn in the same run.
+func needsSecurityRecipe(root string) bool {
+	data, err := readRepoFile(root, pathWorkflowSecurity)
+	if err != nil {
+		return true
+	}
+
+	return containsLine(string(data), securityWorkflowStep)
+}
+
+// definesSecurityRecipe reports whether a root Justfile defines `security`.
+func definesSecurityRecipe(justfile string) bool {
+	for raw := range strings.SplitSeq(justfile, "\n") {
+		if securityRecipe.MatchString(strings.TrimSuffix(raw, carriageReturn)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // containsLine reports whether any line of text, trimmed, equals want.

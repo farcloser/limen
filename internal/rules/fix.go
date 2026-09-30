@@ -255,7 +255,7 @@ const justfileSeed = "# This file is the project's own.\n" +
 	"lint: do::lint::default\n" +
 	"fix: do::fix::default\n" +
 	"test:\n" +
-	"security: do::security::default\n"
+	securityRecipeLine + "\n"
 
 // remediateJustfile handles the task runner's two regimes: the root Justfile
 // is the project's own — seeded when missing, and when present only ever
@@ -275,9 +275,10 @@ func remediateJustfile(root string) []Outcome {
 	return out
 }
 
-// remediateRootJustfile seeds a missing root Justfile, appends the canonical
-// import to one that lacks it, and otherwise leaves the file alone — it is
-// the project's own.
+// remediateRootJustfile seeds a missing root Justfile, appends to one that
+// lacks them the canonical import and the `security` recipe the security
+// workflow runs, and otherwise leaves the file alone — it is the project's
+// own.
 func remediateRootJustfile(root, rule string) Outcome {
 	name, found := findFirst(root, justfileName, "justfile", ".justfile")
 	if !found {
@@ -298,7 +299,23 @@ func remediateRootJustfile(root, rule string) Outcome {
 		return failed(rule, name, err)
 	}
 
-	if containsLine(string(data), CanonicalJustfileImport) {
+	content := string(data)
+
+	var done []string
+
+	if !containsLine(content, CanonicalJustfileImport) {
+		content = ensureTrailingNewline(content) +
+			"\n# --- added by limen fix: the shared-baseline import ---\n" + CanonicalJustfileImport + "\n"
+		done = append(done, "appended the shared-baseline import ("+CanonicalJustfileImport+")")
+	}
+
+	if needsSecurityRecipe(root) && !definesSecurityRecipe(content) {
+		content = ensureTrailingNewline(content) +
+			"\n# --- added by limen fix: the recipe the security workflow runs ---\n" + securityRecipeLine + "\n"
+		done = append(done, "appended the recipe the security workflow runs ("+securityRecipeLine+")")
+	}
+
+	if len(done) == 0 {
 		return Outcome{
 			Rule:    rule,
 			Action:  ActionNone,
@@ -307,9 +324,7 @@ func remediateRootJustfile(root, rule string) Outcome {
 		}
 	}
 
-	appended := ensureTrailingNewline(string(data)) +
-		"\n# --- added by limen fix: the shared-baseline import ---\n" + CanonicalJustfileImport + "\n"
-	if err := writeFile(root, name, appended); err != nil {
+	if err := writeFile(root, name, content); err != nil {
 		return failed(rule, name, err)
 	}
 
@@ -317,7 +332,7 @@ func remediateRootJustfile(root, rule string) Outcome {
 		Rule:    rule,
 		Action:  ActionMerged,
 		Path:    name,
-		Message: "appended the shared-baseline import (" + CanonicalJustfileImport + ")",
+		Message: strings.Join(done, "; "),
 	}
 }
 

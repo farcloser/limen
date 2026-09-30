@@ -63,7 +63,7 @@ func compliantFiles() map[string]string {
 		".gitattributes":      rules.CanonicalGitattributes,
 		"AGENTS.md":           rules.CanonicalAgents,
 		"CLAUDE.md":           limen.CanonicalClaudeSeed,
-		"Justfile":            rules.CanonicalJustfileImport + "\n",
+		"Justfile":            rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
 		"aqua.yaml":           limen.CanonicalAquaYAML,
 		"aqua-checksums.json": "{}\n",
 		// Every repository declares the Go-built tools the recipes run (the
@@ -487,7 +487,7 @@ func TestJustfileRequiresImport(t *testing.T) {
 	// root Justfile is the project's own.
 	files = compliantFiles()
 
-	files["Justfile"] = "# mine\n" + rules.CanonicalJustfileImport + "\n\nstray:\n\t@echo x\n"
+	files["Justfile"] = "# mine\n" + rules.CanonicalJustfileImport + "\n\nstray:\n\t@echo x\n\nsecurity: stray\n"
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
 		t.Errorf("a Justfile with the import and its own recipes should pass: %s", f.Message)
 	}
@@ -530,10 +530,31 @@ func TestJustfileOwnRecipesNotJudged(t *testing.T) {
 
 	// Whatever the project puts around the import line is its own business.
 	files := compliantFiles()
-	files["Justfile"] = rules.CanonicalJustfileImport + "\n\nwhatever:\n\t@echo project-specific\n"
+	files["Justfile"] = rules.CanonicalJustfileImport + "\n\nwhatever:\n\t@echo project-specific\n\nsecurity *args: whatever\n"
 
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
 		t.Errorf("project recipes in the root Justfile must not be judged: %s", f.Message)
+	}
+}
+
+// TestJustfileRequiresSecurityRecipe: the canonical security workflow runs
+// `just security`, so a Justfile without that recipe fails, and an assignment
+// named security does not count; a project whose workflow runs something
+// else owes no such recipe.
+func TestJustfileRequiresSecurityRecipe(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files["Justfile"] = rules.CanonicalJustfileImport + "\n\nsecurity := \"x\"\n"
+
+	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile")
+	if f.OK() || !strings.Contains(f.Message, "security") {
+		t.Fatalf("a Justfile without a security recipe should fail naming it: %v %s", f.OK(), f.Message)
+	}
+
+	files[".github/workflows/security.yaml"] = "name: security\njobs:\n  scan:\n    steps:\n      - run: just do security\n"
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
+		t.Errorf("a workflow that does not run `just security` owes no recipe: %s", f.Message)
 	}
 }
 

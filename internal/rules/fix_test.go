@@ -141,8 +141,25 @@ func TestFixJustfileRegimes(t *testing.T) {
 		t.Errorf("merge must keep the project's recipes and add the import, got: %q", data)
 	}
 
-	// Present with the import -> the project's own, untouched.
-	own := rules.CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n"
+	// Present with the import but no `security` recipe, which the seeded
+	// security workflow runs -> merged: the recipe appended, content kept,
+	// and the rule passes after.
+	withImport := rules.CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n"
+
+	noSecurity := writeRepo(t, map[string]string{"Justfile": withImport})
+	if o := justfileOutcome(rules.Fix(t.Context(), noSecurity, bootstrapOpts())); o.Action != rules.ActionMerged ||
+		!strings.Contains(o.Message, "security: do::security::default") {
+		t.Fatalf("Justfile without the security recipe: %s (%s), want merged appending it", o.Action, o.Message)
+	}
+
+	data, _ = os.ReadFile(filepath.Join(noSecurity, "Justfile"))
+	if !strings.HasPrefix(string(data), withImport) ||
+		!strings.Contains(string(data), "\nsecurity: do::security::default\n") {
+		t.Errorf("the recipe must be appended after the project's content, got: %q", data)
+	}
+
+	// Present with the import and the recipe -> the project's own, untouched.
+	own := withImport + "\nsecurity: do::security::default\n"
 
 	untouched := writeRepo(t, map[string]string{"Justfile": own})
 	if o := justfileOutcome(rules.Fix(t.Context(), untouched, bootstrapOpts())); o.Action != rules.ActionNone {
