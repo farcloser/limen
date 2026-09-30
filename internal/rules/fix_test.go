@@ -998,7 +998,7 @@ func TestFixWorkflows(t *testing.T) {
 	}
 
 	// goreleaser present -> the release workflow is seeded.
-	releasing := writeRepo(t, map[string]string{".goreleaser.yaml": "version: 2\n"})
+	releasing := writeRepo(t, map[string]string{".release-go.yaml": releaseGoHeader + "\nversion: 2\n"})
 	for _, o := range rules.Fix(t.Context(), releasing, bootstrapOpts()) {
 		if o.Rule == "workflows" && o.Path == ".github/workflows/release.yaml" && o.Action != rules.ActionCreated {
 			t.Errorf("release workflow with goreleaser: %s, want created", o.Action)

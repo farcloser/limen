@@ -379,7 +379,9 @@ func remediateWorkflows(root string) []Outcome {
 			"seeded the canonical renovate config (the content is the project's own from here)"),
 	}
 
-	if _, hasGoreleaser := findFirst(root, ".goreleaser.yaml", ".goreleaser.yml"); hasGoreleaser {
+	out = append(out, remediateReleaseGo(root, rule))
+
+	if exists(filepath.Join(root, releaseGoFile)) {
 		out = append(out, seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
 			"seeded the canonical release workflow (the content is the project's own from here)"))
 	} else {
@@ -387,11 +389,82 @@ func remediateWorkflows(root string) []Outcome {
 			Rule:    rule,
 			Action:  ActionNone,
 			Path:    pathWorkflowRelease,
-			Message: "not applicable: no .goreleaser.yaml (releasing is opt-in)",
+			Message: "not applicable: no " + releaseGoFile + " (releasing is opt-in)",
 		})
 	}
 
 	return out
+}
+
+// remediateReleaseGo moves a goreleaser configuration from a default name to
+// .release-go.yaml and gives it its schema header; the content is otherwise
+// the project's, untouched. With both names present, the project merges them
+// by hand.
+func remediateReleaseGo(root, rule string) Outcome {
+	stray, found := findFirst(root, strayGoreleaserFiles...)
+	if found && exists(filepath.Join(root, releaseGoFile)) {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionAdvisory,
+			Path:    stray,
+			Message: "both " + stray + " and " + releaseGoFile + " exist: merge the first into the second and delete it",
+		}
+	}
+
+	source := releaseGoFile
+	if found {
+		source = stray
+	}
+
+	data, err := readRepoFile(root, source)
+	if err != nil {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionNone,
+			Path:    releaseGoFile,
+			Message: "not applicable: no " + releaseGoFile,
+		}
+	}
+
+	content := string(data)
+	headed := strings.HasPrefix(content, releaseGoHeader+"\n") || strings.HasPrefix(content, releaseGoHeader+"\r\n")
+
+	if !found && headed {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionNone,
+			Path:    releaseGoFile,
+			Message: releaseGoFile + " carries its schema line",
+		}
+	}
+
+	if !headed {
+		content = releaseGoHeader + "\n" + content
+	}
+
+	if err := writeFile(root, releaseGoFile, content); err != nil {
+		return failed(rule, releaseGoFile, err)
+	}
+
+	if !found {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionMerged,
+			Path:    releaseGoFile,
+			Message: "added the schema line to " + releaseGoFile,
+		}
+	}
+
+	if err := os.Remove(filepath.Join(root, stray)); err != nil {
+		return failed(rule, stray, err)
+	}
+
+	return Outcome{
+		Rule:    rule,
+		Action:  ActionMerged,
+		Path:    releaseGoFile,
+		Message: "renamed " + stray + " to " + releaseGoFile + ", with the schema line (the name the release lane reads)",
+	}
 }
 
 // pinExact enforces that the file at relPath equals canonical exactly: create it
