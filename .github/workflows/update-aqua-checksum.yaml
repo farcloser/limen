@@ -154,7 +154,11 @@ jobs:
                 "${work}/deletions.json" > "${work}/next"
               mv "${work}/next" "${work}/deletions.json"
             fi
-          done < <(git status --porcelain -z)
+          # --untracked-files=all: by default a new directory is ONE entry,
+          # `?? dir/`, which is not a file, would be sent as a deletion, and
+          # its files never committed — any directory the pinned limen fix
+          # seeds (tools/golangci-lint/ did) would be lost.
+          done < <(git status --porcelain -z --untracked-files=all)
           # Signed-off-by: `just do lint commits` enforces DCO on the PR range,
           # bot commits included.
           jq -n \
