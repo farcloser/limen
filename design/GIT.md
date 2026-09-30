@@ -27,7 +27,7 @@ The canonical just modules, exact invocations:
 | Module | Invocations |
 |---|---|
 | `lint.just`, `fix.just`, `lint-homebrew.just`, `fix-homebrew.just` | `git ls-files -z --cached --others --exclude-standard [pathspec…]`, seven sites, pathspecs like `'*.go'` and literal names with their `**/` twins |
-| `lint.just` | `git config --unset-all gpg.ssh.allowedSignersFile` and `--add … .allowed_signers` (best-effort, arms signature display for humans); `git rev-parse --verify -q origin/<ref>` (range detection for the commits lane); then `build/tools/git-validation`, which itself runs `git rev-list <range>` and `git log --pretty=oneline --no-show-signature` |
+| `lint.just` | `git log --no-merges --format=… <range>`, then `git -c gpg.ssh.allowedSignersFile=.lint-signers log -1 --format=%G? <sha>` per commit (signature against the listed authors; nothing written to .git/config); `git rev-parse --verify -q origin/<ref>` (range detection for the commits lane); then `build/tools/git-validation`, which itself runs `git rev-list <range>` and `git log --pretty=oneline --no-show-signature` |
 | `lint-go.just` | `git grep -nE "<pattern>" -- '*.go'`, three ban patterns, all RE2-compatible |
 | `main.just` | `git remote get-url origin`, `git describe --tags --abbrev=0`, `git rev-parse --short HEAD`, `git log --max-count=1 --format=%cd --date=short` |
 | `build-go.just` | `git describe --tags --always --dirty`, four sites |
@@ -41,7 +41,7 @@ twelve: `status --porcelain`, `describe --exact-match` / `--always` / `--dirty -
 --match`, `rev-parse --abbrev-ref`, `rev-list -n1` / `--max-parents=0`, `show --format`,
 `tag -l`, `ls-remote --get-url`). `actions/checkout` uses the runner's git, outside the
 hermetic PATH whatever we do. The contribute skill and humans use `worktree add` and
-`remove`, `commit -s` with SSH signing, `%G?` verification against `.allowed_signers`,
+`remove`, `commit -s` with SSH signing, `%G?` verification against `.lint-signers`,
 `reset --soft`, `merge --ff-only`, `push --force-with-lease`, `fetch --prune`, `branch -d`.
 
 Two edges stay outside git whatever is done: git delegates signing and verification to
