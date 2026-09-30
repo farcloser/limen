@@ -125,7 +125,7 @@ var CanonicalWorkflowCI string
 var CanonicalWorkflowSecurity string
 
 // CanonicalWorkflowRelease seeds .github/workflows/release.yaml — only into
-// repositories that carry a .goreleaser.yaml (releasing is opt-in).
+// repositories that carry a .release-go.yaml (releasing is opt-in).
 //
 //go:embed .github/workflows/release.yaml
 var CanonicalWorkflowRelease string

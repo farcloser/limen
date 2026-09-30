@@ -235,7 +235,7 @@ cheap on purpose; visibility is the counterweight.
 |---|---|
 | `.limen/lint-go.yaml` | The baseline, content-pinned in every Go module by the `lintgo` rule; the driver reads it from the nearest `.limen/` at or above the module it runs in. |
 | `cmd/limen-lint-go/` | The driver, a nested module: `main.go`, `internal/lintgo/` (render, merge, check, flags, tests), its own `.lint-go.yaml`. |
-| `.goreleaser.yaml`, `.limen/aqua-registry.yaml` | A second build into the same archive; the limen entry lists both binaries, with an override keeping earlier releases installable. |
+| `.release-go.yaml`, `.limen/aqua-registry.yaml` | A second build into the same archive; the limen entry lists both binaries, with an override keeping earlier releases installable. |
 | limen `internal/rules/lintgo.go` | Seed `.lint-go.yaml` once; a root golangci-lint configuration fails check and is an advisory on fix. Go modules only. |
 | `.limen/just/lib.just`, `lint-go.just`, `fix-go.just` | `_golangci-config` checks the floor and renders; `code` runs golangci-lint with `-c build/golangci.yml`, `licenses` splices `$(limen-lint-go flags licenses)`; `LINT_GO_LICENSES_FLAGS` retired. |
 | limen's root `Justfile` (limen's own, not shared) | Builds the driver from the tree before the lanes run (`LIMEN_LINT_GO_BIN`), lints and tests the nested module. |

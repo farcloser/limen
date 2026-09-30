@@ -198,11 +198,16 @@ Two roles deserve emphasis because they close the enforcement loop:
   imported *flat* into the `do` namespace (`do.just`, hence `just do release vX.Y.Z` — a
   module invocation could not take the tag argument). Every repository can be released:
   `just do release vX.Y.Z` verifies a clean tree, creates the *signed* tag and pushes it. For
-  a repository without a `.goreleaser.yaml` — a Go module, a tap, a configuration — that
+  a repository without a `.release-go.yaml` — a Go module, a tap, a configuration — that
   signed tag **is** the release: there is nothing to build or publish, and Go's module
-  proxy, Renovate and `go get` all read the tag. A `.goreleaser.yaml` (project-owned, like
+  proxy, Renovate and `go get` all read the tag. A `.release-go.yaml` (project-owned, like
   the root Justfile) opts the repository into artifacts, and the two lanes below then share
-  every guard. The **CI lane** (public repos, the default): `just do release vX.Y.Z`
+  every guard. It is goreleaser's configuration under the lane's name, like `.lint-go.yaml`
+  (the recipes pass it with `--config`), and its first line is
+  `# yaml-language-server: $schema=https://goreleaser.com/static/schema.json`: away from
+  goreleaser's default name, that header is how an editor finds the schema. `limen check`
+  requires it, and fails a leftover `.goreleaser.yaml`, which nothing reads; `limen fix`
+  renames one and adds the header. The **CI lane** (public repos, the default): `just do release vX.Y.Z`
   verifies a clean tree, creates the *signed* tag — a human signs the intent — and pushes
   it; the tag push triggers the release workflow, which runs `just do release --ci`:
   goreleaser plus **keyless** cosign, the artifacts signed by the workflow's short-lived

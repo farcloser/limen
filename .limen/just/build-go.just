@@ -46,7 +46,7 @@ cgo_ldflags := if os() == 'linux' { '-Wl,-z,defs -Wl,-z,relro -Wl,-z,now -Wl,-z,
 default: release
 
 # Release: reproducible (trimpath, commit-time VCS stamp), stripped, PIE.
-# Twin of the builds section in .goreleaser.yaml (the release builder, where
+# Twin of the builds section in .release-go.yaml (the release builder, where
 # a project ships one) — a flag change here must land there too. See the
 # comment there for the differences that are intended.
 release: (_banner "build go" "release")
