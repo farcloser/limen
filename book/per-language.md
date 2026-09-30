@@ -290,6 +290,31 @@ plain name, and the reason in the commit message. gocritic's `sloppyReassign` re
 exactly the assigning form, which is why it is off in the baseline: the two cannot both
 pass.
 
+## Go — no replace, ever
+
+A `replace` directive is never committed: not in `go.mod`, not in a nested module, not
+through a relative path to a sibling checkout, and no configuration that permits one is
+committed either (`gomoddirectives`' `replace-local` or `replace-allow-list`, in a
+`.lint-go.yaml` or anywhere else). There is no case where it is right.
+
+A local replace has one legitimate use: working on two modules at once, on one machine,
+while a change travels from one to the other. It lives in the working tree for as long as
+that takes, and is gone before anything is committed. What is committed builds from
+published versions only, so that the build a reviewer, CI, or a consumer runs is the one
+the author ran — a replace makes the module build from whatever happens to sit at a path,
+which nobody else has, and which the checksum database never saw.
+
+When the change a module needs is not tagged yet, require the commit that carries it: a
+pseudo-version (`go get <module>@<commit>`) is published like a tag — the module proxy
+serves it, the checksum database records it. The commit must already be on the owner's
+default branch: one from an unmerged branch can be rewritten or vanish, and the pin then
+names code that never landed. When a tag is wanted instead, ask the owning session for a
+release. A tool module nested in a repository requires its parent's published version like
+any other consumer, or becomes part of the parent module.
+
+The baseline refuses `replace` by default (gomoddirectives), and `exclude` with it, being a
+replace by other means.
+
 ## Go — what golangci-lint cannot see
 
 golangci-lint's `govet` runs the same analyzers as `go vet`, with one structural gap: its

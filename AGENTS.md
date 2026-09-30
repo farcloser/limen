@@ -105,3 +105,10 @@ chapter; the procedure is limen's `skills/contribute`.
   get wrong at that spot; never provenance, versions, or what the code visibly does. The
   reasoning goes in the commit message. See the book's
   [generic principles](https://github.com/farcloser/limen/blob/main/book/index.md#generic-principles).
+- **A `replace` directive is never committed**, nor anything that permits one (a
+  `gomoddirectives` `replace-local` or `replace-allow-list`). A local replace is a
+  temporary tool for working on two modules in parallel, on your machine, and stays there.
+  What ships requires a published version: a tag, or, when the change you need is not
+  tagged yet, the commit that carries it (a pseudo-version), once it is on the owner's
+  default branch. See the book's
+  [no replace, ever](https://github.com/farcloser/limen/blob/main/book/per-language.md#go--no-replace-ever).
