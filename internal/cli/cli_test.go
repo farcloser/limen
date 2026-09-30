@@ -160,7 +160,7 @@ func compliantRepo(t *testing.T) string {
 		".gitattributes":            rules.CanonicalGitattributes,
 		"AGENTS.md":                 rules.CanonicalAgents,
 		"CLAUDE.md":                 limen.CanonicalClaudeSeed,
-		"Justfile":                  rules.CanonicalJustfileImport + "\n",
+		"Justfile":                  rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
 		"aqua.yaml":                 limen.CanonicalAquaYAML,
 		"aqua-checksums.json":       "{}\n",
 		"aqua-policy.yaml":          rules.CanonicalAquaPolicy,
