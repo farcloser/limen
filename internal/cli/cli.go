@@ -343,7 +343,7 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 	if releaseVersion(version) == "" {
 		_, _ = fmt.Fprintln(
 			stderr,
-			"limen: dev build — the seeded aqua.yaml keeps the embedded limen pin, which may predate the files seeded from this working tree",
+			"limen: dev build — the seeded .aqua/aqua.yaml keeps the embedded limen pin, which may predate the files seeded from this working tree",
 		)
 	}
 
@@ -367,7 +367,7 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		_, _ = fmt.Fprintf(stderr, "the repository is set up; once aqua is available run, from %s:\n", root)
 		_, _ = fmt.Fprint(
 			stderr,
-			"  aqua policy allow aqua-policy.yaml && aqua update-checksum --prune && aqua install --only-link\n",
+			"  aqua policy allow .aqua/aqua-policy.yaml && aqua update-checksum --prune && aqua install --only-link\n",
 		)
 
 		return 1
@@ -488,10 +488,10 @@ func ensureUpdateApp(ctx context.Context, org, root string, stderr io.Writer) {
 // authorizes the committed local-registry policy, refreshes the checksums for
 // whatever the manifest pins (a no-op on the pristine seed), then installs
 // (links) every tool. It runs with the repo as the working directory so aqua
-// finds aqua.yaml.
+// finds .aqua/aqua.yaml.
 func installTooling(ctx context.Context, root string, progress io.Writer) error {
 	steps := [][]string{
-		{"policy", "allow", "aqua-policy.yaml"},
+		{"policy", "allow", ".aqua/aqua-policy.yaml"},
 		{"update-checksum", "--prune"},
 		{"install", "--only-link"},
 	}
@@ -663,7 +663,7 @@ bootstrap flags:
                   a warning, when neither is available)
   -force          Proceed even if the target directory is not empty
 
-After writing files, bootstrap runs "aqua policy allow aqua-policy.yaml",
+After writing files, bootstrap runs "aqua policy allow .aqua/aqua-policy.yaml",
 "aqua update-checksum --prune", and "aqua install --only-link" to install the
 pinned tooling, then converges the org's update-App credential (idempotent;
 anything it cannot do or verify under the current gh token is a warning).

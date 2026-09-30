@@ -71,18 +71,18 @@ var CanonicalLintGo string
 // only installs the tools, it is not needed to make the files valid. See
 // book/tooling.md.
 //
-//go:embed aqua.yaml
+//go:embed .aqua/aqua.yaml
 var CanonicalAquaYAML string
 
 // CanonicalAquaChecksums is the checksums file matching CanonicalAquaYAML —
 // seeded together so a fresh bootstrap is compliant offline (see above).
 //
-//go:embed aqua-checksums.json
+//go:embed .aqua/aqua-checksums.json
 var CanonicalAquaChecksums string
 
 // CanonicalAquaPolicy is the aqua policy, content-pinned in every repo (see above).
 //
-//go:embed aqua-policy.yaml
+//go:embed .aqua/aqua-policy.yaml
 var CanonicalAquaPolicy string
 
 // CanonicalAquaRegistry is the local aqua registry, content-pinned in every repo (see above).

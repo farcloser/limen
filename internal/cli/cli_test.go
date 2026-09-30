@@ -96,7 +96,7 @@ func stubDir(t *testing.T) string {
 	// aqua proxy, which execs `aqua` — this very stub — and recurses without
 	// end. `${0%/*}` is the shell's own dirname.
 	aquaScript := "#!/bin/sh\necho \"$@\" >> \"${0%/*}/log\"\n" +
-		"case \"$*\" in *update-checksum*) echo '{\"stub\":true}' > aqua-checksums.json;; esac\n"
+		"case \"$*\" in *update-checksum*) echo '{\"stub\":true}' > .aqua/aqua-checksums.json;; esac\n"
 	goStub := filepath.Join(dir, "go")
 	goScript := "#!/bin/sh\n" +
 		"[ \"$1\" = get ] && [ \"$2\" = -tool ] || exit 0\n" +
@@ -107,7 +107,7 @@ func stubDir(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		aqua += ".bat"
 		aquaScript = "@echo off\r\n>> \"%~dp0log\" echo %*\r\n" +
-			"echo %* | find \"update-checksum\" >nul && echo {\"stub\":true}> aqua-checksums.json\r\n"
+			"echo %* | find \"update-checksum\" >nul && echo {\"stub\":true}> .aqua\\aqua-checksums.json\r\n"
 		goStub += ".bat"
 		goScript = "@echo off\r\n" +
 			"if not \"%1\"==\"get\" exit /b 0\r\n" +
@@ -161,9 +161,9 @@ func compliantRepo(t *testing.T) string {
 		"AGENTS.md":                 rules.CanonicalAgents,
 		"CLAUDE.md":                 limen.CanonicalClaudeSeed,
 		"Justfile":                  rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
-		"aqua.yaml":                 limen.CanonicalAquaYAML,
-		"aqua-checksums.json":       "{}\n",
-		"aqua-policy.yaml":          rules.CanonicalAquaPolicy,
+		".aqua/aqua.yaml":           limen.CanonicalAquaYAML,
+		".aqua/aqua-checksums.json": "{}\n",
+		".aqua/aqua-policy.yaml":    rules.CanonicalAquaPolicy,
 		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
 		".limen/lychee.toml":        rules.CanonicalLychee,
 		".limen/.yamlfmt":           rules.CanonicalYamlfmt,
@@ -293,7 +293,7 @@ func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.S
 	}
 
 	want := []string{
-		"--log-level warn policy allow aqua-policy.yaml",
+		"--log-level warn policy allow .aqua/aqua-policy.yaml",
 		"--log-level warn update-checksum --prune",
 		"--log-level warn install --only-link",
 	}
@@ -357,7 +357,7 @@ func TestReleaseStampPinsOnlyExactReleases(t *testing.T) { // Serial by design: 
 			t.Fatalf("stamp %q: bootstrap returned %d:\n%s%s", tc.stamp, code, stdout.String(), stderr.String())
 		}
 
-		manifest, err := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+		manifest, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
 		if err != nil {
 			t.Fatal(err)
 		}

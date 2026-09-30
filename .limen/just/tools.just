@@ -11,12 +11,12 @@ set quiet
 import 'lib.just'
 
 # --- Project tooling (see book/tooling.md). Every recipe takes the tool as it
-#     is pinned: an aqua slug exactly as in aqua.yaml (goreleaser/goreleaser),
+#     is pinned: an aqua slug exactly as in .aqua/aqua.yaml (goreleaser/goreleaser),
 #     or a Go package path exactly as in tools/go.mod
 #     (golang.org/x/tools/cmd/deadcode). ---
 #
 # The two are told apart by the first path element: a Go module root is a
-# host and always carries a dot; a GitHub owner never can. aqua.yaml holds no
+# host and always carries a dot; a GitHub owner never can. .aqua/aqua.yaml holds no
 # go_install package any more (book/tooling.md), so there is no overlap.
 #
 # The mutating recipes end by really installing the tool, never by linking:
@@ -45,11 +45,11 @@ add pkg: (_banner "tools" "add")
         {{ go_tool_build }} '{{ pkg }}'           # REAL build: a bad pin fails here, not at first use
         exit 0
     fi
-    if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" aqua.yaml; then
-        echo "{{ pkg }} is already in aqua.yaml — use 'just do tools update {{ pkg }}' or 'just do tools set {{ pkg }} <version>'." >&2
+    if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" .aqua/aqua.yaml; then
+        echo "{{ pkg }} is already in .aqua/aqua.yaml — use 'just do tools update {{ pkg }}' or 'just do tools set {{ pkg }} <version>'." >&2
         exit 1
     fi
-    aqua generate -i "{{ pkg }}"      # append the latest version to aqua.yaml
+    aqua generate -i "{{ pkg }}"      # append the latest version to .aqua/aqua.yaml
     aqua update-checksum --prune      # record its checksum (and drop stale ones)
     aqua install                      # REAL install: a bad pin fails here, not at first use
 
@@ -80,16 +80,16 @@ set pkg version: (_banner "tools" "set")
         {{ go_tool_build }} '{{ pkg }}'                   # REAL build: a bad pin fails here, not at first use
         exit 0
     fi
-    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}@" aqua.yaml; then
-        echo "{{ pkg }} is not pinned in aqua.yaml — add it with 'just do tools add {{ pkg }}'." >&2
+    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}@" .aqua/aqua.yaml; then
+        echo "{{ pkg }} is not pinned in .aqua/aqua.yaml — add it with 'just do tools add {{ pkg }}'." >&2
         exit 1
     fi
     # Explicit sibling template: macOS mktemp ignores $TMPDIR, and a sibling
     # makes the mv an atomic same-filesystem rename.
-    tmp=$(mktemp aqua.yaml.XXXXXX)
+    tmp=$(mktemp .aqua/aqua.yaml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
-    sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc})@[^[:space:]]*#\1@{{ version }}#" aqua.yaml > "$tmp"
-    mv "$tmp" aqua.yaml
+    sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc})@[^[:space:]]*#\1@{{ version }}#" .aqua/aqua.yaml > "$tmp"
+    mv "$tmp" .aqua/aqua.yaml
     aqua update-checksum --prune      # new checksum in, replaced version's out
     aqua install                      # REAL install: a bad pin fails here, not at first use
 
@@ -158,7 +158,7 @@ update command="": (_banner "tools" "update")
             exit 0
         fi
     done
-    aqua update "{{ command }}"       # bump aqua.yaml to the latest release
+    aqua update "{{ command }}"       # bump .aqua/aqua.yaml to the latest release
     aqua update-checksum --prune      # new checksum in, replaced version's out
     aqua install                      # REAL install: a bad pin fails here, not at first use
 
@@ -188,12 +188,12 @@ remove pkg: (_banner "tools" "remove")
         rm -f "build/tools/${name}" "build/tools/${name}.exe"
         exit 0
     fi
-    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" aqua.yaml; then
-        echo "{{ pkg }} is not in aqua.yaml — nothing to remove." >&2
+    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" .aqua/aqua.yaml; then
+        echo "{{ pkg }} is not in .aqua/aqua.yaml — nothing to remove." >&2
         exit 1
     fi
     # See `set` for why mktemp gets an explicit sibling-path template.
-    tmp=$(mktemp aqua.yaml.XXXXXX)
+    tmp=$(mktemp .aqua/aqua.yaml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
     # Exact string compare on the parsed slug, not a regex (a dot would be a
     # wildcard, and escaping for awk is unportable: -v eats backslashes). The
@@ -212,7 +212,7 @@ remove pkg: (_banner "tools" "remove")
             }
             print
         }
-    ' aqua.yaml > "$tmp"
-    mv "$tmp" aqua.yaml
+    ' .aqua/aqua.yaml > "$tmp"
+    mv "$tmp" .aqua/aqua.yaml
     aqua remove "{{ pkg }}" || true   # uninstall the binary
     aqua update-checksum --prune      # drop the now-unused checksum

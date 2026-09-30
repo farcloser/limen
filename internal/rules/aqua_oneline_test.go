@@ -95,7 +95,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	}
 
 	files := compliantFiles()
-	files["aqua.yaml"] = manifest
+	files[".aqua/aqua.yaml"] = manifest
 	dir := writeRepo(t, files)
 
 	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); f.OK() ||
@@ -109,7 +109,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		t.Fatal("fix did not resolve the two-line pins")
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
 	out := string(data)
 
 	for _, want := range []string{
@@ -172,14 +172,14 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	manifest = strings.Replace(manifest, cliLine, "", 1) // now missing
 
 	files := compliantFiles()
-	files["aqua.yaml"] = manifest
+	files[".aqua/aqua.yaml"] = manifest
 	dir := writeRepo(t, files)
 
 	if !allResolvedOutcomes(outcomesFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "aqua")) {
 		t.Fatal("fix did not resolve the manifest")
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
 
 	out := string(data)
 	if !strings.Contains(out, goLine) ||

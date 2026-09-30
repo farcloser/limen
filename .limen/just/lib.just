@@ -20,7 +20,7 @@ _banner mod name:
 go_cgo := '${CGO_ENABLED:-${GO_CGO:-0}}'
 
 # Run CMD once per supported platform — every GOOS/GOARCH pair in the canonical
-# checksum.supported_envs of aqua.yaml (the list below mirrors it; extend them
+# checksum.supported_envs of .aqua/aqua.yaml (the list below mirrors it; extend them
 # together) — with CGO disabled. The Go build graph is selected by both axes:
 # a file built only on linux is invisible to a darwin run, and a file built
 # only on amd64 (an _amd64.go, an _amd64.s) is invisible to an arm64 one, so a

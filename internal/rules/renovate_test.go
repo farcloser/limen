@@ -255,9 +255,9 @@ func TestCanonicalPresetRef(t *testing.T) {
 	}
 
 	pinned := writeRepo(t, map[string]string{
-		"go.mod":        "module example.com/thing\n\ngo 1.26\n",
-		"aqua.yaml":     "packages:\n  - name: farcloser/limen@v1.2.3 # renovate: depName=farcloser/limen\n    registry: local\n",
-		"renovate.json": local,
+		"go.mod":          "module example.com/thing\n\ngo 1.26\n",
+		".aqua/aqua.yaml": "packages:\n  - name: farcloser/limen@v1.2.3 # renovate: depName=farcloser/limen\n    registry: local\n",
+		"renovate.json":   local,
 	})
 	if f := findingByRule(rules.Check(pinned, rules.DefaultPolicy()), "renovate"); f.OK() ||
 		!strings.Contains(f.Message, "github>farcloser/limen#v1.2.3") {
@@ -265,8 +265,8 @@ func TestCanonicalPresetRef(t *testing.T) {
 	}
 
 	unpinned := writeRepo(t, map[string]string{
-		"aqua.yaml":     "packages: []\n",
-		"renovate.json": `{"forkProcessing":"enabled","extends":["config:recommended"]}` + "\n",
+		".aqua/aqua.yaml": "packages: []\n",
+		"renovate.json":   `{"forkProcessing":"enabled","extends":["config:recommended"]}` + "\n",
 	})
 	if f := findingByRule(rules.Check(unpinned, rules.DefaultPolicy()), "renovate"); !f.OK() {
 		t.Errorf("no limen pin: nothing to enforce, got: %s", f.Message)
