@@ -187,7 +187,7 @@ reproduction path.
 
 ## Driving it: `just vm`
 
-The root `Justfile` wraps this whole loop in one recipe — `just vm <task>` runs
+The root `.justfile` wraps this whole loop in one recipe — `just vm <task>` runs
 any just task inside the VM against this same working tree, and streams the
 guest log back:
 
@@ -206,5 +206,5 @@ and no env vars are passed: qemu-ga's exec replaces the guest environment
 wholesale, which would strip `APPDATA` and break aqua. Two knobs, both
 environment variables: **`VM_NAME`** (default `Windows`) and **`VM_TIMEOUT`**
 seconds (default `1800`). This recipe is host-specific — macOS, UTM, a
-provisioned Windows VM — so it lives in the root `Justfile`, deliberately *not*
+provisioned Windows VM — so it lives in the root `.justfile`, deliberately *not*
 in the canonical baseline.

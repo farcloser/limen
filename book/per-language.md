@@ -40,7 +40,7 @@ baseline is defined once and lives in one place: this repository's own
 [`.limen/.shellcheckrc`](../.limen/.shellcheckrc), embedded into `limen` and exposed as
 `rules.CanonicalShellcheckrc`. **That file is the source of truth.** A repo may not add, remove,
 or reorder anything — extras fail the check, and `limen fix` overwrites a drifted file back to
-the canonical. (This is the same exact-match rule as the `.editorconfig`, the `Justfile`, and
+the canonical. (This is the same exact-match rule as the `.editorconfig`, the `.justfile`, and
 the `.limen/just/*.just` modules — only `.aqua/aqua.yaml` uses the subset, "contains the baseline"
 model, and `.gitignore` is merely seeded once when absent.)
 
@@ -107,7 +107,7 @@ Two deliberate exceptions, named because they cut against doctrine:
   itself is untouched.
 - **`brew audit` needs a tap identity.** brew addresses formulas by tap name, never by
   path, so the project declares which tap it is (`export LINT_HOMEBREW_TAP :=
-  'user/name'` in the root `Justfile`) and the audit recipe registers the working tree
+  'user/name'` in the root `.justfile`) and the audit recipe registers the working tree
   under that name for the duration of the run — a symlink, so the audit judges the
   working tree, not a stale clone. Audit flags that only make sense on CI (`--online`
   does network calls) go through `LINT_HOMEBREW_AUDIT_FLAGS`.
@@ -147,7 +147,7 @@ their own. And golangci-lint has no overlay — one configuration file, first fo
 repository used to carry its own hand-edited copy of the file, the copies drifted from the
 baseline and from each other, and a change to the lint policy could not be applied to any of
 them without a manual three-way merge, so it was not applied. The per-project ignores for
-go-licenses lived in an exported variable in the root `Justfile`, a hidden override.
+go-licenses lived in an exported variable in the root `.justfile`, a hidden override.
 
 The shape now is one baseline, one overlay, rendered at lint time:
 
