@@ -82,6 +82,14 @@ chapter; the procedure is limen's `skills/contribute`.
 
 - **Pinned means by digest.** Every image, action, and tool — in code, examples, and
   documentation alike, because examples are what gets copied.
+- **A linter finding is judged, not obeyed.** Fix it when the fix makes the code better;
+  when it does not, silence it inline, by its rule, saying why the code is right as it is.
+  Never restructure working code only to get under a linter: a split, a rename, a
+  constant earns its place on its own. A rule wrong for a whole class of code is raised
+  with limen for the baseline, or settled in the project's overlay, with the evidence —
+  and decided before anything is silenced, since an exemption added later leaves every
+  inline silence dead. See the book's
+  [judging a finding](https://github.com/farcloser/limen/blob/main/book/per-language.md#go--judging-a-finding).
 - **A linter finding is silenced by its rule, never by its linter:**
   `//revive:disable-next-line:<rule>`, `// #nosec G### -- reason`,
   `//nolint:staticcheck // SA####: reason`. Never `//nolint:revive`, `//nolint:gosec`, a
