@@ -83,9 +83,11 @@ func compliantFiles() map[string]string {
 		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
 		".github/workflows/security.yaml":             limen.CanonicalWorkflowSecurity,
-		// The seed, with its preset reference pinned to this manifest's limen
-		// version — what `limen fix` leaves behind (the renovate rule).
-		"renovate.json": rules.CanonicalRenovateFor(limen.CanonicalAquaYAML),
+		// The shared Renovate configuration, content-pinned, and the seed
+		// extending it by the repository's name — what `limen fix` leaves
+		// behind (the renovate rule).
+		".limen/renovate.json": limen.CanonicalRenovatePreset,
+		"renovate.json":        rules.CanonicalRenovateFor(testRepository),
 	}
 	// Every shared just module (.limen/*.just) must be present.
 	for _, m := range limen.JustModules() {

@@ -13,17 +13,28 @@ import (
 	"github.com/farcloser/limen/internal/rules"
 )
 
-const testIdentity = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
+const (
+	testIdentity = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
+	// testRepository is the "owner/name" the fixtures stand for, as the
+	// caller would resolve it from the origin remote.
+	testRepository = "example-org/thing"
+	// testPresetRef is the reference a repository named testRepository must
+	// extend: the shared configuration, read from itself by name.
+	testPresetRef = "local>example-org/thing//.limen/renovate"
+)
 
-// presetRefRE matches a reference to limen's preset, at any ref.
-var presetRefRE = regexp.MustCompile(`^(?:github|local)>farcloser/limen(?:#.*)?$`)
+// presetRefRE matches any reference to the shared configuration: the
+// in-repository form under any name, and the retired farcloser/limen preset.
+var presetRefRE = regexp.MustCompile(
+	`^(?:(?:github|local)>farcloser/limen|local>[^/]+/[^/]+//\.limen/renovate)(?:#.*)?$`,
+)
 
-// pinnedPresetRef is the reference every repository must carry: the preset at
-// the canonical manifest's limen version.
-func pinnedPresetRef(t *testing.T) string {
-	t.Helper()
+// withRepository is the default policy with the repository known.
+func withRepository() rules.Policy {
+	policy := rules.DefaultPolicy()
+	policy.Repository = testRepository
 
-	return "github>farcloser/limen#" + canonicalLimenVersion(t)
+	return policy
 }
 
 // renovateConfig reads the repository's renovate.json back as generic JSON.
@@ -69,11 +80,11 @@ func TestConfigRoundTrip(t *testing.T) {
 
 	files := compliantFiles()
 	// No forkProcessing, so fix has one key to set and must leave the rest as it found it.
-	files["renovate.json"] = `{"extends":["` + pinnedPresetRef(t) + `"],"prConcurrentLimit":10}` + "\n"
+	files["renovate.json"] = `{"extends":["` + testPresetRef + `"],"prConcurrentLimit":10}` + "\n"
 	root := writeRepo(t, files)
 
 	if o := renovateOutcome(
-		rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()}),
 	); o.Action != rules.ActionMerged {
 		t.Fatalf("fix: %s (%s), want merged", o.Action, o.Message)
 	}
@@ -81,7 +92,7 @@ func TestConfigRoundTrip(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(root, "renovate.json"))
 
 	out := string(data)
-	if !strings.Contains(out, pinnedPresetRef(t)) {
+	if !strings.Contains(out, testPresetRef) {
 		t.Errorf("the preset reference was escaped:\n%s", out)
 	}
 
@@ -90,36 +101,36 @@ func TestConfigRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSetPresetRef covers the shapes extends arrives in: absent, carrying an
-// outdated reference, carrying only unrelated presets, and already correct.
+// TestSetPresetRef covers the shapes extends arrives in: absent, carrying the
+// retired preset, carrying another name's reference (a rename, a fork), only
+// unrelated presets, and already correct.
 func TestSetPresetRef(t *testing.T) {
 	t.Parallel()
-
-	want := pinnedPresetRef(t)
 
 	for name, input := range map[string]string{
 		"absent":           `{"forkProcessing":"enabled"}`,
 		"no extends array": `{"forkProcessing":"enabled","extends":"github>farcloser/limen#v1.0.0"}`,
-		"outdated ref":     `{"forkProcessing":"enabled","extends":["github>farcloser/limen#v1.0.0","config:recommended"]}`,
-		"local ref":        `{"forkProcessing":"enabled","extends":["local>farcloser/limen"]}`,
+		"retired tagged":   `{"forkProcessing":"enabled","extends":["github>farcloser/limen#v1.0.0","config:recommended"]}`,
+		"retired local":    `{"forkProcessing":"enabled","extends":["local>farcloser/limen"]}`,
+		"renamed":          `{"forkProcessing":"enabled","extends":["local>example-org/old-name//.limen/renovate"]}`,
 		"only unrelated":   `{"forkProcessing":"enabled","extends":["config:recommended"]}`,
-		"already correct":  `{"forkProcessing":"enabled","extends":["` + want + `","config:recommended"]}`,
+		"already correct":  `{"forkProcessing":"enabled","extends":["` + testPresetRef + `","config:recommended"]}`,
 		"duplicated stale": `{"forkProcessing":"enabled","extends":["github>farcloser/limen#v1.0.0","github>farcloser/limen#v2.0.0"]}`,
 	} {
 		files := compliantFiles()
 		files["renovate.json"] = input + "\n"
 		root := writeRepo(t, files)
 
-		rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()})
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()})
 
 		refs := stringsAt(renovateConfig(t, root), "extends")
-		if !slices.Contains(refs, want) {
-			t.Errorf("%s: extends = %v, want %s", name, refs, want)
+		if !slices.Contains(refs, testPresetRef) {
+			t.Errorf("%s: extends = %v, want %s", name, refs, testPresetRef)
 		}
 
 		// Unrelated presets survive, and the stale reference does not.
 		for _, ref := range refs {
-			if ref != want && presetRefRE.MatchString(ref) {
+			if ref != testPresetRef && presetRefRE.MatchString(ref) {
 				t.Errorf("%s: stale reference kept: %q", name, ref)
 			}
 		}
@@ -128,9 +139,50 @@ func TestSetPresetRef(t *testing.T) {
 			t.Errorf("%s: an unrelated preset was dropped: %v", name, refs)
 		}
 
-		if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); !f.OK() {
+		if f := findingByRule(rules.Check(root, withRepository()), "renovate"); !f.OK() {
 			t.Errorf("%s: after fix: %s", name, f.Message)
 		}
+	}
+}
+
+// TestPresetRefRepositoryUnknown: without an origin remote the name cannot be
+// known, so the reference is not enforced — except that the retired preset,
+// gone from every later limen release, fails check and leaves fix advisory.
+func TestPresetRefRepositoryUnknown(t *testing.T) {
+	t.Parallel()
+
+	for name, extends := range map[string]string{
+		"another name": "local>other-org/other//.limen/renovate",
+		"none":         "config:recommended",
+	} {
+		files := compliantFiles()
+		files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + extends + `"]}` + "\n"
+		root := writeRepo(t, files)
+
+		if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); !f.OK() {
+			t.Errorf("%s: an unknown repository must not fail: %s", name, f.Message)
+		}
+
+		if o := renovateOutcome(
+			rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		); o.Action != rules.ActionNone {
+			t.Errorf("%s: fix: %s (%s), want none", name, o.Action, o.Message)
+		}
+	}
+
+	files := compliantFiles()
+	files["renovate.json"] = `{"forkProcessing":"enabled","extends":["github>farcloser/limen#v1.0.0"]}` + "\n"
+	root := writeRepo(t, files)
+
+	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); f.OK() ||
+		!strings.Contains(f.Message, "retired") {
+		t.Errorf("the retired preset must fail naming it, got: %+v", f)
+	}
+
+	if o := renovateOutcome(
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+	); o.Action != rules.ActionAdvisory {
+		t.Errorf("fix on the retired preset, repository unknown: %s (%s), want advisory", o.Action, o.Message)
 	}
 }
 
@@ -139,11 +191,11 @@ func TestSetPresetRef(t *testing.T) {
 func TestAddIgnoredAuthor(t *testing.T) {
 	t.Parallel()
 
-	known := rules.DefaultPolicy()
+	known := withRepository()
 	known.UpdateAppIdentity = testIdentity
 
 	files := compliantFiles()
-	files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + pinnedPresetRef(t) + `"],` +
+	files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + testPresetRef + `"],` +
 		`"gitIgnoredAuthors":["a@example.com","b@example.com"]}` + "\n"
 	root := writeRepo(t, files)
 
@@ -170,7 +222,7 @@ func TestAddIgnoredAuthor(t *testing.T) {
 	}
 
 	// Absent key: the array is created.
-	files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + pinnedPresetRef(t) + `"]}` + "\n"
+	files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + testPresetRef + `"]}` + "\n"
 	root = writeRepo(t, files)
 
 	rules.Fix(t.Context(), root, rules.FixOptions{Policy: known})
@@ -195,8 +247,10 @@ func TestCanonicalSeed(t *testing.T) {
 		t.Errorf("the seed must set forkProcessing to %q", "enabled")
 	}
 
-	if !slices.Contains(stringsAt(cfg, "extends"), "local>farcloser/limen") {
-		t.Errorf("the seed must extend %q", "local>farcloser/limen")
+	// The seed cannot know the name of the repository it lands in: the
+	// reference is the rule's to write.
+	if _, has := cfg["extends"]; has {
+		t.Error("the seed must carry no extends: the reference names the repository")
 	}
 
 	// The seed carries what every repository needs and nothing of limen's
@@ -209,6 +263,50 @@ func TestCanonicalSeed(t *testing.T) {
 	if got := stringsAt(cfg, "gitIgnoredAuthors"); !slices.Equal(got,
 		[]string{"41898282+github-actions[bot]@users.noreply.github.com"}) {
 		t.Errorf("the seed's gitIgnoredAuthors = %v, want the github-actions identity alone", got)
+	}
+
+	if rules.CanonicalRenovateFor("") != limen.CanonicalRenovate {
+		t.Error("an unknown repository must get the seed as is")
+	}
+
+	if !strings.Contains(rules.CanonicalRenovateFor(testRepository), testPresetRef) {
+		t.Errorf("the seed for %s does not carry %s", testRepository, testPresetRef)
+	}
+}
+
+// TestSharedConfigPinned: .limen/renovate.json is content-pinned — missing or
+// drifted fails check, and fix writes the canonical file back.
+func TestSharedConfigPinned(t *testing.T) {
+	t.Parallel()
+
+	for name, content := range map[string]*string{
+		"missing": nil,
+		"drifted": new(`{"minimumReleaseAge":"0 days"}` + "\n"),
+	} {
+		files := compliantFiles()
+		delete(files, ".limen/renovate.json")
+
+		if content != nil {
+			files[".limen/renovate.json"] = *content
+		}
+
+		root := writeRepo(t, files)
+
+		if f := findingByRule(rules.Check(root, withRepository()), "renovate"); f.OK() ||
+			!strings.Contains(f.Message, ".limen/renovate.json") {
+			t.Errorf("%s: check must fail naming .limen/renovate.json, got: %+v", name, f)
+		}
+
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()})
+
+		data, err := os.ReadFile(filepath.Join(root, ".limen", "renovate.json"))
+		if err != nil || string(data) != limen.CanonicalRenovatePreset {
+			t.Errorf("%s: fix must write the canonical file (err %v)", name, err)
+		}
+
+		if f := findingByRule(rules.Check(root, withRepository()), "renovate"); !f.OK() {
+			t.Errorf("%s: after fix: %s", name, f.Message)
+		}
 	}
 }
 
@@ -228,12 +326,12 @@ func TestSupersededConfig(t *testing.T) {
 			files[name] = "{ extends: ['config:recommended'] }\n"
 			root := writeRepo(t, files)
 
-			finding := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate")
+			finding := findingByRule(rules.Check(root, withRepository()), "renovate")
 			if finding.OK() || finding.Path != name || !strings.Contains(finding.Message, "dead config") {
 				t.Errorf("check must fail naming %s, got: %+v", name, finding)
 			}
 
-			outcome := renovateOutcome(rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}))
+			outcome := renovateOutcome(rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()}))
 			if outcome.Action != rules.ActionAdvisory || !strings.Contains(outcome.Message, name) {
 				t.Errorf("fix must end advisory naming %s, got: %s (%s)", name, outcome.Action, outcome.Message)
 			}
@@ -245,74 +343,22 @@ func TestSupersededConfig(t *testing.T) {
 	}
 }
 
-// TestCanonicalPresetRef: limen extends its own default branch; every other
-// repository extends the preset at its pinned limen version; a repository
-// without a limen pin has nothing to pin to.
-func TestCanonicalPresetRef(t *testing.T) {
-	t.Parallel()
-
-	const local = `{"forkProcessing":"enabled","extends":["local>farcloser/limen"]}` + "\n"
-
-	self := writeRepo(t, map[string]string{
-		"go.mod":        "module github.com/farcloser/limen\n\ngo 1.26\n",
-		"renovate.json": local,
-	})
-	if f := findingByRule(rules.Check(self, rules.DefaultPolicy()), "renovate"); !f.OK() {
-		t.Errorf("limen itself extends its own default branch: %s", f.Message)
-	}
-
-	pinned := writeRepo(t, map[string]string{
-		"go.mod":          "module example.com/thing\n\ngo 1.26\n",
-		".aqua/aqua.yaml": "packages:\n  - name: farcloser/limen@v1.2.3 # renovate: depName=farcloser/limen\n    registry: local\n",
-		"renovate.json":   local,
-	})
-	if f := findingByRule(rules.Check(pinned, rules.DefaultPolicy()), "renovate"); f.OK() ||
-		!strings.Contains(f.Message, "github>farcloser/limen#v1.2.3") {
-		t.Errorf("a pinned repository must be asked for the preset at its pin, got: %+v", f)
-	}
-
-	unpinned := writeRepo(t, map[string]string{
-		".aqua/aqua.yaml": "packages: []\n",
-		"renovate.json":   `{"forkProcessing":"enabled","extends":["config:recommended"]}` + "\n",
-	})
-	if f := findingByRule(rules.Check(unpinned, rules.DefaultPolicy()), "renovate"); !f.OK() {
-		t.Errorf("no limen pin: nothing to enforce, got: %s", f.Message)
-	}
-
-	if !strings.Contains(rules.CanonicalRenovateFor(limen.CanonicalAquaYAML), pinnedPresetRef(t)) {
-		t.Errorf("the canonical manifest's renovate.json does not carry %s", pinnedPresetRef(t))
-	}
-}
-
-// canonicalLimenVersion reads the farcloser/limen pin off the canonical
-// manifest, the way the fixtures derive every version they need.
-func canonicalLimenVersion(t *testing.T) string {
-	t.Helper()
-
-	m := regexp.MustCompile(`(?m)^ {2}- name: farcloser/limen@(\S+)`).FindStringSubmatch(limen.CanonicalAquaYAML)
-	if m == nil {
-		t.Fatal("the canonical aqua.yaml carries no farcloser/limen pin")
-	}
-
-	return m[1]
-}
-
 // TestRenovateRule: check and fix agree, the identity is enforced only when
 // known, and fix's edit is exactly what check wants.
 func TestRenovateRule(t *testing.T) {
 	t.Parallel()
 
-	known := rules.DefaultPolicy()
+	known := withRepository()
 	known.UpdateAppIdentity = testIdentity
 
 	// Unknown identity: pass / none, file untouched.
 	root := writeRepo(t, compliantFiles())
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); !f.OK() {
+	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); !f.OK() {
 		t.Errorf("unknown identity must not fail: %s", f.Message)
 	}
 
 	if o := renovateOutcome(
-		rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()}),
 	); o.Action != rules.ActionNone {
 		t.Errorf("unknown identity: %s, want none", o.Action)
 	}
@@ -349,7 +395,7 @@ func TestRenovateRule(t *testing.T) {
 	// formatting diff into every branch the checksum workflow ran on.
 	handEdited := compliantFiles()
 	handEdited["renovate.json"] = `{"gitIgnoredAuthors":["` + testIdentity + `"],"forkProcessing":"enabled",` +
-		`"extends":["github>farcloser/limen#` + canonicalLimenVersion(t) + `"],"description":["\u2014 by hand"]}` + "\n"
+		`"extends":["` + testPresetRef + `"],"description":["— by hand"]}` + "\n"
 	root = writeRepo(t, handEdited)
 
 	if f := findingByRule(rules.Check(root, known), "renovate"); !f.OK() {
@@ -367,24 +413,20 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("fix must leave a value-identical file untouched, got:\n%s", got)
 	}
 
-	// The seed as seeded — extending limen's own default branch — is not what
-	// a repository must carry: check names the pinned reference, fix sets it
-	// (identity known or not), and the file is otherwise untouched.
+	// The seed as seeded carries no reference: with the repository known,
+	// check names it, fix sets it (identity known or not), and the file is
+	// otherwise untouched.
 	seeded := compliantFiles()
 	seeded["renovate.json"] = limen.CanonicalRenovate
 	root = writeRepo(t, seeded)
 
-	want := "github>farcloser/limen#" + canonicalLimenVersion(t)
-	if f := findingByRule(
-		rules.Check(root, rules.DefaultPolicy()),
-		"renovate",
-	); f.OK() ||
-		!strings.Contains(f.Message, want) {
-		t.Errorf("the raw seed must fail naming %s, got: %+v", want, f)
+	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); f.OK() ||
+		!strings.Contains(f.Message, testPresetRef) {
+		t.Errorf("the raw seed must fail naming %s, got: %+v", testPresetRef, f)
 	}
 
 	if o := renovateOutcome(
-		rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()}),
 	); o.Action != rules.ActionMerged {
 		t.Errorf("fix on the raw seed: %s (%s), want merged", o.Action, o.Message)
 	}
@@ -394,32 +436,32 @@ func TestRenovateRule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(data) != rules.CanonicalRenovateFor(limen.CanonicalAquaYAML) {
-		t.Errorf("fix must pin the reference and change nothing else:\n%s", data)
+	if string(data) != rules.CanonicalRenovateFor(testRepository) {
+		t.Errorf("fix must set the reference and change nothing else:\n%s", data)
 	}
 
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); !f.OK() {
-		t.Errorf("after pinning: %s", f.Message)
+	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); !f.OK() {
+		t.Errorf("after setting the reference: %s", f.Message)
 	}
 
 	// forkProcessing is not inheritable: a config that drops it fails, and
 	// fix puts it back. This is the whole reason the file is renovate.json.
 	noForks := compliantFiles()
-	noForks["renovate.json"] = `{"extends":["` + want + `"]}` + "\n"
+	noForks["renovate.json"] = `{"extends":["` + testPresetRef + `"]}` + "\n"
 	root = writeRepo(t, noForks)
 
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); f.OK() ||
+	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); f.OK() ||
 		!strings.Contains(f.Message, "forkProcessing") {
 		t.Errorf("a config without %s must fail naming it, got: %+v", "forkProcessing", f)
 	}
 
 	if o := renovateOutcome(
-		rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()}),
 	); o.Action != rules.ActionMerged {
 		t.Errorf("fix must set %s: %s (%s)", "forkProcessing", o.Action, o.Message)
 	}
 
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); !f.OK() {
+	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); !f.OK() {
 		t.Errorf("after setting %s: %s", "forkProcessing", f.Message)
 	}
 
@@ -485,13 +527,13 @@ func ignoredAuthorsOf(t *testing.T, root string) []string {
 	return cfg.GitIgnoredAuthors
 }
 
-// renovateOutcome is the renovate rule's outcome among outcomes, or a
-// failure when the rule was not remediated at all.
+// renovateOutcome is the renovate rule's outcome for renovate.json among
+// outcomes, or a failure when the file was not remediated at all.
 func renovateOutcome(outcomes []rules.Outcome) rules.Outcome {
 	const rule = "renovate"
 
 	for _, o := range outcomes {
-		if o.Rule == rule {
+		if o.Rule == rule && o.Path == "renovate.json" {
 			return o
 		}
 	}
