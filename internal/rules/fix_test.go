@@ -122,7 +122,7 @@ func TestFixJustfileRegimes(t *testing.T) {
 		t.Fatalf("missing Justfile: %s, want created", o.Action)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(seeded, "Justfile"))
+	data, _ := os.ReadFile(filepath.Join(seeded, ".justfile"))
 	if !strings.Contains(string(data), rules.CanonicalJustfileImport) || !strings.HasSuffix(string(data), "\n") {
 		t.Errorf("seed must carry the import and end in a newline, got: %q", data)
 	}
@@ -130,12 +130,12 @@ func TestFixJustfileRegimes(t *testing.T) {
 	// Present without the import -> merged: import appended, content kept.
 	ownRecipes := "greet:\n\t@echo hand-rolled\n"
 
-	merged := writeRepo(t, map[string]string{"Justfile": ownRecipes})
+	merged := writeRepo(t, map[string]string{".justfile": ownRecipes})
 	if o := justfileOutcome(rules.Fix(t.Context(), merged, bootstrapOpts())); o.Action != rules.ActionMerged {
 		t.Fatalf("Justfile without the import: %s, want merged", o.Action)
 	}
 
-	data, _ = os.ReadFile(filepath.Join(merged, "Justfile"))
+	data, _ = os.ReadFile(filepath.Join(merged, ".justfile"))
 	if !strings.Contains(string(data), "hand-rolled") ||
 		!strings.Contains(string(data), rules.CanonicalJustfileImport) {
 		t.Errorf("merge must keep the project's recipes and add the import, got: %q", data)
@@ -146,13 +146,13 @@ func TestFixJustfileRegimes(t *testing.T) {
 	// and the rule passes after.
 	withImport := rules.CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n"
 
-	noSecurity := writeRepo(t, map[string]string{"Justfile": withImport})
+	noSecurity := writeRepo(t, map[string]string{".justfile": withImport})
 	if o := justfileOutcome(rules.Fix(t.Context(), noSecurity, bootstrapOpts())); o.Action != rules.ActionMerged ||
 		!strings.Contains(o.Message, "security: do::security::default") {
 		t.Fatalf("Justfile without the security recipe: %s (%s), want merged appending it", o.Action, o.Message)
 	}
 
-	data, _ = os.ReadFile(filepath.Join(noSecurity, "Justfile"))
+	data, _ = os.ReadFile(filepath.Join(noSecurity, ".justfile"))
 	if !strings.HasPrefix(string(data), withImport) ||
 		!strings.Contains(string(data), "\nsecurity: do::security::default\n") {
 		t.Errorf("the recipe must be appended after the project's content, got: %q", data)
@@ -161,14 +161,44 @@ func TestFixJustfileRegimes(t *testing.T) {
 	// Present with the import and the recipe -> the project's own, untouched.
 	own := withImport + "\nsecurity: do::security::default\n"
 
-	untouched := writeRepo(t, map[string]string{"Justfile": own})
+	untouched := writeRepo(t, map[string]string{".justfile": own})
 	if o := justfileOutcome(rules.Fix(t.Context(), untouched, bootstrapOpts())); o.Action != rules.ActionNone {
 		t.Fatalf("compliant Justfile: %s, want none", o.Action)
 	}
 
-	data, _ = os.ReadFile(filepath.Join(untouched, "Justfile"))
+	data, _ = os.ReadFile(filepath.Join(untouched, ".justfile"))
 	if string(data) != own {
 		t.Error("a compliant Justfile must never be modified")
+	}
+}
+
+// TestJustfileFormerName: a root Justfile under its former name fails the
+// rule naming it, and fix renames it to .justfile, content kept; with both
+// present (which just refuses), fix leaves them for a hand merge.
+func TestJustfileFormerName(t *testing.T) {
+	t.Parallel()
+
+	own := rules.CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n\nsecurity: do::security::default\n"
+
+	files := map[string]string{"Justfile": own}
+	dir := writeRepo(t, files)
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "justfile"); f.OK() || f.Path != "Justfile" {
+		t.Fatalf("a root Justfile should fail naming it: %v %q %s", f.OK(), f.Path, f.Message)
+	}
+
+	if o := justfileOutcome(rules.Fix(t.Context(), dir, bootstrapOpts())); o.Action != rules.ActionMerged ||
+		!strings.Contains(o.Message, "renamed Justfile to .justfile") {
+		t.Fatalf("fix: %s (%s), want merged with the rename", o.Action, o.Message)
+	}
+
+	if data, err := os.ReadFile(filepath.Join(dir, ".justfile")); err != nil || string(data) != own {
+		t.Fatalf(".justfile after the rename: %q, %v", data, err)
+	}
+
+	both := writeRepo(t, map[string]string{"Justfile": own, ".justfile": own})
+	if o := justfileOutcome(rules.Fix(t.Context(), both, bootstrapOpts())); o.Action != rules.ActionAdvisory {
+		t.Errorf("both names present: %s (%s), want advisory", o.Action, o.Message)
 	}
 }
 

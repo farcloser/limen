@@ -163,7 +163,7 @@ var CanonicalOverrideExample string
 
 // justFS embeds the whole .limen/ directory. The *.just files directly under
 // .limen/just/ are the shared, content-pinned modules (see JustModules); a
-// project's own recipes live in the root Justfile, which is neither embedded
+// project's own recipes live in the root .justfile, which is neither embedded
 // nor pinned. The directory also holds non-module config that lives here to
 // declutter the repo root (.shellcheckrc, .yamlfmt, aqua-registry.yaml) —
 // those are embedded by name above and are not just modules, so JustModules
@@ -200,7 +200,7 @@ func loadJustModules() []JustModule {
 
 	for _, entry := range entries {
 		// Only *.just files are shared modules; other files here (config parked to
-		// declutter the root) are not. A project's own recipes live in the root Justfile.
+		// declutter the root) are not. A project's own recipes live in the root .justfile.
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".just") {
 			continue
 		}

@@ -1,5 +1,5 @@
 # limen-lint-go's own carve-outs, for the lint this repository runs on the
-# module (the root Justfile's lint-lint-go): the one dependency depguard must
+# module (the root .justfile's lint-lint-go): the one dependency depguard must
 # let through, and the test tolerances the root module's overlay states.
 golangci:
   linters:

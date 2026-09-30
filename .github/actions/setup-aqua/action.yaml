@@ -21,7 +21,7 @@ runs:
         AQUA_VERSION: v2.63.0
       run: |
         # Pin the root explicitly: aqua's Windows build defaults it to
-        # %LOCALAPPDATA%, the installer and the Justfile compute ~/.local/share,
+        # %LOCALAPPDATA%, the installer and the .justfile compute ~/.local/share,
         # and the layers must agree.
         AQUA_ROOT_DIR="${AQUA_ROOT_DIR:-$HOME/.local/share/aquaproj-aqua}"
         # Native form on windows: git-bash's POSIX $HOME (/c/Users/…) is misread

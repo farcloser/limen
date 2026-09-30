@@ -40,7 +40,7 @@ func (a Action) resolved() bool {
 	return a == ActionNone || a == ActionCreated || a == ActionOverwrote || a == ActionMerged
 }
 
-// Outcome is the result of remediating one rule (or, for the Justfile rule, one
+// Outcome is the result of remediating one rule (or, for the .justfile rule, one
 // file of a multi-file rule).
 type Outcome struct {
 	Rule    string `json:"rule"`
@@ -68,7 +68,7 @@ type FixOptions struct {
 }
 
 // Fix remediates the repository rooted at root and returns one outcome per rule
-// (the Justfile rule may contribute several). It is the single engine behind
+// (the .justfile rule may contribute several). It is the single engine behind
 // both `limen fix` (an existing repo) and `limen bootstrap` (an empty one): the
 // only difference is that bootstrap sets up the directory and passes a License,
 // so on an empty tree every rule takes its "create" path. The rule order matches
@@ -269,7 +269,7 @@ func remediateGitignore(root string) Outcome {
 	return Outcome{Rule: rule, Action: ActionCreated, Path: name, Message: "wrote canonical .gitignore"}
 }
 
-// justfileSeed is the root Justfile a fresh repository starts from: the
+// justfileSeed is the root .justfile a fresh repository starts from: the
 // canonical import plus guidance — the file is the project's own from then
 // on. The seed must end in a newline (just --fmt rejects a file without one —
 // `just do lint just` runs that check on every just file, this one included)
@@ -286,7 +286,7 @@ const justfileSeed = "# This file is the project's own.\n" +
 	"test:\n" +
 	securityRecipeLine + "\n"
 
-// remediateJustfile handles the task runner's two regimes: the root Justfile
+// remediateJustfile handles the task runner's two regimes: the root .justfile
 // is the project's own — seeded when missing, and when present only ever
 // MERGED (the canonical import line is appended if absent; nothing is
 // overwritten) — while every shared just module is content-pinned exactly.
@@ -304,22 +304,40 @@ func remediateJustfile(root string) []Outcome {
 	return out
 }
 
-// remediateRootJustfile seeds a missing root Justfile, appends to one that
-// lacks them the canonical import and the `security` recipe the security
-// workflow runs, and otherwise leaves the file alone — it is the project's
-// own.
+// remediateRootJustfile renames a root justfile from its former name to
+// .justfile, seeds a missing one, appends to one that lacks them the
+// canonical import and the `security` recipe the security workflow runs, and
+// otherwise leaves the file alone — it is the project's own.
 func remediateRootJustfile(root, rule string) Outcome {
-	name, found := findFirst(root, justfileName, "justfile", ".justfile")
-	if !found {
-		if err := writeFile(root, justfileName, justfileSeed); err != nil {
-			return failed(rule, justfileName, err)
+	name := justfileName
+
+	var done []string
+
+	if legacy, found := findFirstFold(root, legacyJustfileName); found {
+		if exists(filepath.Join(root, name)) {
+			return Outcome{
+				Rule:    rule,
+				Action:  ActionAdvisory,
+				Path:    legacy,
+				Message: "both " + legacy + " and " + name + " exist, which just refuses: merge the first into the second and delete it",
+			}
+		}
+
+		if err := os.Rename(filepath.Join(root, legacy), filepath.Join(root, name)); err != nil {
+			return failed(rule, legacy, err)
+		}
+
+		done = append(done, "renamed "+legacy+" to "+name)
+	} else if !exists(filepath.Join(root, name)) {
+		if err := writeFile(root, name, justfileSeed); err != nil {
+			return failed(rule, name, err)
 		}
 
 		return Outcome{
 			Rule:    rule,
 			Action:  ActionCreated,
-			Path:    justfileName,
-			Message: "seeded the root Justfile (the content is the project's own from here)",
+			Path:    name,
+			Message: "seeded the root " + name + " (the content is the project's own from here)",
 		}
 	}
 
@@ -329,8 +347,6 @@ func remediateRootJustfile(root, rule string) Outcome {
 	}
 
 	content := string(data)
-
-	var done []string
 
 	if !containsLine(content, CanonicalJustfileImport) {
 		content = ensureTrailingNewline(content) +

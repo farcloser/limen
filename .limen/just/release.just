@@ -1,8 +1,8 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# Project recipes live in the root Justfile, below the shared-baseline import.
+# Project recipes live in the root .justfile, below the shared-baseline import.
 
-# Imported flat into the canonical Justfile — not a module — so the recipe can
+# Imported flat into the canonical .justfile — not a module — so the recipe can
 # take arguments (`just do release v1.2.3`; a module invocation would parse the
 # tag as a recipe path). Deliberately no settings and no _lib import here: an
 # import's settings would apply to the whole importing module.

@@ -19,7 +19,7 @@ Linting Go takes many tools, each configured its own way. golangci-lint reads a
 320-line YAML file; go-licenses takes its allowed list and its ignores as flags;
 vet, govulncheck and deadcode take flags of their own. Nothing ties them
 together, so a project's lint policy is spread across a config file, recipe
-arguments, and environment variables exported from the root Justfile.
+arguments, and environment variables exported from the root .justfile.
 
 And golangci-lint, the largest of them, has no overlay: one configuration file,
 first found wins, no `extends`, `include`, or merge, and no way to say "the shared
@@ -33,7 +33,7 @@ ossein-kernel is missing a gofumpt improvement (`clothe-returns`,
 
 go-licenses shows the same pattern, smaller: the allowed-license list is
 hardcoded in the recipe, and three repositories export `LINT_GO_LICENSES_FLAGS`
-from their root Justfile to add `--ignore` entries. A hidden per-project override.
+from their root .justfile to add `--ignore` entries. A hidden per-project override.
 
 ### Why golangci-lint cannot do it, verified
 
@@ -238,7 +238,7 @@ cheap on purpose; visibility is the counterweight.
 | `.release-go.yaml`, `.limen/aqua-registry.yaml` | A second build into the same archive; the limen entry lists both binaries, with an override keeping earlier releases installable. |
 | limen `internal/rules/lintgo.go` | Seed `.lint-go.yaml` once; a root golangci-lint configuration fails check and is an advisory on fix. Go modules only. |
 | `.limen/just/lib.just`, `lint-go.just`, `fix-go.just` | `_golangci-config` checks the floor and renders; `code` runs golangci-lint with `-c build/golangci.yml`, `licenses` splices `$(limen-lint-go flags licenses)`; `LINT_GO_LICENSES_FLAGS` retired. |
-| limen's root `Justfile` (limen's own, not shared) | Builds the driver from the tree before the lanes run (`LIMEN_LINT_GO_BIN`), lints and tests the nested module. |
+| limen's root `.justfile` (limen's own, not shared) | Builds the driver from the tree before the lanes run (`LIMEN_LINT_GO_BIN`), lints and tests the nested module. |
 | Enrolled repositories | The limen bump brings the binary; `limen fix` seeds `.lint-go.yaml`; the project moves its carve-outs into the overlay by hand and deletes `.golangci.yml` and its `LINT_GO_LICENSES_FLAGS` export. Owners' work, one PR each. |
 | `book/` | per-language.md, tooling.md, mandatory-files.md, recipes.md. |
 
@@ -278,4 +278,4 @@ cheap on purpose; visibility is the counterweight.
 - golangci-lint#1141 (open), #4895 and #6621 (closed as duplicates), discussion
   3954.
 - `diff` of limen's `.golangci.yml` against every enrolled repository's copy;
-  `grep LINT_GO_LICENSES_FLAGS` across root Justfiles.
+  `grep LINT_GO_LICENSES_FLAGS` across root .justfiles.

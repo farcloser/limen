@@ -1,6 +1,6 @@
 # DO NOT EDIT MANUALLY.
 # This file provides shared tasks common to all projects and managed by limen.
-# Project recipes live in the root Justfile, below the shared-baseline import.
+# Project recipes live in the root .justfile, below the shared-baseline import.
 
 set working-directory := '../..'
 
@@ -34,7 +34,7 @@ style: (_banner "fix homebrew" "style")
         exit 0
     fi
     {{ _require_brew }}
-    # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical Justfile (main.just).
+    # shellcheck disable=SC2154 # BREW_BIN is exported by the canonical .justfile (main.just).
     "$BREW_BIN" style --fix "${files[@]}"
 
 # Homebrew exists on macOS only: everywhere else this recipe degrades to a
