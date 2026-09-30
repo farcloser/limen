@@ -212,14 +212,6 @@ links: (_banner "lint" "links")
 commits range="": (_banner "lint" "commits") (_go-tool "git-validation" "github.com/vbatts/git-validation")
     #!/usr/bin/env bash
     set -euo pipefail
-    # .allowed_signers arms signature DISPLAY for humans; none of the rules
-    # below verify signatures. Best-effort: a sandboxed session may
-    # write-protect .git/config, and that must not fail the lint.
-    if [ -f .allowed_signers ]; then
-        git config --unset-all gpg.ssh.allowedSignersFile 2>/dev/null || true
-        git config --add gpg.ssh.allowedSignersFile .allowed_signers 2>/dev/null ||
-            echo "note: .git/config not writable; signature display not armed" >&2
-    fi
     range="{{ range }}"
     if [ -z "$range" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
         # GitHub Actions pull request: validate against the PR's actual base
@@ -246,6 +238,37 @@ commits range="": (_banner "lint" "commits") (_go-tool "git-validation" "github.
         build/tools/git-validation -run DCO,short-subject,dangling-whitespace -range "$range"
     else
         build/tools/git-validation -run DCO,short-subject,dangling-whitespace
+    fi
+    # .lint-signers lists everyone who authors here, email and key, in git's
+    # allowed-signers format: every commit in the range must be signed by a
+    # key it lists for the committer (%G? is G). Not a security boundary,
+    # since a pull request can edit the file: a forcing function, so an author
+    # lists themselves. Skipped: merges, which author nothing (GitHub makes
+    # the pull request checkout's and the update-branch button's), and a
+    # GitHub App's commits (Renovate, the checksum-update App), authored by
+    # the bot and committed by GitHub. A human's commit that GitHub made, a
+    # web-UI edit, fails. The file is passed per command: nothing is written
+    # to .git/config. Without a range (no upstream) there is nothing to check.
+    if [ -f .lint-signers ] && [ -n "$range" ]; then
+        commits=$(git log --no-merges --format='%H%x09%ae%x09%ce' "$range")
+        unsigned=0
+        while IFS=$'\t' read -r sha author committer; do
+            [ -n "$sha" ] || continue
+            case "$author" in
+                *'[bot]@users.noreply.github.com') [ "$committer" = noreply@github.com ] && continue ;;
+            esac
+            status=$(git -c gpg.ssh.allowedSignersFile=.lint-signers log -1 --format=%G? "$sha" 2>/dev/null || true)
+            if [ "$status" != G ]; then
+                echo "$(git log -1 --format='%h %s' "$sha"): not signed by a key .lint-signers lists for ${committer}" >&2
+                unsigned=1
+            fi
+        done <<< "$commits"
+        if [ "$unsigned" -ne 0 ]; then
+            echo "sign your commits, and list yourself in .lint-signers: <email> namespaces=\"git\" <public key>" >&2
+            exit 1
+        fi
+    elif [ ! -f .lint-signers ]; then
+        echo "warning: no .lint-signers: commit signatures are not checked — list every author, <email> namespaces=\"git\" <public key>" >&2
     fi
 
 # Verify aqua-checksums.json is in sync with aqua.yaml — the working tree's

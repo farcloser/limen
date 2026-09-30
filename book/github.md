@@ -307,12 +307,21 @@ The decided merge model, enforced by both the repository settings and the
   `Signed-off-by` trailer is present, and a trailer is a line of text anyone
   can type under any name. A signature binds the commit to a key. We require
   both — the trailer is the legal assertion, the signature is the proof — and
-  we sign with SSH keys backed by hardware tokens (see `.allowed_signers`,
-  which arms local verification but enforces nothing on its own).
+  we sign with SSH keys backed by hardware tokens.
+- **Every author is listed.** `.lint-signers` names everyone who authors
+  commits in the repository, email and SSH key, in git's allowed-signers
+  format, and `lint commits` fails a commit in its range that is not signed by
+  a key listed for its committer. It is not a security boundary — a pull
+  request can edit the file, and the check with it — but a forcing function:
+  an author lists themselves, in their first pull request. Merges author
+  nothing and are skipped, as are GitHub Apps' commits (Renovate, the
+  checksum-update App), which GitHub signs. A commit made in the web UI is
+  signed by GitHub too, and fails: editing in a browser is not a way to
+  contribute here.
 - **Squash commits default to the pull request title and body**, merged
   branches are deleted automatically, auto-merge is allowed (Renovate merges
-  green PRs), and web-UI commits require sign-off — DCO holds even for edits
-  made in a browser.
+  green PRs), and web-UI commits require sign-off — belt and braces for a path
+  `lint commits` already refuses.
 
 Requiring signatures has two sharp edges worth knowing before they bite:
 
@@ -499,7 +508,7 @@ day; the sequence below is what avoids them.
    the bot (no admin), and the fixer reports them as advisories rather than
    inventing them. Set them right after the first push; the `description` and
    `topics` checks go green.
-7. **`.allowed_signers` is the human's enrollment commit.** `limen bootstrap`
+7. **`.lint-signers` is the human's enrollment commit.** `limen bootstrap`
    does not seed it: the human's key is theirs to publish. It lands with the
    first push, with the bot's key beside it (see [agents](./agents.md)), or is
    copied from a sibling repository at the owner's instruction.

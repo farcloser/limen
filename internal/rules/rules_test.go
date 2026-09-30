@@ -431,6 +431,51 @@ func TestCheckGitRepoRequired(t *testing.T) {
 	}
 }
 
+// TestGitFlagsStraySigners: the signers file under its former name,
+// .allowed_signers, fails the git rule naming it, and fix renames it to
+// .lint-signers, content intact; with both present fix leaves them for a
+// hand merge.
+func TestGitFlagsStraySigners(t *testing.T) {
+	t.Parallel()
+
+	const signers = "me@example.com namespaces=\"git\" ssh-ed25519 AAAA\n"
+
+	files := compliantFiles()
+	files[".allowed_signers"] = signers
+	dir := writeRepo(t, files)
+
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "git")
+	if f.OK() || !strings.Contains(f.Message, ".lint-signers") {
+		t.Fatalf("a stray .allowed_signers should fail naming .lint-signers: %v %s", f.OK(), f.Message)
+	}
+
+	if o := outcomeFor(
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		"git",
+	); o.Action != rules.ActionMerged {
+		t.Fatalf("fix: %s (%s), want merged", o.Action, o.Message)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".lint-signers"))
+	if err != nil || string(data) != signers {
+		t.Fatalf(".lint-signers after the rename: %q, %v", data, err)
+	}
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "git"); !f.OK() {
+		t.Errorf("git rule after the rename: %s", f.Message)
+	}
+
+	files[".lint-signers"] = signers
+	both := writeRepo(t, files)
+
+	if o := outcomeFor(
+		rules.Fix(t.Context(), both, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		"git",
+	); o.Action != rules.ActionAdvisory {
+		t.Errorf("fix with both files: %s (%s), want advisory", o.Action, o.Message)
+	}
+}
+
 func TestGitRepoAcceptsGitFile(t *testing.T) {
 	t.Parallel()
 

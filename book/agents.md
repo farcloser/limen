@@ -117,9 +117,10 @@ so it loads whichever repository a session starts in.
 
 ## Per repository
 
-The bot's public key belongs in `.allowed_signers`, next to the human's, so
-`just lint`'s commit check verifies its signatures locally exactly as it
-verifies the human's. That file is the same in every repository and hand-copied
+The bot's public key belongs in `.lint-signers`, next to the human's, so
+`just lint`'s commit check verifies its signatures exactly as it verifies the
+human's, and fails a commit neither key signed. That file is the same in every
+repository and hand-copied
 today; it is the shape of a canonical, content-pinned file, and making it one is
 the planned next step — until then, the script prints the line to add.
 

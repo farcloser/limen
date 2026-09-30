@@ -221,12 +221,26 @@ func checkGit(root string) Finding {
 	const rule = "git"
 	// .git is a directory in a normal clone and a file ("gitdir: …") in a
 	// worktree or submodule; either means the project root is a git repository.
-	if _, err := os.Stat(filepath.Join(root, gitDirName)); err == nil {
-		return Finding{Rule: rule, Status: StatusOK, Path: ".git", Message: "git repository"}
+	if _, err := os.Stat(filepath.Join(root, gitDirName)); err != nil {
+		return fail(rule, "", "not a git repository (no .git in project root)")
 	}
 
-	return fail(rule, "", "not a git repository (no .git in project root)")
+	if exists(filepath.Join(root, straySignersFile)) {
+		return fail(rule, straySignersFile, straySignersFile+straySignersMessage)
+	}
+
+	return Finding{Rule: rule, Status: StatusOK, Path: ".git", Message: "git repository"}
 }
+
+// signersFile lists everyone who authors commits here, email and key, in
+// git's allowed-signers format; `lint commits` reads it. straySignersFile
+// is its former name, which nothing reads anymore.
+const (
+	signersFile         = ".lint-signers"
+	straySignersFile    = ".allowed_signers"
+	straySignersMessage = " is the former name of " + signersFile + ", which `lint commits` reads" +
+		" — rename it (limen fix does)"
+)
 
 func checkReadme(root string) Finding {
 	const rule = "readme"
