@@ -169,6 +169,23 @@ write each revision under a fresh filename (or wait out the cache).
   Do not thread shell code through those layers — write a bash script FILE
   on the share and invoke bash with only the script path.
 
+## windows-11-arm in CI: exit code 4 or 127, no output
+
+A shebang recipe that dies on the windows-11-arm leg with `exit code 4` or
+`exit code 127` and nothing on stderr did not fail a command: bash itself died.
+Git for Windows pairs its native arm64 `git` with an x86_64 MSYS2 userland, so
+every recipe's bash runs under emulation there, and the runtime turns a raw death
+of bash into an exit code from the Windows status it ended with — 4, 127 or 2816
+for the same crash. (bash's own 127, "command not found", always prints.) The
+known trigger is a process substitution (`< <(git ls-files …)`): the shared
+recipes carry none, and a recipe added to them must not either. A pipeline is
+fine.
+
+The full record — mechanism, calibration, the reproduction on this VM, a CI
+canary, and what to watch for before the rule can be lifted — is
+[design/WINDOWS-ARM-EXIT-4.md](../design/WINDOWS-ARM-EXIT-4.md). The rule lifts
+when Git for Windows ships its MSYS2 runtime native on arm64.
+
 ## Verifying the loop end to end
 
 One round trip proves the whole chain (agent alive, share mounted, read-write,
