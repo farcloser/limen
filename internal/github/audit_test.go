@@ -826,7 +826,7 @@ func TestLoadOverrides(t *testing.T) {
 		t.Errorf("missing file: overrides %v, err %v", missing, err)
 	}
 
-	write("# comment\n\ngithub:\n  wiki: hosts the runbook\n  pages: marketing site\n")
+	write("# comment\n\nwiki: hosts the runbook\npages: marketing site\n")
 
 	overrides, err := github.LoadOverrides(dir)
 	if err != nil {
@@ -837,46 +837,51 @@ func TestLoadOverrides(t *testing.T) {
 		t.Errorf("parsed overrides: %v", overrides)
 	}
 
-	write("github:\n  nonsense-check: because\n")
+	write("nonsense-check: because\n")
 
 	if _, err = github.LoadOverrides(dir); err == nil {
 		t.Error("unknown check identifier must fail the file")
 	}
 
-	write("github:\n  wiki:\n")
+	write("wiki:\n")
 
 	if _, err = github.LoadOverrides(dir); err == nil {
 		t.Error("an exception without a reason must fail the file")
 	}
 
 	// Inline comments are YAML-legal and editors highlight them as such: the
-	// parser must treat them as commentary, on headers and entries alike —
-	// and a comment-only reason is still no reason.
-	write("github:  # settings-audit exceptions\n  wiki: hosts the runbook  # revisit\n")
+	// parser must treat them as commentary — and a comment-only reason is
+	// still no reason.
+	write("wiki: hosts the runbook  # revisit\n")
 
 	overrides, err = github.LoadOverrides(dir)
 	if err != nil || overrides["wiki"] != "hosts the runbook" {
 		t.Errorf("inline comments: overrides %v, err %v", overrides, err)
 	}
 
-	write("github:\n  wiki: # todo write a reason\n")
+	write("wiki: # todo write a reason\n")
 
 	if _, err := github.LoadOverrides(dir); err == nil {
 		t.Error("a comment-only reason must fail the file")
 	}
 
-	// Entries need a section: the pre-consolidation flat format must fail
-	// loudly, not silently exempt nothing.
-	write("wiki: hosts the runbook\n")
+	// The former sectioned format must fail loudly, not silently exempt
+	// nothing.
+	write("github:\n  wiki: hosts the runbook\n")
 
-	if _, err := github.LoadOverrides(dir); err == nil {
-		t.Error("a sectionless entry must fail the file")
+	if _, err := github.LoadOverrides(dir); err == nil || !strings.Contains(err.Error(), "github:") {
+		t.Errorf("a github: section must fail the file naming it, got %v", err)
 	}
 
-	write("gitlab:\n  wiki: hosts the runbook\n")
+	// The former file name, alone: its exceptions must not vanish silently.
+	former := t.TempDir()
+	if err := os.WriteFile(filepath.Join(former, github.FormerOverridePath),
+		[]byte("github:\n  wiki: hosts the runbook\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-	if _, err := github.LoadOverrides(dir); err == nil {
-		t.Error("an unknown section must fail the file")
+	if _, err := github.LoadOverrides(former); err == nil || !strings.Contains(err.Error(), github.OverridePath) {
+		t.Errorf("the former file name must fail naming %s, got %v", github.OverridePath, err)
 	}
 }
 

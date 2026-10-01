@@ -385,7 +385,7 @@ func (a *auditor) auditOrgAdmins() {
 			// re-verified on every run, and it is the only entry in the
 			// override file that keeps enforcing after it is written.
 			Message: "organization owners: " + roster +
-				" — declare them in " + OverridePath + " under `github:` as `" + checkOrgAdmins +
+				" — declare them in " + OverridePath + " as `" + checkOrgAdmins +
 				": <reason naming every owner login>`. The reason is parsed, not just recorded:" +
 				" an owner it does not name raises this again",
 		})
@@ -843,7 +843,7 @@ const renovateAppSlug = "renovate"
 // action SHAs in the workflows — silently stops moving. Installing a GitHub
 // App is a browser-only consent flow (there is no API for it), so the finding
 // carries no fix. A self-hosted Renovate is a legitimate exemption: declare it
-// in limen.yaml.
+// in .lint-github.yaml.
 func (a *auditor) auditOrgInstalledApps() {
 	installations, outcome := listPages[orgAppInstallation](
 		a.ctx,
@@ -887,7 +887,7 @@ func (a *auditor) auditOrgInstalledApps() {
 			" and the checksum-refresh workflow in every repository do nothing without it, and no pin"+
 			" ever moves. Install it at https://github.com/apps/renovate/installations/new (choose"+
 			" this organization, all repositories) — GitHub offers no API for app installation, so"+
-			" limen cannot fix this. A self-hosted Renovate is an exemption to declare in limen.yaml",
+			" limen cannot fix this. A self-hosted Renovate is an exemption to declare in "+OverridePath,
 		nil)
 }
 

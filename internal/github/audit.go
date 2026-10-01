@@ -235,7 +235,7 @@ func (a *auditor) flag(check string, status Status, current, desired, message st
 			Check:   check,
 			Status:  StatusOK,
 			Current: current,
-			Message: "exempted by limen.yaml: " + a.overrides[check],
+			Message: "exempted by " + OverridePath + ": " + a.overrides[check],
 		})
 
 		return

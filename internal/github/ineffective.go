@@ -15,14 +15,14 @@ const (
 	planFree          = "free"
 	ineffectivePrefix = "the fix applied without error, but GitHub left the setting unchanged: "
 	planGateHint      = " — a feature GitHub gates by plan on this target (a private repository in a Free" +
-		" organization, typically): change the visibility or the plan, or declare the exception in limen.yaml"
+		" organization, typically): change the visibility or the plan, or declare the exception in " + OverridePath
 )
 
 // autoMergeUnavailableMessage is the auto-merge finding when the write is
 // known up front to be ignored, so none is planned.
 const autoMergeUnavailableMessage = "auto-merge must be allowed (Renovate merges green PRs) and cannot be " +
 	"enabled here — a private repository in a Free organization: GitHub accepts the write and ignores it, " +
-	"so none is planned. Make the repository public, upgrade the plan, or declare the exception in limen.yaml"
+	"so none is planned. Make the repository public, upgrade the plan, or declare the exception in " + OverridePath
 
 // MarkIneffective rewrites, in place, the failing findings among the checks
 // whose change applied without error: a check that was repaired and still
@@ -83,5 +83,5 @@ func autoMergeFailMessage(settings repoSettings) string {
 	}
 
 	return base + " — on a private repository GitHub gates this by plan, and a Free organization accepts the" +
-		" write and ignores it: make the repository public, upgrade the plan, or declare the exception in limen.yaml"
+		" write and ignores it: make the repository public, upgrade the plan, or declare the exception in " + OverridePath
 }

@@ -22,7 +22,7 @@ func TestMarkIneffective(t *testing.T) {
 
 	const prefix = "the fix applied without error, but GitHub left the setting unchanged: "
 
-	if got := findings[0].Message; !strings.HasPrefix(got, prefix) || !strings.Contains(got, "limen.yaml") {
+	if got := findings[0].Message; !strings.HasPrefix(got, prefix) || !strings.Contains(got, github.OverridePath) {
 		t.Errorf("applied and still failing: %q, want the ineffective verdict with the ways out", got)
 	}
 

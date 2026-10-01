@@ -34,31 +34,103 @@ The authoritative catalog of checks is the tool itself — run
 `limen github check` and read the findings; each names its check identifier.
 The book carries the reasoning, not a copy of the list.
 
-## Exceptions — `limen.yaml`
+## Exceptions — `.lint-github.yaml`
 
 A repository that genuinely needs to deviate declares it, in a committed file
 at the repository root, with a reason — the escape hatch lives in review,
 never in a UI click:
 
 ```yaml
-# limen.yaml — project-owned declarations: where and why this repository
-# deviates from what limen enforces. Delta only, one reason each.
-github:
-  wiki: hosts the operations runbook
-  org-admins: apostasie is the sole owner
+# .lint-github.yaml — where and why this repository deviates from what
+# `limen github check` enforces. Delta only, one reason each.
+wiki: hosts the operations runbook
+org-admins: apostasie is the sole owner
 ```
 
-The file is a **delta**: exceptions only, never a full settings copy — and it
-is sectioned by concern: `github:` carries the settings-audit entries, and
-future limen judgments get their own sections here rather than their own
-files. Each entry is `check-identifier: reason`. An exempted check reports ok,
-visibly carrying the reason; an unknown section, an unknown identifier, or a
-missing reason fails the file itself.
+The file is a **delta**: exceptions only, never a full settings copy. Each
+entry is `check-identifier: reason`. An exempted check reports ok, visibly
+carrying the reason; an unknown identifier or a missing reason fails the file
+itself. It is named for its lane like the other project-owned carve-outs
+(`.lint-go.yaml`, `.lint-links.toml`, `.lint-signers`): one file per check,
+read by that check alone. Its former name, `limen.yaml`, held the same
+entries under a `github:` section, meant to gather every limen judgment in
+one file; the judgments grew their own files instead. The audit refuses to
+run while `limen.yaml` is present, rather than read no exceptions, and
+`limen fix` converts it.
 
-Every declarable identifier, grouped and commented, lives in
-[`limen-example.yaml`](../limen-example.yaml) — seeded by `bootstrap` for
-reference (never by `fix`, and no check requires it); a test pins it to the
-live check catalog so it cannot drift.
+Every declarable identifier, grouped (a test pins this list to the live check
+catalog, so it cannot drift):
+
+```yaml
+# .lint-github.yaml — every declarable identifier
+# --- Repository: security posture ---
+# secret-scanning: <reason>
+# secret-scanning-push-protection: <reason>
+# dependabot-alerts: <reason>
+# dependabot-security-updates: <reason>  # baseline is OFF (Renovate is the one bot); exempt to keep Dependabot's own PRs
+# private-vulnerability-reporting: <reason>
+# code-scanning: <reason>  # OPT-IN: listing this REQUIRES CodeQL default setup (a stricter floor), never exempts
+# --- Repository: Actions hardening ---
+# actions-workflow-permissions: <reason>
+# actions-approve-pull-requests: <reason>
+# actions-allowed: <reason>
+# actions-fork-pr-approval: <reason>
+# actions-access-level: <reason>
+# --- Repository: merge & branch workflow ---
+# merge-methods: <reason>
+# squash-commit-defaults: <reason>
+# delete-branch-on-merge: <reason>
+# auto-merge: <reason>
+# update-branch-suggestions: <reason>
+# default-branch: <reason>
+# web-commit-signoff: <reason>
+# --- Repository: rulesets ---
+# ruleset-default-branch: <reason>
+# ruleset-version-tags: <reason>
+# --- Repository: hygiene & surface ---
+# description: <reason>
+# topics: <reason>
+# issues: <reason>
+# wiki: <reason>
+# projects: <reason>
+# discussions: <reason>
+# forking: <reason>
+# pages: <reason>
+# outside-collaborators: <reason>
+# webhooks: <reason>
+# deploy-keys: <reason>
+# agents-team: <reason>
+# renovate-processing: <reason>  # self-hosted Renovate without a dashboard, say
+# --- Organization (only read by `limen github … -org <name>`) ---
+# org-two-factor-requirement: <reason>
+# org-default-repository-permission: <reason>
+# org-members-create-public-repositories: <reason>
+# org-members-fork-private-repositories: <reason>
+# org-members-change-repository-visibility: <reason>
+# org-members-delete-repositories: <reason>
+# org-members-create-public-pages: <reason>
+# org-web-commit-signoff: <reason>
+# org-admins: <owner logins>  # the roster declaration: every actual owner login must appear here
+# org-actions-enabled-repositories: <reason>
+# org-actions-allowed: <reason>
+# org-actions-sha-pinning: <reason>
+# org-actions-workflow-permissions: <reason>
+# org-actions-approve-pull-requests: <reason>
+# org-actions-fork-pr-approval: <reason>
+# org-actions-self-hosted-runners: <reason>
+# org-code-security-configuration: <reason>
+# org-dependabot-security-updates: <reason>  # Dependabot raises the fix PRs here, not Renovate, say
+# org-installed-apps: <reason>
+# org-renovate-installed: <reason>  # Renovate is self-hosted from <repo>, say
+# org-webhooks: <reason>
+# org-actions-secrets: <reason>
+# org-teams: <reason>
+# org-agents-team: <reason>
+# org-personal-access-tokens: <reason>
+# org-profile-description: <reason>
+# org-community-health-repo: <reason>
+# org-community-health-content: <reason>
+```
 
 A small set of checks works in the opposite direction — **opt-in**: listing
 them declares a *stricter* floor for this repository, never an exemption.
@@ -406,11 +478,10 @@ canonically the org's `.github` repository). The catalog:
   the 2FA requirement is advisory by nature: enabling it evicts members
   without 2FA, a human decision.
 - **The owner roster** is a deliberate standing advisory until you declare who
-  the owners are meant to be, in `limen.yaml`:
+  the owners are meant to be, in `.lint-github.yaml`:
 
   ```yaml
-  github:
-    org-admins: apostasie is the sole owner
+  org-admins: apostasie is the sole owner
   ```
 
   Despite living among the exceptions, this one is **not** an escape hatch. The
@@ -446,7 +517,7 @@ canonically the org's `.github` repository). The catalog:
   `.aqua/aqua.yaml`, action SHAs in the workflows) silently stops moving. A failing
   verdict, but never auto-fixed: installing a GitHub App is a browser-only
   consent flow with no API. A self-hosted Renovate is an exemption to declare
-  in `limen.yaml`.
+  in `.lint-github.yaml`.
 - **The org `.github` repository** — must exist, be public (GitHub silently
   ignores a private one as a fallback source), and carry the canonical
   community-health set: `SECURITY.md`, `CONTRIBUTING.md` (the DCO terms,
