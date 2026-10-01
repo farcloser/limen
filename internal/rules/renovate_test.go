@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -239,7 +240,7 @@ func TestCanonicalSeed(t *testing.T) {
 	t.Parallel()
 
 	var cfg map[string]any
-	if err := json.Unmarshal([]byte(limen.CanonicalRenovate), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(rules.CanonicalRenovateFor("")), &cfg); err != nil {
 		t.Fatalf("the canonical seed is not valid JSON: %v", err)
 	}
 
@@ -265,12 +266,59 @@ func TestCanonicalSeed(t *testing.T) {
 		t.Errorf("the seed's gitIgnoredAuthors = %v, want the github-actions identity alone", got)
 	}
 
-	if rules.CanonicalRenovateFor("") != limen.CanonicalRenovate {
-		t.Error("an unknown repository must get the seed as is")
-	}
-
 	if !strings.Contains(rules.CanonicalRenovateFor(testRepository), testPresetRef) {
 		t.Errorf("the seed for %s does not carry %s", testRepository, testPresetRef)
+	}
+}
+
+// TestOwnConfigIsTheSeed: limen's own renovate.json is the seed as `limen
+// fix` leaves it in limen — its reference and the org's App identity added —
+// plus the one manager only the preset's author needs, and its description
+// entry. Prose fixed in one and not the other fails here.
+func TestOwnConfigIsTheSeed(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files["renovate.json"] = rules.CanonicalRenovateFor("")
+	root := writeRepo(t, files)
+
+	policy := rules.DefaultPolicy()
+	policy.Repository = "farcloser/limen"
+	policy.UpdateAppIdentity = "300983632+limen-ci-farcloser[bot]@users.noreply.github.com"
+
+	rules.Fix(t.Context(), root, rules.FixOptions{Policy: policy})
+
+	want := renovateConfig(t, root)
+
+	own, err := os.ReadFile(filepath.Join("..", "..", "renovate.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(own, &got); err != nil {
+		t.Fatalf("limen's renovate.json is not valid JSON: %v", err)
+	}
+
+	delete(got, "customManagers")
+
+	description, isList := got["description"].([]any)
+	if !isList {
+		t.Fatal("limen's renovate.json carries no description array")
+	}
+
+	got["description"] = slices.DeleteFunc(slices.Clone(description), func(entry any) bool {
+		text, isString := entry.(string)
+
+		return isString && strings.HasPrefix(text, "customManagers:")
+	})
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(
+			"limen's renovate.json, its own manager aside, is not the seed as fix leaves it:\ngot  %v\nwant %v",
+			got,
+			want,
+		)
 	}
 }
 
@@ -417,7 +465,7 @@ func TestRenovateRule(t *testing.T) {
 	// check names it, fix sets it (identity known or not), and the file is
 	// otherwise untouched.
 	seeded := compliantFiles()
-	seeded["renovate.json"] = limen.CanonicalRenovate
+	seeded["renovate.json"] = rules.CanonicalRenovateFor("")
 	root = writeRepo(t, seeded)
 
 	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); f.OK() ||

@@ -141,6 +141,28 @@ func (cfg config) strings(key string) ([]string, bool) {
 	return out, true
 }
 
+// renovateSeed is the renovate.json a repository starts from, seeded once by
+// the workflows rule and the project's own afterwards. It carries no extends
+// and no org App identity: both name what the seed cannot know, and this rule
+// writes them. limen's own renovate.json is this seed as `limen fix` leaves
+// it in limen, plus the one manager only the preset's author needs — a test
+// holds the two together. Plain JSON, not JSON5: Renovate reads
+// forkProcessing only from this exact filename, so prose goes in the
+// `description` array the schema provides for it.
+const renovateSeed = `{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "The canonical Renovate configuration is .limen/renovate.json, content-pinned like the rest of .limen/, so a fix there reaches this repository with its next limen bump, in the bump's diff. extends reads it by this repository's own name (local>owner/name//.limen/renovate): Renovate refuses a relative reference in a repository's own config. The ` + "`renovate`" + ` rule writes that reference from the origin remote and rewrites it after a rename or a fork. Everything below is the project's own — overrides and additions go here, next to the reference.",
+    "forkProcessing: Renovate skips forked repositories by default under an all-repositories App installation, and it skips them before reading any config beyond this file — so the setting cannot live in the shared preset, and cannot live in a renovate.json5 either: only the onboarding config file name, renovate.json, is read through the platform API at that point. Every repository that is a GitHub fork is silently never processed without it.",
+    "gitIgnoredAuthors: the update-aqua-checksum workflow pushes a fix-up commit onto Renovate's branches; without this, Renovate treats the branch as human-modified and stops rebasing it. The org's App identity is the org's, so the array stays here (the ` + "`renovate`" + ` rule maintains it) rather than in the preset."
+  ],
+  "forkProcessing": "enabled",
+  "gitIgnoredAuthors": [
+    "41898282+github-actions[bot]@users.noreply.github.com"
+  ]
+}
+`
+
 // CanonicalRenovateFor returns the seeded renovate.json as `limen fix` leaves
 // it in the named repository ("owner/name"): the seed extending the shared
 // configuration by that name. An unknown repository ("") gets the seed as is.
@@ -148,19 +170,19 @@ func (cfg config) strings(key string) ([]string, bool) {
 // the canonical files.
 func CanonicalRenovateFor(repository string) string {
 	if repository == "" {
-		return limen.CanonicalRenovate
+		return renovateSeed
 	}
 
-	cfg, err := parseConfig([]byte(limen.CanonicalRenovate))
+	cfg, err := parseConfig([]byte(renovateSeed))
 	if err != nil {
-		return limen.CanonicalRenovate
+		return renovateSeed
 	}
 
 	cfg.setPresetRef(selfPresetRef(repository))
 
 	pinned, err := render(cfg)
 	if err != nil {
-		return limen.CanonicalRenovate
+		return renovateSeed
 	}
 
 	return pinned
