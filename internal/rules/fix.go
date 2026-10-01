@@ -413,7 +413,7 @@ func remediateWorkflows(root string) []Outcome {
 			"seeded the canonical CI workflow (the content is the project's own from here)"),
 		seedIfMissing(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity,
 			"seeded the canonical security workflow (the content is the project's own from here)"),
-		seedIfMissing(root, rule, pathRenovate, limen.CanonicalRenovate,
+		seedIfMissing(root, rule, pathRenovate, renovateSeed,
 			"seeded the canonical renovate config (the content is the project's own from here)"),
 	}
 

@@ -130,16 +130,6 @@ var CanonicalWorkflowSecurity string
 //go:embed .github/workflows/release.yaml
 var CanonicalWorkflowRelease string
 
-// CanonicalRenovate seeds renovate.json once; projects may tune cooldowns and
-// managers afterwards. Plain JSON, not JSON5: Renovate reads forkProcessing
-// only from this exact filename, and prose goes in the `description` array
-// the schema provides for it. The seed is its own file, not limen's
-// renovate.json: that one is limen's own config, with the managers and the
-// App identity of the preset's author, none of which belongs anywhere else.
-//
-//go:embed renovate-seed.json
-var CanonicalRenovate string
-
 // CanonicalRenovatePreset is the shared Renovate configuration, content-pinned
 // in every repository at .limen/renovate.json and extended from renovate.json.
 //
