@@ -68,13 +68,32 @@ approve itself, every participant knows it, and the review never says so. Mergin
 closing, tagging and dismissing alerts are @apostasie's; a review that needs one of
 them says which and why, in one line, and ends.
 
-## What a review contains
+## The shape of a review
 
-- What was verified, and where. Not the diff restated, not the reasoning narrated.
-- A finding names the defect, the evidence, and the owner; a note is marked
-  non-blocking and never requests a change on its own.
-- Full URLs for every pull request, run, commit or advisory. The person reads
-  from a terminal and clicks.
+A review is read from a terminal, often on a phone, usually by someone who already
+knows the change. It is short, and it says the verdict first. Every section opens
+with the same marker every time, so the eye finds it without reading:
+
+| Marker | Section | Rule |
+|---|---|---|
+| ✅ / ❌ | **Verdict**, the first line | `✅ Ready` or `❌ Not ready`, the head it was read at, and the one-line reason. Nothing above it. An open 🛑 or an open ⚠️ makes it ❌ until it is fixed or decided. |
+| 🛑 | **Blocking** | What must change before merge: the defect, the evidence, the fix. One bullet per item. |
+| ⚠️ | **Decision** | Not a defect: a call the owner or @apostasie has to make, with the options and the recommendation. |
+| 💡 | **Non-blocking** | A suggestion or a follow-up. Never requests a change on its own. |
+| 📝 | **Note** | A fact the reader should know and nothing to do about it here. |
+| 🔍 | **Verified** | What was checked and where, one line each, last. Not the diff restated, not the reasoning narrated. |
+
+A section with nothing in it is left out, markers are never reused for anything else,
+and a review that is only `✅ Ready` plus 🔍 is a complete review. The verdict carries
+the bottom line; the rest is evidence for the reader who wants it. One screen is the
+budget; a review that needs more is two findings that should have been one, or a
+design discussion that belongs in the conversation with the owner, raised here as
+one ⚠️ and settled there.
+
+What every section obeys:
+
+- A finding names the defect, the evidence, and the owner.
+- Full URLs for every pull request, run, commit or advisory. The reader clicks.
 - @apostasie by handle, in anything public.
 - Nothing the author already knows: a constraint shared by everyone, a rule the
   pull request body already states, a repeat of an earlier round.
