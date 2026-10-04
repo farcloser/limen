@@ -143,9 +143,11 @@ shared recipes:
   vanishing inside the substitution, which is an improvement on its own.
 - Pipelines, waited-for native children and command substitutions are fine.
 
-The record, with the mechanism, the calibration and the canary, is
-https://github.com/farcloser/limen/pull/192 and its design document. The rule lifts
-when Git for Windows ships its MSYS2 runtime native on arm64.
+The record, with the mechanism, the calibration, the reproduction on a guest
+([VM testing](./vm_testing.md)) and the canary, is
+[design/WINDOWS-ARM-EXIT-4.md](../design/WINDOWS-ARM-EXIT-4.md), from
+https://github.com/farcloser/limen/pull/192. The rule lifts when Git for Windows ships its
+MSYS2 runtime native on arm64.
 
 ## Reading an exit code
 
