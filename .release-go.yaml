@@ -13,12 +13,25 @@ project_name: limen
 # build/ must survive a release run.
 dist: build/release
 
+# The tools modules' go.mod files go into the binary, so `limen fix` seeds a
+# missing tool directive at the versions this release was tested with, never
+# at @latest (internal/toolpins). go:embed cannot reach them where they live,
+# each being a module of its own, so internal/toolpins/copy.sh copies them
+# first, into a directory whose contents are gitignored: the tree stays clean,
+# and a development build, which skips this, embeds none and refuses to seed.
+# A tools module missing here would ship a release that refuses too, so the
+# copy fails loud.
+before:
+  hooks:
+    - sh internal/toolpins/copy.sh
+
 # Twin of the `release` recipe in .limen/just/build-go.just — the developer-facing
 # builder. A flag change here must land there too (and vice versa); the
 # intended differences are: the version stamp source ({{ .Version }} here,
 # `git describe` there — identical on a release tag), mod_timestamp
-# (reproducibility is a shipped-artifact concern), and the target matrix
-# (releases cross-compile, dev builds are native).
+# (reproducibility is a shipped-artifact concern), the target matrix
+# (releases cross-compile, dev builds are native), and the toolpins stamp
+# (only a release carries tool pins).
 builds:
   - main: ./cmd/limen
     binary: limen
@@ -35,8 +48,11 @@ builds:
     tags:
       - netgo
       - osusergo
+    # The toolpins stamp marks a binary built here: only it reads the go.mod
+    # copies the before hook embedded, so a development build made after a
+    # local dry run, which leaves the copies in place, embeds them unread.
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - -s -w -X main.version={{ .Version }} -X github.com/farcloser/limen/internal/toolpins.stamp=release
     # Exactly the platforms .aqua/aqua.yaml lists under checksum.supported_envs.
     targets:
       - darwin_arm64

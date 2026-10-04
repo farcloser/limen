@@ -116,6 +116,85 @@ var aquaGoPin = regexp.MustCompile(
 	`(?m)^\s*-\s*name:\s*['"]?golang/go@go(\S+?)['"]?\s*(#.*)?$`,
 )
 
+// ToolPins are the module versions limen's own tools modules require, read
+// from their go.mod files: what fix seeds a missing tool directive at, so a
+// seeded tool is the version this limen release was tested with. Each tools
+// module resolves on its own, so an isolated tool's versions are kept apart
+// from the shared module's. The zero value is a development build's: it pins
+// nothing, and fix refuses to seed.
+type ToolPins struct {
+	shared   map[string]string
+	isolated map[string]map[string]string
+}
+
+// NewToolPins parses tools/go.mod (shared) and each tools/<name>/go.mod
+// (isolated, keyed by name) into the versions they require.
+func NewToolPins(shared string, isolated map[string]string) ToolPins {
+	pins := ToolPins{shared: goModRequires(shared), isolated: map[string]map[string]string{}}
+	for name, gomod := range isolated {
+		pins.isolated[name] = goModRequires(gomod)
+	}
+
+	return pins
+}
+
+// version is the version pinned for pkg in the shared tools module, or "".
+func (p ToolPins) version(pkg string) string { return moduleVersion(p.shared, pkg) }
+
+// isolatedVersion is the version pinned for pkg in tool name's own module,
+// or "".
+func (p ToolPins) isolatedVersion(name, pkg string) string {
+	return moduleVersion(p.isolated[name], pkg)
+}
+
+// moduleVersion finds the module that provides pkg — the longest required
+// module path that is pkg or a prefix of it at a path boundary — and returns
+// its version, or "".
+func moduleVersion(requires map[string]string, pkg string) string {
+	best, version := "", ""
+
+	for module, v := range requires {
+		if (pkg == module || strings.HasPrefix(pkg, module+slash)) && len(module) > len(best) {
+			best, version = module, v
+		}
+	}
+
+	return version
+}
+
+// goModRequires parses the require directives of a go.mod, one-line and
+// block form, comments stripped: module path to version.
+func goModRequires(gomod string) map[string]string {
+	requires := map[string]string{}
+	inBlock := false
+
+	for raw := range strings.SplitSeq(gomod, "\n") {
+		line := raw
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+
+		fields := strings.Fields(line)
+
+		switch {
+		case len(fields) == 0:
+			continue
+		case inBlock && fields[0] == ")":
+			inBlock = false
+		case inBlock && len(fields) == 2:
+			requires[fields[0]] = fields[1]
+		case fields[0] == "require" && len(fields) == 2 && fields[1] == "(":
+			inBlock = true
+		case fields[0] == "require" && len(fields) == 3:
+			requires[fields[1]] = fields[2]
+		default:
+			// any other directive
+		}
+	}
+
+	return requires
+}
+
 // requiredGoTools lists the tool packages a repository must declare: the
 // everywhere set, plus the analyzers when the root carries a go.mod (rootMod
 // is its text, nil when there is none). The aqua rule's retired set is built
@@ -374,14 +453,15 @@ func stripGoModToolDirectives(gomod string) string {
 // project's go.mod (when there is one) carry none: it writes a bare
 // tools/go.mod when there is none (module path <root>/tools and the root's
 // go directive in a Go repository; `tools` and the aqua-pinned go elsewhere),
-// adds the missing directives there with `go get -tool` at the latest version
-// (the resolved version is then pinned, exactly as `just do tools add` pins
-// an aqua tool at its latest, and Renovate bumps it from there) followed by
-// `go mod tidy`, and strips any tool directive out of the root go.mod, tidying
-// it too. The go steps need the pinned go on PATH and the network — when
-// either is unavailable the rule ends as an advisory carrying the exact
-// command to run by hand.
-func remediateGoTools(ctx context.Context, root string) Outcome {
+// adds the missing directives there with `go get -tool` at the versions this
+// limen's own tools modules pin (pins; never @latest, which would make the
+// seeded version depend on the day fix ran) followed by `go mod tidy`, and
+// strips any tool directive out of the root go.mod, tidying it too. Renovate
+// bumps the seeded versions from there. A development build carries no pins
+// and ends as an advisory instead of seeding. The go steps need the pinned go
+// on PATH and the network — when either is unavailable the rule ends as an
+// advisory carrying the exact command to run by hand.
+func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 	rootMod := rootGoMod(root)
 
 	var done []string
@@ -424,8 +504,7 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 	toolsRoot := filepath.Join(root, goToolsDir)
 
 	if len(missing) > 0 {
-		step, advisory := goToolsGet(ctx, toolsRoot, missing, "latest", missingGoModToolsMessage(missing),
-			"added tool directive(s) for ", " (go -C tools get -tool, then go -C tools mod tidy)")
+		step, advisory := addPinnedGoTools(ctx, toolsRoot, pins, missing)
 		if advisory != nil {
 			return *advisory
 		}
@@ -434,7 +513,7 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 	}
 
 	if len(retired) > 0 {
-		step, advisory := goToolsGet(ctx, toolsRoot, retired, "none", retiredGoModToolsMessage(retired),
+		step, advisory := goToolsGet(ctx, toolsRoot, atVersion(retired, "none"), retiredGoModToolsMessage(retired),
 			"removed retired tool directive(s) for ", " (go -C tools get -tool <pkg>@none, then go -C tools mod tidy)")
 		if advisory != nil {
 			return *advisory
@@ -443,7 +522,7 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 		done = append(done, step)
 	}
 
-	steps, advisory := seedIsolatedGoTools(ctx, root, rootMod)
+	steps, advisory := seedIsolatedGoTools(ctx, root, rootMod, pins)
 	if advisory != nil {
 		return *advisory
 	}
@@ -459,7 +538,7 @@ func remediateGoTools(ctx context.Context, root string) Outcome {
 // seedIsolatedGoTools seeds every isolated tool module a Go repository lacks
 // (none is asked of a repository without a root go.mod): the steps done, or
 // the advisory that stopped it.
-func seedIsolatedGoTools(ctx context.Context, root string, rootMod []byte) ([]string, *Outcome) {
+func seedIsolatedGoTools(ctx context.Context, root string, rootMod []byte, pins ToolPins) ([]string, *Outcome) {
 	if rootMod == nil {
 		return nil, nil
 	}
@@ -467,7 +546,7 @@ func seedIsolatedGoTools(ctx context.Context, root string, rootMod []byte) ([]st
 	var done []string
 
 	for _, name := range missingIsolatedGoTools(root) {
-		if outcome := remediateIsolatedGoTool(ctx, root, rootMod, name); outcome != nil {
+		if outcome := remediateIsolatedGoTool(ctx, root, rootMod, name, pins); outcome != nil {
 			return nil, outcome
 		}
 
@@ -502,20 +581,18 @@ func moveStrayGoTools(ctx context.Context, root string, rootMod []byte) (string,
 	return "moved tool directive(s) for " + strings.Join(stray, ", ") + " out of " + goModFile, nil
 }
 
-// goToolsGet moves the directives for pkgs to version in the tools module —
-// "latest" adds them, "none" removes them — then tidies. The step done reads
-// prefix, the packages, suffix; when a go step fails the advisory carries
-// failure (the check's wording) and the command to run by hand.
+// goToolsGet moves the tool directives in the tools module to specs
+// (`pkg@version` adds or moves one, `pkg@none` removes it), then tidies. The
+// step done reads prefix, the specs, suffix; when a go step fails the
+// advisory carries failure (the check's wording) and the command to run by
+// hand.
 func goToolsGet(
 	ctx context.Context,
 	toolsRoot string,
-	pkgs []string,
-	version, failure, prefix, suffix string,
+	specs []string,
+	failure, prefix, suffix string,
 ) (string, *Outcome) {
-	getArgs := []string{goGetVerb, goToolFlag}
-	for _, pkg := range pkgs {
-		getArgs = append(getArgs, pkg+"@"+version)
-	}
+	getArgs := append([]string{goGetVerb, goToolFlag}, specs...)
 
 	if out := goGetThenTidy(ctx, toolsRoot, getArgs); out != "" {
 		advisory := goToolsAdvisory(goToolsModFile, failure+"; "+out, getArgs)
@@ -523,14 +600,77 @@ func goToolsGet(
 		return "", &advisory
 	}
 
-	return prefix + strings.Join(pkgs, listSeparator) + suffix, nil
+	return prefix + strings.Join(specs, listSeparator) + suffix, nil
+}
+
+// addPinnedGoTools adds the missing directives to the tools module at the
+// versions pins carry for them, then tidies: the step done, or the advisory
+// when pins carry nothing for one of them or a go step failed.
+func addPinnedGoTools(ctx context.Context, toolsRoot string, pins ToolPins, missing []string) (string, *Outcome) {
+	specs, unpinned := pinnedSpecs(pins, missing)
+	if unpinned != "" {
+		advisory := unpinnedGoToolAdvisory(goToolsModFile, missingGoModToolsMessage(missing), unpinned)
+
+		return "", &advisory
+	}
+
+	return goToolsGet(ctx, toolsRoot, specs, missingGoModToolsMessage(missing),
+		"added tool directive(s) for ", " at this limen's pins (go -C tools get -tool, then go -C tools mod tidy)")
+}
+
+// pinnedSpecs are pkgs as `go get` specs at the versions pins carry for them;
+// unpinned names the first package pins carry nothing for, and specs is then
+// nil.
+func pinnedSpecs(pins ToolPins, pkgs []string) (specs []string, unpinned string) {
+	for _, pkg := range pkgs {
+		version := pins.version(pkg)
+		if version == "" {
+			return nil, pkg
+		}
+
+		specs = append(specs, pkg+"@"+version)
+	}
+
+	return specs, ""
+}
+
+// atVersion are pkgs as `go get` specs all at version.
+func atVersion(pkgs []string, version string) []string {
+	specs := make([]string, 0, len(pkgs))
+	for _, pkg := range pkgs {
+		specs = append(specs, pkg+"@"+version)
+	}
+
+	return specs
+}
+
+// unpinnedGoToolAdvisory is the outcome when this limen pins no version for
+// pkg: a development build, whose tools go.mod files were never embedded.
+// Seeding at @latest instead would make the version depend on the day fix ran.
+func unpinnedGoToolAdvisory(path, failure, pkg string) Outcome {
+	return Outcome{
+		Rule:   ruleGoTools,
+		Action: ActionAdvisory,
+		Path:   path,
+		Message: failure + "; this limen pins no version for " + pkg +
+			" (a development build embeds no tool pins): run a released limen, or add the directive by hand" +
+			" at the version limen's own tools module requires",
+	}
 }
 
 // remediateIsolatedGoTool seeds one isolated tool module and pins its
-// directive at the latest release; nil on success, the advisory otherwise.
-func remediateIsolatedGoTool(ctx context.Context, root string, rootMod []byte, name string) *Outcome {
+// directive at the version this limen's own module for it requires; nil on
+// success, the advisory otherwise.
+func remediateIsolatedGoTool(ctx context.Context, root string, rootMod []byte, name string, pins ToolPins) *Outcome {
 	modFile := isolatedGoModFile(name)
 	pkg := isolatedGoTools[name]
+
+	version := pins.isolatedVersion(name, pkg)
+	if version == "" {
+		advisory := unpinnedGoToolAdvisory(modFile, isolatedGoToolsMessage([]string{name}), pkg)
+
+		return &advisory
+	}
 
 	if _, err := readRepoFile(root, modFile); err != nil {
 		seed := bareGoMod(string(rootMod), aquaGoDirective(root), goToolsDir+slash+name,
@@ -543,7 +683,7 @@ func remediateIsolatedGoTool(ctx context.Context, root string, rootMod []byte, n
 		}
 	}
 
-	getArgs := []string{goGetVerb, goToolFlag, pkg + "@latest"}
+	getArgs := []string{goGetVerb, goToolFlag, pkg + "@" + version}
 	if out := goGetThenTidy(ctx, filepath.Join(root, goToolsDir, name), getArgs); out != "" {
 		advisory := goToolsAdvisory(modFile, isolatedGoToolsMessage([]string{name})+"; "+out, getArgs)
 

@@ -1,0 +1,4 @@
+# Filled by the release's goreleaser hook (.release-go.yaml), never committed:
+# a development build embeds none of it. See internal/toolpins.
+*
+!.gitignore

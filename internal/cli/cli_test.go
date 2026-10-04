@@ -107,7 +107,12 @@ func stubDir(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		aqua += ".bat"
 		aquaScript = "@echo off\r\n>> \"%~dp0log\" echo %*\r\n" +
-			"echo %* | find \"update-checksum\" >nul && echo {\"stub\":true}> .aqua\\aqua-checksums.json\r\n"
+			// cmd's own substring test, never `find`: under the Git Bash PATH the
+			// tests run with, `find` is GNU find, which takes the word for a path
+			// and fails every call.
+			"set \"args=%*\"\r\n" +
+			"if not \"%args:update-checksum=%\"==\"%args%\" echo {\"stub\":true}> .aqua\\aqua-checksums.json\r\n" +
+			"exit /b 0\r\n"
 		goStub += ".bat"
 		goScript = "@echo off\r\n" +
 			"if not \"%1\"==\"get\" exit /b 0\r\n" +
@@ -269,16 +274,47 @@ func TestRunFixAndBootstrap(t *testing.T) {
 // record the aqua calls, so the exact install sequence is asserted instead
 // of suppressed. With no -org and no origin remote, the update-App step is a
 // warning that names the way forward, never a failure.
+// toolsSeededDir is a bootstrap target already carrying limen's own
+// tools/go.mod: the test binary is a development build, which embeds no tool
+// pins and refuses to seed a tool directive (the rules tests cover seeding),
+// so a bootstrap meant to end compliant starts with the tools declared.
+// Bootstrapping it takes -force.
+func toolsSeededDir(t *testing.T) string {
+	t.Helper()
+
+	// The one environment a bootstrap test cannot run in; any other nonzero
+	// exit from bootstrap is a failure, never a skip.
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not on PATH, and bootstrap runs git init")
+	}
+
+	gomod, err := os.ReadFile(filepath.Join("..", "..", "tools", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := filepath.Join(t.TempDir(), "newrepo")
+	if err := os.MkdirAll(filepath.Join(dir, "tools"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "tools", "go.mod"), gomod, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	return dir
+}
+
 func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
 	stubs := stubDir(t)
 	t.Setenv(ghStubEnv, "1")
 	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	dir := filepath.Join(t.TempDir(), "newrepo")
+	dir := toolsSeededDir(t)
 
 	var stderr strings.Builder
-	if code := run([]string{"bootstrap", dir}, io.Discard, &stderr); code != 0 {
-		t.Skipf("bootstrap returned %d (likely git init unavailable in this environment): %s", code, stderr.String())
+	if code := run([]string{"bootstrap", "-force", dir}, io.Discard, &stderr); code != 0 {
+		t.Fatalf("bootstrap returned %d: %s", code, stderr.String())
 	}
 
 	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
@@ -344,18 +380,13 @@ func TestReleaseStampPinsOnlyExactReleases(t *testing.T) { // Serial by design: 
 		{"1.2.4-SNAPSHOT-1a2b3c4", ""},     // goreleaser --snapshot
 		{"1a2b3c4", ""},                    // bare sha (no tags at all)
 	}
-	for i, tc := range cases {
-		dir := filepath.Join(t.TempDir(), "newrepo")
+	for _, tc := range cases {
+		dir := toolsSeededDir(t)
 
 		var stdout, stderr strings.Builder
 
-		code := cli.Run(tc.stamp, []string{"bootstrap", dir}, &stdout, &stderr)
+		code := cli.Run(tc.stamp, []string{"bootstrap", "-force", dir}, &stdout, &stderr)
 		if code != 0 {
-			if i == 0 {
-				t.Skipf("bootstrap returned %d (likely git init unavailable in this environment): %s",
-					code, stderr.String())
-			}
-
 			t.Fatalf("stamp %q: bootstrap returned %d:\n%s%s", tc.stamp, code, stdout.String(), stderr.String())
 		}
 

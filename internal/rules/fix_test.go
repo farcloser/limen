@@ -15,7 +15,28 @@ import (
 // bootstrapOpts remediates like `limen bootstrap`: a Closed-source LICENSE is
 // generated for a missing one.
 func bootstrapOpts() rules.FixOptions {
-	return rules.FixOptions{Policy: rules.DefaultPolicy(), License: license.Closed, Holder: "Farcloser", Year: 2026}
+	return rules.FixOptions{
+		Policy: rules.DefaultPolicy(), License: license.Closed, Holder: "Farcloser", Year: 2026,
+		ToolPins: limenToolPins(),
+	}
+}
+
+// limenToolPins are the pins a release of this tree embeds: limen's own
+// tools/go.mod and each tools/<name>/go.mod, read from the repository the
+// way the release hook copies them. A read failure leaves them empty, which
+// the seeding tests then report as the development-build advisory.
+func limenToolPins() rules.ToolPins {
+	shared, _ := os.ReadFile(filepath.Join("..", "..", "tools", "go.mod"))
+	isolated := map[string]string{}
+
+	mods, _ := filepath.Glob(filepath.Join("..", "..", "tools", "*", "go.mod"))
+	for _, mod := range mods {
+		if data, err := os.ReadFile(mod); err == nil {
+			isolated[filepath.Base(filepath.Dir(mod))] = string(data)
+		}
+	}
+
+	return rules.NewToolPins(string(shared), isolated)
 }
 
 // outcomesFor returns every outcome a rule produced, in order, for rules that
