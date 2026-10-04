@@ -60,7 +60,7 @@ func compliantFiles() map[string]string {
 		"README.md":                 "# Thing",
 		"LICENSE":                   mitText,
 		".editorconfig":             rules.CanonicalEditorconfig,
-		".gitignore":                "*.log\n", // any present .gitignore satisfies the rule
+		".gitignore":                "*.log\n" + requiredGitignore, // the project's own, plus the required patterns
 		".gitattributes":            rules.CanonicalGitattributes,
 		"AGENTS.md":                 rules.CanonicalAgents,
 		"CLAUDE.md":                 limen.CanonicalClaudeSeed,
@@ -494,17 +494,45 @@ func TestGitRepoAcceptsGitFile(t *testing.T) {
 	}
 }
 
-func TestGitignoreAnyContentPasses(t *testing.T) {
+// requiredGitignore carries the required patterns, spelled as a project
+// might: anchored or not, with or without the trailing slash.
+const requiredGitignore = "build/\n**/_scratch\n/.claude\n.idea/\n"
+
+func TestGitignoreRequiredPatterns(t *testing.T) {
 	t.Parallel()
 
-	// limen only requires that a .gitignore exists; its patterns are the repo's
-	// own. A file sharing nothing with the canonical baseline still passes.
+	// Beyond the required patterns, the file is the project's own: one that
+	// shares nothing else with the canonical seed passes.
 	files := compliantFiles()
-	files[".gitignore"] = "# the project's own\nbin/\n"
+	files[".gitignore"] = "# the project's own\nbin/\n" + requiredGitignore
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gitignore")
 	if !f.OK() {
-		t.Errorf("any present .gitignore should pass, got: %s", f.Message)
+		t.Errorf("a .gitignore with the required patterns should pass, got: %s", f.Message)
+	}
+
+	// A missing pattern fails, named; a comment or a negation does not count.
+	files[".gitignore"] = "# /build\n!/_scratch\n.claude\n.idea\n"
+
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gitignore")
+	if f.OK() || !strings.Contains(f.Message, "/build, /_scratch") {
+		t.Errorf("missing /build and /_scratch should fail naming both, got: %+v", f)
+	}
+
+	// The last matching line wins, as in git: a later negation cancels a
+	// required pattern, and a pattern after the negation restores it.
+	files[".gitignore"] = requiredGitignore + "!build\n"
+
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gitignore")
+	if f.OK() || !strings.Contains(f.Message, "/build") {
+		t.Errorf("/build negated after it should fail naming it, got: %+v", f)
+	}
+
+	files[".gitignore"] = "!/build/\n" + requiredGitignore
+
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "gitignore")
+	if !f.OK() {
+		t.Errorf("/build ignored again after its negation should pass, got: %s", f.Message)
 	}
 }
 

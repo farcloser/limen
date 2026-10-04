@@ -19,8 +19,9 @@ import (
 var CanonicalEditorconfig string
 
 // CanonicalGitignore is the repository's .gitignore — seeded verbatim into a
-// repository that has none. limen never enforces or updates it afterward; an
-// existing .gitignore is the project's own. See book/mandatory-files.md.
+// repository that has none. Afterward limen enforces only the required
+// patterns the rules package names, and the rest of an existing .gitignore is
+// the project's own. See book/mandatory-files.md.
 //
 //go:embed .gitignore
 var CanonicalGitignore string

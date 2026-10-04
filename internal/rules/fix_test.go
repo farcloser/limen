@@ -87,25 +87,51 @@ func TestFixIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestFixLeavesExistingGitignore(t *testing.T) {
+// TestFixAppendsRequiredGitignore: an existing .gitignore keeps every line of
+// its own; fix appends only the required patterns it lacks, then leaves it.
+func TestFixAppendsRequiredGitignore(t *testing.T) {
 	t.Parallel()
 
-	const own = "# the project's own\nbin/\n"
+	const own = "# the project's own\nbin/\n.idea/\n/tmp" // no final newline
 
 	dir := writeRepo(t, map[string]string{".gitignore": own})
 
 	o := outcomeFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "gitignore")
-	if o.Action != rules.ActionNone {
-		t.Fatalf("gitignore action = %s, want none (an existing file is left as-is)", o.Action)
+	if o.Action != rules.ActionMerged {
+		t.Fatalf("gitignore action = %s (%s), want merged", o.Action, o.Message)
 	}
-	// The existing file is untouched — not overwritten with the canonical.
+
 	data, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if string(data) != own {
-		t.Errorf("fix modified an existing .gitignore: %q", string(data))
+	if want := own + "\n\n# Required by limen (book/mandatory-files.md, \".gitignore\").\n" +
+		"/build\n/_scratch\n.claude\n"; string(data) != want {
+		t.Errorf(".gitignore after fix:\n%q\nwant:\n%q", data, want)
 	}
 
 	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gitignore"); !f.OK() {
-		t.Errorf("an existing .gitignore should pass: %s", f.Message)
+		t.Errorf("the fixed .gitignore should pass: %s", f.Message)
+	}
+
+	if again := outcomeFor(
+		rules.Fix(t.Context(), dir, bootstrapOpts()),
+		"gitignore",
+	); again.Action != rules.ActionNone {
+		t.Errorf("second fix: %s (%s), want none", again.Action, again.Message)
+	}
+}
+
+// TestFixGitignoreAfterNegation: a required pattern negated later in the file
+// is appended again, last, where it wins.
+func TestFixGitignoreAfterNegation(t *testing.T) {
+	t.Parallel()
+
+	dir := writeRepo(t, map[string]string{".gitignore": "/build\n/_scratch\n.claude\n.idea\n!build/\n"})
+
+	if o := outcomeFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "gitignore"); o.Action != rules.ActionMerged {
+		t.Fatalf("gitignore action = %s (%s), want merged", o.Action, o.Message)
+	}
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gitignore"); !f.OK() {
+		t.Errorf("the fixed .gitignore should pass: %s", f.Message)
 	}
 }
 

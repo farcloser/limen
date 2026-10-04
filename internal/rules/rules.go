@@ -322,20 +322,75 @@ func checkPinned(root, rule, relPath, canonical string) *Finding {
 	return nil
 }
 
-// checkGitignore requires only that a .gitignore exists. Its contents are the
-// repository's own: limen seeds a canonical file when none is present (see
-// remediateGitignore) but never enforces or updates the patterns afterward.
+// checkGitignore requires a .gitignore carrying the required patterns
+// (gitignoreRequired). The rest of its contents are the repository's own:
+// the canonical file is only a seed (see remediateGitignore).
 func checkGitignore(root string) Finding {
 	const (
 		rule = "gitignore"
 		name = ".gitignore"
 	)
 
-	if _, err := readRepoFile(root, name); err != nil {
+	data, err := readRepoFile(root, name)
+	if err != nil {
 		return fail(rule, "", "no .gitignore found")
 	}
 
-	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: ".gitignore present"}
+	if missing := missingGitignorePatterns(string(data)); len(missing) > 0 {
+		return fail(rule, name, ".gitignore lacks required pattern(s): "+strings.Join(missing, ", ")+
+			" (limen fix appends them; see book/mandatory-files.md)")
+	}
+
+	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: ".gitignore carries the required patterns"}
+}
+
+// gitignoreRequired are the patterns every .gitignore carries: what the
+// recipes and the working sessions write inside a checkout, which must never be
+// committed. The rest of the canonical file is a seed, the project's to keep
+// or drop.
+//
+//nolint:gochecknoglobals // immutable table.
+var gitignoreRequired = []string{"/build", "/_scratch", ".claude", ".idea"}
+
+// missingGitignorePatterns lists the required patterns the file does not
+// carry. Spellings are compared normalized (normalizeIgnorePattern), so
+// `.idea`, `.idea/`, `/.idea` and `**/.idea` all count.
+func missingGitignorePatterns(content string) []string {
+	// Git applies the last line that matches: a later `!pattern` un-ignores
+	// what an earlier line ignored, and a pattern after it ignores it again.
+	ignored := map[string]bool{}
+
+	for line := range strings.SplitSeq(content, "\n") {
+		if pattern, negated := normalizeIgnorePattern(line); pattern != "" {
+			ignored[pattern] = !negated
+		}
+	}
+
+	var missing []string
+
+	for _, required := range gitignoreRequired {
+		if pattern, _ := normalizeIgnorePattern(required); !ignored[pattern] {
+			missing = append(missing, required)
+		}
+	}
+
+	return missing
+}
+
+// normalizeIgnorePattern drops what does not change whether the checkout-root
+// path is ignored: surrounding space, a leading `/` or `**/`, a trailing `/`,
+// and reports a leading `!` as a negation. A comment normalizes to "".
+func normalizeIgnorePattern(line string) (pattern string, negated bool) {
+	pattern = strings.TrimSpace(line)
+	if strings.HasPrefix(pattern, "#") {
+		return "", false
+	}
+
+	pattern, negated = strings.CutPrefix(pattern, "!")
+	pattern = strings.TrimPrefix(pattern, "**/")
+	pattern = strings.TrimPrefix(pattern, "/")
+
+	return strings.TrimSuffix(pattern, "/"), negated
 }
 
 // checkJustfile verifies the task runner in its two regimes: the root
