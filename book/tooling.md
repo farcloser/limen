@@ -449,9 +449,14 @@ rather than raw aliases:
 - **`tools set` edits the manifest in place.** `aqua generate -i owner/repo@version` would *append* a
   second entry for an already-present package (its merge is an unconditional list append), not
   update the existing one — so `tools set` rewrites the version on the existing line instead.
-- **`tools remove` edits the manifest too.** `aqua remove` only uninstalls the binary; it does not
-  touch `.aqua/aqua.yaml`. The recipe removes the
-  package's entry, then `aqua remove`s the binary, then `aqua update-checksum --prune`s the orphaned checksum.
+- **`tools remove` edits the manifest, and only the manifest.** `aqua remove` only uninstalls the
+  binary; it does not touch `.aqua/aqua.yaml`. The recipe removes the package's entry, then
+  `aqua update-checksum --prune`s the orphaned checksum, and never runs `aqua remove`: that
+  uninstalls from aqua's root, which every checkout on the machine shares, so removing a tool in
+  one repository took it away from every other one still pinning that version, mid-run.
+- **Every aqua call names the repository's manifest** (`aqua -c .aqua/aqua.yaml …`). Without
+  it aqua also reads any aqua.yaml in the directories above, and a stray one there decides what
+  a recipe installs or prunes.
 
 These recipes are the preferred interface for any hand-made change. Renovate (below) still
 owns the routine, unattended version bumps — the recipes are what you reach for when *you*
