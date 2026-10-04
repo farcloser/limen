@@ -325,6 +325,21 @@ func remediateJustfile(root string) []Outcome {
 		out = append(out, pinExact(root, rule, mod.Path, mod.Content))
 	}
 
+	// A stray module is removed, not left for a manual sweep: .limen/just/ is
+	// limen's alone, so the file is one an earlier limen wrote.
+	for _, stray := range strayJustModules(root) {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(stray))); err != nil {
+			out = append(out, failed(rule, stray, err))
+
+			continue
+		}
+
+		out = append(out, Outcome{
+			Rule: rule, Action: ActionMerged, Path: stray,
+			Message: "removed " + stray + ", not a canonical module (left by an earlier limen)",
+		})
+	}
+
 	return out
 }
 

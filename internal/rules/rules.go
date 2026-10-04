@@ -393,6 +393,39 @@ func normalizeIgnorePattern(line string) (pattern string, negated bool) {
 	return strings.TrimSuffix(pattern, "/"), negated
 }
 
+// strayJustModules lists the *.just files directly under .limen/just/ that
+// are not canonical modules, in directory order: a module an earlier limen
+// shipped and has since renamed or dropped (v0.0.1's _lib.just, lib.just
+// since), which the fixer seeds under its new name and the old copy outlives.
+// The directory is limen's alone, so a file there is never the project's.
+func strayJustModules(root string) []string {
+	entries, err := os.ReadDir(filepath.Join(root, ".limen", "just"))
+	if err != nil {
+		return nil
+	}
+
+	canonical := map[string]bool{}
+	for _, mod := range limen.JustModules() {
+		canonical[mod.Path] = true
+	}
+
+	var stray []string
+
+	for _, entry := range entries {
+		path := ".limen/just/" + entry.Name()
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".just") && !canonical[path] {
+			stray = append(stray, path)
+		}
+	}
+
+	return stray
+}
+
+// strayJustModulesMessage names them, and who removes them.
+func strayJustModulesMessage(stray []string) string {
+	return strings.Join(stray, ", ") + ": not a canonical module (left by an earlier limen; limen fix removes it)"
+}
+
 // checkJustfile verifies the task runner in its two regimes: the root
 // .justfile is the PROJECT's own — a shim that must carry the canonical
 // import line (mounting the shared baseline) and is otherwise never judged —
@@ -438,6 +471,10 @@ func checkJustfile(root string) Finding {
 		if string(mdata) != mod.Content {
 			return fail(rule, mod.Path, mod.Path+" does not match the canonical baseline")
 		}
+	}
+
+	if stray := strayJustModules(root); len(stray) > 0 {
+		return fail(rule, stray[0], strayJustModulesMessage(stray))
 	}
 
 	return Finding{
