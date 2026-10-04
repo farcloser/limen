@@ -159,9 +159,13 @@ branches are the human's.
   lane: what CI runs on other platforms (a linux-only package, a windows leg)
   is what a single lane on one machine misses.
 - **Push, open, own.** Push the branch, open the pull request with a
-  description drawn from the commit messages, then own the checks: watch
-  them, read the failed logs, fix, push again. A red check is the agent's to
-  turn green or to explain — never to leave for the human to discover.
+  description drawn from the commit messages, message the reviewing session
+  its URL with CI pending, and end the turn: a session cannot wait on CI,
+  since its harness forbids polling it, so the reviewing session's sweep
+  reads the checks and reports green or red back, and that report resumes
+  the work. On red: read the failed logs, fix, push, and tell the reviewing
+  session again. A red check is the agent's to turn green or to explain —
+  never to leave for the human to discover.
 - **Green, then the reviewer.** Once the checks are green and the pull
   request is ready, request the repository owner's review — the human is
   told, not left to notice, and told once: a review request on a red pull
@@ -170,8 +174,11 @@ branches are the human's.
   from an unmerged branch, showing that branch's commits until it lands —
   waits, unrequested, until its base has merged and it has been rebased
   down to its own commits. The owner is whoever the repository says: a
-  `CODEOWNERS` entry when there is one, else the organization's owner. What
-  the reviewer checks, and in what order, is [reviewing code](./review.md).
+  `CODEOWNERS` entry when there is one, else the organization's owner. The
+  review request and a message to the reviewing session with the URL are
+  one step, since a separate message to remember is the one that gets
+  forgotten. What the reviewer checks, and in what order, is
+  [reviewing code](./review.md).
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local
   `main`, prune the merged branch and its worktree, and rebase every open
   branch onto `main` — so that both the human and the agent can rebase often

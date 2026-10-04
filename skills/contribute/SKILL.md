@@ -109,17 +109,22 @@ trailer eaten by a shell variable — in your tree, not in CI.
 ```
 git c push origin claudio/<date>-<topic>             # `git c` drops the sandbox's GIT_SSH_COMMAND
 gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
-gh pr checks claudio/<date>-<topic> --watch
 ```
 
 No `-u` on the push — recording the upstream writes `.git/config`, which the
 sandbox denies; name the remote and branch instead.
 
-Read the failed logs (`gh run view --job <id> --log-failed`), fix, push
-again. A red check is yours to turn green or to explain in the pull request —
-never to leave for the human to find.
+Then message the reviewing session the pull request's full URL, CI pending,
+and end the turn. A session cannot wait on CI: the harness forbids polling
+it. The reviewing session's sweep reads the checks and reports green or red
+back to you, and that message is what resumes the procedure.
 
-Then, and only then — checks green, pull request ready — request the
+On red, read the failed logs (`gh run view --job <id> --log-failed`), fix,
+push again, and message the reviewing session again, CI pending. A red
+check is yours to turn green or to explain in the pull request — never to
+leave for the human to find.
+
+On green, and only then — checks green, pull request ready — request the
 owner's review; that is how the human learns the work exists, and it is
 said once, never on a red pull request. Never on a stacked one either: a
 branch cut from an unmerged branch is not mergeable on its own, so it
@@ -134,6 +139,12 @@ when next checking open pull requests.
 owner="$(gh api "orgs/<org>/members?role=admin" -q '.[0].login')"   # a CODEOWNERS entry, when the repo has one
 gh pr edit claudio/<date>-<topic> --add-reviewer "$owner"
 ```
+
+The review request and a second message to the reviewing session with the
+URL are one step: neither is ever made without the other.
+
+A pull request that is green but deliberately held is said to be held, and
+why, so it is not taken for forgotten.
 
 In anything public on GitHub — a pull request title or body, a comment, a
 commit message — the human is `@apostasie`, by handle, never "the owner" or
