@@ -6,6 +6,8 @@
   "here's my plan" essays.
 - Prefer a sentence over a paragraph and a short list over prose. Cut caveats that don't
   change the decision or action.
+- A message from another session that needs nothing from you gets no reply and no
+  commentary. Act when it asks for something; otherwise say nothing at all.
 
 ## Versions & pins
 
