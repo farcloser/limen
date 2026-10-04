@@ -384,10 +384,13 @@ project's own `go.mod` fails the rule. The reasoning is in
 [tooling](./tooling.md#go-source-analyzers-are-gomod-tools). `limen fix` creates
 `tools/go.mod` (module path `<module>/tools` and the root's `go` directive in a Go repository;
 `tools` and the aqua-pinned `go` elsewhere), adds a missing directive with `go -C tools get
--tool <pkg>@latest` followed by `go -C tools mod tidy` (the resolved version is then pinned,
-and Renovate bumps it), and strips any directive out of the root `go.mod`, tidying it; when
-the pinned `go` or the network is unavailable, the rule ends as an advisory carrying the exact
-command.
+-tool <pkg>@<version>` followed by `go -C tools mod tidy`, and strips any directive out of the
+root `go.mod`, tidying it; when the pinned `go` or the network is unavailable, the rule ends as
+an advisory carrying the exact command. The version is the one limen's own `tools/go.mod` (or
+`tools/<name>/go.mod`, for an isolated tool) requires in the running release, never
+`@latest`, which would make what a repository receives depend on the day `fix` ran; Renovate
+bumps it from there. A release carries those `go.mod` files because its build copies them in
+first; a development build carries none and refuses to seed, saying so.
 
 ## Link checking — `.limen/lychee.toml`
 
