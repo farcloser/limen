@@ -1269,6 +1269,57 @@ func TestPinsRule(t *testing.T) {
 	}
 }
 
+// TestStaleReferences: a reference to a path limen moved, in a file the
+// project owns, fails naming the file, the line and the new path; the new
+// paths themselves pass, and fix leaves the project's files alone.
+func TestStaleReferences(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files[".github/workflows/ci.yaml"] = "name: ci\n" +
+		"# keyed on .aqua/aqua.yaml and .limen/aqua.yaml, which are fine\n" +
+		"key: ${{ hashFiles('aqua.yaml', 'aqua-checksums.json') }}\n" +
+		"# prose about the old Justfile and aqua.yaml is a comment, not a reference\n" +
+		"run: just lint # the Justfile recipes\n"
+	files["renovate.json"] = "{\n" +
+		`  "description": [` + "\n" +
+		`    "a description an earlier limen seeded, naming aqua.yaml and the Justfile"` + "\n" +
+		"  ],\n" +
+		`  "forkProcessing": "enabled",` + "\n" +
+		`  "customManagers": [{"managerFilePatterns": ["/^Justfile$/"]}]` + "\n" +
+		"}\n"
+	root := writeRepo(t, files)
+
+	f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows")
+	for _, want := range []string{
+		".github/workflows/ci.yaml:3: aqua.yaml → .aqua/aqua.yaml",
+		".github/workflows/ci.yaml:3: aqua-checksums.json → .aqua/aqua-checksums.json",
+		"renovate.json:6: Justfile → .justfile",
+	} {
+		if f.OK() || !strings.Contains(f.Message, want) {
+			t.Errorf("want %q in the finding, got: %+v", want, f)
+		}
+	}
+
+	// The new paths, YAML comments and renovate.json's description are not
+	// references.
+	for _, prose := range []string{"ci.yaml:2:", "ci.yaml:4:", "ci.yaml:5:", "renovate.json:3:"} {
+		if strings.Contains(f.Message, prose) {
+			t.Errorf("%s was flagged: %s", prose, f.Message)
+		}
+	}
+
+	rules.Fix(t.Context(), root, bootstrapOpts())
+
+	if data, _ := os.ReadFile(
+		filepath.Join(root, ".github", "workflows", "ci.yaml"),
+	); string(
+		data,
+	) != files[".github/workflows/ci.yaml"] {
+		t.Errorf("fix edited the project's workflow:\n%s", data)
+	}
+}
+
 func TestWorkflowsRule(t *testing.T) {
 	t.Parallel()
 
