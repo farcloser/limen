@@ -109,14 +109,19 @@ update command="": (_banner "tools" "update")
     set -euo pipefail
     # Every directive in tools/go.mod: a `tool` line and a `tool (…)` block are
     # both walked; a `//` comment line inside the block is not a directive.
-    # (A read loop, not mapfile: macOS ships bash 3.)
-    pkgs=()
-    while IFS= read -r p; do pkgs+=("$p"); done < <(awk '
+    # (A read loop, not mapfile: macOS ships bash 3. A capture and a
+    # here-string, never a process substitution: see lint.just's `just`.)
+    directives=$(awk '
         /^tool[[:blank:]]*\(/ { block = 1; next }
         block && /^\)/ { block = 0; next }
         /^tool[[:blank:]]/ { print $2 }
         block && NF && $1 !~ /^\/\// { print $1 }
     ' tools/go.mod 2>/dev/null || true)
+    pkgs=()
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        pkgs+=("$p")
+    done <<< "$directives"
     # A directive builds as its last path element, except that go strips a /vN
     # major suffix (github.com/google/go-licenses/v2 builds as go-licenses —
     # see _go-tool).

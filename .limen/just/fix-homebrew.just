@@ -21,14 +21,18 @@ style: (_banner "fix homebrew" "style")
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _skip_unless_macos }}
-    # Same discovery as `lint homebrew style`.
+    # Same discovery as `lint homebrew style`, through a file (see lint.just's
+    # `just` recipe).
+    list=$(mktemp "${TMPDIR:-/tmp}/fix-homebrew.XXXXXX")
+    trap 'rm -f "$list"' EXIT
+    git ls-files -z --cached --others --exclude-standard \
+        'Formula/*.rb' 'Formula/**/*.rb' 'Casks/*.rb' 'Casks/**/*.rb' > "$list"
     files=()
     while IFS= read -r -d '' f; do
         # Tracked-but-deleted files are skipped (see lint.just's `just` recipe).
         [ -f "$f" ] || continue
         files+=("$f")
-    done < <(git ls-files -z --cached --others --exclude-standard \
-        'Formula/*.rb' 'Formula/**/*.rb' 'Casks/*.rb' 'Casks/**/*.rb')
+    done < "$list"
     if [ "${#files[@]}" -eq 0 ]; then
         echo "no formulas or casks (Formula/, Casks/) — nothing to fix."
         exit 0
