@@ -114,6 +114,28 @@ gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…
 No `-u` on the push — recording the upstream writes `.git/config`, which the
 sandbox denies; name the remote and branch instead.
 
+The body follows the book's shape (`book/agents.md`, "The shape of a pull
+request"), why first and detail last, one fixed marker per section, only the
+sections that have content:
+
+```
+🎯 Why: <what fails or is missing, or who asked for what; one or two sentences>
+🛠️ What: <what changes, by file or component>
+🧪 How: <how it fixes or satisfies, and how that was verified; mark each claim V or U>
+  1. <commit subject>: <what this commit does for the why>. V: <where or how>
+  2. <commit subject>: <…>. U: <what could not be verified, and why>
+💡 Follow-ups: <left for later, non-blocking, with the reason>
+📝 Notes: <stacked on #N, a deliberate hold, a red inherited from main>
+📎 Annex: <measurements, tables, logs, history; last, so the rest fits one screen>
+```
+
+The description is drawn from the commit messages and does not repeat the
+diff. With several commits, 🧪 is one numbered line per commit, in history
+order and keyed by subject (a sha goes stale on every amend), so the
+description and the history are the same list. A one-line
+change needs 🎯 and 🧪 and nothing else; never write a section to look
+complete.
+
 Then message the reviewing session the pull request's full URL, CI pending,
 and end the turn. A session cannot wait on CI: the harness forbids polling
 it. The reviewing session's sweep reads the checks and reports green or red

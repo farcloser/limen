@@ -172,7 +172,8 @@ branches are the human's.
   lane: what CI runs on other platforms (a linux-only package, a windows leg)
   is what a single lane on one machine misses.
 - **Push, open, own.** Push the branch, open the pull request with a
-  description drawn from the commit messages, message the reviewing session
+  description drawn from the commit messages in
+  [the shape of a pull request](#the-shape-of-a-pull-request), message the reviewing session
   its URL with CI pending, and end the turn: a session cannot wait on CI,
   since its harness forbids polling it, so the reviewing session's sweep
   reads the checks and reports green or red back, and that report resumes
@@ -205,6 +206,32 @@ branches are the human's.
 - **Not the agent's to do.** Merging, pushing to `main`, force-pushing shared
   branches, and tagging releases. Those are not trust questions; they are the
   rulesets and the release lane doing their job.
+
+## The shape of a pull request
+
+A pull request description is read before its diff, by the reviewing session and by
+@apostasie, usually from a terminal or a phone. It says why first and leaves the detail
+for last. Every section opens with the same marker every time, so the eye finds it without
+reading; a section with nothing to say is left out, and no section is written to look
+complete:
+
+| Marker | Section | What goes there |
+|---|---|---|
+| 🎯 | **Why** | The first line. What fails or is missing today, or who asked for what. One or two sentences; the reason the diff exists. |
+| 🛠️ | **What** | What changes, by file, package or component, as a reader would check it against the diff. |
+| 🧪 | **How** | How the change fixes the defect or satisfies the request, and how that was verified. With several commits, one numbered line per commit in history order, keyed by the commit's subject (never its sha, which every amend and rebase changes): what it does for the why, and its verification. The reader maps the description onto the history without opening it. Every claim is marked V, verified, with where or how, or U, unverified, with what is missing. |
+| 💡 | **Follow-ups** | What this leaves for later, non-blocking, with the reason it was not done here. |
+| 📝 | **Notes** | Facts the reader should know and nothing to do about them here: a stack ("stacked on #N"), a deliberate hold, a red inherited from `main`. |
+| 📎 | **Annex** | Everything long: measurements, tables, logs, history, the reproduction. Last, so the screen above it stays short. |
+
+The description is drawn from the commit messages, which remain the record; it does not
+replace them and does not repeat the diff. Because every commit is one thing, the 🧪 lines
+and the commits are the same list, in the same order. The budget above the annex is one screen. A
+pull request that changes one line needs 🎯 and 🧪 and nothing else; a pull request that
+needs every section with two paragraphs each is two pull requests. 💡 and 📝 mean here
+what they mean in a review ([the shape of a review](./review.md#the-shape-of-a-review)):
+a suggestion that requests nothing, and a fact that asks nothing. Full URLs, @apostasie by
+handle, no link to the agent's tooling, as everywhere.
 
 ## Scope and priorities
 
