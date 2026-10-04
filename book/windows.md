@@ -99,7 +99,8 @@ https://github.com/farcloser/limen/pull/205. Two rules come out of it:
   In our own Go this is `filepath.Clean` on both sides (or `filepath.Abs`) before `==`,
   and `strings.EqualFold` for a suffix check, never `strings.CutSuffix(name, ".exe")`.
   Where an upstream tool gets this wrong, the workaround is to feed it one spelling,
-  never to depend on which spelling it prefers.
+  never to depend on which spelling it prefers. The two aqua bugs behind this one are
+  listed, with their lift conditions, in [known upstream bugs](./upstream.md).
 
 What a program sees as `argv[0]` depends on its parent. The runner and .NET's
 `ProcessStartInfo` put the file name on the command line verbatim; PowerShell's
