@@ -142,6 +142,11 @@ description and the history are the same list. A one-line
 change needs 🎯 and 🧪 and nothing else; never write a section to look
 complete.
 
+The title says what the pull request lands, and stays true: a version
+bump names the version it pins, and when a later push changes what the
+pull request lands (a newer version, a narrower scope), the title and the
+body are updated with it (`gh pr edit --title … --body-file …`).
+
 Then message the reviewing session the pull request's full URL, CI pending,
 and end the turn. A session cannot wait on CI: the harness forbids polling
 it. The reviewing session's sweep reads the checks and reports green or red

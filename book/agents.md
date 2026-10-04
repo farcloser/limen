@@ -224,6 +224,11 @@ complete:
 | 📝 | **Notes** | Facts the reader should know and nothing to do about them here: a stack ("stacked on #N"), a deliberate hold, a red inherited from `main`. |
 | 📎 | **Annex** | Everything long: measurements, tables, logs, history, the reproduction. Last, so the screen above it stays short. |
 
+The title says what the pull request lands and stays true as it changes: a version bump
+names the version it pins, and a later push that changes what lands (a newer version, a
+narrower scope) updates the title and the description with it. A title left at the first
+push's version reads as the wrong release to everyone who triages from the list.
+
 The description is drawn from the commit messages, which remain the record; it does not
 replace them and does not repeat the diff. Because every commit is one thing, the 🧪 lines
 and the commits are the same list, in the same order. The budget above the annex is one screen. A
