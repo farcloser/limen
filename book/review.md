@@ -19,7 +19,7 @@ assigned the role, or a person.
    trap, no scratchpads, no tooling links.
 
 A finding at step 1 outranks a clean pass at steps 2 and 3, and is raised with the
-baseline's owner when the mechanism is the baseline's.
+baseline's owning session when the mechanism is the baseline's.
 
 ## Verify live, never from memory
 
@@ -28,7 +28,7 @@ source of truth, and the review says where:
 
 - A pinned checksum or digest, against what upstream publishes: the GitHub release
   asset digest, `sum.golang.org` for a Go module, the publisher's checksum file.
-- A pseudo-version, against the owner's default branch: the commit is on it, and
+- A pseudo-version, against the upstream module's default branch: the commit is on it, and
   the timestamp in the version is the commit's.
 - A content-pinned file, byte for byte against the canonical copy at the version
   the repository pins — the release, not the baseline's `main`.
@@ -52,7 +52,7 @@ failing log and forwards what it found.
 **Red by construction is a baseline defect.** A bump that cannot be green without a
 hand edit the bot will never make — a seeded workflow calling a recipe the project
 does not define, a managed file the bot and a workflow both rewrite — is not a
-problem with that pull request. It is one finding, to the baseline's owner, with
+problem with that pull request. It is one finding, to the baseline's owning session, with
 the URL of every repository it reddens.
 
 **A branch that moves while its base does not is a question.** Count force-pushes
@@ -78,7 +78,7 @@ with the same marker every time, so the eye finds it without reading:
 |---|---|---|
 | ✅ / ❌ | **Verdict**, the first line | `✅ Ready` or `❌ Not ready`, the head it was read at, and the one-line reason. Nothing above it. An open 🛑 or an open ⚠️ makes it ❌ until it is fixed or decided. |
 | 🛑 | **Blocking** | What must change before merge: the defect, the evidence, the fix. One bullet per item. |
-| ⚠️ | **Decision** | Not a defect: a call the owner or @apostasie has to make, with the options and the recommendation. |
+| ⚠️ | **Decision** | Not a defect: a call the owning session or @apostasie has to make, with the options and the recommendation. |
 | 💡 | **Non-blocking** | A suggestion or a follow-up. Never requests a change on its own. |
 | 📝 | **Note** | A fact the reader should know and nothing to do about it here. |
 | 🔍 | **Verified** | What was checked and where, one line each, last. Not the diff restated, not the reasoning narrated. |
@@ -87,16 +87,16 @@ A section with nothing in it is left out, markers are never reused for anything 
 and a review that is only `✅ Ready` plus 🔍 is a complete review. The verdict carries
 the bottom line; the rest is evidence for the reader who wants it. One screen is the
 budget; a review that needs more is two findings that should have been one, or a
-design discussion that belongs in the conversation with the owner, raised here as
+design discussion that belongs in the conversation with the owning session, raised here as
 one ⚠️ and settled there.
 
 What every section obeys:
 
-- A finding names the defect, the evidence, and the owner.
+- A finding names the defect, the evidence, and the owning session.
 - Full URLs for every pull request, run, commit or advisory. The reader clicks.
 - @apostasie by handle, in anything public.
 - Nothing the author already knows: a constraint shared by everyone, a rule the
   pull request body already states, a repeat of an earlier round.
 
-The same finding in several repositories is one review, to the owner of what
+The same finding in several repositories is one review, to the session that owns what
 they share, not one comment per repository.
