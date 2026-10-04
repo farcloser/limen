@@ -80,16 +80,23 @@ set pkg version: (_banner "tools" "set")
         {{ go_tool_build }} '{{ pkg }}'                   # REAL build: a bad pin fails here, not at first use
         exit 0
     fi
-    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}@" .aqua/aqua.yaml; then
-        echo "{{ pkg }} is not pinned in .aqua/aqua.yaml — add it with 'just do tools add {{ pkg }}'." >&2
+    # The pin lives in the manifest (a project's own tool) or in the canonical
+    # set it imports (.limen/aqua.yaml — edited here only in limen itself; in
+    # any other repository the next lint reports it as drift).
+    manifest=""
+    for f in .aqua/aqua.yaml .limen/aqua.yaml; do
+        if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}@" "$f" 2>/dev/null; then manifest=$f; break; fi
+    done
+    if [ -z "$manifest" ]; then
+        echo "{{ pkg }} is not pinned in .aqua/aqua.yaml or .limen/aqua.yaml — add it with 'just do tools add {{ pkg }}'." >&2
         exit 1
     fi
     # Explicit sibling template: macOS mktemp ignores $TMPDIR, and a sibling
     # makes the mv an atomic same-filesystem rename.
-    tmp=$(mktemp .aqua/aqua.yaml.XXXXXX)
+    tmp=$(mktemp "$manifest.XXXXXX")
     trap 'rm -f "$tmp"' EXIT
-    sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc})@[^[:space:]]*#\1@{{ version }}#" .aqua/aqua.yaml > "$tmp"
-    mv "$tmp" .aqua/aqua.yaml
+    sed -E "s#(^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc})@[^[:space:]]*#\1@{{ version }}#" "$manifest" > "$tmp"
+    mv "$tmp" "$manifest"
     aqua update-checksum --prune      # new checksum in, replaced version's out
     aqua install                      # REAL install: a bad pin fails here, not at first use
 
@@ -188,12 +195,17 @@ remove pkg: (_banner "tools" "remove")
         rm -f "build/tools/${name}" "build/tools/${name}.exe"
         exit 0
     fi
-    if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" .aqua/aqua.yaml; then
-        echo "{{ pkg }} is not in .aqua/aqua.yaml — nothing to remove." >&2
+    # See `set` for the two files a pin can live in.
+    manifest=""
+    for f in .aqua/aqua.yaml .limen/aqua.yaml; do
+        if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" "$f" 2>/dev/null; then manifest=$f; break; fi
+    done
+    if [ -z "$manifest" ]; then
+        echo "{{ pkg }} is not in .aqua/aqua.yaml or .limen/aqua.yaml — nothing to remove." >&2
         exit 1
     fi
     # See `set` for why mktemp gets an explicit sibling-path template.
-    tmp=$(mktemp .aqua/aqua.yaml.XXXXXX)
+    tmp=$(mktemp "$manifest.XXXXXX")
     trap 'rm -f "$tmp"' EXIT
     # Exact string compare on the parsed slug, not a regex (a dot would be a
     # wildcard, and escaping for awk is unportable: -v eats backslashes). The
@@ -212,7 +224,7 @@ remove pkg: (_banner "tools" "remove")
             }
             print
         }
-    ' .aqua/aqua.yaml > "$tmp"
-    mv "$tmp" .aqua/aqua.yaml
+    ' "$manifest" > "$tmp"
+    mv "$tmp" "$manifest"
     aqua remove "{{ pkg }}" || true   # uninstall the binary
     aqua update-checksum --prune      # drop the now-unused checksum
