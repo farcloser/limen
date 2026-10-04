@@ -40,6 +40,10 @@ chapter; the procedure is limen's `skills/contribute`.
 - **Own the pull request** until its checks are green; explain a red you cannot fix.
 - **Request the owner's review only then** — green, ready, and not stacked on an
   unmerged branch. The request is sent once; withdraw it if the pull request turns red.
+  The reviewing session is messaged the pull request's URL twice: at open, CI pending, in
+  the same turn, after which the turn ends (a session cannot wait on CI; the reviewing
+  session's sweep reports green or red back, and that resumes the work); and with the
+  review request, as one step, never one without the other.
 - **Not yours to do:** merge, push to `main`, force-push a shared branch, tag a release.
 
 ## Scope
