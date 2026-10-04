@@ -47,6 +47,18 @@ deliberately **off**: a gate the human taps reflexively, dozens of times a day,
 is theater — worse than no gate, because it feels like control. The human's own
 YubiKey keeps its touch, where a touch is rare and means something.
 
+**The key only works while the human's session is unlocked.** Secretive creates
+every key as `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, whatever its
+authentication setting, so once the screen locks the agent refuses every request:
+no signed commit, no push, until the human is back. That is the enclave's
+guarantee working, not a fault, and the agent reads it as such: a signing or push
+failure that follows earlier successes means a locked screen, so the agent
+finishes the work in its worktree — green, its commit message written — and
+leaves it ready to commit and push, instead of reporting a broken rig. Its
+worktree stays until then. A per-key opt-in to stay usable while locked is
+proposed upstream
+([maxgoedjen/secretive#819](https://github.com/maxgoedjen/secretive/pull/819)).
+
 What is the veto, then? **The rulesets.** `limen:main` requires a pull request
 with signed commits *and one approving review*; the bot can push branches and
 open pull requests, and cannot land anything on `main`. Merging stays a human
@@ -98,7 +110,8 @@ the installed ssh refused, signing unable to reach the agent, a recipe failing �
 first and stops there; a private workaround that keeps the work moving hides the defect
 from the one person who can fix it, and once hid a broken installer for a whole session
 while pushes quietly took another path. A workaround needs the human's agreement and is
-named as one each time it is used.
+named as one each time it is used. A key that stops answering after it worked is the
+exception: a locked screen, not a broken rig ([the key model](#the-key-model)).
 
 ## What stays manual
 
