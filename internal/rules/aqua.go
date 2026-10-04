@@ -1,13 +1,17 @@
 package rules
 
 // aqua.yaml is subset-pinned rather than content-pinned: the checksum and
-// registries sections and the canonical package set are limen's, while package
-// versions, extra per-project packages, and the standard registry ref (bumped
-// per project by Renovate) are the project's. This file holds the conservative
-// line-oriented parser and merge logic behind that rule. It understands exactly
-// the shape the rule prescribes — block-style top-level checksum/registries/
-// packages keys with "- name:" package entries — and refuses anything else, so
-// remediation never rewrites a manifest it does not fully understand.
+// registries sections, the farcloser/limen pin and the import of the canonical
+// tool set (.limen/aqua.yaml, content-pinned) are limen's, while extra
+// per-project packages and the standard registry ref (bumped per project by
+// Renovate) are the project's. A canonical tool never sits in the manifest
+// itself: Renovate rebuilds a branch whose manifest's package list differs from
+// the base's, so a limen bump that rewrote the list would fight it on every
+// push. This file holds the conservative line-oriented parser and merge logic
+// behind that rule. It understands exactly the shape the rule prescribes —
+// block-style top-level checksum/registries/packages keys with "- name:" and
+// "- import:" entries — and refuses anything else, so remediation never
+// rewrites a manifest it does not fully understand.
 
 import (
 	"cmp"
@@ -47,8 +51,12 @@ type aquaManifest struct {
 var (
 	aquaTopKeyRE  = regexp.MustCompile(`^([A-Za-z0-9_-]+):(.*)$`)
 	aquaPkgNameRE = regexp.MustCompile(`^(\s*)-\s+name:\s*(.+)$`)
-	aquaRefKeyRE  = regexp.MustCompile(`^(\s*ref:).*$`)
-	aquaRefValRE  = regexp.MustCompile(`^(\s*ref:\s*)(\S+)(.*)$`)
+	// An import entry counts as a package named for its path (importPkgPrefix
+	// + path): the canonical one is then required, and restored, exactly like
+	// a canonical package.
+	aquaPkgImportRE = regexp.MustCompile(`^(\s*)-\s+import:\s*(.+)$`)
+	aquaRefKeyRE    = regexp.MustCompile(`^(\s*ref:).*$`)
+	aquaRefValRE    = regexp.MustCompile(`^(\s*ref:\s*)(\S+)(.*)$`)
 	// An exact pin: a plain semver tag or a full commit SHA. Branches and
 	// "latest" are moving targets and fail the rule.
 	aquaExactRefRE = regexp.MustCompile(`^(v\d+\.\d+\.\d+|[0-9a-f]{40})$`)
@@ -97,10 +105,54 @@ func selfPinReplacement(manifest aquaManifest, version string) []aquaReplacement
 	return nil
 }
 
+// importPkgPrefix names an import entry as a package: "import " + its path.
+const importPkgPrefix = "import "
+
 // canonicalAqua is the parsed embedded aqua.yaml — the baseline the rule
 // enforces. The canonical file is limen's own, so failing to parse it is a
 // build defect, caught the first time the package loads.
 var canonicalAqua = mustParseCanonicalAqua() //nolint:gochecknoglobals // parsed once from embedded canonical data.
+
+// importedCanonicalPkgs are the package names of the canonical tool set the
+// manifest imports (.limen/aqua.yaml).
+var importedCanonicalPkgs = mustParseImportedPkgs() //nolint:gochecknoglobals // parsed once from embedded canonical data.
+
+func mustParseImportedPkgs() []string {
+	toolSet, ok := parseAquaManifest(limen.CanonicalAquaPackages)
+	if !ok || len(toolSet.pkgs) == 0 {
+		panic("limen: the embedded .limen/aqua.yaml does not parse as a package list")
+	}
+
+	names := make([]string, 0, len(toolSet.pkgs))
+	for _, p := range toolSet.pkgs {
+		names = append(names, p.name)
+	}
+
+	return names
+}
+
+// importedPkgs returns the canonical packages the manifest still declares
+// itself, in manifest order: they come from the import, so a direct entry
+// would duplicate it, and its version would be the project's where it must be
+// limen's.
+func (m *aquaManifest) importedPkgs() []string {
+	var listed []string
+
+	for _, p := range m.pkgs {
+		if slices.Contains(importedCanonicalPkgs, p.name) {
+			listed = append(listed, p.name)
+		}
+	}
+
+	return listed
+}
+
+// importedPkgsMessage is the check failure / fix summary wording for canonical
+// packages still listed in the manifest.
+func importedPkgsMessage(listed []string) string {
+	return "canonical package(s) listed directly: " + strings.Join(listed, ", ") +
+		" (they come from " + aquaPackagesFile + " now, at limen's versions; limen fix removes the entries)"
+}
 
 func mustParseCanonicalAqua() aquaManifest {
 	m, ok := parseAquaManifest(limen.CanonicalAquaYAML)
@@ -233,7 +285,7 @@ func (m *aquaManifest) parsePackages() bool {
 	entryIndent := -1
 
 	for lineIndex := m.packages.start + 1; lineIndex < m.packages.end; lineIndex++ {
-		match := aquaPkgNameRE.FindStringSubmatch(m.lines[lineIndex])
+		match, prefix := matchPkgEntry(m.lines[lineIndex])
 		if match == nil {
 			continue
 		}
@@ -258,6 +310,8 @@ func (m *aquaManifest) parsePackages() bool {
 			return false
 		}
 
+		name = prefix + name
+
 		end := lineIndex + 1
 		for end < m.packages.end && strings.TrimSpace(m.lines[end]) != "" && lineIndent(m.lines[end]) > indent {
 			end++
@@ -267,6 +321,17 @@ func (m *aquaManifest) parsePackages() bool {
 	}
 
 	return true
+}
+
+// matchPkgEntry matches a line opening a package entry — "- name:" or
+// "- import:" — returning the submatches (indent, value) and the prefix its
+// name takes (importPkgPrefix for an import); nil when the line opens neither.
+func matchPkgEntry(line string) (match []string, prefix string) {
+	if match = aquaPkgNameRE.FindStringSubmatch(line); match != nil {
+		return match, ""
+	}
+
+	return aquaPkgImportRE.FindStringSubmatch(line), importPkgPrefix
 }
 
 func (m *aquaManifest) section(s aquaSection) []string { return m.lines[s.start:s.end] }
@@ -460,6 +525,12 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 		return &finding
 	}
 
+	if listed := manifest.importedPkgs(); len(listed) > 0 {
+		finding := fail(rule, name, name+": "+importedPkgsMessage(listed))
+
+		return &finding
+	}
+
 	if twoLine := manifest.twoLinePinNames(); len(twoLine) > 0 {
 		finding := fail(rule, name, name+": "+twoLinePinMessage(twoLine))
 
@@ -498,6 +569,14 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 			manifest = stripped
 
 			plan.summary = append(plan.summary, "removed "+retiredPkgsMessage(retired))
+		}
+	}
+
+	if listed := manifest.importedPkgs(); len(listed) > 0 {
+		if stripped, ok := manifest.withoutPkgs(listed); ok {
+			manifest = stripped
+
+			plan.summary = append(plan.summary, "removed "+importedPkgsMessage(listed))
 		}
 	}
 

@@ -165,6 +165,7 @@ func compliantRepo(t *testing.T) string {
 		".aqua/aqua-checksums.json": "{}\n",
 		".aqua/aqua-policy.yaml":    rules.CanonicalAquaPolicy,
 		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
+		".limen/aqua.yaml":          rules.CanonicalAquaPackages,
 		".limen/lychee.toml":        rules.CanonicalLychee,
 		".limen/.yamlfmt":           rules.CanonicalYamlfmt,
 		".limen/.shellcheckrc":      rules.CanonicalShellcheckrc,

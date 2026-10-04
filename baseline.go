@@ -90,6 +90,13 @@ var CanonicalAquaPolicy string
 //go:embed .limen/aqua-registry.yaml
 var CanonicalAquaRegistry string
 
+// CanonicalAquaPackages is the canonical tool set every repository's aqua.yaml
+// imports, content-pinned at .limen/aqua.yaml: its pins move with limen
+// releases, so a limen bump never changes the manifest's own package list.
+//
+//go:embed .limen/aqua.yaml
+var CanonicalAquaPackages string
+
 // The .github pieces are embedded individually, not by glob, because the
 // directory deliberately mixes two regimes (see book/mandatory-files.md):
 // content-pinned limen machinery (the checksum-update workflow and the

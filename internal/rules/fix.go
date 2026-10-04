@@ -655,16 +655,20 @@ func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 		out = append(out, merged...)
 	}
 
-	// Canonical everywhere: content-pinned exactly.
+	// Canonical everywhere: content-pinned exactly. The tool set is the one
+	// whose change moves pins, so its rewrite regenerates checksums too.
+	packages := pinExact(root, ruleAqua, aquaPackagesFile, limen.CanonicalAquaPackages)
 	out = append(out,
 		pinExact(root, ruleAqua, aquaPolicyFile, limen.CanonicalAquaPolicy),
 		pinExact(root, ruleAqua, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry),
+		packages,
 	)
 
 	// A move always regenerates: it is what allows the policy at its new path,
 	// which every aqua command run after this one in the same job needs.
 	if !advised && !pristine &&
-		(moved != nil || manifestWrote || !exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile)))) {
+		(moved != nil || manifestWrote || packages.Action != ActionNone ||
+			!exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile)))) {
 		outcome := regenerateAquaChecksumsOutcome(ctx, root)
 		out = append(out, outcome)
 		advised = outcome.Action == ActionAdvisory

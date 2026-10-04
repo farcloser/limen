@@ -34,6 +34,9 @@ const (
 	aquaChecksumsFile = aquaDir + "/" + legacyAquaChecksums
 	aquaPolicyFile    = aquaDir + "/" + legacyAquaPolicy
 
+	// The canonical tool set, content-pinned, which the manifest imports.
+	aquaPackagesFile = ".limen/aqua.yaml"
+
 	// The same files at the repository root, where limen kept them before.
 	legacyAquaManifest    = "aqua.yaml"
 	legacyAquaManifestYml = "aqua.yml"
@@ -116,14 +119,16 @@ var CanonicalLychee = limen.CanonicalLycheeToml //nolint:gochecknoglobals // imm
 // root .justfile is the project's own.
 const CanonicalJustfileImport = "import '.limen/just/main.just'"
 
-// CanonicalAquaPolicy and CanonicalAquaRegistry are the canonical aqua policy
-// (.aqua/aqua-policy.yaml) and local registry (.limen/aqua-registry.yaml) every
-// repository must carry verbatim — the shared catalog of authorized registries
-// and local tools. Unlike aqua.yaml (a per-project package list) they are
-// content-pinned. They are this repo's own files, embedded.
+// CanonicalAquaPolicy, CanonicalAquaRegistry and CanonicalAquaPackages are the
+// canonical aqua policy (.aqua/aqua-policy.yaml), local registry
+// (.limen/aqua-registry.yaml) and tool set (.limen/aqua.yaml) every repository
+// must carry verbatim. Unlike aqua.yaml (the project's manifest, which imports
+// the tool set) they are content-pinned. They are this repo's own files,
+// embedded.
 var (
 	CanonicalAquaPolicy   = limen.CanonicalAquaPolicy   //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 	CanonicalAquaRegistry = limen.CanonicalAquaRegistry //nolint:gochecknoglobals // immutable alias of embedded canonical data.
+	CanonicalAquaPackages = limen.CanonicalAquaPackages //nolint:gochecknoglobals // immutable alias of embedded canonical data.
 )
 
 // Status is the outcome of evaluating a single rule.
@@ -495,6 +500,10 @@ func checkAqua(root string) Finding {
 		return *f
 	}
 
+	if f := checkPinned(root, rule, aquaPackagesFile, CanonicalAquaPackages); f != nil {
+		return *f
+	}
+
 	return Finding{
 		Rule:    rule,
 		Status:  StatusOK,
@@ -514,6 +523,17 @@ func readAquaManifest(root string) (data []byte, err error) {
 	}
 
 	return nil, err
+}
+
+// readAquaPins reads every pin the repository's aqua setup declares: its
+// manifest and the canonical tool set the manifest imports. A rule looking
+// for a package (golang/go, the verifiers) must search both — the canonical
+// ones are in the import.
+func readAquaPins(root string) []byte {
+	manifest, _ := readAquaManifest(root)
+	imported, _ := readRepoFile(root, aquaPackagesFile)
+
+	return append(append(manifest, '\n'), imported...)
 }
 
 // legacyAquaFiles are aqua's files at the repository root, where limen kept

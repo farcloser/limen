@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/farcloser/limen"
 	"github.com/farcloser/limen/internal/rules"
 )
 
@@ -366,8 +365,8 @@ func TestFixRemovesRetiredPackages(t *testing.T) {
 		t.Errorf("retired package survived fix:\n%s", manifest)
 	}
 
-	if !strings.Contains(manifest, "- name: casey/just@") {
-		t.Error("an unrelated canonical package was lost")
+	if !strings.Contains(manifest, "- import: ../.limen/aqua.yaml") {
+		t.Error("the canonical import was lost")
 	}
 
 	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
@@ -584,46 +583,23 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) { // Serial by design: t.Sete
 }
 
 // TestAquaGoDirective: the go directive of a seeded tools/go.mod comes from
-// the manifest's golang/go pin — the canonical one, or the project's own,
-// quoted and commented as it likes.
+// the golang/go pin of the canonical tool set the manifest imports.
 func TestAquaGoDirective(t *testing.T) {
 	t.Parallel()
 
-	goLine, _ := canonicalPin(t, "golang/go")
+	files := compliantFiles()
+	delete(files, "tools/go.mod")
+	dir := writeRepo(t, files)
 
-	tests := []struct {
-		name     string
-		manifest string
-		want     string
-	}{
-		{name: "canonical", manifest: limen.CanonicalAquaYAML, want: "go " + canonicalGoVersion(t)},
-		{
-			name:     "quoted, the project's own version",
-			manifest: strings.Replace(limen.CanonicalAquaYAML, goLine, "  - name: 'golang/go@go1.25.3' # pinned\n", 1),
-			want:     "go 1.25.3",
-		},
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
+	if err != nil {
+		t.Fatalf("tools/go.mod not created: %v", err)
 	}
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			files := compliantFiles()
-			files[".aqua/aqua.yaml"] = testCase.manifest
-			delete(files, "tools/go.mod")
-			dir := writeRepo(t, files)
-
-			rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
-
-			toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
-			if err != nil {
-				t.Fatalf("tools/go.mod not created: %v", err)
-			}
-
-			if !strings.Contains(string(toolsMod), "\n"+testCase.want+"\n") {
-				t.Errorf("tools/go.mod lacks %q:\n%s", testCase.want, toolsMod)
-			}
-		})
+	if want := "go " + canonicalGoVersion(t); !strings.Contains(string(toolsMod), "\n"+want+"\n") {
+		t.Errorf("tools/go.mod lacks %q:\n%s", want, toolsMod)
 	}
 }
 
