@@ -39,6 +39,13 @@ status the pipe's, and a `cd` chained on that once fell through into the
 human's clone, where the next command rebased `main`. The `test -d` is what
 stops the chain when the add did not land.
 
+Inside a worktree the harness isolates the session there, and it refuses any
+git command aimed at the clone, `git -C <clone> status` included. A session
+already in a worktree, because it started in one or entered one, cannot run
+the block above. It cuts the next branch in its own worktree instead, once
+the previous branch is pushed: `git c fetch origin`, then `git checkout
+--no-track -b claudio/<date>-<topic> origin/main`.
+
 ## 2. Commit
 
 The commit message is the record; the pull request description is derived
@@ -172,6 +179,14 @@ commit message — the human is `@apostasie`, by handle, never "the owner" or
 "the human". Those are session words; GitHub has a name for the person.
 
 ## 5. After a merge
+
+These commands aim at the clone, and from inside a worktree the harness
+refuses every one of them (step 1). A session that entered its worktree with
+the harness's EnterWorktree leaves it first, with ExitWorktree keeping the
+worktree. ExitWorktree only leaves a worktree EnterWorktree made in the same
+session, so a session that started in its worktree stays there. It fetches,
+rebases its open branches, and says the clone's `main`, the merged branch and
+the worktree are left for the human to prune.
 
 ```
 git -C <clone> c fetch --prune origin
