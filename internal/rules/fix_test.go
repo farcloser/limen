@@ -156,6 +156,36 @@ func TestFixGitignoreAfterNegation(t *testing.T) {
 	}
 }
 
+// TestStrayJustModule: a *.just under .limen/just/ that is no canonical module
+// (v0.0.1's _lib.just, outlived by its rename) fails the check, naming it, and
+// fix removes it; the canonical modules stay.
+func TestStrayJustModule(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files[".limen/just/_lib.just"] = "# an earlier limen's module\n"
+	root := writeRepo(t, files)
+
+	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "justfile"); f.OK() ||
+		!strings.Contains(f.Message, ".limen/just/_lib.just") {
+		t.Fatalf("a stray module should fail naming it, got: %+v", f)
+	}
+
+	rules.Fix(t.Context(), root, bootstrapOpts())
+
+	if _, err := os.Stat(filepath.Join(root, ".limen", "just", "_lib.just")); !os.IsNotExist(err) {
+		t.Errorf("fix left the stray module: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, ".limen", "just", "lib.just")); err != nil {
+		t.Errorf("fix removed a canonical module: %v", err)
+	}
+
+	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "justfile"); !f.OK() {
+		t.Errorf("after fix: %s", f.Message)
+	}
+}
+
 // TestFixJustfileRegimes: the root Justfile is the project's own — a missing
 // one is seeded, one lacking the shared-baseline import gets it APPENDED
 // (never overwritten), and one carrying it is untouched.

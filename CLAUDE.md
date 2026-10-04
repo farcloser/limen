@@ -14,5 +14,5 @@ shares:
   limen *releases* (Renovate bumps the pin; the checksum-update workflow runs the newly
   pinned `limen fix` on the branch) — running a dev-build fix in them plants files their
   pinned limen flags as drift, failing their CI. The one exception: when canonical files
-  are MOVED or renamed, the fixer seeds the new path but never deletes the old one, so
-  the strays need a manual sweep.
+  are MOVED or renamed outside `.limen/just/` (which fix sweeps itself), the fixer seeds
+  the new path but never deletes the old one, so the strays need a manual sweep.
