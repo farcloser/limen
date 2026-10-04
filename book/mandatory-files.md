@@ -39,6 +39,33 @@ subset files (`.aqua/aqua.yaml` and the root `.justfile`’s import line) withou
 discarding a repo's own additions. Anything it cannot fix safely — a disallowed `LICENSE`, a
 manifest it cannot parse — is reported for a human to resolve.
 
+### Onboarding an existing repository
+
+Enrolling a codebase that predates the baseline applies the lint rules to code that never saw
+them, so the lint lanes go red by construction. Green before merge holds for the enrolment
+pull request all the same: a red `main` is inherited by every pull request opened after it,
+and none of them can be read as green. The order is:
+
+1. **Enrolment lands green, with the backlog in the overlay.** The pull request carries
+   `limen fix` and the mechanical fixes (`just do fix …`). Every Go finding still left is
+   exempted in `.lint-go.yaml`, by linter and path, as narrowly as turns the lane green, in
+   one block whose comment marks it as the onboarding backlog. The other lanes have no overlay
+   ([per-language rules](./per-language.md)); their findings are fixed in the enrolment pull
+   request itself.
+2. **Alignment empties the block.** One linter or one package per pull request, each green,
+   each finding judged as any other is
+   ([judging a finding](./per-language.md#go--judging-a-finding)): fixed, silenced inline with
+   its reason, or raised as a rule. The last alignment pull request deletes the block.
+
+The backlog block is the one carve-out that is not a judgment: every other carve-out records a
+decision that the code is right as it is, while this one records findings not yet read. It is
+labelled as such, so it is never mistaken for a decision, and it exists only to be emptied.
+
+Two shortcuts are ruled out. Merging the enrolment red with the alignment "right behind it"
+leaves every pull request opened in between red for a reason unrelated to its change. And
+enrolment and alignment in one pull request mixes mechanical rewrites with judged code
+changes in one diff, which cannot be reviewed as either.
+
 ## Allowed licenses
 
 A repository's `LICENSE` must be identifiable as exactly one of the licenses below.

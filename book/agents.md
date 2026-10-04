@@ -197,7 +197,9 @@ The human sets the priorities; the agent measures scope before it moves.
   suppression, a workflow that hides its own failure — casual, on the way
   through, in scope. Several repositories are in a broken state and their
   large-scale repair — onboarding onto limen, wholesale lint cleanups —
-  waits for the human's explicit green light, however tempting.
+  waits for the human's explicit green light, however tempting. Once it is
+  given, onboarding follows its own order
+  ([onboarding an existing repository](./mandatory-files.md#onboarding-an-existing-repository)).
 - **A red inherited from `main`** is explained on the pull request, not
   fixed there: the fix is its own change, if the human wants it, and a
   file under the human's active edit is left alone.
