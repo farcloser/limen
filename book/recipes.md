@@ -35,12 +35,18 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   into workspace mode — Go workspaces are a supported way to work here, at the eyes-open
   cost that a build under an active workspace can differ from CI.
 
-Digests and encoders are pinned too: `sha256sum` and `base64` on the hermetic PATH are the
-aqua-pinned coreutils (one Rust multicall binary linked under the names recipes type — the
-local registry entry says how), never the runner's. The ambient ones differ by platform
-(perl's `shasum` on macOS, GNU on Linux), and a `command -v` fallback between them
-institutionalizes the ambient tool instead of pinning one; write the bare GNU name and let the
-PATH answer. Call it from the project tree: an aqua shim finds its pin by walking up from the
+The coreutils are pinned too — `sort`, `date`, `mktemp`, `sha256sum`, `base64` and the rest
+on the hermetic PATH are aqua's, never the runner's. On macOS and Linux that is one Rust
+multicall binary linked under every name it provides; on Windows it is Git for Windows'
+MSYS2 coreutils under the same names (the local registry entries say how). Windows is
+different on purpose: recipes run in git-bash there, and a native Windows coreutils inside it
+prints Windows paths (`C:\…`) its MSYS2 neighbours misread, so the pin is the kind of program
+the shell itself is. The shell is not pinned there: an aqua link named `bash` becomes every
+`shell: bash` step's shell, which aqua cannot serve. The ambient tools differ by platform (BSD `stat` and perl's `shasum`
+on macOS, GNU on Linux), and a `command -v` fallback between them institutionalizes the
+ambient tool instead of pinning one; write the bare GNU name and let the PATH answer. A
+third-party build script that branches on `uname` and expects BSD flags on macOS meets GNU
+there; patch it after fetching, never unpin the PATH for it. Call it from the project tree: an aqua shim finds its pin by walking up from the
 working directory, so a recipe that `cd`s into a temp dir outside the repository has no pinned
 tool there — hand it the path instead.
 
