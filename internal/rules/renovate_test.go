@@ -146,6 +146,93 @@ func TestSetPresetRef(t *testing.T) {
 	}
 }
 
+// v062SeedDescription is the first description entry limen v0.5.1 to v0.6.2
+// seeded, as a repository carries it today (mumbrew, among others).
+const v062SeedDescription = "The canonical Renovate configuration is a shared preset — default.json in the limen" +
+	" repository — so every repository inherits it by reference and a fix there reaches all of them without a file" +
+	" being re-seeded. The ref is pinned: the `renovate` rule keeps it at the repository's own limen version (the" +
+	" farcloser/limen pin in aqua.yaml), so the preset moves with the release like every other canonical file." +
+	" Everything below is the project's own — overrides and additions go here, next to the ref."
+
+// TestRetiredSeedDescription: a description entry still exactly as an earlier
+// limen seeded it fails the check and is replaced by fix with the current
+// seed's, every other entry kept; an entry the project edited is its own.
+func TestRetiredSeedDescription(t *testing.T) {
+	t.Parallel()
+
+	seeded := stringsAt(renovateConfigFrom(t, rules.CanonicalRenovateFor(testRepository)), "description")
+	if len(seeded) == 0 {
+		t.Fatal("the seed carries no description")
+	}
+
+	seedDescription := seeded[0]
+
+	stale, _ := json.Marshal(map[string]any{
+		"description":    []string{v062SeedDescription, "the project's own note"},
+		"extends":        []string{testPresetRef},
+		"forkProcessing": "enabled",
+	})
+
+	files := compliantFiles()
+	files["renovate.json"] = string(stale) + "\n"
+	root := writeRepo(t, files)
+
+	if f := findingByRule(
+		rules.Check(root, withRepository()),
+		"renovate",
+	); f.OK() ||
+		!strings.Contains(f.Message, "default.json") {
+		t.Fatalf("a seeded description describing the retired preset should fail naming it, got: %+v", f)
+	}
+
+	rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()})
+
+	if got := stringsAt(
+		renovateConfig(t, root),
+		"description",
+	); !slices.Equal(
+		got,
+		[]string{seedDescription, "the project's own note"},
+	) {
+		t.Errorf("description after fix = %q", got)
+	}
+
+	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); !f.OK() {
+		t.Errorf("after fix: %s", f.Message)
+	}
+
+	// One word changed and it is the project's text: left alone, and passing.
+	edited, _ := json.Marshal(map[string]any{
+		"description":    []string{strings.Replace(v062SeedDescription, "Everything below", "All below", 1)},
+		"extends":        []string{testPresetRef},
+		"forkProcessing": "enabled",
+	})
+	files["renovate.json"] = string(edited) + "\n"
+	root = writeRepo(t, files)
+
+	rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()})
+
+	if got := stringsAt(
+		renovateConfig(t, root),
+		"description",
+	); len(got) != 1 ||
+		!strings.Contains(got[0], "All below") {
+		t.Errorf("an edited description was replaced: %q", got)
+	}
+}
+
+// renovateConfigFrom parses a renovate.json text as generic JSON.
+func renovateConfigFrom(t *testing.T, text string) map[string]any {
+	t.Helper()
+
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(text), &cfg); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+
+	return cfg
+}
+
 // TestPresetRefRepositoryUnknown: without an origin remote the name cannot be
 // known, so the reference is not enforced — except that the retired preset,
 // gone from every later limen release, fails check and leaves fix advisory.
