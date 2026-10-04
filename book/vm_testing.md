@@ -5,7 +5,9 @@ failure is seen. Local reproduction on a mac means a Windows 11 (arm64) virtual
 machine, with the repository shared into the guest so the exact working tree —
 not a copy — is what the guest builds and lints. This chapter records the full
 path to a working setup, including every trap we hit, so nobody walks it blind
-again.
+again. What is true of windows itself — the kinds of program, the paths, the exit
+codes, the names, what may be pinned there — is the [windows chapter](./windows.md);
+this one is the machine.
 
 ## Host: UTM and an installer image
 
