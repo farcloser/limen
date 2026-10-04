@@ -3,6 +3,7 @@ package rules_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -72,6 +73,7 @@ func compliantFiles() map[string]string {
 		// The aqua policy, local registry, and lychee config are content-pinned exactly.
 		".aqua/aqua-policy.yaml":    rules.CanonicalAquaPolicy,
 		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
+		".limen/aqua.yaml":          rules.CanonicalAquaPackages,
 		".limen/lychee.toml":        rules.CanonicalLychee,
 		// aqua.yaml is YAML, so the conditional yamlfmt rule fires; satisfy it
 		// with the canonical baseline. The shellcheck config is unconditional.
@@ -719,37 +721,122 @@ func TestAquaLegacyRootLayout(t *testing.T) {
 	}
 }
 
-// canonicalAquaLine returns the full line of the canonical aqua.yaml containing
-// substr, so tests can manipulate entries without hardcoding versions (which
-// Renovate bumps).
-func canonicalAquaLine(t *testing.T, substr string) string {
+// canonicalImportLine returns the canonical aqua.yaml's import line, exactly as
+// it is spelled there.
+func canonicalImportLine(t *testing.T) string {
 	t.Helper()
 
 	for line := range strings.SplitSeq(limen.CanonicalAquaYAML, "\n") {
-		if strings.Contains(line, substr) {
+		if strings.Contains(line, "- import:") {
 			return line
 		}
 	}
 
-	t.Fatalf("canonical aqua.yaml has no line containing %q — update this test", substr)
+	t.Fatal("the canonical aqua.yaml has no import line — update this test")
 
 	return ""
 }
 
-// TestAquaProjectOwnedParts: package versions, extra packages, and the standard
-// registry ref are the project's — none of them may fail the rule.
+// canonicalPin returns a canonical tool's one-line pin exactly as the embedded
+// tool set (.limen/aqua.yaml) spells it, and its version. Fixtures are built
+// from these rather than from copied literals: a copied version is a second
+// pin of the same tool that Renovate does not know about.
+func canonicalPin(t *testing.T, name string) (line, version string) {
+	t.Helper()
+
+	prefix := "  - name: " + name + "@"
+	for l := range strings.SplitSeq(rules.CanonicalAquaPackages, "\n") {
+		if rest, ok := strings.CutPrefix(l, prefix); ok {
+			version, _, _ = strings.Cut(rest, " ")
+
+			return l + "\n", version
+		}
+	}
+
+	t.Fatalf("the canonical .limen/aqua.yaml carries no one-line pin for %s", name)
+
+	return "", ""
+}
+
+// withProjectEntries returns the canonical manifest with entries (complete
+// lines) placed where a project's own packages go: above the import, which
+// closes the list.
+func withProjectEntries(t *testing.T, entries string) string {
+	t.Helper()
+
+	importLine := canonicalImportLine(t) + "\n"
+
+	return strings.Replace(limen.CanonicalAquaYAML, importLine, entries+importLine, 1)
+}
+
+// withoutLineContaining returns text with the one line containing substr
+// removed; it fails the test when no line matches.
+func withoutLineContaining(t *testing.T, text, substr string) string {
+	t.Helper()
+
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, substr) {
+			return strings.Join(slices.Delete(lines, i, i+1), "\n")
+		}
+	}
+
+	t.Fatalf("no line containing %q — update this test", substr)
+
+	return ""
+}
+
+// TestAquaProjectOwnedParts: extra packages, an override of a canonical tool's
+// version, and the standard registry ref are the project's — none may fail the
+// rule.
 func TestAquaProjectOwnedParts(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	justLine := canonicalAquaLine(t, "casey/just@")
-	manifest := canonicalAquaWith(t, justLine, "  - name: casey/just@v99.99.99") // own version of a canonical package
-	manifest = strings.Replace(manifest, "packages:", "packages:\n  - name: junegunn/fzf@v0.60.0", 1)
+	manifest := withProjectEntries(t,
+		"  - name: junegunn/fzf@v0.60.0\n"+ // an extra package
+			"  - name: golang/go@go99.0.0\n") // a newer go than limen pins
 	manifest = replaceRef(t, manifest, "v9.9.9") // Renovate-bumped registry ref
 
 	files[".aqua/aqua.yaml"] = manifest
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua"); !f.OK() {
-		t.Errorf("project-owned versions/packages/ref should pass: %s", f.Message)
+		t.Errorf("project-owned packages/override/ref should pass: %s", f.Message)
+	}
+}
+
+// TestAquaOverrideBelowImport: aqua takes a package's first declaration, so an
+// override below the import would be shadowed by it. Check fails; fix moves the
+// import to the end of the list, keeps the override, and the rule passes.
+func TestAquaOverrideBelowImport(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files[".aqua/aqua.yaml"] = limen.CanonicalAquaYAML + "  - name: golang/go@go99.0.0\n"
+	dir := writeRepo(t, files)
+
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua")
+	if f.OK() || !strings.Contains(f.Message, "last package entry") {
+		t.Fatalf("an entry below the import must fail, got: %+v", f)
+	}
+
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(data)
+
+	override := strings.Index(got, "  - name: golang/go@go99.0.0\n")
+	importAt := strings.Index(got, "  - import: ../.limen/aqua.yaml\n")
+
+	if override < 0 || importAt < 0 || override > importAt {
+		t.Errorf("fix must keep the override and move the import below it:\n%s", got)
+	}
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
+		t.Errorf("after fix: %s", f.Message)
 	}
 }
 
@@ -803,20 +890,22 @@ func TestAquaRejectsExtraRegistry(t *testing.T) {
 	}
 }
 
+// TestAquaRequiresCanonicalPackages: the manifest must import the canonical
+// tool set; without the import every canonical tool is gone.
 func TestAquaRequiresCanonicalPackages(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	line := canonicalAquaLine(t, "koalaman/shellcheck@")
+	line := canonicalImportLine(t)
 	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, line+"\n", "")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
-		t.Fatal("a missing canonical package should fail")
+		t.Fatal("a missing import should fail")
 	}
 
-	if !strings.Contains(f.Message, "koalaman/shellcheck") {
-		t.Errorf("message did not name the missing package: %s", f.Message)
+	if !strings.Contains(f.Message, "import ../.limen/aqua.yaml") {
+		t.Errorf("message did not name the missing import: %s", f.Message)
 	}
 }
 
@@ -824,15 +913,15 @@ func TestAquaRejectsDuplicatePackages(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	line := canonicalAquaLine(t, "casey/just@")
-	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, line+"\n", line+"\n  - name: casey/just@v0.0.1\n")
+	files[".aqua/aqua.yaml"] = withProjectEntries(t,
+		"  - name: junegunn/fzf@v0.60.0\n  - name: junegunn/fzf@v0.61.0\n")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("duplicate package entries should fail")
 	}
 
-	if !strings.Contains(f.Message, "duplicate") || !strings.Contains(f.Message, "casey/just") {
+	if !strings.Contains(f.Message, "duplicate") || !strings.Contains(f.Message, "junegunn/fzf") {
 		t.Errorf("message did not name the duplicate: %s", f.Message)
 	}
 }
@@ -941,6 +1030,21 @@ func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 	if f := findingByRule(rules.Check(writeRepo(t, badReg), rules.DefaultPolicy()), "aqua"); f.OK() {
 		t.Error("a drifted .limen/aqua-registry.yaml should fail (content-pinned)")
 	}
+
+	// The canonical tool set: missing or drifted fails (content-pinned).
+	noPkgs := compliantFiles()
+	delete(noPkgs, ".limen/aqua.yaml")
+
+	if f := findingByRule(rules.Check(writeRepo(t, noPkgs), rules.DefaultPolicy()), "aqua"); f.OK() {
+		t.Error("a missing .limen/aqua.yaml should fail the aqua rule")
+	}
+
+	badPkgs := compliantFiles()
+
+	badPkgs[".limen/aqua.yaml"] = rules.CanonicalAquaPackages + "  - name: junegunn/fzf@v0.60.0\n"
+	if f := findingByRule(rules.Check(writeRepo(t, badPkgs), rules.DefaultPolicy()), "aqua"); f.OK() {
+		t.Error("a drifted .limen/aqua.yaml should fail (content-pinned)")
+	}
 }
 
 func TestYamlfmtConditional(t *testing.T) {
@@ -949,7 +1053,7 @@ func TestYamlfmtConditional(t *testing.T) {
 	// No YAML anywhere: the yamlfmt rule produces no finding.
 	noYAML := compliantFiles()
 	for _, y := range []string{
-		".aqua/aqua.yaml", ".aqua/aqua-policy.yaml", ".limen/aqua-registry.yaml",
+		".aqua/aqua.yaml", ".aqua/aqua-policy.yaml", ".limen/aqua-registry.yaml", ".limen/aqua.yaml",
 		".github/workflows/update-aqua-checksum.yaml", ".github/actions/setup-aqua/action.yaml", ".github/workflows/ci.yaml",
 		".github/workflows/security.yaml",
 	} {
@@ -1119,8 +1223,8 @@ func TestPinsRule(t *testing.T) {
 		t.Errorf("an unknown verify method must fail naming it, got: %+v", f)
 	}
 
-	// A method that shells out needs its tool pinned in aqua.yaml: the
-	// canonical manifest pins gh and cosign, one without cosign fails naming
+	// A method that shells out needs its tool pinned through aqua: the
+	// canonical tool set pins gh and cosign, one without cosign fails naming
 	// the package.
 	files["pins.yaml"] = strings.Replace(current, "verify: download",
 		"verify: cosign-sha256sums https://e.invalid/S https://e.invalid/B ^x$ https://e.invalid", 1)
@@ -1129,7 +1233,7 @@ func TestPinsRule(t *testing.T) {
 		t.Errorf("a pinned verifier must pass: %s", f.Message)
 	}
 
-	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, canonicalAquaLine(t, "sigstore/cosign@")+"\n", "")
+	files[".limen/aqua.yaml"] = withoutLineContaining(t, rules.CanonicalAquaPackages, "sigstore/cosign@")
 
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); f.OK() ||
 		!strings.Contains(f.Message, "sigstore/cosign") {

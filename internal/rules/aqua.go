@@ -1,13 +1,18 @@
 package rules
 
 // aqua.yaml is subset-pinned rather than content-pinned: the checksum and
-// registries sections and the canonical package set are limen's, while package
-// versions, extra per-project packages, and the standard registry ref (bumped
-// per project by Renovate) are the project's. This file holds the conservative
-// line-oriented parser and merge logic behind that rule. It understands exactly
-// the shape the rule prescribes — block-style top-level checksum/registries/
-// packages keys with "- name:" package entries — and refuses anything else, so
-// remediation never rewrites a manifest it does not fully understand.
+// registries sections, the farcloser/limen pin and the import of the canonical
+// tool set (.limen/aqua.yaml, content-pinned), last in the list, are limen's;
+// the project's own packages above the import — extras, and overrides of a
+// canonical tool's version — and the standard registry ref (bumped per project
+// by Renovate) are the project's. fix never edits the project's entries:
+// Renovate rebuilds a branch whose manifest's package list differs from the
+// base's, so a limen bump that rewrote the list would fight it on every push.
+// This file holds the conservative line-oriented parser and merge logic
+// behind that rule. It understands exactly the shape the rule prescribes —
+// block-style top-level checksum/registries/packages keys with "- name:" and
+// "- import:" entries — and refuses anything else, so remediation never
+// rewrites a manifest it does not fully understand.
 
 import (
 	"cmp"
@@ -47,8 +52,12 @@ type aquaManifest struct {
 var (
 	aquaTopKeyRE  = regexp.MustCompile(`^([A-Za-z0-9_-]+):(.*)$`)
 	aquaPkgNameRE = regexp.MustCompile(`^(\s*)-\s+name:\s*(.+)$`)
-	aquaRefKeyRE  = regexp.MustCompile(`^(\s*ref:).*$`)
-	aquaRefValRE  = regexp.MustCompile(`^(\s*ref:\s*)(\S+)(.*)$`)
+	// An import entry counts as a package named for its path (importPkgPrefix
+	// + path): the canonical one is then required, and restored, exactly like
+	// a canonical package.
+	aquaPkgImportRE = regexp.MustCompile(`^(\s*)-\s+import:\s*(.+)$`)
+	aquaRefKeyRE    = regexp.MustCompile(`^(\s*ref:).*$`)
+	aquaRefValRE    = regexp.MustCompile(`^(\s*ref:\s*)(\S+)(.*)$`)
 	// An exact pin: a plain semver tag or a full commit SHA. Branches and
 	// "latest" are moving targets and fail the rule.
 	aquaExactRefRE = regexp.MustCompile(`^(v\d+\.\d+\.\d+|[0-9a-f]{40})$`)
@@ -97,10 +106,36 @@ func selfPinReplacement(manifest aquaManifest, version string) []aquaReplacement
 	return nil
 }
 
+// importPkgPrefix names an import entry as a package: "import " + its path.
+const importPkgPrefix = "import "
+
 // canonicalAqua is the parsed embedded aqua.yaml — the baseline the rule
 // enforces. The canonical file is limen's own, so failing to parse it is a
 // build defect, caught the first time the package loads.
 var canonicalAqua = mustParseCanonicalAqua() //nolint:gochecknoglobals // parsed once from embedded canonical data.
+
+// canonicalImport is the package name of the canonical tool set's import.
+const canonicalImport = importPkgPrefix + "../" + aquaPackagesFile
+
+// importNotLast reports whether the manifest imports the canonical tool set
+// but declares a package after it. aqua takes the first declaration of a
+// package: an entry above the import overrides the canonical version (a
+// project adopting a newer go), while the same entry below it would be
+// shadowed by the import without a word — so the import closes the list.
+func (m *aquaManifest) importNotLast() bool {
+	for i, p := range m.pkgs {
+		if p.name == canonicalImport {
+			return i != len(m.pkgs)-1
+		}
+	}
+
+	return false
+}
+
+// importNotLastMessage is the check failure / fix summary wording.
+const importNotLastMessage = "the import of " + aquaPackagesFile + " must be the last package entry: " +
+	"aqua takes a package's first declaration, so an entry below the import is shadowed by it " +
+	"(limen fix moves the import down)"
 
 func mustParseCanonicalAqua() aquaManifest {
 	m, ok := parseAquaManifest(limen.CanonicalAquaYAML)
@@ -233,7 +268,7 @@ func (m *aquaManifest) parsePackages() bool {
 	entryIndent := -1
 
 	for lineIndex := m.packages.start + 1; lineIndex < m.packages.end; lineIndex++ {
-		match := aquaPkgNameRE.FindStringSubmatch(m.lines[lineIndex])
+		match, prefix := matchPkgEntry(m.lines[lineIndex])
 		if match == nil {
 			continue
 		}
@@ -258,6 +293,8 @@ func (m *aquaManifest) parsePackages() bool {
 			return false
 		}
 
+		name = prefix + name
+
 		end := lineIndex + 1
 		for end < m.packages.end && strings.TrimSpace(m.lines[end]) != "" && lineIndent(m.lines[end]) > indent {
 			end++
@@ -267,6 +304,17 @@ func (m *aquaManifest) parsePackages() bool {
 	}
 
 	return true
+}
+
+// matchPkgEntry matches a line opening a package entry — "- name:" or
+// "- import:" — returning the submatches (indent, value) and the prefix its
+// name takes (importPkgPrefix for an import); nil when the line opens neither.
+func matchPkgEntry(line string) (match []string, prefix string) {
+	if match = aquaPkgNameRE.FindStringSubmatch(line); match != nil {
+		return match, ""
+	}
+
+	return aquaPkgImportRE.FindStringSubmatch(line), importPkgPrefix
 }
 
 func (m *aquaManifest) section(s aquaSection) []string { return m.lines[s.start:s.end] }
@@ -328,8 +376,10 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 // project's pinned go ran it first, and then shares that binary across
 // projects; nothing pins the compiler behind the binary that runs, which only
 // the module's tool directive guarantees. A manifest still pinning one fails
-// check (the recipes no longer look for it on PATH), and fix removes the
-// entry.
+// check (the recipes no longer look for it on PATH). fix never removes it:
+// the entry is the project's, and deleting it on a limen bump would change
+// the manifest's package list, which is what makes Renovate rebuild the
+// branch over the checksum workflow's fix (book/tooling.md).
 //
 // The set is the gotools rule's own tables read from the other side — every
 // tool it requires, every directive it has retired, and the aqua packages
@@ -391,7 +441,7 @@ func (m *aquaManifest) withoutPkgs(names []string) (aquaManifest, bool) {
 // canonical packages still present.
 func retiredPkgsMessage(retired []string) string {
 	return "retired canonical package(s): " + strings.Join(retired, ", ") +
-		" (now go.mod tool directives, see book/tooling.md; limen fix removes the entry)"
+		" (now go.mod tool directives, see book/tooling.md): delete the entry by hand, limen fix leaves the project's entries alone"
 }
 
 // checkAquaManifest evaluates a parsed manifest against the canonical baseline
@@ -460,6 +510,12 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 		return &finding
 	}
 
+	if manifest.importNotLast() {
+		finding := fail(rule, name, name+": "+importNotLastMessage)
+
+		return &finding
+	}
+
 	if twoLine := manifest.twoLinePinNames(); len(twoLine) > 0 {
 		finding := fail(rule, name, name+": "+twoLinePinMessage(twoLine))
 
@@ -490,14 +546,15 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []string) {
 	var plan aquaPlan
 
-	// Retired packages go first, as a whole-text pass: every range planned
-	// below is then computed on the stripped manifest, so no replacement can
-	// straddle a removed entry.
-	if retired := manifest.retiredPkgs(); len(retired) > 0 {
-		if stripped, ok := manifest.withoutPkgs(retired); ok {
+	// An import above other entries is taken out here, as a whole-text pass
+	// so every range planned below is computed on the stripped manifest, and,
+	// now missing, appended back at the end of the list by the package merge.
+	// A retired package is left in place: check names it for the owner.
+	if manifest.importNotLast() {
+		if stripped, ok := manifest.withoutPkgs([]string{canonicalImport}); ok {
 			manifest = stripped
 
-			plan.summary = append(plan.summary, "removed "+retiredPkgsMessage(retired))
+			plan.summary = append(plan.summary, "moved the import of "+aquaPackagesFile+" to the end of the list")
 		}
 	}
 
