@@ -170,7 +170,8 @@ branches are the human's.
   from an unmerged branch, showing that branch's commits until it lands —
   waits, unrequested, until its base has merged and it has been rebased
   down to its own commits. The owner is whoever the repository says: a
-  `CODEOWNERS` entry when there is one, else the organization's owner.
+  `CODEOWNERS` entry when there is one, else the organization's owner. What
+  the reviewer checks, and in what order, is [reviewing code](./review.md).
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local
   `main`, prune the merged branch and its worktree, and rebase every open
   branch onto `main` — so that both the human and the agent can rebase often
