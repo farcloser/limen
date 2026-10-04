@@ -242,17 +242,44 @@ func remediateEditorconfig(root string) Outcome {
 	return pinExact(root, "editorconfig", ".editorconfig", CanonicalEditorconfig)
 }
 
-// remediateGitignore seeds the canonical .gitignore only when a repository has
-// none. An existing file is the project's own and is left untouched — limen
-// neither enforces nor updates its patterns.
+// remediateGitignore seeds the canonical .gitignore when a repository has
+// none, and appends to an existing one the required patterns it lacks (see
+// gitignoreRequired); the rest of an existing file is the project's own.
 func remediateGitignore(root string) Outcome {
 	const (
 		rule = "gitignore"
 		name = ".gitignore"
 	)
 
-	if _, err := readRepoFile(root, name); err == nil {
-		return Outcome{Rule: rule, Action: ActionNone, Path: name, Message: ".gitignore present; left as-is"}
+	if data, err := readRepoFile(root, name); err == nil {
+		missing := missingGitignorePatterns(string(data))
+		if len(missing) == 0 {
+			return Outcome{
+				Rule:    rule,
+				Action:  ActionNone,
+				Path:    name,
+				Message: ".gitignore carries the required patterns",
+			}
+		}
+
+		// Appended, never rewritten: everything else in the file is the
+		// project's own, comments and order included.
+		content := string(data)
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+
+		content += "\n# Required by limen (book/mandatory-files.md, \".gitignore\").\n" +
+			strings.Join(missing, "\n") + "\n"
+
+		if err := writeFile(root, name, content); err != nil {
+			return failed(rule, name, err)
+		}
+
+		return Outcome{
+			Rule: rule, Action: ActionMerged, Path: name,
+			Message: "appended required pattern(s): " + strings.Join(missing, ", "),
+		}
 	}
 
 	if err := writeFile(root, name, limen.CanonicalGitignore); err != nil {

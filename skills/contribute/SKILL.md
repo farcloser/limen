@@ -14,7 +14,6 @@ human's request, and never commit on `main`.
 
 ```
 git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_COMMAND, which outranks the rig's core.sshCommand
-grep -qx '.claude/' <clone>/.git/info/exclude || echo '.claude/' >> <clone>/.git/info/exclude   # once per clone
 git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/main
 test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
 cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow .aqua/aqua-policy.yaml && aqua install --only-link
@@ -26,9 +25,9 @@ branch listing reads in date order and a stale one shows its age.
 
 The worktree lives under `.claude/worktrees/` in the clone, where the
 harness's own worktree tool puts its worktrees, so the harness can switch the
-session into it by path. Nothing ignores `.claude/`, and a nested checkout
-shows up in the human's `git status` as an untracked directory; the exclude
-line keeps it out, per clone, without a commit.
+session into it by path. `.claude` is a required `.gitignore` pattern
+(`book/mandatory-files.md`), so the nested checkout stays out of the human's
+`git status`.
 
 `--no-track`, because a remote-tracking start point records an upstream, and
 that writes `.git/config`, which the sandbox denies (the same denial as `-u`

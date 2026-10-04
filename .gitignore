@@ -9,13 +9,15 @@ Desktop.ini
 *.swp
 *~
 
+# Coding agent sessions: worktrees, local settings
+.claude/
+
 # Build output and Go artifacts
 /build
-/tmp
 
 # Scratch / work-in-progress files
 # *.local
-_scratch/
+/_scratch
 # WIP_*
 
 # =========================
