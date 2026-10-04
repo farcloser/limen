@@ -240,7 +240,7 @@ each project keeps room of its own:
 | `.limen/just/*.just` (shared modules) | The **shared recipe baseline**. `main.just` mounts the `do` tree, sets the hermetic environment, and carries the orientation recipes (`default`, `info`); under the `do` namespace sit `build` (compile — release, debug, race, static variants), `tools` (aqua management), `lint` (report style/quality problems — its `aqua` recipe compares `.aqua/aqua-checksums.json` against a fresh regeneration to detect drift, aqua having no read-only validator, and its `limen` recipe runs `limen check`), `test` (run the suite — unit, race, bench, cover, profile), `fix` (apply fixes in place, where the tool supports it — including `limen fix`), each loaded as a `mod`, plus `release` imported flat so it can take a tag argument. The same in every repo. | Content-pinned: **every `*.just` file under `.limen/just/`** must match the canonical exactly. |
 
 The `.limen/` directory also parks a few non-recipe config files to keep the repo root uncluttered
-(`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/lint-go.yaml`, `.limen/aqua-registry.yaml`,
+(`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/lint-go.yaml`, `.limen/aqua-registry.yaml`, `.limen/aqua.yaml`,
 `.limen/lychee.toml`). These are *not* just modules — only `*.just` files are — and they are
 governed by their own rules ([per-language](./per-language.md), [tooling](./tooling.md),
 [link checking](#link-checking--limenlycheetoml)), not the .justfile content-pin.

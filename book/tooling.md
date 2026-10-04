@@ -287,15 +287,17 @@ machine up so a coding agent can commit and push as its own identity — see
 Create these files. aqua's own three live in `.aqua/`, one of the directories aqua searches
 (a local registry path inside them is relative to `.aqua/`, hence `../.limen/…`). This
 repository's own aqua files
-([`.aqua/aqua.yaml`](../.aqua/aqua.yaml), [`.limen/aqua-registry.yaml`](../.limen/aqua-registry.yaml),
+([`.aqua/aqua.yaml`](../.aqua/aqua.yaml), [`.limen/aqua.yaml`](../.limen/aqua.yaml),
+[`.limen/aqua-registry.yaml`](../.limen/aqua-registry.yaml),
 [`.aqua/aqua-policy.yaml`](../.aqua/aqua-policy.yaml)) are the canonical reference — we dogfood this rule.
 
 ```
 repo/
 ├── .aqua/
-│   ├── aqua.yaml                          # the manifest: pinned tool versions
+│   ├── aqua.yaml                          # the manifest: the limen pin, the import, the project's own tools
 │   ├── aqua-checksums.json                # GENERATED — commit it
 │   └── aqua-policy.yaml                   # authorizes the local registry
+├── .limen/aqua.yaml                              # the canonical tool set, imported by the manifest
 ├── .limen/aqua-registry.yaml                     # local registry: farcloser/limen and the coreutils names
 ├── renovate.json                          # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
@@ -312,20 +314,33 @@ What the `.aqua/aqua.yaml` must carry — the manifest is **subset-pinned** (see
   (limen itself, the coreutils names). One field is the project's: the standard registry's
   `ref`, which Renovate bumps per repo — but it must always be an **exact pin** (a `vX.Y.Z`
   tag or a full commit SHA, never a branch).
-- **At least the canonical packages**, matched by name — the *versions* are the project's
-  (Renovate bumps them), and extra per-project packages are welcome. A package is never
-  listed twice — and never a **retired** one: the Go-built tools moved to `tools/go.mod`
-  (see [above](#go-source-analyzers-are-gomod-tools)); `limen fix` removes a lingering pin.
+- **The `farcloser/limen` pin and the import of the canonical tool set**
+  (`- import: ../.limen/aqua.yaml`). Every other tool limen requires lives in that file, at
+  the versions the pinned limen release carries: the canonical tools move with limen, not
+  per repository. Extra per-project packages are welcome below the import, at the project's
+  versions. A canonical tool is never listed in the manifest as well (`limen fix` removes
+  it), a package is never listed twice, and never a **retired** one: the Go-built tools moved
+  to `tools/go.mod` (see [above](#go-source-analyzers-are-gomod-tools)); `limen fix` removes a
+  lingering pin.
 
-> **Content-pinned files.** `.aqua/aqua-policy.yaml` and `.limen/aqua-registry.yaml` are **canonical
-> everywhere** — `limen` requires them to match its embedded copies byte for byte (and `limen
-> fix` overwrites drift). `.aqua/aqua.yaml` is subset-pinned as above; only its package versions,
-> extra packages, and the standard registry ref are project-owned. `.aqua/aqua-checksums.json` is
-> **generated, never hand-edited**: `limen fix` regenerates it (`aqua update-checksum`)
-> whenever it changes the manifest or the file is missing. Consequence: the catalog of
-> local-registry packages is **shared** — to add one, it goes into limen's canonical registry,
-> not a single repo's. A Go-built tool never qualifies (see above): it is a `tools/go.mod`
-> directive, which is the project's own.
+Why the import: Renovate rebuilds a branch from scratch whenever the package list of the
+file it updates differs from the base branch's. If a limen bump rewrote that list in
+`.aqua/aqua.yaml` (adding a tool limen now requires, dropping a retired one), the
+checksum workflow's `limen fix` and Renovate would undo each other on every push. With the
+canonical tools in the imported file, a limen bump changes one line of the manifest, the
+limen pin, and its list never moves.
+
+> **Content-pinned files.** `.limen/aqua.yaml`, `.aqua/aqua-policy.yaml` and
+> `.limen/aqua-registry.yaml` are **canonical everywhere** — `limen` requires them to match its
+> embedded copies byte for byte (and `limen fix` overwrites drift). Renovate leaves them alone
+> outside limen; in limen it bumps the canonical tools, which every repository then receives
+> with its next limen version. `.aqua/aqua.yaml` is subset-pinned as above; only its extra
+> packages and the standard registry ref are project-owned. `.aqua/aqua-checksums.json` is
+> **generated, never hand-edited**: `limen fix` regenerates it (`aqua update-checksum`, which
+> follows the import) whenever it changes the manifest or the tool set, or the file is missing.
+> Consequence: the catalog of local-registry packages is **shared** — to add one, it goes into
+> limen's canonical registry, not a single repo's. A Go-built tool never qualifies (see
+> above): it is a `tools/go.mod` directive, which is the project's own.
 
 Bootstrap, from the repo root:
 
