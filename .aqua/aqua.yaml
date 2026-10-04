@@ -28,9 +28,12 @@ packages:
   # --- farcloser tools (local registry; standard once registered upstream) ---
   - name: farcloser/limen@v0.6.2 # renovate: depName=farcloser/limen
     registry: local
-  # sha256sum and base64 under their bare names; the registry entry says how
-  # it is verified.
+  # The coreutils under their bare names, the same pin on every platform:
+  # uutils on macOS and Linux, Git for Windows' MSYS2 coreutils on Windows.
+  # The registry entries say why, and how each is verified.
   - name: uutils/coreutils@0.12.0
+    registry: local
+  - name: git-for-windows/git@v2.56.0.windows.1
     registry: local
   # --- toolchain + binary-release tools (standard registry, aqua-verified) ---
   - name: golang/go@go1.27.1
