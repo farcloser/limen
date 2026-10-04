@@ -232,6 +232,33 @@ func TestParseAndGet(t *testing.T) {
 	}
 }
 
+// TestVersioningGroupsExpand: a tag whose release asset spells the version
+// another way is rebuilt from the named groups of its regex versioning, in the
+// url and in the method's arguments.
+func TestVersioningGroupsExpand(t *testing.T) {
+	t.Parallel()
+
+	text := "pins:\n  - name: expat\n    renovate: github-tags libexpat/libexpat\n" +
+		"    versioning: regex:^R_(?<major>\\d+)_(?<minor>\\d+)_(?<patch>\\d+)$\n    version: R_2_8_5\n" +
+		"    url: https://h/releases/download/${version}/expat-${major}.${minor}.${patch}.tar.gz\n" +
+		"    verify: github-release-asset libexpat/libexpat ${version}\n" +
+		"    digest:\n      version: R_2_8_5\n      sha256: " + strings.Repeat("0", 64) + "\n"
+
+	manifest, err := pins.Parse([]byte(text))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	url, _ := manifest.Get("expat", "url")
+	if want := "https://h/releases/download/R_2_8_5/expat-2.8.5.tar.gz"; url != want {
+		t.Errorf("url = %q, want %q", url, want)
+	}
+
+	if args := manifest.Entries[0].VerifyArgs(); !slices.Equal(args, []string{"libexpat/libexpat", "R_2_8_5"}) {
+		t.Errorf("verify args = %v", args)
+	}
+}
+
 // TestParseRejects: every shape the commands could not act on is refused at
 // parse time, naming the entry and the problem.
 func TestParseRejects(t *testing.T) {
@@ -290,6 +317,28 @@ func TestParseRejects(t *testing.T) {
 			pins.ErrEntry,
 		},
 		"duplicate name": {good + strings.TrimPrefix(good, "pins:\n"), pins.ErrEntry},
+		"unknown variable in url": {
+			strings.Replace(good, "url: https://h/a", "url: https://h/a-${minor}", 1),
+			pins.ErrEntry,
+		},
+		"unknown variable in verify": {
+			strings.Replace(good, "verify: download", "verify: github-release-asset x/y v${vresion}", 1),
+			pins.ErrEntry,
+		},
+		"group the version does not match": {
+			strings.Replace(
+				strings.Replace(
+					good,
+					"    version: 1\n",
+					"    versioning: regex:^R_(?<major>\\d+)_(?<minor>\\d+)$\n    version: 1\n",
+					1,
+				),
+				"url: https://h/a",
+				"url: https://h/a-${minor}",
+				1,
+			),
+			pins.ErrEntry,
+		},
 	}
 
 	for name, tc := range cases {
