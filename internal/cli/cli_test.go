@@ -107,7 +107,12 @@ func stubDir(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		aqua += ".bat"
 		aquaScript = "@echo off\r\n>> \"%~dp0log\" echo %*\r\n" +
-			"echo %* | find \"update-checksum\" >nul && echo {\"stub\":true}> .aqua\\aqua-checksums.json\r\n"
+			// cmd's own substring test, never `find`: under the Git Bash PATH the
+			// tests run with, `find` is GNU find, which takes the word for a path
+			// and fails every call.
+			"set \"args=%*\"\r\n" +
+			"if not \"%args:update-checksum=%\"==\"%args%\" echo {\"stub\":true}> .aqua\\aqua-checksums.json\r\n" +
+			"exit /b 0\r\n"
 		goStub += ".bat"
 		goScript = "@echo off\r\n" +
 			"if not \"%1\"==\"get\" exit /b 0\r\n" +
