@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/farcloser/limen"
 	"github.com/farcloser/limen/internal/rules"
 )
 
@@ -344,9 +343,9 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 	}
 }
 
-// TestFixRemovesRetiredPackages: fix strips a retired pin (entry line and its
-// continuation) and leaves every other package, then the manifest passes.
-func TestFixRemovesRetiredPackages(t *testing.T) {
+// TestFixLeavesRetiredPackages: a retired pin is the project's entry, so fix
+// leaves the manifest untouched and ends advisory, naming the entry to delete.
+func TestFixLeavesRetiredPackages(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
@@ -354,24 +353,22 @@ func TestFixRemovesRetiredPackages(t *testing.T) {
 		"packages:\n  - name: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n    registry: local\n")
 	dir := writeRepo(t, files)
 
-	outcome := outcomeFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "aqua")
-	if !resolved(outcome.Action) {
-		t.Fatalf("aqua fix unresolved: %s (%s)", outcome.Action, outcome.Message)
+	var advisory *rules.Outcome
+
+	for _, o := range rules.Fix(t.Context(), dir, bootstrapOpts()) {
+		if o.Rule == "aqua" && o.Action == rules.ActionAdvisory {
+			advisory = &o
+		}
+	}
+
+	if advisory == nil || !strings.Contains(advisory.Message, "golang.org/x/vuln/cmd/govulncheck") ||
+		!strings.Contains(advisory.Message, "by hand") {
+		t.Fatalf("fix should end advisory, naming the retired entry to delete by hand, got: %+v", advisory)
 	}
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
-
-	manifest := string(data)
-	if strings.Contains(manifest, "- name: golang.org/x/vuln/cmd/govulncheck") {
-		t.Errorf("retired package survived fix:\n%s", manifest)
-	}
-
-	if !strings.Contains(manifest, "- name: casey/just@") {
-		t.Error("an unrelated canonical package was lost")
-	}
-
-	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
-		t.Fatalf("manifest does not pass after fix: %s", f.Message)
+	if string(data) != files[".aqua/aqua.yaml"] {
+		t.Errorf("fix edited the manifest:\n%s", data)
 	}
 }
 
@@ -584,46 +581,23 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) { // Serial by design: t.Sete
 }
 
 // TestAquaGoDirective: the go directive of a seeded tools/go.mod comes from
-// the manifest's golang/go pin — the canonical one, or the project's own,
-// quoted and commented as it likes.
+// the golang/go pin of the canonical tool set the manifest imports.
 func TestAquaGoDirective(t *testing.T) {
 	t.Parallel()
 
-	goLine, _ := canonicalPin(t, "golang/go")
+	files := compliantFiles()
+	delete(files, "tools/go.mod")
+	dir := writeRepo(t, files)
 
-	tests := []struct {
-		name     string
-		manifest string
-		want     string
-	}{
-		{name: "canonical", manifest: limen.CanonicalAquaYAML, want: "go " + canonicalGoVersion(t)},
-		{
-			name:     "quoted, the project's own version",
-			manifest: strings.Replace(limen.CanonicalAquaYAML, goLine, "  - name: 'golang/go@go1.25.3' # pinned\n", 1),
-			want:     "go 1.25.3",
-		},
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
+	if err != nil {
+		t.Fatalf("tools/go.mod not created: %v", err)
 	}
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			files := compliantFiles()
-			files[".aqua/aqua.yaml"] = testCase.manifest
-			delete(files, "tools/go.mod")
-			dir := writeRepo(t, files)
-
-			rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
-
-			toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
-			if err != nil {
-				t.Fatalf("tools/go.mod not created: %v", err)
-			}
-
-			if !strings.Contains(string(toolsMod), "\n"+testCase.want+"\n") {
-				t.Errorf("tools/go.mod lacks %q:\n%s", testCase.want, toolsMod)
-			}
-		})
+	if want := "go " + canonicalGoVersion(t); !strings.Contains(string(toolsMod), "\n"+want+"\n") {
+		t.Errorf("tools/go.mod lacks %q:\n%s", want, toolsMod)
 	}
 }
 

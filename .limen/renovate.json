@@ -87,6 +87,7 @@
     {
       "matchFileNames": [
         ".aqua/aqua.yaml",
+        ".limen/aqua.yaml",
         "aqua.yaml",
         "aqua.yml"
       ],

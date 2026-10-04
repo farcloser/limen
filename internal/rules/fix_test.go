@@ -537,8 +537,9 @@ func TestFixCreatesMissingShellcheck(t *testing.T) {
 }
 
 // TestFixMergesAquaManifest: an existing manifest keeps its own packages and
-// versions, gains the canonical sections and missing canonical packages without
-// duplicates, and has its checksums regenerated — not copied from limen.
+// versions — a canonical package it pins itself stays, as an override above
+// the import — gains the canonical sections and the import at the end of the
+// list, and has its checksums regenerated — not copied from limen.
 func TestFixMergesAquaManifest(t *testing.T) {
 	t.Parallel()
 
@@ -571,12 +572,19 @@ func TestFixMergesAquaManifest(t *testing.T) {
 		t.Error("the project's own package was dropped")
 	}
 
-	if !strings.Contains(manifest, "casey/just@v99.99.99") {
-		t.Error("the project's own version of a canonical package was not kept")
+	override := strings.Index(manifest, "- name: casey/just@v99.99.99")
+	importAt := strings.Index(manifest, "- import: ../.limen/aqua.yaml")
+
+	if override < 0 {
+		t.Error("the project's override of a canonical package was dropped")
 	}
 
-	if n := strings.Count(manifest, "- name: casey/just@"); n != 1 {
-		t.Errorf("casey/just appears %d times, want exactly 1 (no duplicates)", n)
+	if importAt < 0 || importAt < override {
+		t.Errorf("the import must be added at the end of the list:\n%s", manifest)
+	}
+
+	if pkgs, _ := os.ReadFile(filepath.Join(dir, ".limen", "aqua.yaml")); string(pkgs) != rules.CanonicalAquaPackages {
+		t.Error("the canonical tool set was not written")
 	}
 
 	sums, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua-checksums.json"))
@@ -687,7 +695,7 @@ func TestFixInsertsSelfPinAtRunningVersion(t *testing.T) {
 	opts.SelfVersion = "v9.9.9"
 
 	dir := writeRepo(t, map[string]string{
-		".aqua/aqua.yaml": "packages:\n  - name: casey/just@v99.99.99\n",
+		".aqua/aqua.yaml": "packages:\n  - name: junegunn/fzf@v99.99.99\n",
 	})
 
 	rules.Fix(t.Context(), dir, opts)
@@ -702,7 +710,7 @@ func TestFixInsertsSelfPinAtRunningVersion(t *testing.T) {
 		t.Error("the inserted limen pin does not carry the running version")
 	}
 
-	if !strings.Contains(manifest, "casey/just@v99.99.99") {
+	if !strings.Contains(manifest, "junegunn/fzf@v99.99.99") {
 		t.Error("a project-owned version was rewritten")
 	}
 }
@@ -776,7 +784,7 @@ func TestFixMovesExistingSelfPinInReplacedPackages(t *testing.T) {
 	dir := writeRepo(t, map[string]string{
 		".aqua/aqua.yaml": "packages:\n" +
 			"  - name: farcloser/limen@v0.0.1 # renovate: depName=farcloser/limen\n" +
-			"  - name: casey/just@v99.99.99\n",
+			"  - name: junegunn/fzf@v99.99.99\n",
 	})
 
 	rules.Fix(t.Context(), dir, opts)
@@ -795,7 +803,7 @@ func TestFixMovesExistingSelfPinInReplacedPackages(t *testing.T) {
 		t.Errorf("farcloser/limen appears %d times, want exactly 1", n)
 	}
 
-	if !strings.Contains(manifest, "casey/just@v99.99.99") {
+	if !strings.Contains(manifest, "junegunn/fzf@v99.99.99") {
 		t.Error("a project-owned version was rewritten")
 	}
 }
@@ -909,7 +917,7 @@ func TestFixLeavesUnparseableAquaAlone(t *testing.T) {
 func TestFixLeavesQuotedKeyAquaAlone(t *testing.T) {
 	t.Parallel()
 
-	manifest := strings.Replace(limen.CanonicalAquaYAML, canonicalAquaLine(t, "koalaman/shellcheck@")+"\n", "", 1) +
+	manifest := strings.Replace(limen.CanonicalAquaYAML, canonicalImportLine(t)+"\n", "", 1) +
 		"\"my-user-key\":\n  - my precious user data\n"
 	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": manifest, ".aqua/aqua-checksums.json": "{}\n"})
 
@@ -956,8 +964,7 @@ func TestAquaMergeMovesQuotedSelfPin(t *testing.T) {
 func TestFixAquaDuplicatesAdvisory(t *testing.T) {
 	t.Parallel()
 
-	line := canonicalAquaLine(t, "casey/just@")
-	manifest := strings.Replace(limen.CanonicalAquaYAML, line+"\n", line+"\n  - name: casey/just@v0.0.1\n", 1)
+	manifest := withProjectEntries(t, "  - name: junegunn/fzf@v0.60.0\n  - name: junegunn/fzf@v0.61.0\n")
 	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": manifest, ".aqua/aqua-checksums.json": "{}\n"})
 
 	var advisory bool

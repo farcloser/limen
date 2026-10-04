@@ -3,7 +3,6 @@ package rules_test
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -11,13 +10,18 @@ import (
 	"github.com/farcloser/limen/internal/rules"
 )
 
-// TestCanonicalAquaHasNoTwoLinePins: the canonical manifest is itself the
-// shape the rule enforces — every pin one-line, nothing for the fix to do.
+// TestCanonicalAquaHasNoTwoLinePins: the canonical manifest and tool set are
+// themselves the shape the rule enforces — every pin one-line, nothing for the
+// fix to do.
 func TestCanonicalAquaHasNoTwoLinePins(t *testing.T) {
 	t.Parallel()
 
 	if strings.Contains(limen.CanonicalAquaYAML, "\n    version:") {
 		t.Error("the canonical aqua.yaml carries a version: line")
+	}
+
+	if strings.Contains(limen.CanonicalAquaPackages, "\n    version:") {
+		t.Error("the canonical .limen/aqua.yaml carries a version: line")
 	}
 
 	if o := outcomesFor(
@@ -41,67 +45,32 @@ func allNone(outcomes []rules.Outcome) bool {
 	return true
 }
 
-// canonicalPin returns a canonical package's one-line pin exactly as the
-// embedded aqua.yaml spells it, and its version. The fixtures below are
-// built from these rather than from copied literals: a copied version is a
-// second pin of the same tool that Renovate does not know about, and every
-// bump of the canonical manifest then broke these tests for no reason.
-func canonicalPin(t *testing.T, name string) (line, version string) {
-	t.Helper()
-
-	re := regexp.MustCompile(`(?m)^  - name: ` + regexp.QuoteMeta(name) + `@(\S+)\n`)
-
-	m := re.FindStringSubmatch(limen.CanonicalAquaYAML)
-	if m == nil {
-		t.Fatalf("the canonical aqua.yaml carries no one-line pin for %s", name)
-	}
-
-	return m[0], m[1]
-}
-
-// TestAquaTwoLinePinsCollapsed: a project pinning packages on a separate
-// version: line fails check, and fix collapses exactly those entries — the
-// project's version kept, quotes kept, continuation lines untouched, the
+// TestAquaTwoLinePinsCollapsed: a project pinning its own packages on a
+// separate version: line fails check, and fix collapses exactly those entries
+// — the project's version kept, quotes kept, continuation lines untouched, the
 // two-line renovate hook dropped, a project's own comment kept — after which
 // check passes and fix is idempotent.
 func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	t.Parallel()
 
-	// Canonical, except four two-line pins: one with the renovate hook and a
-	// project's own (older) version, one quoted, one with a registry:
-	// continuation line AFTER the version, one with a project's own comment
-	// on the version line.
-	goLine, _ := canonicalPin(t, "golang/go")
-	jqLine, jqVersion := canonicalPin(t, "jqlang/jq")
-	cuLine, cuVersion := canonicalPin(t, "uutils/coreutils")
-	cliLine, cliVersion := canonicalPin(t, "cli/cli")
-
-	const heldBackGo = "go1.0.0" // any version but the canonical: the project's, kept as is
-
-	manifest := limen.CanonicalAquaYAML
-	manifest = strings.Replace(manifest, goLine,
-		"  - name: golang/go\n    version: "+heldBackGo+" # renovate: depName=golang/go\n", 1)
-	manifest = strings.Replace(manifest, jqLine,
-		"  - name: \"jqlang/jq\"\n    version: \""+jqVersion+"\"\n", 1)
-	manifest = strings.Replace(manifest, cuLine+"    registry: local\n",
-		"  - name: uutils/coreutils\n"+
-			"    version: "+cuVersion+" # renovate: depName=uutils/coreutils\n"+
-			"    registry: local\n", 1)
-	manifest = strings.Replace(manifest, cliLine,
-		"  - name: cli/cli\n    version: "+cliVersion+" # held back on purpose\n", 1)
-
-	if strings.Count(manifest, "\n    version:") != 4 {
-		t.Fatal("the fixture did not diverge from the canonical as intended — update the replacements")
-	}
+	// Canonical, plus four project packages pinned on two lines: one with the
+	// renovate hook, one quoted, one with a registry: continuation line AFTER
+	// the version, one with a project's own comment on the version line.
+	manifest := withProjectEntries(t,
+		"  - name: junegunn/fzf\n    version: v0.60.0 # renovate: depName=junegunn/fzf\n"+
+			"  - name: \"mikefarah/yq\"\n    version: \"v4.44.0\"\n"+
+			"  - name: example/local-tool\n    version: v1.2.3 # renovate: depName=example/local-tool\n"+
+			"    registry: local\n"+
+			"  - name: sharkdp/fd\n    version: v10.1.0 # held back on purpose\n")
 
 	files := compliantFiles()
 	files[".aqua/aqua.yaml"] = manifest
 	dir := writeRepo(t, files)
 
 	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); f.OK() ||
-		!strings.Contains(f.Message, "version: line") || !strings.Contains(f.Message, "golang/go") ||
-		!strings.Contains(f.Message, "jqlang/jq") || !strings.Contains(f.Message, "uutils/coreutils") ||
-		!strings.Contains(f.Message, "cli/cli") {
+		!strings.Contains(f.Message, "version: line") || !strings.Contains(f.Message, "junegunn/fzf") ||
+		!strings.Contains(f.Message, "mikefarah/yq") || !strings.Contains(f.Message, "example/local-tool") ||
+		!strings.Contains(f.Message, "sharkdp/fd") {
 		t.Errorf("check must name every two-line pin, got: %+v", f)
 	}
 
@@ -113,18 +82,18 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 	out := string(data)
 
 	for _, want := range []string{
-		"  - name: golang/go@" + heldBackGo + "\n",
-		"  - name: \"jqlang/jq@" + jqVersion + "\"\n",
-		cuLine + "    registry: local\n",
-		"  - name: cli/cli@" + cliVersion + " # held back on purpose\n",
+		"  - name: junegunn/fzf@v0.60.0\n",
+		"  - name: \"mikefarah/yq@v4.44.0\"\n",
+		"  - name: example/local-tool@v1.2.3\n    registry: local\n",
+		"  - name: sharkdp/fd@v10.1.0 # held back on purpose\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("merged manifest lacks:\n%s\n--- got:\n%s", want, out)
 		}
 	}
 
-	if strings.Contains(out, "\n    version:") || strings.Contains(out, "depName=golang/go") ||
-		strings.Contains(out, "depName=uutils/coreutils") {
+	if strings.Contains(out, "\n    version:") || strings.Contains(out, "depName=junegunn/fzf") ||
+		strings.Contains(out, "depName=example/local-tool") {
 		t.Errorf("a version: line or renovate hook survived the collapse:\n%s", out)
 	}
 
@@ -158,18 +127,15 @@ func allResolvedOutcomes(outcomes []rules.Outcome) bool {
 }
 
 // TestAquaTwoLinePinsFoldIntoWholesaleReplacement: when the packages section
-// is rebuilt anyway (a canonical package is missing), the collapse folds into
+// is rebuilt anyway (the canonical import is missing), the collapse folds into
 // that single replacement rather than adding an overlapping one.
 func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	t.Parallel()
 
-	goLine, goVersion := canonicalPin(t, "golang/go")
-	cliLine, _ := canonicalPin(t, "cli/cli")
+	importLine := canonicalImportLine(t) + "\n"
 
-	manifest := limen.CanonicalAquaYAML
-	manifest = strings.Replace(manifest, goLine,
-		"  - name: golang/go\n    version: "+goVersion+" # renovate: depName=golang/go\n", 1)
-	manifest = strings.Replace(manifest, cliLine, "", 1) // now missing
+	manifest := limen.CanonicalAquaYAML + "  - name: junegunn/fzf\n    version: v0.60.0 # renovate: depName=junegunn/fzf\n"
+	manifest = strings.Replace(manifest, importLine, "", 1) // now missing
 
 	files := compliantFiles()
 	files[".aqua/aqua.yaml"] = manifest
@@ -182,8 +148,8 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
 
 	out := string(data)
-	if !strings.Contains(out, goLine) ||
-		!strings.Contains(out, cliLine) || strings.Contains(out, "\n    version:") {
+	if !strings.Contains(out, "  - name: junegunn/fzf@v0.60.0\n") ||
+		!strings.Contains(out, importLine) || strings.Contains(out, "\n    version:") {
 		t.Errorf("merged manifest:\n%s", out)
 	}
 
