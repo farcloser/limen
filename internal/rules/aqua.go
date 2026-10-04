@@ -408,6 +408,58 @@ func (m *aquaManifest) retiredPkgs() []string {
 	return retired
 }
 
+// redundantPins returns the project entries pinned exactly as the canonical
+// set the manifest imports pins them (same package, same version), in
+// manifest order. An override at another version is the project's choice
+// and is not one of these. An identical one overrides nothing today and
+// freezes the tool against every later limen bump, since aqua takes a
+// package's first declaration. fix never removes it: dropping a line on a
+// limen bump changes the package list, which is what makes Renovate rebuild
+// the branch over the checksum workflow's fix (book/tooling.md).
+func (m *aquaManifest) redundantPins() []string {
+	canonical := map[string]bool{}
+
+	for line := range strings.SplitSeq(CanonicalAquaPackages, "\n") {
+		if spec := pinSpec(line); spec != "" {
+			canonical[spec] = true
+		}
+	}
+
+	var redundant []string
+
+	for _, p := range m.pkgs {
+		if spec := pinSpec(m.lines[p.start]); canonical[spec] {
+			redundant = append(redundant, spec)
+		}
+	}
+
+	return redundant
+}
+
+// pinSpec is the `owner/repo@version` a `- name:` line pins, quotes and
+// comment stripped; "" for any other line, or a pin without a version.
+func pinSpec(line string) string {
+	match := aquaPkgNameRE.FindStringSubmatch(line)
+	if match == nil {
+		return ""
+	}
+
+	spec := strings.Trim(strings.TrimSpace(stripAquaComment(match[2])), `"'`)
+	if !strings.Contains(spec, "@") {
+		return ""
+	}
+
+	return spec
+}
+
+// redundantPinsMessage is the check failure / fix advisory wording for pins
+// identical to the canonical set's.
+func redundantPinsMessage(redundant []string) string {
+	return "pin(s) identical to the canonical set it imports: " + strings.Join(redundant, ", ") +
+		" (an entry above the import freezes the tool against later limen bumps): delete the line by hand," +
+		" limen fix leaves the project's entries alone"
+}
+
 // withoutPkgs returns the manifest with the named packages' entries (entry
 // line plus continuation lines) removed, re-parsed so every section range is
 // current. The bool is false when the stripped text no longer parses, which
@@ -512,6 +564,12 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 
 	if manifest.importNotLast() {
 		finding := fail(rule, name, name+": "+importNotLastMessage)
+
+		return &finding
+	}
+
+	if redundant := manifest.redundantPins(); len(redundant) > 0 {
+		finding := fail(rule, name, name+": "+redundantPinsMessage(redundant))
 
 		return &finding
 	}

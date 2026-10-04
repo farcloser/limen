@@ -321,7 +321,9 @@ What the `.aqua/aqua.yaml` must carry — the manifest is **subset-pinned** (see
   canonical tool at a version of the project's choosing (a newer go, say), which Renovate
   then bumps in the project. aqua takes a package's first declaration, so an entry above the
   import wins and the same entry below it would be silently shadowed: the import closes the
-  list (`limen fix` moves it there). A package is never listed twice, and never a
+  list (`limen fix` moves it there). An override is at another version than the import's: one
+  pinned identically overrides nothing today and freezes the tool against every later limen
+  bump, so the check names it for the owner to delete. A package is never listed twice, and never a
   **retired** one: the Go-built tools moved to `tools/go.mod` (see
   [above](#go-source-analyzers-are-gomod-tools)). `limen fix` never edits the project's
   entries: a lingering retired pin fails the check, which names it, and the owner deletes it

@@ -832,6 +832,50 @@ func TestAquaProjectOwnedParts(t *testing.T) {
 	}
 }
 
+// TestAquaRedundantPins: a project entry pinned exactly as the canonical set
+// pins it freezes the tool against later limen bumps. Check fails naming it;
+// fix leaves the project's entry alone and ends advisory; an override at
+// another version is the project's own and passes.
+func TestAquaRedundantPins(t *testing.T) {
+	t.Parallel()
+
+	line, version := canonicalPin(t, "cli/cli")
+
+	files := compliantFiles()
+	files[".aqua/aqua.yaml"] = withProjectEntries(t, line)
+	root := writeRepo(t, files)
+
+	f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "aqua")
+	if f.OK() || !strings.Contains(f.Message, "cli/cli@"+version) {
+		t.Fatalf("a pin identical to the canonical set's should fail naming it, got: %+v", f)
+	}
+
+	var advisory bool
+
+	for _, o := range rules.Fix(t.Context(), root, bootstrapOpts()) {
+		advisory = advisory ||
+			(o.Rule == "aqua" && o.Action == rules.ActionAdvisory && strings.Contains(o.Message, "cli/cli@"))
+	}
+
+	if !advisory {
+		t.Error("fix should end advisory on the identical pin")
+	}
+
+	if data, _ := os.ReadFile(
+		filepath.Join(root, ".aqua", "aqua.yaml"),
+	); !strings.Contains(
+		string(data),
+		strings.TrimSpace(line),
+	) {
+		t.Errorf("fix removed the project's entry:\n%s", data)
+	}
+
+	files[".aqua/aqua.yaml"] = withProjectEntries(t, "  - name: cli/cli@v99.0.0\n")
+	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua"); !f.OK() {
+		t.Errorf("an override at another version should pass: %s", f.Message)
+	}
+}
+
 // TestAquaOverrideBelowImport: aqua takes a package's first declaration, so an
 // override below the import would be shadowed by it. Check fails; fix moves the
 // import to the end of the list, keeps the override, and the rule passes.
