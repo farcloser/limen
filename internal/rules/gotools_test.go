@@ -3,6 +3,7 @@ package rules_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -10,8 +11,8 @@ import (
 	"github.com/farcloser/limen/internal/rules"
 )
 
-// The fake go (see TestMain and installGoStub): `go get -tool a@latest
-// b@latest` appends the directives to the go.mod in the working directory,
+// The fake go (see TestMain and installGoStub): `go get -tool a@v1
+// b@v2` appends the directives, each with its version in a comment, to the go.mod in the working directory,
 // `go get -tool a@none` strips them, `go mod tidy` and anything else succeed
 // silently.
 
@@ -101,7 +102,9 @@ func runGoStub() int {
 			continue
 		}
 
-		lines = append(lines, "tool "+pkg)
+		// The version rides along as a comment, which the directive parser
+		// ignores, so a test can tell what fix seeded.
+		lines = append(lines, "tool "+pkg+" // @"+version)
 	}
 
 	if len(lines) == 0 {
@@ -302,7 +305,7 @@ func TestGoToolsRetiredDirective(t *testing.T) {
 	}
 
 	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	)
 
@@ -379,7 +382,7 @@ func TestFixGoToolsNoOpWhenComplete(t *testing.T) {
 		rules.Fix(
 			t.Context(),
 			writeRepo(t, compliantFiles()),
-			rules.FixOptions{Policy: rules.DefaultPolicy()},
+			rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()},
 		),
 		"gotools",
 	)
@@ -400,7 +403,7 @@ func TestFixGoToolsSeedsWithoutGoMod(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "created "+"tools/go.mod") {
@@ -445,7 +448,7 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged {
@@ -479,10 +482,98 @@ func TestFixGoToolsAddsDirectives(t *testing.T) {
 	}
 
 	if again := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	); again.Action != rules.ActionNone {
 		t.Fatalf("second fix not a no-op: %s (%s)", again.Action, again.Message)
+	}
+}
+
+// limenRequire is the version limen's own go.mod at path (relative to the
+// repository root) requires for module.
+func limenRequire(t *testing.T, path, module string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(path)))
+	if err != nil {
+		t.Fatalf("reading limen's %s: %v", path, err)
+	}
+
+	m := regexp.MustCompile(`(?m)^[ \t]*(?:require[ \t]+)?` + regexp.QuoteMeta(module) + `[ \t]+(v\S+)`).
+		FindSubmatch(data)
+	if m == nil {
+		t.Fatalf("limen's %s requires no %s", path, module)
+	}
+
+	return string(m[1])
+}
+
+// TestFixGoToolsSeedsAtLimenPins: a missing directive is seeded at the
+// version limen's own tools modules require (the module that provides the
+// package, the isolated tool from its own module), never at @latest.
+func TestFixGoToolsSeedsAtLimenPins(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files["go.mod"] = goModBare
+	delete(files, "tools/go.mod")
+	delete(files, "tools/golangci-lint/go.mod")
+	dir := writeRepo(t, files)
+
+	outcome := outcomeFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "gotools")
+	if outcome.Action != rules.ActionMerged {
+		t.Fatalf("got %s (%s), want merged", outcome.Action, outcome.Message)
+	}
+
+	toolsMod, _ := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
+
+	for pkg, module := range map[string]string{
+		"github.com/vbatts/git-validation":  "github.com/vbatts/git-validation",
+		"golang.org/x/tools/cmd/deadcode":   "golang.org/x/tools",
+		"golang.org/x/vuln/cmd/govulncheck": "golang.org/x/vuln",
+		"github.com/google/go-licenses/v2":  "github.com/google/go-licenses/v2",
+	} {
+		want := "tool " + pkg + " // @" + limenRequire(t, "tools/go.mod", module)
+		if !strings.Contains(string(toolsMod), want) {
+			t.Errorf("tools/go.mod lacks %q:\n%s", want, toolsMod)
+		}
+	}
+
+	if strings.Contains(string(toolsMod), "@latest") {
+		t.Errorf("a directive was seeded at @latest:\n%s", toolsMod)
+	}
+
+	isolated, _ := os.ReadFile(filepath.Join(dir, "tools", "golangci-lint", "go.mod"))
+
+	want := "tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint // @" +
+		limenRequire(t, "tools/golangci-lint/go.mod", "github.com/golangci/golangci-lint/v2")
+	if !strings.Contains(string(isolated), want) {
+		t.Errorf("tools/golangci-lint/go.mod lacks %q:\n%s", want, isolated)
+	}
+}
+
+// TestFixGoToolsDevBuildRefusesToSeed: without pins — a development build,
+// whose tools go.mod files were never embedded — fix ends as an advisory
+// naming the reason instead of guessing a version.
+func TestFixGoToolsDevBuildRefusesToSeed(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	delete(files, "tools/go.mod")
+	dir := writeRepo(t, files)
+
+	outcome := outcomeFor(rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}), "gotools")
+	if outcome.Action != rules.ActionAdvisory || !strings.Contains(outcome.Message, "development build") {
+		t.Fatalf("got %s (%s), want the development-build advisory", outcome.Action, outcome.Message)
+	}
+
+	if toolsMod, _ := os.ReadFile(
+		filepath.Join(dir, "tools", "go.mod"),
+	); strings.Contains(
+		string(toolsMod),
+		"\ntool ",
+	) {
+		t.Errorf("a directive was seeded without pins:\n%s", toolsMod)
 	}
 }
 
@@ -499,7 +590,7 @@ func TestFixGoToolsSeedsIsolatedBesideCompleteTools(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged {
@@ -528,7 +619,7 @@ func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "moved tool directive(s)") {
@@ -563,7 +654,7 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) { // Serial by design: t.Sete
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()}),
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	)
 	if outcome.Action != rules.ActionAdvisory {
@@ -589,7 +680,7 @@ func TestAquaGoDirective(t *testing.T) {
 	delete(files, "tools/go.mod")
 	dir := writeRepo(t, files)
 
-	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()})
 
 	toolsMod, err := os.ReadFile(filepath.Join(dir, "tools", "go.mod"))
 	if err != nil {

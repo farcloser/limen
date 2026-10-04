@@ -20,6 +20,7 @@ import (
 	"github.com/farcloser/limen/internal/github"
 	"github.com/farcloser/limen/internal/license"
 	"github.com/farcloser/limen/internal/rules"
+	"github.com/farcloser/limen/internal/toolpins"
 )
 
 // releaseVersionRE is an exact release version, optionally missing the v
@@ -29,6 +30,14 @@ var releaseVersionRE = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9
 // describeSuffixRE is git describe's commits-since-tag suffix (-N-g<sha>),
 // which the prerelease grammar of releaseVersionRE would otherwise accept.
 var describeSuffixRE = regexp.MustCompile(`-\d+-g[0-9a-f]{4,}$`)
+
+// releaseToolPins are the tool versions this binary's release embedded: none
+// in a development build, where fix then refuses to seed a tool directive.
+func releaseToolPins() rules.ToolPins {
+	shared, isolated := toolpins.GoMods()
+
+	return rules.NewToolPins(shared, isolated)
+}
 
 // releaseVersion returns the binary's version stamp as an exact release tag
 // (vX.Y.Z[-pre]), or "" for anything else: "dev" (plain go build / go run), a
@@ -239,6 +248,7 @@ func runFix(ctx context.Context, version string, args []string, stdout, stderr i
 	outcomes := rules.Fix(ctx, root, rules.FixOptions{
 		Policy:      policyFor(ctx, root, discoverIdentity),
 		SelfVersion: releaseVersion(version),
+		ToolPins:    releaseToolPins(),
 	})
 
 	return reportOutcomes(stdout, stderr, cmdFix, root, outcomes, *asJSON)
@@ -367,6 +377,7 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		Holder:      opts.holder,
 		Year:        time.Now().Year(),
 		SelfVersion: releaseVersion(version),
+		ToolPins:    releaseToolPins(),
 	})
 
 	code := reportOutcomes(stdout, stderr, cmdBootstrap, root, outcomes, opts.asJSON)
@@ -397,7 +408,9 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		policy.Repository = repositoryOf(ctx, root)
 		policy.UpdateAppIdentity = identity
 
-		for _, outcome := range rules.Fix(ctx, root, rules.FixOptions{Policy: policy, SelfVersion: releaseVersion(version)}) {
+		for _, outcome := range rules.Fix(ctx, root, rules.FixOptions{
+			Policy: policy, SelfVersion: releaseVersion(version), ToolPins: releaseToolPins(),
+		}) {
 			if outcome.Rule == "renovate" && outcome.Action != rules.ActionNone {
 				_, _ = fmt.Fprintf(stderr, "limen: renovate: %s\n", outcome.Message)
 			}

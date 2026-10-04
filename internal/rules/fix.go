@@ -66,6 +66,10 @@ type FixOptions struct {
 	// limen that wrote its canonical files is the limen it pins — see
 	// mergeAquaManifest for the full argument.
 	SelfVersion string
+	// ToolPins are the versions limen's own tools modules require (see
+	// ToolPins); a missing tool directive is seeded at them. Zero for a
+	// development build, which then refuses to seed one.
+	ToolPins ToolPins
 }
 
 // Fix remediates the repository rooted at root and returns one outcome per rule
@@ -89,7 +93,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateAgents(root)...)
 	add(remediateJustfile(root)...)
 	add(remediateAqua(ctx, root, opts.SelfVersion)...)
-	add(remediateGoTools(ctx, root))
+	add(remediateGoTools(ctx, root, opts.ToolPins))
 	add(remediateLintGo(root)...)
 	add(remediateLychee(root)...)
 	add(remediateWorkflows(root)...)
