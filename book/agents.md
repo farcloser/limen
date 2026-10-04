@@ -253,6 +253,17 @@ The human sets the priorities; the agent measures scope before it moves.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged;
   what survives judgment becomes code, tests, or book prose. They are never
   committed.
+- **Exact values are researched, never recalled.** A version, a git ref, a
+  checksum, license text: fetched live, resolved by the pinning tool, or
+  copied from the repository, and a placeholder only when it truly cannot be
+  had, said as such. A model's memory is months stale and sounds sure; a
+  remembered `aqua-registry` ref once got pinned and broke every install.
+- **Doctrine can lose the argument, never silently.** A fix or a design is
+  checked against the book first. Contradicting it is allowed, since
+  doctrine evolves, but the conflict is named and argued and then decided,
+  not discovered. Installing tools eagerly once fixed a real CI bug while
+  quietly defeating aqua's lazy pulls, a value the book argues at length;
+  naming the conflict would have surfaced the better fix at once.
 
 ## Where the conversation happens
 
@@ -291,6 +302,11 @@ The human sets the priorities; the agent measures scope before it moves.
   not a survey; a fix that cuts against recorded doctrine is named as such
   and argued, never slipped in. When something is either the right call or
   not, say which.
+- **Silence is an answer between sessions.** A message from another session
+  that needs nothing gets no reply: an acknowledgement costs the sender a
+  turn and tells it nothing it can use. The messages the workflow requires,
+  such as the reviewing session's at open and at the review request, are
+  not this kind.
 
 These rules ship in two forms: compressed into the content-pinned `AGENTS.md`
 every repository carries — the harness-neutral file any coding agent reads —

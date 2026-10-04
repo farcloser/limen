@@ -1,31 +1,14 @@
 @AGENTS.md
 
-## Be concise
+## Limen's own
 
-- Lead with the answer/TL;DR, then stop. No preamble, no recap of what you just did, no
-  "here's my plan" essays.
-- Prefer a sentence over a paragraph and a short list over prose. Cut caveats that don't
-  change the decision or action.
-- A message from another session that needs nothing from you gets no reply and no
-  commentary. Act when it asks for something; otherwise say nothing at all.
+What holds in this repository on top of the working agreement every repository
+shares:
 
-## Versions & pins
-
-- **Always research the following explicitly; never rely on memory alone:** version numbers,
-  git refs, tags, checksums, and legal/license text (any exact, externally-defined value).
-  Your training is stale and *will* be wrong — this is exactly how a months-old `aqua-registry`
-  ref got pinned and broke installs. Go get the authoritative source: fetch it live (the
-  releases API, the registry, `git ls-remote`, SPDX), let the pinning tool resolve it (`aqua`,
-  Renovate), or copy it verbatim from a file in the repo. This is a directive to *do the
-  research*, not an excuse to skip the work or leave a stub — only leave an obvious placeholder
-  (`vX.Y.Z`) when the value genuinely cannot be obtained, and say so. Never guess and present a
-  guess as current.
 - **Never put specific version numbers in the book (`book/`).** Use generic placeholders in
-  prose and examples. The real, pinned versions live in `.aqua/aqua.yaml` and are managed by
-  aqua/Renovate — the book explains *how*, not *which*.
-
-## Scope
-
+  prose and examples. The real, pinned versions live in `.limen/aqua.yaml` and
+  `.aqua/aqua.yaml` and are managed by aqua and Renovate: the book explains *how*, not
+  *which*.
 - **Never reconverge the sibling repositories (mumbrew, limen-install, godolint,
   homebrew-brews, …) after changing limen's canonical baseline.** They catch up through
   limen *releases* (Renovate bumps the pin; the checksum-update workflow runs the newly
@@ -33,18 +16,3 @@
   pinned limen flags as drift, failing their CI. The one exception: when canonical files
   are MOVED or renamed, the fixer seeds the new path but never deletes the old one, so
   the strays need a manual sweep.
-- **When asked for thing A, deliver thing A.** Not thing B, not B + A. Do not
-  touch files, fix breakage, or "complete" edits outside the asked scope — other work
-  may be in flight in the same tree, and unrequested changes interfere with it. When
-  something unrelated to A genuinely needs fixing, finish A first, then *mention* it;
-  acting on it is the user's call.
-
-## Remediation
-
-- Evaluate every proposed fix or design against the recorded doctrine (book/, AGENTS.md,
-  decisions in code comments). Contradicting it is allowed — doctrine evolves, and a rule
-  can lose the argument — but never silently: name the conflict out loud, make the case
-  for why the fix is still right (or why the rule should change), and let that be decided,
-  not discovered. Eager tool installation once fixed a real CI bug but quietly defeated
-  aqua's lazy pulls, a value the book argues at length — naming the conflict would have
-  surfaced the better fix immediately.
