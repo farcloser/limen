@@ -110,6 +110,8 @@ var (
 	// fingerprintRE is a v4 OpenPGP fingerprint as the manifest carries it:
 	// forty hex digits, no spaces (the arguments split on whitespace).
 	fingerprintRE = regexp.MustCompile(`^[0-9A-Fa-f]{40}$`)
+	// templateVarRE is a ${name} reference in the url or a method argument.
+	templateVarRE = regexp.MustCompile(`\$\{([^}]*)\}`)
 )
 
 // Entry is one pinned artifact.
@@ -121,7 +123,7 @@ type Entry struct {
 	Renovate       []string
 	ExtractVersion string
 	Versioning     string
-	// URL is the template, with ${version} and ${major} unexpanded.
+	// URL is the template, its variables unexpanded (see variables).
 	URL string
 	// Verify is the method followed by its arguments, templates unexpanded.
 	Verify []string
@@ -159,12 +161,67 @@ func (e Entry) VerifyArgs() []string {
 // Method is the verification method's name.
 func (e Entry) Method() string { return e.Verify[0] }
 
-// expand substitutes ${version} and ${major} (the version up to its first
-// dot, the way kernel.org names its series directories).
-func (e Entry) expand(s string) string {
+// variables are the template's: ${version}, ${major} (the version up to its
+// first dot, the way kernel.org names its series directories), and, under a
+// `regex:` versioning, each named group as the version matches it — a tag
+// whose asset spells the version differently (R_2_8_5, expat-2.8.5.tar.gz)
+// is rebuilt from its groups. A group named major replaces the default.
+func (e Entry) variables() map[string]string {
 	major, _, _ := strings.Cut(e.Version, ".")
+	vars := map[string]string{"version": e.Version, "major": major}
 
-	return strings.NewReplacer("${version}", e.Version, "${major}", major).Replace(s)
+	pattern, isRegex := strings.CutPrefix(e.Versioning, "regex:")
+	if !isRegex {
+		return vars
+	}
+
+	groups, err := regexp.Compile(pattern)
+	if err != nil {
+		return vars
+	}
+
+	match := groups.FindStringSubmatch(e.Version)
+	if match == nil {
+		return vars
+	}
+
+	for index, name := range groups.SubexpNames() {
+		if name != "" && name != "version" {
+			vars[name] = match[index]
+		}
+	}
+
+	return vars
+}
+
+// expand substitutes the template variables; a reference to anything else is
+// left as written, which validate refuses.
+func (e Entry) expand(s string) string {
+	vars := e.variables()
+
+	return templateVarRE.ReplaceAllStringFunc(s, func(ref string) string {
+		if value, ok := vars[ref[2:len(ref)-1]]; ok {
+			return value
+		}
+
+		return ref
+	})
+}
+
+// unknownVariable is the first ${…} in the url or the method's arguments
+// that is not a template variable, or "".
+func (e Entry) unknownVariable() string {
+	vars := e.variables()
+
+	for _, template := range append([]string{e.URL}, e.Verify...) {
+		for _, ref := range templateVarRE.FindAllStringSubmatch(template, -1) {
+			if _, ok := vars[ref[1]]; !ok {
+				return ref[0]
+			}
+		}
+	}
+
+	return ""
 }
 
 // Manifest is a parsed pins.yaml: the entries and the lines they came from.
@@ -404,6 +461,11 @@ func (e Entry) validate() error {
 	if e.Verify[0] == VerifyPGPSums && !fingerprintRE.MatchString(e.Verify[3]) {
 		return fmt.Errorf("%w: %s: verify %s: the fingerprint must be 40 hex digits without spaces, got %q",
 			ErrEntry, label, VerifyPGPSums, e.Verify[3])
+	}
+
+	if ref := e.unknownVariable(); ref != "" {
+		return fmt.Errorf("%w: %s: %s is not a template variable (${version}, ${major}, or a named group"+
+			" of a regex: versioning that matches the version)", ErrEntry, label, ref)
 	}
 
 	return e.validateOrder()

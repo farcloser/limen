@@ -525,7 +525,19 @@ The methods, each a way to obtain a sha256 the entry can stand behind:
 | `pgp-sha256sums <sums-url> <key-url> <fingerprint>` | fetches the clearsigned sums and the signer's public key block, verifies the signature in-process (limen's own OpenPGP reader: v4 keys and signatures, RSA or Ed25519, SHA-2), requires the signing key to be the one the fingerprint pins, takes the artifact's line from the signed text; the artifact itself is not downloaded | a source that clearsigns its checksums (kernel.org's `sha256sums.asc`) |
 
 `${version}` and `${major}` (the version up to its first dot, the way kernel.org names a
-series directory) expand in `url` and in the method's arguments. The arguments are split on
+series directory) expand in `url` and in the method's arguments. Under a `regex:` versioning,
+so do its named groups, as the version matches them: a project that tags `R_<x>_<y>_<z>` and
+names its release asset `expat-<x>.<y>.<z>.tar.gz` pins the asset itself, the publisher's
+file, rather than GitHub's generated tag archive:
+
+```yaml
+    versioning: regex:^R_(?<major>\d+)_(?<minor>\d+)_(?<patch>\d+)$
+    version: R_<x>_<y>_<z>
+    url: https://github.com/libexpat/libexpat/releases/download/${version}/expat-${major}.${minor}.${patch}.tar.gz
+```
+
+A reference that is none of these — a typo, or a group the version does not match — is
+refused when the file is read, never sent to a host. The arguments are split on
 whitespace, so an identity regexp carries none and a fingerprint is forty hex digits
 unbroken. The tool a method shells out to — `gh`, `cosign` — must be pinned in `.aqua/aqua.yaml`,
 and the `pins` rule says so when it is not: unpinned, aqua's proxy falls through to whatever
