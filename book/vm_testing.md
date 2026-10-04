@@ -5,7 +5,9 @@ failure is seen. Local reproduction on a mac means a Windows 11 (arm64) virtual
 machine, with the repository shared into the guest so the exact working tree —
 not a copy — is what the guest builds and lints. This chapter records the full
 path to a working setup, including every trap we hit, so nobody walks it blind
-again.
+again. What is true of windows itself — the kinds of program, the paths, the exit
+codes, the names, what may be pinned there — is the [windows chapter](./windows.md);
+this one is the machine.
 
 ## Host: UTM and an installer image
 
@@ -96,6 +98,33 @@ Both forms of each pattern are needed (bare matches the naked command, `*`
 matches invocations with arguments — mirror how the other exclusions are
 written). The sandbox profile is built once at session start: settings edits do
 nothing to a live session, restart it.
+
+With the exclusion in place, `utmctl` must still be the *whole* command of the call.
+A pipe, a redirection, `&&`, `$(…)` or a wrapper script around it aborts the call with
+exit 134 before anything runs — so `utmctl file push … < script` is not available
+from the sandbox, and neither is `utmctl file pull … > out`. Each `utmctl` is its own
+call; `file pull` prints the file to stdout, and that output is what you read. The
+loop that works without the share and without redirection: put the script on the
+command line as PowerShell's `-EncodedCommand` (the UTF-16LE base64 of the script,
+`iconv -f UTF-8 -t UTF-16LE script.ps1 | base64 | tr -d '\n'` on the host), keep each
+encoded argument under about 8 KB (larger ones abort the same way; split a file into
+single-quoted here-string chunks written with `Set-Content`/`Add-Content`), have the
+script write its results to a guest file ending in a `DONE` marker, and `file pull`
+that file. `exec` prints nothing and may return before a long command ends; detach
+anything long with `Start-Process -WindowStyle Hidden`. `file pull` fails with "being
+used by another process" while a cmd.exe `>>` still holds the file open; retry.
+
+```sh
+utmctl exec Windows --cmd powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand "$(cat script.b64)"
+utmctl file pull Windows 'C:\Windows\Temp\out.txt'
+```
+
+Everything the guest agent runs is `SYSTEM` in session 0 under an x86-64 agent, so a
+`powershell.exe` started from it is x64 under emulation on an arm64 guest. A native
+parent, or a logged-on user's session, needs a scheduled task: a principal of
+`-UserId SYSTEM -LogonType ServiceAccount` runs at once (Task Scheduler is native, so
+its children are); `-LogonType Interactive` registers but waits for that user to log
+on at the UTM console.
 
 ## `utmctl exec` semantics
 
