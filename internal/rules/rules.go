@@ -742,6 +742,10 @@ func checkWorkflows(root string) Finding {
 		return fail(rule, formerLintGithubFile, formerLintGithubMessage)
 	}
 
+	if stale := staleReferences(root); len(stale) > 0 {
+		return fail(rule, "", staleReferencesMessage(stale))
+	}
+
 	if exists(filepath.Join(root, releaseGoFile)) &&
 		!exists(filepath.Join(root, filepath.FromSlash(pathWorkflowRelease))) {
 		return fail(
@@ -757,6 +761,117 @@ func checkWorkflows(root string) Finding {
 		Path:    pathWorkflowCI,
 		Message: "workflows present; the canonical pieces match the baseline",
 	}
+}
+
+// movedPaths maps each path limen has moved to where it lives now. fix moves
+// the file; a reference to the old path in a file the project owns (a
+// Renovate manager matching ^Justfile$, a CI cache key hashing the root
+// aqua.yaml) then matches nothing, silently: the manager stops proposing, the
+// key never changes.
+//
+//nolint:gochecknoglobals // immutable table.
+var movedPaths = map[string]string{
+	"aqua.yaml":           aquaManifestFile,
+	"aqua-checksums.json": aquaChecksumsFile,
+	"aqua-policy.yaml":    aquaPolicyFile,
+	"Justfile":            justfileName,
+	".allowed_signers":    signersFile,
+	".goreleaser.yaml":    releaseGoFile,
+	".goreleaser.yml":     releaseGoFile,
+	formerLintGithubFile:  lintGithubFile,
+}
+
+// movedPathRE finds a moved path as a whole name: what precedes it is no part
+// of a path, so `.aqua/aqua.yaml` and `.limen/aqua.yaml` are where the files
+// live now, not references to the old root ones. A name escaped inside a
+// regular expression (aqua\.yaml) is not recognized.
+var movedPathRE = regexp.MustCompile(
+	`(?:^|[^\w./-])(aqua\.yaml|aqua-checksums\.json|aqua-policy\.yaml|Justfile|\.allowed_signers|\.goreleaser\.ya?ml|limen\.yaml)\b`,
+)
+
+// staleReferences lists, as "file:line: old → new", the references to moved
+// paths in the files a project owns that name paths: renovate.json and its
+// workflows, the content-pinned checksum workflow excepted.
+func staleReferences(root string) []string {
+	files := []string{pathRenovate}
+
+	workflows, _ := filepath.Glob(filepath.Join(root, ".github", "workflows", "*.y*ml"))
+	for _, workflow := range workflows {
+		rel := filepath.ToSlash(strings.TrimPrefix(workflow, root+string(filepath.Separator)))
+		if rel != pathWorkflowChecksum {
+			files = append(files, rel)
+		}
+	}
+
+	var stale []string
+
+	for _, name := range files {
+		data, err := readRepoFile(root, name)
+		if err != nil {
+			continue
+		}
+
+		for index, line := range referenceLines(name, string(data)) {
+			for _, match := range movedPathRE.FindAllStringSubmatch(line, -1) {
+				stale = append(stale, fmt.Sprintf("%s:%d: %s → %s", name, index+1, match[1], movedPaths[match[1]]))
+			}
+		}
+	}
+
+	return stale
+}
+
+// referenceLines is the file's lines with prose blanked, one per line so
+// numbers stay true: a workflow's YAML comments, and renovate.json's
+// description array. Prose naming an old path (a seeded comment, the
+// description an earlier limen wrote) misleads nobody's tooling; a manager
+// pattern or a cache key does.
+func referenceLines(name, data string) []string {
+	lines := strings.Split(data, "\n")
+	inDescription := false
+
+	for index, line := range lines {
+		switch {
+		case name != pathRenovate:
+			lines[index] = stripYAMLComment(line)
+		case inDescription:
+			inDescription = !strings.Contains(line, "]")
+			lines[index] = ""
+		case strings.Contains(line, `"`+descriptionKey+`"`):
+			inDescription = strings.Contains(line, "[") && !strings.Contains(line, "]")
+			lines[index] = ""
+		}
+	}
+
+	return lines
+}
+
+// stripYAMLComment cuts a YAML comment off a line: a # at the start or after
+// whitespace, outside quotes.
+func stripYAMLComment(line string) string {
+	var quote rune
+
+	for index, char := range line {
+		switch {
+		case quote != 0:
+			if char == quote {
+				quote = 0
+			}
+		case char == '\'' || char == '"':
+			quote = char
+		case char == '#' && (index == 0 || line[index-1] == ' ' || line[index-1] == '\t'):
+			return line[:index]
+		}
+	}
+
+	return line
+}
+
+// staleReferencesMessage names them; the files are the project's, so the
+// edit is its own.
+func staleReferencesMessage(stale []string) string {
+	return "references to paths limen moved (" + strings.Join(stale, "; ") +
+		"): update them by hand, these files are the project's own"
 }
 
 // releaseGoFile is the project's goreleaser configuration, named for its
