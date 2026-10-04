@@ -69,8 +69,13 @@ release: (_banner "build go" "release")
         name=$(basename "${dir}")
         ls "${dir}"*.go >/dev/null 2>&1 || continue
         echo "→ build/${name}"
-        go build -trimpath -buildmode=pie -tags='{{ go_tags }}' \
-            -ldflags "${ldflags}" ${extra[@]+"${extra[@]}"} -o "build/${name}" "./${dir%/}"
+        # A command that is a module of its own (cmd/<name>/go.mod) builds
+        # from inside it: from the root, go refuses a package outside the main
+        # module. Every variant below does the same.
+        src=. pkg="./${dir%/}"
+        [ ! -f "${dir}go.mod" ] || { src="${dir%/}"; pkg=.; }
+        go -C "${src}" build -trimpath -buildmode=pie -tags='{{ go_tags }}' \
+            -ldflags "${ldflags}" ${extra[@]+"${extra[@]}"} -o "${PWD}/build/${name}" "${pkg}"
     done
 
 # Debug: optimizations and inlining off, symbols kept, real paths kept — no
@@ -95,8 +100,10 @@ debug: (_banner "build go" "debug")
         name=$(basename "${dir}")
         ls "${dir}"*.go >/dev/null 2>&1 || continue
         echo "→ build/${name}-debug"
-        go build -buildmode=pie -gcflags='all=-N -l' -tags='{{ go_tags }}' \
-            -ldflags "${ldflags}" ${extra[@]+"${extra[@]}"} -o "build/${name}-debug" "./${dir%/}"
+        src=. pkg="./${dir%/}"
+        [ ! -f "${dir}go.mod" ] || { src="${dir%/}"; pkg=.; }
+        go -C "${src}" build -buildmode=pie -gcflags='all=-N -l' -tags='{{ go_tags }}' \
+            -ldflags "${ldflags}" ${extra[@]+"${extra[@]}"} -o "${PWD}/build/${name}-debug" "${pkg}"
     done
 
 # Race: a diagnostic build with the race detector, which requires cgo (forced
@@ -115,9 +122,11 @@ race: (_banner "build go" "race")
         name=$(basename "${dir}")
         ls "${dir}"*.go >/dev/null 2>&1 || continue
         echo "→ build/${name}-race"
-        go build -race -tags='{{ go_tags }}' \
+        src=. pkg="./${dir%/}"
+        [ ! -f "${dir}go.mod" ] || { src="${dir%/}"; pkg=.; }
+        go -C "${src}" build -race -tags='{{ go_tags }}' \
             -ldflags "${ldflags}" \
-            ${extra[@]+"${extra[@]}"} -o "build/${name}-race" "./${dir%/}"
+            ${extra[@]+"${extra[@]}"} -o "${PWD}/build/${name}-race" "${pkg}"
     done
 
 # Static: fully static external link. Preconditions enforced, not commented:
@@ -148,7 +157,9 @@ static: (_banner "build go" "static")
         name=$(basename "${dir}")
         ls "${dir}"*.go >/dev/null 2>&1 || continue
         echo "→ build/${name}-static"
-        go build -trimpath -tags='{{ go_tags }}' \
+        src=. pkg="./${dir%/}"
+        [ ! -f "${dir}go.mod" ] || { src="${dir%/}"; pkg=.; }
+        go -C "${src}" build -trimpath -tags='{{ go_tags }}' \
             -ldflags "${ldflags}" \
-            ${extra[@]+"${extra[@]}"} -o "build/${name}-static" "./${dir%/}"
+            ${extra[@]+"${extra[@]}"} -o "${PWD}/build/${name}-static" "${pkg}"
     done
