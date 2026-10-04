@@ -9,7 +9,7 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | **Git repository** | The project root is a git repository — a `.git` directory (normal clone) or a `.git` file (worktree/submodule) is present. |
 | `LICENSE` | Present, and its content must be one of the **allowed licenses** below. |
 | `.editorconfig` | Present, and **content-pinned**: equals the [canonical baseline](#canonical-editorconfig) byte for byte — no extra sections, no edited values. |
-| `.gitignore` | Present. Seeded from the [canonical file](#gitignore) when absent; an existing one is the project's own. |
+| `.gitignore` | Present, and carrying the [required patterns](#gitignore). Seeded from the canonical file when absent; beyond the required patterns, an existing one is the project's own. |
 | `.gitattributes` | Present, and **content-pinned**: the [canonical file](#canonical-gitattributes) disabling git line-ending conversion. |
 | `AGENTS.md` | Present, and **content-pinned**: the [working agreement](#canonical-agentsmd) for a coding agent, identical everywhere. |
 | `CLAUDE.md` | Present. Seeded as the one-line `@AGENTS.md` import when absent; an existing one is the project's own. |
@@ -34,8 +34,8 @@ security features): see [GitHub settings](./github.md).
 You do not hand-create these files: `limen bootstrap <path>` scaffolds a new repository with
 all of them, and `limen fix` brings an existing repository up to the baseline — writing what
 is missing, resetting the content-pinned files (`.editorconfig`, `.gitattributes`, and the
-`.limen/*` files), seeding a `.gitignore` when none exists, and merging the baseline into the
-subset files (`.aqua/aqua.yaml` and the root `.justfile`’s import line) without
+`.limen/*` files), and merging the baseline into the subset files (`.gitignore`'s required
+patterns, `.aqua/aqua.yaml` and the root `.justfile`’s import line) without
 discarding a repo's own additions. Anything it cannot fix safely — a disallowed `LICENSE`, a
 manifest it cannot parse — is reported for a human to resolve.
 
@@ -178,7 +178,7 @@ covers every language we work in, and a section only ever matches files that are
 full baseline is harmless even for languages a repo does not use. Because it is exhaustive, a
 repo never needs its own additions; `limen fix` overwrites a drifted `.editorconfig` back to the
 canonical. (This is the same exact-match rule as the `.justfile` and the `.limen/*` files — unlike
-`.gitignore`, which limen only seeds and never checks.)
+`.gitignore`, of which limen requires a handful of patterns and seeds the rest.)
 
 The reasoning behind it: **each file type uses the indentation its own tooling treats as
 canonical**, so the config never fights the formatter — tabs where `gofmt` and `make` require
@@ -189,14 +189,23 @@ never drifts if that fallback changes.
 
 ## .gitignore
 
-`limen` requires only that a `.gitignore` **exists**. Its contents are the repository's own —
-`limen` neither enforces nor updates them.
+A `.gitignore` must exist and carry four patterns: `/build`, `/_scratch`, `.claude` and
+`.idea`. These are what the recipes, the working sessions and the editors write inside a
+checkout, and none of it is ever committed. There is no repository-local `tmp/`: a disposable
+file that persists between runs goes under `build/`, in a subdirectory named for what it holds,
+and one that lives for a single command goes in a `mktemp -d` under `$TMPDIR`, removed by a
+`trap`. Spelling is free (`.idea`, `.idea/`, `/.idea` and
+`**/.idea` all count); a commented-out or negated pattern does not. The check names a
+missing pattern, and `limen fix` appends the missing ones in one marked block at the end,
+never touching the rest of the file.
 
-When a repository has none, `limen fix`/`bootstrap` seeds this repository's own
-[`.gitignore`](../.gitignore) — which `limen` embeds — as a starting point. Once the file
-exists, `limen` never rewrites it or checks its patterns: edit it freely, or delete the seeded
-lines that do not apply. Editing the embedded file changes only what future seeds contain, not
-any existing repository.
+Everything else in the file is the repository's own. When a repository has none,
+`limen fix`/`bootstrap` seeds this repository's own [`.gitignore`](../.gitignore), which `limen`
+embeds, as a starting point: edit it freely, or delete the seeded lines that do not apply.
+Editing the embedded file changes only what future seeds contain, not any existing
+repository. The required set is deliberately short. Enforcing the whole canonical file
+imposed every language's patterns on every repository; enforcing nothing let a repository
+onboarded with a `.gitignore` of its own miss what the rig writes.
 
 ## Canonical .gitattributes
 
