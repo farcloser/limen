@@ -51,14 +51,16 @@ upstream yet.
 
 **Cause.** Git for Windows' arm64 build pairs a native `git` with an x86-64 MSYS2 userland
 run under Windows' x64 emulation. There, roughly once in a few thousand launches, bash
-dies at the operating-system level while it runs a process substitution whose child execs
-a program (`done < <(git ls-files …)`). The full record, with the mechanism, the
-calibration and a runner canary, is
+dies at the operating-system level while a child it forked execs a program: a process
+substitution (`done < <(git ls-files …)`), or a command substitution
+(`scratch=$(mktemp -d …)`). What kills it was never identified. The full record, with the
+mechanism, the calibration and a runner canary, is
 [design/WINDOWS-ARM-EXIT-4.md](../design/WINDOWS-ARM-EXIT-4.md).
 
-**Workaround.** The shared recipes carry no process substitution
-([windows: no process substitution](./windows.md#no-process-substitution-in-shared-recipes));
-pipelines and temporary files do the same work.
+**Workaround.** None that removes it. The shared recipes carry no process substitution,
+the shape of every early failure; command substitutions stay, since rewriting them all
+for one runner is not worth it, and a silent `4` or `127` on that leg is re-run
+([windows: bash dies under emulation](./windows.md#bash-dies-under-emulation)).
 
 **Lifts when** Git for Windows ships its MSYS2 runtime native on arm64. The port is
 https://github.com/msys2/msys2-runtime/pull/356, open.

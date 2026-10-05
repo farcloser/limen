@@ -1,7 +1,8 @@
 # WINDOWS-ARM-EXIT-4 — bash dies raw under x86_64 emulation on windows-11-arm
 
-Status: **root cause established for the trigger; runner-side terminator unverified.**
-Investigated 2026-09-29 to 2026-10-01 for
+Status: **trigger narrowed, not removed: a forked child that execs an MSYS program;
+runner-side terminator unverified.** Revised 2026-10-05, when a recipe with no process
+substitution died the same way (section 9). Investigated 2026-09-29 to 2026-10-01 for
 https://github.com/farcloser/limen/pull/192. Every claim below is marked
 verified (V) or unverified (U). Evidence: eleven failed CI jobs (all logs read), the
 sources of just 1.58.0, msys2-runtime 3.6.x, bash 5.3, Git for Windows' launcher, and
@@ -269,7 +270,9 @@ in all five, `while IFS= read -r -d '' f; do …; done < <(PRODUCER)`; every dea
   different build of the same series, so "3.6.10 fixes it" is not supported (U).
 
 The rule in section 5 does not change: no process substitution in shared recipes,
-whatever the child.
+whatever the child. It should have been read more widely: a command substitution that
+runs an MSYS program is the same fork and exec, and one killed a recipe on the runner
+(section 9).
 
 ## 4. Unverified, stated plainly
 
@@ -310,8 +313,16 @@ Rule for shared recipes:
   `grep -nE '< <\(|>\(' .limen/just/*.just` must be empty.
 - **Pipelines are fine**, including pipelines from native producers (`jq … |` in
   `lint shell`, `go tool cover … |` in `test go`). 0 in 18,015 under the load that kills
-  the substitution.
-- **Waited-for native children and `$(…)` are fine.** 0 in 1,000 each.
+  the substitution. *Qualified 2026-10-05* (section 9): far rarer than the substitution
+  (6 in 18,015 there), not proven zero. The producer measured was native git; a stage
+  that execs an MSYS program was never measured, and is the forked-child shape section
+  3.6 found.
+- **Waited-for native children and `$(…)` are fine.** 0 in 1,000 each. *Withdrawn
+  2026-10-05 for `$(…)`* (section 9): the thousand launches (section 3.1) ran in one
+  loop, without the concurrency the guest needed to reproduce anything, and a thousand
+  cannot see a rate of one in a few thousand. A command substitution whose child execs
+  an MSYS program (`tr` and `wc` there, `mktemp` in section 9) is the trigger section
+  3.6 found.
 - Read `exit code 4` or `exit code 127` with nothing on stderr from any shebang recipe
   on windows-11-arm as "bash died raw under emulation", not as a script error. The
   recipes cannot produce a silent 4, and bash's own 127 always prints "command not
@@ -708,3 +719,38 @@ lands; until then the rule stands.
 Building a native MSYS2 runtime in-house was assessed and declined: it means tracking
 Cygwin master, the msys2 rebase and the GCC patches for weeks, for a component the
 upstreams are already finishing.
+
+## 9. A death with no process substitution (2026-10-05)
+
+https://github.com/farcloser/limen/actions/runs/37266312458/job/111623939333, a
+`verify (windows-11-arm)` job on https://github.com/farcloser/limen/pull/240, one day
+after PR 192 merged, on `windows-11-vs2026-arm64` 20260924.168.1. (V, the job log.)
+
+```
+▶ lint: links
+error: recipe `links` failed with exit code 4
+ERR aqua failed program=aqua … exe_name=just … error="exit status 4"
+##[error]Process completed with exit code 4.
+```
+
+- **No process substitution.** `lint links` has none; its first command that is not a
+  builtin is `scratch=$(mktemp -d "${TMPDIR:-/tmp}/lint-links.XXXXXX")`, a command
+  substitution whose child execs the x86-64 MSYS `mktemp`. (V, `.limen/just/lint.just`
+  at the PR's head.)
+- **bash died before lychee finished, and lychee did not fail.** 1.1 s from the banner
+  to the error, against 4.4 to 4.8 s from the banner to lychee's first output on the
+  three preceding green windows-11-arm runs (V, job logs of runs 37266095369,
+  37263514291 and 37260028938). The only aqua `ERR` line names `just`, relaying the
+  recipe's 4; aqua logs the same line for any proxied tool that exits non-zero on
+  Windows, and none names `lychee`. (V that no line names lychee; U that aqua would
+  always log one, inferred from the `just` line, not from aqua's source.)
+- **Where exactly it died is not known.** The log cannot place the death between the
+  `mktemp` substitution and lychee's start; the substitution is the one fork and exec
+  of an MSYS program in that window. (U)
+
+Reading: the trigger is what section 3.6 measured, a forked child that execs an MSYS
+program, and a command substitution is one. Section 5's rule removed the shape that
+failed most visibly, not the cause. The shared recipes hold dozens of command
+substitutions; rewriting them for one emulated runner was declined. The failure is
+accepted: a silent `exit code 4` or `127` on windows-11-arm is re-run, and the exposure
+ends with the triggers in section 8.

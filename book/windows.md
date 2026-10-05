@@ -118,8 +118,7 @@ native port is tracked at https://github.com/msys2/msys2-runtime/pull/356. What 
 installs for `windows/arm64`, where a package ships an arm64 asset, and `just` and `go`,
 are native arm64. So on that leg every recipe body runs emulated and every tool it calls
 runs native, with the emulation boundary crossed on each fork and exec. Two consequences
-are documented below: the process-substitution rule, and how a death under emulation reads
-in a log. A third is cost: an emulated bash fork is several times slower than a native
+are documented below: bash dying under emulation, and how such a death reads in a log. A third is cost: an emulated bash fork is several times slower than a native
 one, which is one reason the arm64 leg is the slow one.
 
 `%PROCESSOR_ARCHITECTURE%` lies under emulation (an x64 process on an arm64 machine
@@ -127,28 +126,36 @@ reads `AMD64`); the machine's own value is the `PROCESSOR_ARCHITECTURE` under
 `HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, and
 `[Runtime.InteropServices.RuntimeInformation]::OSArchitecture` in PowerShell.
 
-## No process substitution in shared recipes
+## Bash dies under emulation
 
-Under emulation, bash dies raw, at the operating-system level and without a word,
-roughly once in a few thousand launches of a process substitution whose child execs a
-program: `done < <(git ls-files -z …)` and `done < <(cat list)` both die, `< <(printf …)`
-does not, and neither does a pipeline (`git ls-files -z … | while read …`), a temp file
-written by the producer and read by the loop, or an ordinary `$(…)`. On the runners it
-showed as `recipe X failed with exit code 4` with nothing else, an estimated once per
-hundred recipe launches on windows-11-arm; it needed concurrency to reproduce on a guest
-and reproduced once in two thousand launches on a runner canary. The rule for the
-shared recipes:
+Under emulation, bash dies raw, at the operating-system level and without a word, when it
+forks a child that execs an x86-64 MSYS program. On the runners it shows as
+`recipe X failed with exit code 4` (or `127`) with nothing else. It was first pinned on
+the process substitution: `done < <(git ls-files -z …)` and `done < <(cat list)` die,
+and `< <(printf …)`, whose child execs nothing, does not. But the trigger is the fork and
+exec, not the substitution, and every command substitution that runs a program has the
+same shape: `lint links` died at `scratch=$(mktemp -d …)`, with no process substitution
+anywhere in it
+(https://github.com/farcloser/limen/actions/runs/37266312458/job/111623939333). The
+earlier record called `$(…)` safe on no deaths in a thousand launches, a sample too small
+to see a rate of one in a few thousand.
 
-- **No `< <(…)` and no `>(…)`.** The audit is `grep -nE '< <\(|>\(' .limen/just/*.just`,
-  empty. A producer's exit status now fails the recipe under `set -e` instead of
-  vanishing inside the substitution, which is an improvement on its own.
-- Pipelines, waited-for native children and command substitutions are fine.
+The shared recipes carry dozens of command substitutions, and rewriting them all for one
+emulated runner is not worth what it does to the scripts. So the failure is accepted:
+
+- **No `< <(…)` and no `>(…)`** stays. The substitution is the shape every early failure
+  had and the one the guest reproduced, and a producer's exit status now fails the recipe
+  under `set -e` instead of vanishing inside the substitution. The audit is
+  `grep -nE '< <\(|>\(' .limen/just/*.just`, empty.
+- **Command substitutions, pipelines and temp files stay as they are.** They lower the
+  rate; none of them is proven to bring it to zero.
+- **A silent `exit code 4` or `127` on the windows-11-arm leg is re-run, not debugged**
+  ([reading an exit code](#reading-an-exit-code) says why it means bash died).
 
 The record, with the mechanism, the calibration, the reproduction on a guest
 ([VM testing](./vm_testing.md)) and the canary, is
-[design/WINDOWS-ARM-EXIT-4.md](../design/WINDOWS-ARM-EXIT-4.md), from
-https://github.com/farcloser/limen/pull/192. The rule lifts when Git for Windows ships its
-MSYS2 runtime native on arm64.
+[design/WINDOWS-ARM-EXIT-4.md](../design/WINDOWS-ARM-EXIT-4.md). It lifts when Git for
+Windows ships its MSYS2 runtime native on arm64.
 
 ## Reading an exit code
 
