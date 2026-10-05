@@ -225,6 +225,11 @@ Two roles deserve emphasis because they close the enforcement loop:
   argv and shell history). `just do release --local --dry-run` builds an unsigned
   snapshot into `build/release/` in either lane. The recipe is the interface: the
   workflow contains no release logic of its own.
+- **A release carries a real change.** A repository releases when it has something new for
+  its consumers: a change in its own code, or in an upstream it ships. A change to the
+  tooling it is built and checked with (a new limen pin, a linter, a CI action) is not one,
+  and neither is documentation (the readme, the licence file, `UPSTREAM.md`, a comment): it
+  never triggers a release on its own, and goes out with the next real change.
 
 ## Extending the baseline
 
