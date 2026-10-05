@@ -407,10 +407,10 @@ func compliantResponses() map[string]stubResponse {
 			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
 		"GET repos/test/repo/rulesets/1": {
-			Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
+			Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
 		},
 		"GET repos/test/repo/rulesets/2": {
-			Body: `{"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
+			Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
 		},
 		"GET repos/test/repo/actions/permissions/fork-pr-contributor-approval": {
 			Body: `{"approval_policy":"first_time_contributors"}`,
@@ -1690,5 +1690,83 @@ func TestDependabotAlerts404WithAdmin(t *testing.T) {
 	finding, found := findingByCheck(findings, "dependabot-alerts")
 	if !found || finding.Status != github.StatusFail {
 		t.Fatalf("alerts genuinely off must still fail, got %v (%s)", finding.Status, finding.Message)
+	}
+}
+
+// The godolint case: limen:tags carries every rule but an empty bypass list,
+// so no one may create a v* tag and the release push is refused. It must fail,
+// and the reconcile must put the repository admins back.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetTagsWithoutBypassFails(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/2"] = stubResponse{
+		Body: `{"bypass_actors":[],"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "ruleset-version-tags")
+	if finding.Status != github.StatusFail {
+		t.Fatalf("an empty bypass list: %v (%s), want fail", finding.Status, finding.Message)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == "ruleset-version-tags" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), `"actor_type":"RepositoryRole"`) {
+		t.Error("the reconcile must write the repository-admin bypass")
+	}
+}
+
+// An actor beside the admins widens who may press the release button.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetExtraBypassActorFails(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/2"] = stubResponse{
+		Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"},` +
+			`{"actor_id":42,"actor_type":"Integration","bypass_mode":"always"}],` +
+			`"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "ruleset-version-tags")
+	if finding.Status != github.StatusFail {
+		t.Fatalf("an extra bypass actor: %v (%s), want fail", finding.Status, finding.Message)
+	}
+}
+
+// GitHub omits bypass_actors for a token that is not a repository admin: the
+// list cannot be judged, and nothing may be written on that reading.
+//
+//nolint:paralleltest // serial: sets the process environment.
+func TestRulesetBypassHiddenIsUnverifiable(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/2"] = stubResponse{
+		Body: `{"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "ruleset-version-tags")
+	if finding.Status != github.StatusUnverifiable {
+		t.Fatalf("a hidden bypass list: %v (%s), want unverifiable", finding.Status, finding.Message)
+	}
+
+	for _, change := range changes {
+		if change.Check == "ruleset-version-tags" {
+			t.Error("a verdict limen could not reach must plan no write")
+		}
 	}
 }
