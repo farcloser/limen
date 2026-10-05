@@ -128,6 +128,11 @@ chapter; the procedure is limen's `skills/contribute`.
   get wrong at that spot; never provenance, versions, or what the code visibly does. The
   reasoning goes in the commit message. See the book's
   [generic principles](https://github.com/farcloser/limen/blob/main/book/index.md#generic-principles).
+- **A module's `go` directive is the earliest Go release still supported upstream**, as
+  its first version (`go 1.N.0`), or the patch a dependency requires when that is higher
+  (what `go mod tidy` raises it to); never a newer release. The tools modules
+  (`tools/go.mod`, `tools/<name>/go.mod`) are exempt. See the book's
+  [baseline version](https://github.com/farcloser/limen/blob/main/book/per-language.md#go--the-baseline-version).
 - **A `replace` directive is never committed**, nor anything that permits one (a
   `gomoddirectives` `replace-local` or `replace-allow-list`). A local replace is a
   temporary tool for working on two modules in parallel, on your machine, and stays there.
