@@ -322,6 +322,34 @@ plain name, and the reason in the commit message. gocritic's `sloppyReassign` re
 exactly the assigning form, which is why it is off in the baseline: the two cannot both
 pass.
 
+## Go — the baseline version
+
+A module's `go` directive is the earliest Go release still supported upstream, written as
+that release's first version, `go 1.N.0`, unless a dependency requires a later patch of the
+same release. Go supports its two most recent major releases, so the baseline is the older
+of the two, and it moves when a new major release retires it. A module on an earlier
+version moves up; none requires a newer release.
+
+- **`.0`, unless a dependency needs a later patch.** The directive is the minimum a builder
+  and every consumer must run: a module saying `go 1.N.8` refuses to build with `1.N.4`
+  under `GOTOOLCHAIN=local`, and forces every importer up with it. Patch fixes reach a build
+  through the toolchain the repository pins (the aqua `golang/go` pin, kept at the latest
+  release), not through the directive. A module cannot sit below its dependencies, though:
+  with a dependency on `go 1.N.8`, a module on `go 1.N.0` refuses to build, and
+  `go mod tidy` raises it to `1.N.8`. So the directive is the higher of `1.N.0` and the
+  highest any dependency requires; `go mod edit -go=1.N.0` followed by `go mod tidy` lands
+  on it. `go mod init` writes whatever patch level the toolchain that ran it had, which is
+  how repositories drift across a line; a new module's directive is settled the same way.
+- **Not the bare `go 1.N`.** Go orders `1.N` before `1.N`'s release candidates, so it
+  admits a toolchain that is not a release; `1.N.0` is the release.
+- **A dependency that needs a newer release waits.** Taking a dependency on `go 1.(N+1)`
+  would raise the module past the baseline: the module stays on the dependency's last
+  release that supports the baseline until the baseline moves.
+- **The tools modules are the exception.** `tools/go.mod` and `tools/<name>/go.mod` are
+  built only by the repository's pinned toolchain and never imported, and `go mod tidy`
+  raises their directive to whatever the tools themselves require. Their directive is left
+  to that.
+
 ## Go — no replace, ever
 
 A `replace` directive is never committed: not in `go.mod`, not in a nested module, not
