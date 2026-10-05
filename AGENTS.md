@@ -26,7 +26,9 @@ chapter; the procedure is limen's `skills/contribute`.
   branches — `work`, and anything not named after you — are the human's: never commit
   there unless pairing interactively at their request, and never on `main`.
 - **Commits** are signed as you, with a DCO sign-off as you; when the change is the
-  human's own work, the human is the author. No scratchpads (`AUDIT.md` and its kind).
+  human's own work, the human is the author. No scratchpads (`AUDIT.md` and its kind):
+  they live under `_scratch/` at the repository root, which `.gitignore` ignores, and
+  nowhere else in the tree.
 - **One commit per thing.** Different things get different commits; iteration on the
   same thing — a review round, a fix to your own commit — is squashed into the commit it
   amends before the review is requested. Never a stack of fix-ups for one change.

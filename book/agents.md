@@ -156,7 +156,8 @@ branches are the human's.
 - **Commits.** Signed as the bot, with a DCO sign-off as the bot; when the
   change is the human's work, the human is the author and the bot the
   committer. No scratchpads: `AUDIT.md` and its kind are transient notes
-  whose surviving findings become code, tests, or book prose.
+  under `_scratch/`, whose surviving findings become code, tests, or book
+  prose ([scratch is scratch](#scope-and-priorities)).
 - **One commit per thing.** The commit message is the record, so the
   history has to read as decisions, not as a diary. Different things get
   different commits: a fix and an unrelated doctrine paragraph are two.
@@ -256,8 +257,12 @@ The human sets the priorities; the agent measures scope before it moves.
   fixed there: the fix is its own change, if the human wants it, and a
   file under the human's active edit is left alone.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged;
-  what survives judgment becomes code, tests, or book prose. They are never
-  committed.
+  what survives judgment becomes code, tests, or book prose. They live under
+  `_scratch/` at the repository root, which every repository's `.gitignore`
+  ignores (`/_scratch` is a required pattern), never anywhere else in the
+  tree, and they are never committed: one place, out of every listing, so a
+  stray note can neither be committed by accident nor mistaken for a
+  deliverable.
 - **Exact values are researched, never recalled.** A version, a git ref, a
   checksum, license text: fetched live, resolved by the pinning tool, or
   copied from the repository, and a placeholder only when it truly cannot be
