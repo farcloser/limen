@@ -53,12 +53,12 @@ just: (_banner "lint" "just")
         just --fmt --check --justfile "$f"
     done < "$list"
 
-# godolint — hadolint as pure Go (https://github.com/farcloser/godolint) —
+# godolint — hadolint as pure Go (https://github.com/forkcloser/godolint) —
 # over every Dockerfile in the repository; passes vacuously when there are
 # none, so it can sit in the default set for every repo. Rule exceptions
 # belong next to the instruction they excuse, as inline
 # `# hadolint ignore=DLxxxx` pragmas — not in the recipe.
-dockerfile: (_banner "lint" "dockerfile") (_go-tool "godolint" "github.com/farcloser/godolint/cmd/godolint")
+dockerfile: (_banner "lint" "dockerfile") (_go-tool "godolint" "github.com/forkcloser/godolint/cmd/godolint")
     #!/usr/bin/env bash
     set -euo pipefail
     # Same enumeration as `lint just` (through a file, see there), over both

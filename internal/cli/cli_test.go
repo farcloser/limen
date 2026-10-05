@@ -183,7 +183,7 @@ func compliantRepo(t *testing.T) string {
 		// The Go-built tools every repository declares (the gotools rule).
 		"tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
 			"\tgithub.com/vbatts/git-validation\n" +
-			"\tgithub.com/farcloser/godolint/cmd/godolint\n" +
+			"\tgithub.com/forkcloser/godolint/cmd/godolint\n" +
 			"\tgithub.com/forkcloser/dot/cmd/dot\n)\n",
 	}
 	for _, m := range limen.JustModules() {

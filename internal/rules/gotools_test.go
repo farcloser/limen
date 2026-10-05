@@ -24,7 +24,7 @@ const goModBare = "module example.com/proj\n\ngo 1.26\n"
 var (
 	toolsEverywhere = []string{ //nolint:gochecknoglobals // immutable fixture data.
 		"github.com/vbatts/git-validation",
-		"github.com/farcloser/godolint/cmd/godolint",
+		"github.com/forkcloser/godolint/cmd/godolint",
 		"github.com/forkcloser/dot/cmd/dot",
 	}
 	sourceAnalyzers = []string{ //nolint:gochecknoglobals // immutable fixture data.
@@ -43,7 +43,7 @@ go 1.26
 
 tool (
 	github.com/vbatts/git-validation
-	github.com/farcloser/godolint/cmd/godolint
+	github.com/forkcloser/godolint/cmd/godolint
 	github.com/forkcloser/dot/cmd/dot
 )
 `
@@ -59,7 +59,7 @@ tool (
 	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
 	github.com/vbatts/git-validation
-	github.com/farcloser/godolint/cmd/godolint
+	github.com/forkcloser/godolint/cmd/godolint
 	github.com/forkcloser/dot/cmd/dot
 	example.com/other/cmd/thing
 )
@@ -164,7 +164,7 @@ func TestGoModToolDirectives(t *testing.T) {
 			name: "one-line form",
 			gomod: "module tools\n\ngo 1.26\n\n" +
 				"tool github.com/vbatts/git-validation // trailing\n" +
-				"tool   github.com/farcloser/godolint/cmd/godolint\n" +
+				"tool   github.com/forkcloser/godolint/cmd/godolint\n" +
 				"tool github.com/forkcloser/dot/cmd/dot\n",
 			ok: true,
 		},
