@@ -57,7 +57,7 @@ const (
 //nolint:gochecknoglobals // immutable baseline data.
 var goToolsEverywhere = []string{
 	"github.com/vbatts/git-validation",
-	"github.com/farcloser/godolint/cmd/godolint",
+	"github.com/forkcloser/godolint/cmd/godolint",
 	"github.com/forkcloser/dot/cmd/dot",
 }
 
@@ -72,6 +72,9 @@ var goToolsEverywhere = []string{
 var retiredGoTools = map[string]string{
 	// Upstream's cmd/dot lost its tags and its library moved on without it.
 	"github.com/goccy/go-graphviz/cmd/dot": "github.com/forkcloser/dot/cmd/dot",
+	// The repository moved to forkcloser; the old module path is never tagged
+	// again.
+	"github.com/farcloser/godolint/cmd/godolint": "github.com/forkcloser/godolint/cmd/godolint",
 }
 
 // goSourceAnalyzers are the tool packages a Go module must declare on top:
