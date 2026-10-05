@@ -80,7 +80,9 @@ are what prevents it.
    push. Amending after a push means `--force-with-lease=<branch>:<old sha>` to
    the bot's own branch, then the checks again.
 4. **Never commit scratchpads** (`AUDIT.md` and the like) or generated files
-   the repository ignores.
+   the repository ignores. A scratchpad lives under `_scratch/` at the
+   repository root, which `.gitignore` ignores (`/_scratch`), and nowhere
+   else in the tree.
 5. **One commit per thing.** Different things, different commits. Iteration
    on the same thing — a review round on the lines you just added, a fix to
    your own commit — is squashed into the commit it amends and the message
