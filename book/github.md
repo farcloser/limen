@@ -423,7 +423,11 @@ it.
 
 Both rulesets are canonical objects owned by limen — created when missing,
 reconciled when drifted, recognized by name. Local weakening is drift and gets
-reset by `limen github fix`.
+reset by `limen github fix`. The bypass list is compared too, and must be exactly
+the repository admins: with none, the admins' own release tag push and merges are
+refused; with another actor, that actor can press the button as well. GitHub shows
+the list only to an admin's token, so under any other the check reports it
+unverifiable rather than guessing.
 
 ## Fix semantics
 

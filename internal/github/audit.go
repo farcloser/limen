@@ -904,7 +904,20 @@ type rulesetSummary struct {
 }
 
 type rulesetDetail struct {
-	Rules []rulesetRule `json:"rules"`
+	// A pointer: GitHub omits the field for a token that is not a repository
+	// admin, and absent must not read as "nobody may bypass".
+	BypassActors *[]bypassActor `json:"bypass_actors"`
+	Rules        []rulesetRule  `json:"rules"`
+}
+
+type bypassActor struct {
+	ActorType  string `json:"actor_type"`
+	BypassMode string `json:"bypass_mode"`
+	ActorID    int64  `json:"actor_id"`
+}
+
+func (b bypassActor) String() string {
+	return b.ActorType + " " + strconv.FormatInt(b.ActorID, decimalBase) + " " + b.BypassMode
 }
 
 type rulesetRule struct {
@@ -1099,6 +1112,12 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 			strings.Join(contexts, listSeparator),
 			"ruleset "+target.name+" "+migrationReason(current, contexts),
 			reconcile)
+
+		return
+	}
+
+	if detail.BypassActors == nil {
+		a.unverifiable(fmt.Errorf("ruleset %s bypass list: %w", target.name, errFieldNotVisible), target.check)
 
 		return
 	}
@@ -1334,7 +1353,58 @@ func rulesetDrift(target rulesetTarget, detail rulesetDetail, payload map[string
 		}, true
 	}
 
+	if current, want, differs := bypassDrift(detail); differs {
+		return rulesetProblem{
+			current: "bypass: " + current,
+			desired: want,
+			message: "does not let exactly the repository admins bypass it — with none, an admin's release " +
+				"tag push or own merge is refused; with others, they can press the button too",
+		}, true
+	}
+
 	return rulesetProblem{}, false
+}
+
+// canonicalBypass is who may bypass either canonical ruleset: the repository
+// admins, always. Both builders write it and bypassDrift judges against it.
+func canonicalBypass() []bypassActor {
+	return []bypassActor{{ActorType: "RepositoryRole", BypassMode: "always", ActorID: repositoryAdminRoleID}}
+}
+
+// bypassDrift compares the live bypass list against canonicalBypass, as sets.
+// Equality, not the floor: a missing admin bypass blocks the release and the
+// owner's merges, and an extra actor widens who may do either. A list the token
+// cannot read is not drift; auditRuleset reports it unverifiable.
+func bypassDrift(detail rulesetDetail) (current, desired string, differs bool) {
+	if detail.BypassActors == nil {
+		return "", "", false
+	}
+
+	want := actorStrings(canonicalBypass())
+	have := actorStrings(*detail.BypassActors)
+
+	if slices.Equal(have, want) {
+		return "", "", false
+	}
+
+	current = strings.Join(have, listSeparator)
+	if current == "" {
+		current = "(none)"
+	}
+
+	return current, strings.Join(want, listSeparator), true
+}
+
+// actorStrings renders actors sorted, so two lists compare as sets.
+func actorStrings(actors []bypassActor) []string {
+	rendered := make([]string, 0, len(actors))
+	for _, actor := range actors {
+		rendered = append(rendered, actor.String())
+	}
+
+	slices.Sort(rendered)
+
+	return rendered
 }
 
 // approvalShortfall compares the live ruleset's required approving review
@@ -1529,9 +1599,7 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 		// their own pull request approved by anyone else. The agent account and
 		// every App are write-level, not admin, so the approval requirement
 		// binds them and only them.
-		"bypass_actors": []map[string]any{
-			{"actor_type": "RepositoryRole", "actor_id": repositoryAdminRoleID, "bypass_mode": "always"},
-		},
+		"bypass_actors": canonicalBypass(),
 		jsonRulesKey: []map[string]any{
 			ruleOf(ruleDeletion),
 			ruleOf("non_fast_forward"),
@@ -1580,9 +1648,7 @@ func canonicalTagsRuleset() map[string]any {
 		"conditions": map[string]any{
 			"ref_name": map[string]any{"include": []string{"refs/tags/v*"}, "exclude": []string{}},
 		},
-		"bypass_actors": []map[string]any{
-			{"actor_type": "RepositoryRole", "actor_id": repositoryAdminRoleID, "bypass_mode": "always"},
-		},
+		"bypass_actors": canonicalBypass(),
 		jsonRulesKey: []map[string]any{
 			ruleOf("creation"),
 			ruleOf("update"),
