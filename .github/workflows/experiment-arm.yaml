@@ -1,0 +1,200 @@
+# EXPERIMENT, not for merge: windows-11-arm, caching a disk image instead of
+# its files; diagnostic round, three pairs.
+# seed:     an empty expanding NTFS VHDX mounted at C:\vcache holds GOCACHE,
+#           GOMODCACHE, aqua's root and (by junction) the linter cache; lint
+#           and test fill it cold, then the image is detached and saved.
+# image:    restores the one file, attaches it at C:\vcache, lint and test;
+#           variant `excluded` first adds a Defender exclusion for C:\vcache
+#           and C:\vhd (this ephemeral runner only).
+# baseline: today's restores.
+# Both report, before lint, how many of limen-lint-go's packages go considers
+# stale (go list, compiles nothing), and how many files the linter cache
+# gains during lint (its misses).
+name: experiment-arm
+
+on:
+  pull_request:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  seed:
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      GOCACHE: C:\vcache\go-build
+      GOMODCACHE: C:\vcache\mod
+      AQUA_ROOT_DIR: C:/vcache/aqua
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Create and mount the image
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path C:\vhd, C:\vcache | Out-Null
+          "create vdisk file=`"C:\vhd\cache.vhdx`" maximum=40960 type=expandable`nselect vdisk file=`"C:\vhd\cache.vhdx`"`nattach vdisk" |
+            Set-Content -Encoding ascii C:\vhd\create.txt
+          diskpart /s C:\vhd\create.txt | Out-Null
+          $disk = Get-DiskImage -ImagePath C:\vhd\cache.vhdx | Get-Disk
+          Initialize-Disk -Number $disk.Number -PartitionStyle GPT
+          $part = New-Partition -DiskNumber $disk.Number -UseMaximumSize
+          Format-Volume -Partition $part -FileSystem NTFS -Confirm:$false -Force | Out-Null
+          Add-PartitionAccessPath -DiskNumber $disk.Number -PartitionNumber $part.PartitionNumber -AccessPath 'C:\vcache\'
+          New-Item -ItemType Directory -Force -Path C:\vcache\golangci, "$env:GITHUB_WORKSPACE\build" | Out-Null
+          New-Item -ItemType Junction -Path "$env:GITHUB_WORKSPACE\build\cache" -Target C:\vcache\golangci | Out-Null
+
+      - name: Install aqua (pinned, checksum-verified)
+        uses: ./.github/actions/setup-aqua
+
+      - name: Install pinned tools
+        run: aqua install --only-link
+
+      - name: Lint
+        run: just lint
+
+      - name: Test
+        run: just test
+
+      - name: Detach the image
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item "$env:GITHUB_WORKSPACE\build\cache" -Force
+          Dismount-DiskImage -ImagePath C:\vhd\cache.vhdx | Out-Null
+          $mb = [math]::Round((Get-Item C:\vhd\cache.vhdx).Length / 1MB)
+          "image file: $mb MB"
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: C:\vhd\cache.vhdx
+          key: exp-vhdx-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
+
+  image:
+    needs: seed
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [image, excluded]
+        rep: [1, 2, 3]
+    runs-on: windows-11-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      GOCACHE: C:\vcache\go-build
+      GOMODCACHE: C:\vcache\mod
+      AQUA_ROOT_DIR: C:/vcache/aqua
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: C:\vhd\cache.vhdx
+          key: exp-vhdx-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - name: Defender status, and the exclusion
+        shell: pwsh
+        run: |
+          Get-MpComputerStatus | Format-List RealTimeProtectionEnabled, OnAccessProtectionEnabled, AntivirusEnabled | Out-String
+          if ('${{ matrix.variant }}' -eq 'excluded') {
+            Add-MpPreference -ExclusionPath 'C:\vcache', 'C:\vhd'
+            (Get-MpPreference).ExclusionPath
+          }
+
+      - name: Attach the image
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path C:\vcache, "$env:GITHUB_WORKSPACE\build" | Out-Null
+          $img = Mount-DiskImage -ImagePath C:\vhd\cache.vhdx -NoDriveLetter -PassThru
+          $disk = $img | Get-Disk
+          $part = Get-Partition -DiskNumber $disk.Number | Where-Object Type -eq 'Basic'
+          Add-PartitionAccessPath -DiskNumber $disk.Number -PartitionNumber $part.PartitionNumber -AccessPath 'C:\vcache\'
+          New-Item -ItemType Junction -Path "$env:GITHUB_WORKSPACE\build\cache" -Target C:\vcache\golangci | Out-Null
+
+      - name: Install aqua (pinned, checksum-verified)
+        uses: ./.github/actions/setup-aqua
+
+      - name: Install pinned tools
+        run: aqua install --only-link
+
+      - name: Stale packages before lint
+        run: |
+          echo "limen-lint-go: $(go -C cmd/limen-lint-go list -deps -f '{{if .Stale}}x{{end}}' . | grep -c x) stale packages"
+          echo "linter cache before: $(find build/cache/golangci-lint -type f 2>/dev/null | wc -l) files"
+
+      - name: Lint
+        run: just lint
+
+      - name: Linter cache after lint
+        run: |
+          echo "linter cache after: $(find build/cache/golangci-lint -type f | wc -l) files"
+
+      - name: Test
+        run: just test
+
+  baseline:
+    needs: seed
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3]
+    runs-on: windows-11-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install aqua (pinned, checksum-verified)
+        uses: ./.github/actions/setup-aqua
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.AQUA_ROOT_DIR }}/pkgs
+          key: aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.aqua/aqua.yaml', '.aqua/aqua-checksums.json', '.limen/aqua-registry.yaml') }}
+          restore-keys: |
+            aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install pinned tools
+        run: aqua install --only-link
+      - id: gocache
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.gocache.outputs.build }}
+            ${{ steps.gocache.outputs.mod }}
+            build/cache
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-
+            go-${{ runner.os }}-${{ runner.arch }}-
+      - name: Stale packages before lint
+        run: |
+          echo "limen-lint-go: $(go -C cmd/limen-lint-go list -deps -f '{{if .Stale}}x{{end}}' . | grep -c x) stale packages"
+          echo "linter cache before: $(find build/cache/golangci-lint -type f 2>/dev/null | wc -l) files"
+      - name: Lint
+        run: just lint
+      - name: Linter cache after lint
+        run: |
+          echo "linter cache after: $(find build/cache/golangci-lint -type f | wc -l) files"
+      - name: Test
+        run: just test
