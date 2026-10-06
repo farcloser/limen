@@ -162,9 +162,8 @@ leave for the human to find.
 On green, and only then — checks green, pull request ready — request the
 owner's review; that is how the human learns the work exists, and it is
 said once, never on a red pull request. Never on a stacked one either: a
-branch cut from an unmerged branch is not mergeable on its own, so it
-waits, unrequested, until its base merges and it is rebased down to its
-own commits. A requested pull request that turns red has its request
+layer of a stack is not mergeable on its own, so it waits, unrequested,
+until the layer below has merged. A requested pull request that turns red has its request
 withdrawn (`gh api -X DELETE repos/<org>/<repo>/pulls/<n>/requested_reviewers
 -f 'reviewers[]=<owner>'`) until it is green again. The human's comments
 on the pull request are the review: address them when pointed there or
@@ -206,11 +205,12 @@ can both rebase often and cheaply.
 
 ## Stacking
 
-Cut a branch from the human's unmerged branch only when nothing else can be
-green — the repository's CI is broken on `main` until that branch lands. Say
-so in the pull request body ("stacked on #N"), never request review on it,
-and once #N merges, rebase it onto `main` so it shows only its own commits —
-then it is ready, and then the review request goes out.
+Every pull request targets `main`; never open one against another pull
+request's branch, and never merge one into it. A change that cannot be green
+without an unmerged one is either a layer of a GitHub native stack, or a
+branch with no pull request yet, opened against `main` once the other has
+merged. Say what it stacks on in the body ("stacked on #N"), and request
+review only after #N has merged.
 
 ## Scope
 
