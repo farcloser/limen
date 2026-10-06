@@ -21,6 +21,26 @@ assigned the role, or a person.
 A finding at step 1 outranks a clean pass at steps 2 and 3, and is raised with the
 baseline's owner when the mechanism is the baseline's.
 
+## Reading the change
+
+- **Try to break it.** Every guard, check and claim in the change is attacked
+  before it is believed: the input that bypasses it, the caller that never reaches
+  it, the platform it behaves differently on. A check with a known bypass, or a
+  document that contradicts the rule it ships with, is a 🛑 whatever its size. 🔍
+  lists what was tried, not what was read.
+- **Follow the value to its consumer.** A changed value, error or path is traced to
+  where it is used, in this repository and in the ones that import it.
+- **A re-push is a new change.** After a redesign the whole pull request is read
+  again as if for the first time, and two questions are asked of it: what can now
+  go, and why each piece is where it is. A design question is judged against the
+  [generic principles](./index.md#generic-principles), not against the previous
+  round.
+- **Shape blocks before the first release.** A flaw in an exported API — mutable
+  state, a value the type should not admit, state kept twice — is a ⚠️ or a 🛑
+  until it ships, not a 💡. A 💡 repeated across rounds was a ⚠️ in the first one.
+- **Fix the type before the call sites.** When a value should not exist, the
+  recommendation is the type that cannot hold it; a guard is the fallback option.
+
 ## Verify live, never from memory
 
 Every statement in a review was checked at the time of writing, against the
