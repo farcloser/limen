@@ -27,7 +27,8 @@ Every statement in a review was checked at the time of writing, against the
 source of truth, and the review says where:
 
 - A pinned checksum or digest, against what upstream publishes: the GitHub release
-  asset digest, `sum.golang.org` for a Go module, the publisher's checksum file.
+  asset digest, `sum.golang.org` for a Go module, the publisher's checksum file. A
+  match establishes identity (this is the artifact upstream published), not fitness.
 - A pseudo-version, against the owner's default branch: the commit is on it, and
   the timestamp in the version is the commit's.
 - A content-pinned file, byte for byte against the canonical copy at the version
@@ -44,10 +45,29 @@ verified is stated as unverified, not inferred.
 
 ## Dependency bumps
 
-A bot's bump is approved when every check is green and the pin verifies as above;
-the approval body says what was verified and where, in one line. A red bump is the
-owning session's to unblock, never the reviewer's to fix: the reviewer reads the
-failing log and forwards what it found.
+A green run and a pin that matches upstream are the bump's preconditions, not its
+review: CI is the merge gate and the reader sees it without being told, and a digest
+compared with the release the bot read it from checks the source against itself.
+Neither says whether the new version is right for this consumer. A dependency bump,
+bot- or hand-made, is approved on evidence about that, and the approval names the
+evidence:
+
+- **What changed upstream between the two versions**: release notes, changelog, the
+  advisories the bump claims to fix and the ones it does not, new platform or
+  toolchain requirements. A "security" bump is checked against the advisory list: a
+  bump that leaves a published advisory open says so.
+- **What the bump touches that CI does not exercise**, and how that was covered.
+  Where CI cannot run it (a kernel build, a source-built formula, a binary that boots
+  a VM), the approval waits for the owning session's result on the pull request; it
+  is not given on green.
+- **Where the dependency lands**: shipped code, a test, a generator, a tool module.
+  The depth of the check follows the exposure, and the approval says which it is.
+
+A routine patch bump of a tool module, with nothing in its upstream changes, is
+approved in one line that says so. A bump nobody has evidence for is not approved.
+
+A red bump is the owning session's to unblock, never the reviewer's to fix: the
+reviewer reads the failing log and forwards what it found.
 
 **Red by construction is a baseline defect.** A bump that cannot be green without a
 hand edit the bot will never make — a seeded workflow calling a recipe the project
