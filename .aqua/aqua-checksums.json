@@ -71,6 +71,11 @@
       "algorithm": "sha256"
     },
     {
+      "id": "github_release/github.com/farcloser/ossein/v0.3.0/ossein_0.3.0_darwin_arm64.tar.gz",
+      "checksum": "3272F1D1117C2D4F2A8FD484963B0CE8979199D047D0FFA1D110838AB1C16E5F",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/forkcloser/curl/v8.22.0/curl_8.22.0_darwin_arm64.tar.gz",
       "checksum": "E733869CF4FED3F5CB0F67E0AA37DD21216690D27C56525749E3F3A211227DD3",
       "algorithm": "sha256"
