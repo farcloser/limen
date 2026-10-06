@@ -243,6 +243,20 @@ commits range="": (_banner "lint" "commits") (_go-tool "git-validation" "github.
             fi
         done
     fi
+    # git-validation asks git for every commit's signature status, so git
+    # verifies each signature: without the signers file and a gpg it prints
+    # an error per commit that reads like a failure. GIT_CONFIG_* hands git
+    # both without writing .git/config.
+    n=0
+    if [ -f .lint-signers ]; then
+        export GIT_CONFIG_KEY_0=gpg.ssh.allowedSignersFile GIT_CONFIG_VALUE_0=.lint-signers
+        n=1
+    fi
+    if [ -n "${GPG_BIN:-}" ]; then
+        export "GIT_CONFIG_KEY_$n=gpg.program" "GIT_CONFIG_VALUE_$n=$GPG_BIN"
+        n=$((n + 1))
+    fi
+    export GIT_CONFIG_COUNT=$n
     if [ -n "$range" ]; then
         build/tools/git-validation -run DCO,short-subject,dangling-whitespace -range "$range"
     else

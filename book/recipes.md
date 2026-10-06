@@ -21,7 +21,13 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   loudly; a machine-installed copy can never be silently substituted. (Windows/git-bash is
   the one sanctioned exception: with no knowable base-system directory list, the pinned
   tools are *prepended* to the ambient `PATH` — pins still shadow everything, and the POSIX
-  legs of the CI matrix keep full hermeticity enforced.)
+  legs of the CI matrix keep full hermeticity enforced.) Two machine tools are captured
+  from the ambient `PATH` before it is replaced, by absolute path into a variable the
+  recipes name, never onto the `PATH`: `BREW_BIN`, for the homebrew recipes (brew has no
+  pin and lives at a machine-chosen prefix), and `GPG_BIN`, for git to read the PGP
+  signatures GitHub puts on its merge and web-UI commits (the aqua registry has no gnupg,
+  and macOS's base system has none). Neither decides what a pin should: brew is what the
+  homebrew lanes exercise, and no lane's verdict rests on a PGP signature.
 - **Hermetic Go environment** — Go reads its behavior from a dozen `GO*` variables that
   tunnel through the pinned `PATH`, so each is emptied or pinned: `GOROOT` (IDEs inject
   one) so the pinned toolchain finds its own stdlib; `GOTOOLCHAIN=local` to forbid Go's
