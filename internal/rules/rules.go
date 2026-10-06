@@ -48,6 +48,7 @@ const (
 	// project's own.
 	pathWorkflowChecksum = ".github/workflows/update-aqua-checksum.yaml"
 	pathActionSetupAqua  = ".github/actions/setup-aqua/action.yaml"
+	pathActionWinCache   = ".github/actions/windows-cache-image/action.yaml"
 	pathWorkflowCI       = ".github/workflows/ci.yaml"
 	pathWorkflowSecurity = ".github/workflows/security.yaml"
 	pathWorkflowRelease  = ".github/workflows/release.yaml"
@@ -707,7 +708,7 @@ func checkLychee(root string) Finding {
 }
 
 // checkWorkflows verifies the .github surface in its two regimes: the
-// checksum-update workflow and the setup-aqua action are content-pinned
+// checksum-update workflow and the composite actions are content-pinned
 // (limen machinery — the write-capable workflow's hardening must never
 // drift), while the CI and security workflows and the renovate config need
 // only exist (limen fix seeds the canonical ones; their content is the
@@ -721,6 +722,10 @@ func checkWorkflows(root string) Finding {
 	}
 
 	if f := checkPinned(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua); f != nil {
+		return *f
+	}
+
+	if f := checkPinned(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage); f != nil {
 		return *f
 	}
 
