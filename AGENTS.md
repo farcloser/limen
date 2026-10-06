@@ -56,6 +56,11 @@ chapter; the procedure is limen's `skills/contribute`.
   a one-line workflow bug: on the way through. Onboarding a legacy repository, a
   wholesale cleanup of a broken one: the human decides first. Measure before moving.
 - **A red inherited from `main`** is explained on the pull request, not fixed in it.
+- **A flake is fixed when it is noticed.** A check that fails, then passes on a rerun, gets
+  its root cause and its fix at once, in a pull request of its own: by whoever noticed it,
+  or by the owning session when it is another repository's. The rerun found the flake; it
+  did not fix it. The one exception is a flake whose cause is known and whose fix was
+  declined, documented as such (windows-11-arm's silent exit 4 or 127): it is rerun, and named.
 - **Doctrine can lose the argument, never silently.** A fix that cuts against the book is
   named as such and argued; it is decided, not discovered.
 - **Broken tooling is reported, never worked around in silence.** The rig — limen, the

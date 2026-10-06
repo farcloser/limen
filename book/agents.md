@@ -257,6 +257,18 @@ The human sets the priorities; the agent measures scope before it moves.
 - **A red inherited from `main`** is explained on the pull request, not
   fixed there: the fix is its own change, if the human wants it, and a
   file under the human's active edit is left alone.
+- **A flake is fixed when it is noticed.** A check that fails and then
+  passes on a rerun is a bug that came with its reproducer, and the rerun
+  that turned it green is how it was found, not its fix. It gets its root
+  cause and a fix pull request at once, ahead of the ask in hand: from
+  whoever noticed it, or, when it lives in another repository, from the
+  session that owns it, told what, why and where. Rerun-and-move-on is how
+  a test that orders goroutines with sleeps, or times retries by the wall
+  clock, stays red on the slowest runner for weeks. The one exception is a
+  flake whose cause is known and whose fix was declined, recorded where the
+  cause is: windows-11-arm's silent exit 4 or 127
+  ([windows](./windows.md#bash-dies-under-emulation)). It is rerun, and
+  named on the pull request.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged;
   what survives judgment becomes code, tests, or book prose. They live under
   `_scratch/` at the repository root, which every repository's `.gitignore`
