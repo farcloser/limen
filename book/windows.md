@@ -192,6 +192,24 @@ there. A Go program whose `cmd.Run()` fails before a process exists has a nil
 `ProcessState`, whose `ExitCode()` is `-1`; a program that exits with that number
 without printing the error, as aqua's proxy does, leaves a log with no innermost cause.
 
+## Caches on the Windows runners
+
+On a Windows runner, restoring the Go build and module caches, aqua's packages and the
+linter cache as files means writing over 100,000 small files, which was most of a leg's
+time (170 to 350 s on windows-11-arm). The canonical CI workflow keeps them instead in
+one NTFS disk image, cached as a single file and attached at `C:\vcache`
+(`.github/actions/windows-cache-image`): download, decompression and attach take under a
+minute. A miss creates an empty image, and the run fills it and saves it.
+
+The image is excluded from Defender's real-time scan for the job. Without the exclusion,
+every file in it is scanned on its first read, and lint gives back what the restore saved.
+Measured on windows-11-arm, three runs of each in one workflow run: 442 s on average with
+the file caches, 359 s with the image, 275 s with the image and the exclusion.
+
+Tried and dropped, each slower or within the run-to-run noise: Windows' own `tar` for the
+restore (native, but fed by an emulated `zstd`), no Go cache, no aqua cache, caching only
+the module zips, and a Dev Drive (ReFS) at the cache paths.
+
 ## Line endings and sessions
 
 - Line endings: windows machines default git to `core.autocrlf=true`. The canonical

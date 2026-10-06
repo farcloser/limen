@@ -118,6 +118,12 @@ var CanonicalWorkflowUpdateAquaChecksum string
 //go:embed .github/actions/setup-aqua/action.yaml
 var CanonicalActionSetupAqua string
 
+// CanonicalActionWindowsCacheImage is the composite action the canonical CI
+// workflow keeps its Windows caches in — content-pinned.
+//
+//go:embed .github/actions/windows-cache-image/action.yaml
+var CanonicalActionWindowsCacheImage string
+
 // CanonicalWorkflowCI seeds .github/workflows/ci.yaml once; the file is the
 // project's own afterwards (matrix trims, extra jobs, services).
 //

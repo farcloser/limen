@@ -174,12 +174,13 @@ func compliantRepo(t *testing.T) string {
 		".limen/lychee.toml":        rules.CanonicalLychee,
 		".limen/.yamlfmt":           rules.CanonicalYamlfmt,
 		".limen/.shellcheckrc":      rules.CanonicalShellcheckrc,
-		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
-		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
-		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
-		".github/workflows/security.yaml":             limen.CanonicalWorkflowSecurity,
-		".limen/renovate.json":                        limen.CanonicalRenovatePreset,
-		"renovate.json":                               rules.CanonicalRenovateFor(""),
+		".github/workflows/update-aqua-checksum.yaml":     limen.CanonicalWorkflowUpdateAquaChecksum,
+		".github/actions/setup-aqua/action.yaml":          limen.CanonicalActionSetupAqua,
+		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
+		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
+		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
+		".limen/renovate.json":                            limen.CanonicalRenovatePreset,
+		"renovate.json":                                   rules.CanonicalRenovateFor(""),
 		// The Go-built tools every repository declares (the gotools rule).
 		"tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
 			"\tgithub.com/vbatts/git-validation\n" +

@@ -81,10 +81,11 @@ func compliantFiles() map[string]string {
 		".limen/.shellcheckrc": rules.CanonicalShellcheckrc,
 		// The .github surface: two content-pinned pieces, two seeded ones
 		// (any content satisfies the seeded pair — canonical used here).
-		".github/workflows/update-aqua-checksum.yaml": limen.CanonicalWorkflowUpdateAquaChecksum,
-		".github/actions/setup-aqua/action.yaml":      limen.CanonicalActionSetupAqua,
-		".github/workflows/ci.yaml":                   limen.CanonicalWorkflowCI,
-		".github/workflows/security.yaml":             limen.CanonicalWorkflowSecurity,
+		".github/workflows/update-aqua-checksum.yaml":     limen.CanonicalWorkflowUpdateAquaChecksum,
+		".github/actions/setup-aqua/action.yaml":          limen.CanonicalActionSetupAqua,
+		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
+		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
+		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
 		// The shared Renovate configuration, content-pinned, and the seed
 		// extending it by the repository's name — what `limen fix` leaves
 		// behind (the renovate rule).
@@ -1083,6 +1084,7 @@ func TestYamlfmtConditional(t *testing.T) {
 	for _, y := range []string{
 		".aqua/aqua.yaml", ".aqua/aqua-policy.yaml", ".limen/aqua-registry.yaml", ".limen/aqua.yaml",
 		".github/workflows/update-aqua-checksum.yaml", ".github/actions/setup-aqua/action.yaml", ".github/workflows/ci.yaml",
+		".github/actions/windows-cache-image/action.yaml",
 		".github/workflows/security.yaml",
 	} {
 		delete(noYAML, y) // remove every *.yaml/*.yml in the set
