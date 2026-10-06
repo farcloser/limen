@@ -542,6 +542,33 @@ func TestRefreshStopsOnRefusal(t *testing.T) { // Serial by design: t.Setenv for
 	}
 }
 
+// TestRefreshNamesTheAnsweringHost: a release URL redirects to an asset host,
+// and a refusal from there must name that host, not only the URL asked.
+func TestRefreshNamesTheAnsweringHost(t *testing.T) {
+	t.Parallel()
+
+	assets := artifactHost(t, map[string]string{})
+
+	release := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, assets.URL+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(release.Close)
+
+	root := writePins(t, "pins:\n  - name: a\n    renovate: github-tags x/y\n    version: 1\n    url: "+
+		release.URL+"/a-${version}.tgz\n    verify: download\n    digest:\n      version: 0\n      sha256: "+
+		strings.Repeat("0", 64)+"\n")
+
+	_, err := pins.Refresh(t.Context(), root, io.Discard)
+	if !errors.Is(err, pins.ErrVerify) {
+		t.Fatalf("refresh of an asset the redirect target refuses: %v, want ErrVerify", err)
+	}
+
+	assetHost := strings.TrimPrefix(assets.URL, "http://")
+	if !strings.Contains(err.Error(), "HTTP 404 from "+assetHost) {
+		t.Errorf("the error should name the asset host that answered, got: %v", err)
+	}
+}
+
 // TestRefreshThroughClearsignedSums: the PGP method runs no tool. The sums
 // are clearsigned by a key the test generates, the digest is the signed
 // line, and a key other than the pinned one, or a tampered listing, is a

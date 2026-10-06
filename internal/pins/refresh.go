@@ -343,11 +343,11 @@ func downloadOnce(ctx context.Context, url, file string) (string, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= http.StatusInternalServerError || resp.StatusCode == http.StatusTooManyRequests {
-		return "", fmt.Errorf("%w: GET %s: HTTP %d", errTransient, url, resp.StatusCode)
+		return "", fmt.Errorf("%w: GET %s: HTTP %d%s", errTransient, url, resp.StatusCode, answeredBy(req, resp))
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: GET %s: HTTP %d", ErrVerify, url, resp.StatusCode)
+		return "", fmt.Errorf("%w: GET %s: HTTP %d%s", ErrVerify, url, resp.StatusCode, answeredBy(req, resp))
 	}
 
 	out, err := os.Create(file) // #nosec G304 -- a path this package built under its own temporary directory.
@@ -369,6 +369,17 @@ func downloadOnce(ctx context.Context, url, file string) (string, error) {
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// answeredBy names the host that sent the status when a redirect moved the
+// request off the one asked: a release URL answers with a redirect, and the
+// status worth reporting may be the asset host's, not GitHub's.
+func answeredBy(req *http.Request, resp *http.Response) string {
+	if resp.Request == nil || resp.Request.URL.Host == req.URL.Host {
+		return ""
+	}
+
+	return " from " + resp.Request.URL.Host + " (redirected)"
 }
 
 // run executes a pinned verifier from the repository root (the hermetic PATH
