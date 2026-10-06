@@ -2,19 +2,16 @@ package pins
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"github.com/farcloser/limen/internal/fetch"
 	"github.com/farcloser/limen/internal/verify/openpgp"
 )
 
@@ -287,99 +284,15 @@ func sumFor(data []byte, want, sumsURL string) (string, error) {
 	return "", fmt.Errorf("%w: no line for %s in the signed sums at %s", ErrVerify, want, sumsURL)
 }
 
-// Transient failures are retried the way every curl in the rig retries,
-// so a hiccup does not cost a Renovate branch its workflow run.
-const (
-	downloadAttempts = 5
-	downloadBackoff  = 3 * time.Second
-)
-
-// errTransient is a failure worth another attempt: no answer, or a 5xx.
-var errTransient = errors.New("retryable")
-
-// download fetches url into file and returns the sha256 of what it wrote,
-// retrying transient failures. No whole-request timeout: an artifact can be
-// gigabytes; ctx is the bound.
+// download fetches url into file and returns the sha256 of what it wrote; a
+// download that did not land is a refusal like any other.
 func download(ctx context.Context, url, file string) (string, error) {
-	var lastErr error
-
-	for attempt := range downloadAttempts {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return "", fmt.Errorf("%s: %w", url, ctx.Err())
-			case <-time.After(downloadBackoff * time.Duration(attempt)):
-			}
-		}
-
-		sum, err := downloadOnce(ctx, url, file)
-		if err == nil {
-			return sum, nil
-		}
-
-		if !errors.Is(err, errTransient) {
-			return "", err
-		}
-
-		lastErr = err
-	}
-
-	return "", fmt.Errorf("%w: gave up after %d attempts: %w", ErrVerify, downloadAttempts, lastErr)
-}
-
-// downloadOnce is one attempt: a status worth retrying is errTransient, a
-// definitive refusal is ErrVerify.
-func downloadOnce(ctx context.Context, url, file string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	sum, err := fetch.File(ctx, url, file)
 	if err != nil {
-		return "", fmt.Errorf(errFormat, url, err)
+		return "", fmt.Errorf("%w: %w", ErrVerify, err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf(errAt, errTransient, url, err)
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= http.StatusInternalServerError || resp.StatusCode == http.StatusTooManyRequests {
-		return "", fmt.Errorf("%w: GET %s: HTTP %d%s", errTransient, url, resp.StatusCode, answeredBy(req, resp))
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: GET %s: HTTP %d%s", ErrVerify, url, resp.StatusCode, answeredBy(req, resp))
-	}
-
-	out, err := os.Create(file) // #nosec G304 -- a path this package built under its own temporary directory.
-	if err != nil {
-		return "", fmt.Errorf(errFormat, file, err)
-	}
-
-	hash := sha256.New()
-
-	_, copyErr := io.Copy(io.MultiWriter(out, hash), resp.Body)
-	closeErr := out.Close()
-
-	if copyErr != nil {
-		return "", fmt.Errorf("%w: downloading %s: %w", errTransient, url, copyErr)
-	}
-
-	if closeErr != nil {
-		return "", fmt.Errorf("writing %s: %w", file, closeErr)
-	}
-
-	return hex.EncodeToString(hash.Sum(nil)), nil
-}
-
-// answeredBy names the host that sent the status when a redirect moved the
-// request off the one asked: a release URL answers with a redirect, and the
-// status worth reporting may be the asset host's, not GitHub's.
-func answeredBy(req *http.Request, resp *http.Response) string {
-	if resp.Request == nil || resp.Request.URL.Host == req.URL.Host {
-		return ""
-	}
-
-	return " from " + resp.Request.URL.Host + " (redirected)"
+	return sum, nil
 }
 
 // run executes a pinned verifier from the repository root (the hermetic PATH
