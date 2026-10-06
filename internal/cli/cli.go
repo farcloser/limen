@@ -112,6 +112,8 @@ func Run(version string, args []string, stdout, stderr io.Writer) int {
 		return runGithub(ctx, args[1:], stdout, stderr)
 	case cmdPins:
 		return runPins(ctx, args[1:], stdout, stderr)
+	case cmdVulndb:
+		return runVulndb(ctx, args[1:], stdout, stderr)
 	case "version", "-v", "--version":
 		_, _ = fmt.Fprintln(stdout, "limen "+version)
 
@@ -680,6 +682,8 @@ Usage:
   limen github fix [-repo] [-org] [-yes]  Repair the fixable GitHub settings
   limen pins get <name> <field>           Print a pinned artifact's version, url, or sha256
   limen pins refresh [-all] [path]        Recompute stale digests in pins.yaml, verified
+  limen vulndb [-source url] <dir>        Fetch the Go vulnerability database into dir, retried,
+                                          and print the file URL for govulncheck -db
   limen version                           Print the limen version
   limen help                              Show this help
 
