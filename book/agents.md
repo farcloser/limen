@@ -185,10 +185,8 @@ branches are the human's.
   request is ready, request the repository owner's review — the human is
   told, not left to notice, and told once: a review request on a red pull
   request is a request to watch the agent work. Ready also means
-  *mergeable on its own*: a pull request stacked on another — branched
-  from an unmerged branch, showing that branch's commits until it lands —
-  waits, unrequested, until its base has merged and it has been rebased
-  down to its own commits. The owner is whoever the repository says: a
+  *mergeable on its own*: a pull request stacked on another waits,
+  unrequested, until its base has merged. The owner is whoever the repository says: a
   `CODEOWNERS` entry when there is one, else the organization's owner. The
   review request and a message to the reviewing session with the URL are
   one step, since a separate message to remember is the one that gets
@@ -198,12 +196,15 @@ branches are the human's.
   `main`, prune the merged branch and its worktree, and rebase every open
   branch onto `main` — so that both the human and the agent can rebase often
   and cheaply.
-- **Stacking, rarely and said out loud.** A branch is cut from the human's
-  unmerged branch only when the change cannot be green without it — a
-  repository whose CI is broken on `main` until the human's pending
-  migration lands. The pull request body names what it stacks on; once the
-  base merges, the branch is rebased down to its own commits. A stacked
-  pull request is never sent for review.
+- **Every pull request targets `main`.** None is hand-based on another
+  pull request's branch, and none is merged into one: a change that lands
+  on a side branch shows as merged while `main` has none of it, and the
+  pull request into `main` then repeats it. The one exception is a layer
+  of a GitHub native stack, which GitHub itself bases on the layer below
+  and lands into `main`. A change that cannot be green without another is
+  stacked that way, or waits, with no pull request open, until the other
+  merges. The body names what it stacks on, and a stacked pull request is
+  not sent for review until its base has merged.
 - **Not the agent's to do.** Merging, pushing to `main`, force-pushing shared
   branches, and tagging releases. Those are not trust questions; they are the
   rulesets and the release lane doing their job.
