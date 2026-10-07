@@ -40,6 +40,16 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   exception is `GOWORK`:** a `go.work` in the tree (or a parent) deliberately puts recipes
   into workspace mode — Go workspaces are a supported way to work here, at the eyes-open
   cost that a build under an active workspace can differ from CI.
+- **The host's C compiler, for diagnostics and tests only.** cgo calls the C compiler and
+  linker it finds: Xcode's clang on macOS, the base system's `gcc` from `/usr/bin` on Linux,
+  whatever the ambient `PATH` carries on Windows. No C toolchain is pinned, so two kinds of
+  build run on the host's, as a named exception: the race lanes (`test go race` and `build
+  go race` force cgo, the detector needs it) and the tests of a project that sets
+  `GO_CGO`. Both are diagnostics, never shipped: a compiler difference there can change
+  what a test finds, never what a consumer runs. A release artifact is not covered by this
+  exception. One for macOS that links Apple's SDK (Virtualization.framework, an
+  `xcodebuild` bundle) builds with Xcode, which belongs to the machine like the OS itself.
+  On Linux and Windows, a shipped cgo build needs a pinned C toolchain (an ossein container).
 
 The coreutils are pinned too — `sort`, `date`, `mktemp`, `sha256sum`, `base64` and the rest
 on the hermetic PATH are aqua's, never the runner's. On macOS and Linux that is one Rust
