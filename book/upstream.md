@@ -44,6 +44,28 @@ would stop it.
 **Lifts when** aqua compares cleaned paths, case-insensitively, in this skip. Not reported
 upstream yet.
 
+## aqua's downloads have no timeout
+
+**Symptom.** A step that runs a tool for the first time on a runner hangs with no
+output until the job's `timeout-minutes` cancels it. A rerun passes. Seen on the
+erofs Windows leg
+(https://github.com/forkcloser/erofs/actions/runs/37509453884/job/112428768665).
+
+**Cause.** A lazy install, the first run of a tool through its aqua link, downloads the
+package with Go's `http.DefaultClient`
+([pkg/cli/exec/command.go](https://github.com/aquaproj/aqua/blob/01975b3b0d740b5c4876be30a8a99784ad5ad163/pkg/cli/exec/command.go#L87),
+[pkg/download/github_release.go](https://github.com/aquaproj/aqua/blob/01975b3b0d740b5c4876be30a8a99784ad5ad163/pkg/download/github_release.go#L67)),
+which has no timeout, and nothing on that path sets a deadline. A connection that stalls
+mid-body blocks the read forever. The latest aqua release still uses the same client.
+
+**Workaround.** None in aqua's path. Every job in the canonical workflows carries a
+`timeout-minutes`, so a stall costs that budget rather than the runner's six hours. The red
+it leaves is rerun and named on the pull request: a flake whose cause is known and whose
+fix was declined.
+
+**Lifts when** aqua bounds its downloads (a client timeout, or a deadline on a stalled
+body). Not reported upstream, by decision.
+
 ## MSYS2 bash dies under emulation on windows-11-arm
 
 **Symptom.** A shebang recipe on the windows-11-arm leg fails with `exit code 4` (or

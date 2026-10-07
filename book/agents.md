@@ -264,11 +264,12 @@ The human sets the priorities; the agent measures scope before it moves.
   whoever noticed it, or, when it lives in another repository, from the
   session that owns it, told what, why and where. Rerun-and-move-on is how
   a test that orders goroutines with sleeps, or times retries by the wall
-  clock, stays red on the slowest runner for weeks. The one exception is a
-  flake whose cause is known and whose fix was declined, recorded where the
-  cause is: windows-11-arm's silent exit 4 or 127
-  ([windows](./windows.md#bash-dies-under-emulation)). It is rerun, and
-  named on the pull request.
+  clock, stays red on the slowest runner for weeks. The exceptions are
+  flakes whose cause is known and whose fix was declined, each recorded in
+  [known upstream bugs](./upstream.md): windows-11-arm's silent exit 4 or
+  127 ([windows](./windows.md#bash-dies-under-emulation)), and an aqua
+  download that stalls with no timeout. Each is rerun, and named on the
+  pull request.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged;
   what survives judgment becomes code, tests, or book prose. They live under
   `_scratch/` at the repository root, which every repository's `.gitignore`
