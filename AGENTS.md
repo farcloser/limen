@@ -29,6 +29,10 @@ chapter; the procedure is limen's `skills/contribute`.
   human's own work, the human is the author. No scratchpads (`AUDIT.md` and its kind):
   they live under `_scratch/` at the repository root, which `.gitignore` ignores, and
   nowhere else in the tree.
+- **The pull request's title is its release note.** A release's notes are the titles of
+  the pull requests it merged, so a title says what changed for a consumer; no
+  `CHANGELOG.md` is kept by hand. One that breaks a consumer carries the `breaking` label
+  (`gh label create breaking` the first time a repository needs it).
 - **One commit per thing.** Different things get different commits; iteration on the
   same thing — a review round, a fix to your own commit — is squashed into the commit it
   amends before the review is requested. Never a stack of fix-ups for one change.

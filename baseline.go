@@ -150,6 +150,14 @@ var CanonicalWorkflowSecurity string
 //go:embed .github/workflows/release.yaml
 var CanonicalWorkflowRelease string
 
+// CanonicalReleaseNotes is GitHub's release-notes configuration, how the
+// notes a release takes from its merged pull requests are grouped —
+// content-pinned, only where a .release-go.yaml exists, like the release
+// workflow.
+//
+//go:embed .github/release.yml
+var CanonicalReleaseNotes string
+
 // CanonicalRenovatePreset is the shared Renovate configuration, content-pinned
 // in every repository at .limen/renovate.json and extended from renovate.json.
 //

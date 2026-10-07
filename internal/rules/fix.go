@@ -502,8 +502,10 @@ func remediateWorkflows(root string) []Outcome {
 	out = append(out, remediateReleaseGo(root, rule), remediateLintGithub(root, rule))
 
 	if exists(filepath.Join(root, releaseGoFile)) {
-		out = append(out, seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
-			"seeded the canonical release workflow (the content is the project's own from here)"))
+		out = append(out,
+			seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
+				"seeded the canonical release workflow (the content is the project's own from here)"),
+			pinExact(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes))
 	} else {
 		out = append(out, Outcome{
 			Rule:    rule,
@@ -577,9 +579,9 @@ func remediateLintGithub(root, rule string) Outcome {
 }
 
 // remediateReleaseGo moves a goreleaser configuration from a default name to
-// .release-go.yaml and gives it its schema header; the content is otherwise
-// the project's, untouched. With both names present, the project merges them
-// by hand.
+// .release-go.yaml and gives it its schema header and the canonical
+// `changelog:` section; the content is otherwise the project's, untouched.
+// With both names present, the project merges them by hand.
 func remediateReleaseGo(root, rule string) Outcome {
 	stray, found := findFirst(root, strayGoreleaserFiles...)
 	if found && exists(filepath.Join(root, releaseGoFile)) {
@@ -608,18 +610,29 @@ func remediateReleaseGo(root, rule string) Outcome {
 
 	content := string(data)
 	headed := strings.HasPrefix(content, releaseGoHeader+"\n") || strings.HasPrefix(content, releaseGoHeader+"\r\n")
+	_, drifted := changelogDrift(content)
 
-	if !found && headed {
+	if !found && headed && !drifted {
 		return Outcome{
 			Rule:    rule,
 			Action:  ActionNone,
 			Path:    releaseGoFile,
-			Message: releaseGoFile + " carries its schema line",
+			Message: releaseGoFile + " carries its schema line and the canonical changelog section",
 		}
 	}
 
+	var done []string
+
 	if !headed {
 		content = releaseGoHeader + "\n" + content
+
+		done = append(done, "added the schema line")
+	}
+
+	if drifted {
+		content = withCanonicalChangelog(content)
+
+		done = append(done, "set the changelog section to `use: github-native`")
 	}
 
 	if err := writeFile(root, releaseGoFile, content); err != nil {
@@ -631,7 +644,7 @@ func remediateReleaseGo(root, rule string) Outcome {
 			Rule:    rule,
 			Action:  ActionMerged,
 			Path:    releaseGoFile,
-			Message: "added the schema line to " + releaseGoFile,
+			Message: releaseGoFile + ": " + strings.Join(done, "; "),
 		}
 	}
 
@@ -640,10 +653,11 @@ func remediateReleaseGo(root, rule string) Outcome {
 	}
 
 	return Outcome{
-		Rule:    rule,
-		Action:  ActionMerged,
-		Path:    releaseGoFile,
-		Message: "renamed " + stray + " to " + releaseGoFile + ", with the schema line (the name the release lane reads)",
+		Rule:   rule,
+		Action: ActionMerged,
+		Path:   releaseGoFile,
+		Message: strings.Join(append([]string{"renamed " + stray + " to " + releaseGoFile +
+			" (the name the release lane reads)"}, done...), "; "),
 	}
 }
 
