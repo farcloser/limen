@@ -312,10 +312,7 @@ func TestParseRejects(t *testing.T) {
 			strings.Replace(good, "verify: download",
 				"verify: pgp-sha256sums https://x/s.asc https://x/k.asc 632D3A06589DA6B1", 1), pins.ErrEntry,
 		},
-		"no digest": {
-			strings.Replace(good, "    digest:\n      version: 1\n      sha256: "+strings.Repeat("0", 64)+"\n", "", 1),
-			pins.ErrEntry,
-		},
+		"half a digest":  {strings.Replace(good, "      version: 1\n", "", 1), pins.ErrEntry},
 		"duplicate name": {good + strings.TrimPrefix(good, "pins:\n"), pins.ErrEntry},
 		"unknown variable in url": {
 			strings.Replace(good, "url: https://h/a", "url: https://h/a-${minor}", 1),
@@ -409,6 +406,56 @@ func TestRefreshDownload(t *testing.T) { // Serial by design: t.Setenv forbids t
 
 	if again, _ := os.ReadFile(filepath.Join(root, pins.File)); !bytes.Equal(again, before) {
 		t.Error("a refresh with nothing to do rewrote the file")
+	}
+}
+
+// TestRefreshWritesAMissingDigest: an entry written without a digest (the
+// way a new pin starts) parses as unpinned, which get sha256 refuses; a
+// refresh writes its digest block, after its last line or under a bare
+// `digest:`, and the entries after it keep every line.
+func TestRefreshWritesAMissingDigest(t *testing.T) {
+	t.Parallel()
+
+	const tarball = "the tool, version 2"
+
+	host := artifactHost(t, map[string]string{"/releases/tool-2.0.0.tar.gz": tarball})
+	pinned := fmt.Sprintf(fixture, host.URL, host.URL, host.URL, host.URL)
+	toolDigest := "    digest:\n      version: 1.0.0\n      sha256: " + strings.Repeat(
+		"0",
+		64,
+	) + " # computed for 1.0.0\n"
+
+	for name, written := range map[string]string{
+		"no digest":   strings.Replace(pinned, toolDigest, "", 1),
+		"bare digest": strings.Replace(pinned, toolDigest, "    digest:\n", 1),
+	} {
+		manifest, err := pins.Parse([]byte(written))
+		if err != nil {
+			t.Fatalf("%s: an entry without a digest must parse: %v", name, err)
+		}
+
+		if _, err := manifest.Get("tool", "sha256"); !errors.Is(err, pins.ErrUnpinned) {
+			t.Errorf("%s: get sha256 = %v, want ErrUnpinned", name, err)
+		}
+
+		if got := manifest.Unpinned(); !slices.Equal(got, []string{"tool"}) {
+			t.Errorf("%s: unpinned = %v, want [tool]", name, got)
+		}
+
+		root := writePins(t, written)
+
+		if changed, err := pins.Refresh(t.Context(), root, io.Discard); err != nil ||
+			!slices.Equal(changed, []string{"tool"}) {
+			t.Fatalf("%s: refresh = %v, %v; want [tool]", name, changed, err)
+		}
+
+		after, _ := os.ReadFile(filepath.Join(root, pins.File))
+		want := strings.Replace(pinned, toolDigest,
+			"    digest:\n      version: 2.0.0\n      sha256: "+sha256Of(tarball)+"\n", 1)
+
+		if string(after) != want {
+			t.Errorf("%s: after refresh:\n%s\nwant:\n%s", name, after, want)
+		}
 	}
 }
 

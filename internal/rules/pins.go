@@ -45,6 +45,11 @@ func checkPins(root string) (Finding, bool) {
 				strings.Join(missing, ", ")), true
 	}
 
+	if unpinned := manifest.Unpinned(); len(unpinned) > 0 {
+		return fail(rule, pins.File,
+			"no digest yet: "+strings.Join(unpinned, ", ")+" — run `limen pins refresh`"), true
+	}
+
 	if stale := manifest.Stale(); len(stale) > 0 {
 		return fail(rule, pins.File,
 			"digest computed for another version than the one pinned: "+strings.Join(stale, ", ")+

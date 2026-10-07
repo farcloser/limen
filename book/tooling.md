@@ -551,7 +551,9 @@ pins:
   method the entry declares and rewrites the two lines in place; the checksum workflow runs
   it on every Renovate branch, in the same step as `limen fix`, from the same checksummed
   release — data the branch can change only in ways the release understands, never recipe
-  text in a write job.
+  text in a write job. A new entry leaves `digest:` out: `limen pins refresh` writes the
+  block, and until it does the `pins` rule fails the entry and `limen pins get <name>
+  sha256` refuses it.
 
 The methods, each a way to obtain a sha256 the entry can stand behind:
 

@@ -1242,6 +1242,13 @@ func TestPinsRule(t *testing.T) {
 		t.Errorf("a stale digest must fail naming the pin and the refresh, got: %+v", f)
 	}
 
+	files["pins.yaml"], _, _ = strings.Cut(current, "    digest:")
+
+	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins")
+	if f.OK() || !strings.Contains(f.Message, "no digest yet") {
+		t.Errorf("an entry without a digest should fail naming it: %v %s", f.OK(), f.Message)
+	}
+
 	files["pins.yaml"] = strings.Replace(current, "verify: download", "verify: carrier-pigeon", 1)
 
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); f.OK() ||
