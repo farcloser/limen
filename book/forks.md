@@ -1,10 +1,83 @@
 # Forks
 
-A fork carries someone else's code forward under our name. Its history diverges from
-upstream's soon after the fork, and from then on git cannot answer the question that
-matters: what has upstream fixed since, and do we have it? So every fork records its
-provenance by hand, in one file, and its owner reviews upstream's new commits before every
-release.
+A fork carries someone else's code forward under our name. Onboarding one has an order,
+and most of what went wrong on the forks so far came from doing a step late. Its history
+then diverges from upstream's, and from there git cannot answer the question that matters:
+what has upstream fixed since, and do we have it? So every fork also records its provenance
+by hand, in one file, and its owner reviews upstream's new commits before every release.
+
+## Decided before the first change
+
+These are @apostasie's calls, made when the fork is created, because each one shapes the
+work after it:
+
+- **Scope.** Fixes only, or improvements upstream does not have.
+- **Carry or diverge.** Track upstream and port its fixes, or let the code go its own way.
+  Every local edit to upstream's source is a divergence `UPSTREAM.md` records, and
+  reporting a bug upstream is a public act.
+- **API.** Keep upstream's shape, or trim it, and the breaking changes that buys.
+- **Versions.** What a change of output is worth: a change in what the code produces is a
+  minor version, not a patch.
+- **Platforms.** Every operating system and architecture the fork claims, since CI has to
+  run on each.
+- **Owner.** The session that keeps it day to day.
+
+## Onboarding, in order
+
+1. **Every name, settled once.** The module path is changed everywhere in the first pull
+   request: every import, nested and vendored modules, generators, the README and the
+   examples. A path renamed after the first tag strands every consumer on the old one, and
+   Renovate then proposes versions that cannot resolve. What the fork drops (an upstream
+   command it replaces) goes in the same pull request. `UPSTREAM.md` (below) and a
+   `CHANGELOG.md` with an `Unreleased` section exist from this pull request on. (Renovate
+   skips a GitHub fork unless `renovate.json` says `forkProcessing: enabled`; enrolment's
+   `limen fix` writes it, see [mandatory files](./mandatory-files.md).)
+2. **A behavioural baseline, before anything changes.** The test suite runs on every CI leg
+   the fork claims, amd64 and Windows included: a bug in code that only one architecture
+   exercises does not show up on an Apple-silicon laptop. Where upstream ships a reference
+   implementation, a differential test compares the fork's output with it over a corpus.
+   Anything the fork builds or vendors (a binary blob, generated code) is built twice and
+   compared byte for byte, in CI.
+3. **Enrolment, green from day one.** The fork is enrolled in limen with the onboarding
+   backlog block ([onboarding an existing repository](./mandatory-files.md#onboarding-an-existing-repository)),
+   never merged known-red: a real regression then cannot hide among the expected failures.
+4. **Linter decisions by class, then one linter at a time.** A rule wrong for the whole
+   codebase is disabled or excluded in the overlay before the per-linter series starts; an
+   inline silence for a rule later disabled is dead weight. The series then lands one
+   linter per pull request, quickly, since each touches the same backlog lines; linters
+   that edit code land one at a time, test files last, or they conflict.
+5. **Audit, then correctness.** Read the code for what is wrong before improving it, and
+   fix what is wrong first.
+6. **The first tag.** Its version comes from an API diff (`go doc -all` at the last tag
+   against `main`), not from the commit list. The changelog section is the `Unreleased` one
+   every pull request kept current, never written after the fact. Where the release notes
+   come from `CHANGELOG.md`, the release step refuses a version with no section.
+7. **Then everything else:** performance, hardening, API work.
+
+## Pitfalls
+
+| Pitfall | Prevention |
+|---|---|
+| The first tag shipped regressions no test covered, and an amd64-only bug | Step 2 before any tag: whole-output comparison on every leg |
+| A module renamed after its first tag: consumers' Renovate PRs could not resolve, and limen's own pin needed a migration | Step 1: every name settled before the first tag |
+| Enrolment merged red: findings no one could tell from regressions | The backlog block, never known-red |
+| Alignment pull requests rebased up to five times each, on the same backlog lines | Merge them in quick succession; expect a rebase per merge |
+| An auto-resolved overlay conflict dropped a branch's own settings | Auto-resolve only when the overlay diff is the rule deletion alone |
+| Integer-conversion findings (gosec G115) waved off as noise: four were real truncation bugs | Judge every integer conversion in format-parsing code |
+| A squash of stacked branches silently reverted a merged change | Every pull request targets `main`; after a squash or rebase, `git diff` the new parent against the new head shows only the pull request's files |
+| A release for tooling alone, then undone | A release carries a real change ([recipes](./recipes.md)) |
+| A pin CI cannot exercise (a macOS-only tool, a sandbox that cannot clone) | Say so on the pull request; a human runs it |
+| A failure on one operating system dismissed as flaky | A one-OS failure is a bug until shown otherwise (AGENTS.md: a flake is fixed when it is noticed) |
+
+### Case study: go-graphviz
+
+A C library compiled to WebAssembly and run on a Go runtime, with a generated bridge
+between the two. Most of its deep bugs were in the bridge (argument widths, getters,
+leaks), and its raster output, drawn in Go where upstream uses native libraries, needed a
+differential test against upstream's own SVG to be trusted. A graph is untrusted input
+that drives allocations, so its memory budgets were set explicitly. None of this
+generalizes beyond the shape of step 2: compare against the reference before trusting the
+fork.
 
 ## `UPSTREAM.md`
 
