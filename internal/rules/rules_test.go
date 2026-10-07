@@ -618,8 +618,7 @@ func TestJustfileOwnRecipesNotJudged(t *testing.T) {
 
 // TestJustfileRequiresSecurityRecipe: the canonical security workflow runs
 // `just security`, so a Justfile without that recipe fails, and an assignment
-// named security does not count; a project whose workflow runs something
-// else owes no such recipe.
+// named security does not count.
 func TestJustfileRequiresSecurityRecipe(t *testing.T) {
 	t.Parallel()
 
@@ -629,11 +628,6 @@ func TestJustfileRequiresSecurityRecipe(t *testing.T) {
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile")
 	if f.OK() || !strings.Contains(f.Message, "security") {
 		t.Fatalf("a Justfile without a security recipe should fail naming it: %v %s", f.OK(), f.Message)
-	}
-
-	files[".github/workflows/security.yaml"] = "name: security\njobs:\n  scan:\n    steps:\n      - run: just do security\n"
-	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "justfile"); !f.OK() {
-		t.Errorf("a workflow that does not run `just security` owes no recipe: %s", f.Message)
 	}
 }
 
@@ -1338,6 +1332,14 @@ func TestWorkflowsRule(t *testing.T) {
 
 	if f := findingByRule(rules.Check(writeRepo(t, drifted), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error("a drifted update-aqua-checksum workflow should fail (content-pinned)")
+	}
+
+	// The security workflow is pinned too: a project's scans live in its recipe.
+	driftedSecurity := compliantFiles()
+	driftedSecurity[".github/workflows/security.yaml"] = limen.CanonicalWorkflowSecurity + "\n# local edit\n"
+
+	if f := findingByRule(rules.Check(writeRepo(t, driftedSecurity), rules.DefaultPolicy()), "workflows"); f.OK() {
+		t.Error("a drifted security workflow should fail (content-pinned)")
 	}
 
 	// Seeded pieces are presence-only: any content satisfies the rule.

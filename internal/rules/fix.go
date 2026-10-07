@@ -393,7 +393,9 @@ func remediateRootJustfile(root, rule string) Outcome {
 		done = append(done, "appended the shared-baseline import ("+CanonicalJustfileImport+")")
 	}
 
-	if needsSecurityRecipe(root) && !definesSecurityRecipe(content) {
+	// Unconditional, never read off security.yaml: fix may pin that file
+	// after this, over a former copy that ran another command.
+	if !definesSecurityRecipe(content) {
 		content = ensureTrailingNewline(content) +
 			"\n# --- added by limen fix: the recipe the security workflow runs ---\n" + securityRecipeLine + "\n"
 		done = append(done, "appended the recipe the security workflow runs ("+securityRecipeLine+")")
@@ -481,8 +483,9 @@ func remediateCI(root, rule string) Outcome {
 
 // remediateWorkflows brings the .github surface up to the baseline in its two
 // regimes (see checkWorkflows): the checksum-update workflow and the
-// composite actions are content-pinned exactly; the CI and security workflows
-// and the renovate config are seeded once and never overwritten; the release
+// composite actions, the shared CI lanes and the security workflow are
+// content-pinned exactly; the CI workflow and the renovate config are seeded
+// once and never overwritten; the release
 // workflow is seeded only where a goreleaser config makes it applicable.
 func remediateWorkflows(root string) []Outcome {
 	const rule = "workflows"
@@ -492,9 +495,8 @@ func remediateWorkflows(root string) []Outcome {
 		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
 		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
+		pinExact(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity),
 		remediateCI(root, rule),
-		seedIfMissing(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity,
-			"seeded the canonical security workflow (the content is the project's own from here)"),
 		seedIfMissing(root, rule, pathRenovate, renovateSeed,
 			"seeded the canonical renovate config (the content is the project's own from here)"),
 	}
