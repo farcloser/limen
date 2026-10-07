@@ -247,8 +247,9 @@ The decided merge model, enforced by both the repository settings and the
 - **Merges wait for green CI.** The `limen:main` ruleset carries required
   status checks, without which auto-merge (and a hasty human) would merge on
   red. A fresh ruleset requires `gate` — the job in the canonical `ci.yaml`
-  that `needs` every matrix leg, the fuzz job and the tools job, and fails
-  unless all of them succeeded — and, where the default branch carries
+  that `needs` the shared lanes (the `limen` call to the pinned
+  `limen-verify.yaml`: every verify leg, fuzz and tools) and any job the
+  project adds, and fails unless all of them succeeded — and, where the default branch carries
   `security.yaml`, the `security` check beside it (see [security](#security)):
   what the canonical workflows report, read from the default branch, never
   assumed from the seed. The check *names* remain project-owned, so reconciliation
@@ -280,8 +281,7 @@ The decided merge model, enforced by both the repository settings and the
   its matrix freely and no ruleset moves.
 
   The gate job is written with `if: always()` and asserts
-  `needs.verify.result == 'success'` and `needs.fuzz.result == 'success'`
-  explicitly. Both halves matter: without
+  `needs.limen.result == 'success'`, and each project job's, explicitly. Both halves matter: without
   `always()` a failed dependency *skips* the gate rather than failing it, and a
   skipped required check does not block a merge — branch protection that has
   quietly stopped protecting.
@@ -309,7 +309,7 @@ The decided merge model, enforced by both the repository settings and the
   workflows call keep being bumped like any dependency.
 
   <a id="fuzz"></a>
-  **Fuzz.** The canonical `ci.yaml` also carries a `fuzz` job: one linux leg
+  **Fuzz.** The shared lanes also carry a `fuzz` job: one linux leg
   running `just do test go fuzz`, a short coverage-guided fuzz of every
   `Fuzz*` target (see [recipes](./recipes.md)). One leg, not the matrix —
   fuzzing explores the same code from the same corpus wherever it runs, so

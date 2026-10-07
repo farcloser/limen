@@ -444,6 +444,41 @@ func seedIfMissing(root, rule, relPath, content, createdMessage string) Outcome 
 	}
 }
 
+// remediateCI seeds ci.yaml when it is missing and replaces it when it is a
+// released seed nobody edited; a ci.yaml the project edited stays its own,
+// with a note when it does not call the shared lanes yet. Never advisory:
+// the checksum workflow runs fix on every Renovate branch, and an
+// unresolved outcome would fail every bump until a hand edit.
+func remediateCI(root, rule string) Outcome {
+	if tag, unedited := staleCISeed(root); unedited {
+		if e := writeFile(root, pathWorkflowCI, limen.CanonicalWorkflowCI); e != nil {
+			return failed(rule, pathWorkflowCI, e)
+		}
+
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionOverwrote,
+			Path:    pathWorkflowCI,
+			Message: "replaced limen " + tag + "'s unedited seed with the current one, which calls " + pathWorkflowVerify,
+		}
+	}
+
+	outcome := seedIfMissing(root, rule, pathWorkflowCI, limen.CanonicalWorkflowCI,
+		"seeded the canonical CI workflow (the content is the project's own from here)")
+	if outcome.Action != ActionNone {
+		return outcome
+	}
+
+	// #nosec G304 -- a fixed path under the caller-designated repository.
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(pathWorkflowCI)))
+	if err == nil && !strings.Contains(string(data), "uses: ./"+pathWorkflowVerify) {
+		outcome.Message = pathWorkflowCI + " is the project's own and does not call " + pathWorkflowVerify +
+			" yet: realign it by hand (book/mandatory-files.md)"
+	}
+
+	return outcome
+}
+
 // remediateWorkflows brings the .github surface up to the baseline in its two
 // regimes (see checkWorkflows): the checksum-update workflow and the
 // composite actions are content-pinned exactly; the CI and security workflows
@@ -456,8 +491,8 @@ func remediateWorkflows(root string) []Outcome {
 		pinExact(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum),
 		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
-		seedIfMissing(root, rule, pathWorkflowCI, limen.CanonicalWorkflowCI,
-			"seeded the canonical CI workflow (the content is the project's own from here)"),
+		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
+		remediateCI(root, rule),
 		seedIfMissing(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity,
 			"seeded the canonical security workflow (the content is the project's own from here)"),
 		seedIfMissing(root, rule, pathRenovate, renovateSeed,

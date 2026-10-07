@@ -1091,6 +1091,7 @@ func TestFixWorkflows(t *testing.T) {
 				t.Errorf("existing ci workflow: %s, want none (left untouched)", o.Action)
 			}
 		case ".github/actions/setup-aqua/action.yaml", ".github/actions/windows-cache-image/action.yaml",
+			".github/workflows/limen-verify.yaml",
 			".github/workflows/security.yaml", "renovate.json":
 			if o.Action != rules.ActionCreated {
 				t.Errorf("%s: %s, want created", o.Path, o.Action)
@@ -1182,5 +1183,73 @@ func TestLintGithubFormerName(t *testing.T) {
 		if data, _ := os.ReadFile(filepath.Join(root, "limen.yaml")); string(data) != extra["limen.yaml"] {
 			t.Errorf("%s: fix must leave limen.yaml untouched", name)
 		}
+	}
+}
+
+// An unedited seed of an earlier release fails the check and is replaced by
+// fix with the current seed, which calls the shared lanes.
+func TestCIUneditedSeedMigrates(t *testing.T) {
+	t.Parallel()
+
+	old, err := os.ReadFile(filepath.Join("testdata", "ci-v0.8.0.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files := compliantFiles()
+	files[".github/workflows/ci.yaml"] = string(old)
+	root := writeRepo(t, files)
+
+	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); f.OK() ||
+		!strings.Contains(f.Message, "v0.8.0") {
+		t.Fatalf("an unedited v0.8.0 seed should fail naming its release, got: %s", f.Message)
+	}
+
+	outcomes := rules.Fix(t.Context(), root, bootstrapOpts())
+	if !rules.AllResolved(outcomes) {
+		t.Fatalf("fix left the migration unresolved: %+v", outcomesFor(outcomes, "workflows"))
+	}
+
+	got, _ := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yaml"))
+	if string(got) != limen.CanonicalWorkflowCI {
+		t.Error("fix should replace an unedited seed with the current one")
+	}
+
+	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); !f.OK() {
+		t.Errorf("after fix the workflows rule should pass, got: %s", f.Message)
+	}
+}
+
+// An edited ci.yaml is the project's own: fix leaves it, says it does not call
+// the shared lanes, and stays resolved, so a Renovate branch's converge step
+// does not fail on it.
+func TestCIEditedLeftAlone(t *testing.T) {
+	t.Parallel()
+
+	const own = "name: my-own-ci\n"
+
+	files := compliantFiles()
+	files[".github/workflows/ci.yaml"] = own
+	root := writeRepo(t, files)
+
+	outcomes := rules.Fix(t.Context(), root, bootstrapOpts())
+	if !rules.AllResolved(outcomes) {
+		t.Fatalf("an edited ci.yaml must not leave fix unresolved: %+v", outcomesFor(outcomes, "workflows"))
+	}
+
+	noted := false
+
+	for _, o := range outcomesFor(outcomes, "workflows") {
+		if o.Path == ".github/workflows/ci.yaml" && strings.Contains(o.Message, "limen-verify.yaml") {
+			noted = true
+		}
+	}
+
+	if !noted {
+		t.Error("fix should note that the project's ci.yaml does not call limen-verify.yaml")
+	}
+
+	if got, _ := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yaml")); string(got) != own {
+		t.Error("fix must leave an edited ci.yaml untouched")
 	}
 }
