@@ -219,7 +219,20 @@ func TestFixJustfileRegimes(t *testing.T) {
 		t.Errorf("merge must keep the project's recipes and add the import, got: %q", data)
 	}
 
-	// Present with the import but no `security` recipe, which the seeded
+	// A former security workflow that ran `just do security`: one fix both
+	// pins the workflow and appends the recipe the pinned one runs.
+	former := writeRepo(t, map[string]string{
+		".justfile":                       rules.CanonicalJustfileImport + "\n",
+		".github/workflows/security.yaml": "name: security\njobs:\n  scan:\n    steps:\n      - run: just do security\n",
+	})
+	rules.Fix(t.Context(), former, bootstrapOpts())
+
+	data, _ = os.ReadFile(filepath.Join(former, ".justfile"))
+	if !strings.Contains(string(data), "\nsecurity: do::security::default\n") {
+		t.Errorf("fix over a former security workflow must append the recipe, got: %q", data)
+	}
+
+	// Present with the import but no `security` recipe, which the pinned
 	// security workflow runs -> merged: the recipe appended, content kept,
 	// and the rule passes after.
 	withImport := rules.CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n"

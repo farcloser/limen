@@ -136,10 +136,9 @@ var CanonicalWorkflowVerify string
 //go:embed .github/workflows/ci.yaml
 var CanonicalWorkflowCI string
 
-// CanonicalWorkflowSecurity seeds .github/workflows/security.yaml once: the
-// vulnerability scans' lane, apart from ci.yaml because a scan's verdict
-// moves with a database rather than with the tree. The project's own
-// afterwards, like ci.yaml.
+// CanonicalWorkflowSecurity is the vulnerability scans' lane, apart from
+// ci.yaml because a scan's verdict moves with a database rather than with the
+// tree — content-pinned: a project's own scans go in its `security` recipe.
 //
 //go:embed .github/workflows/security.yaml
 var CanonicalWorkflowSecurity string

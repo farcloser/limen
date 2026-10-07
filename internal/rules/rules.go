@@ -455,7 +455,7 @@ func checkJustfile(root string) Finding {
 		)
 	}
 
-	if needsSecurityRecipe(root) && !definesSecurityRecipe(string(data)) {
+	if !definesSecurityRecipe(string(data)) {
 		return fail(
 			rule,
 			name,
@@ -500,26 +500,10 @@ const (
 // writes it: the shared scans, which a project extends with its own.
 const securityRecipeLine = "security: do::security::default"
 
-// securityWorkflowStep is the canonical security workflow's step, trimmed.
-const securityWorkflowStep = "run: just security"
-
 // securityRecipe matches a root .justfile line defining a `security` recipe,
 // with or without parameters or dependencies, and not a `security :=`
 // assignment.
 var securityRecipe = regexp.MustCompile(`^security(\s[^:=]*)?:([^=]|$)`)
-
-// needsSecurityRecipe reports whether the root .justfile must define
-// `security`: the security workflow runs `just security`. A missing workflow
-// counts, since limen fix seeds the canonical one, possibly after the
-// .justfile's turn in the same run.
-func needsSecurityRecipe(root string) bool {
-	data, err := readRepoFile(root, pathWorkflowSecurity)
-	if err != nil {
-		return true
-	}
-
-	return containsLine(string(data), securityWorkflowStep)
-}
 
 // definesSecurityRecipe reports whether a root .justfile defines `security`.
 func definesSecurityRecipe(justfile string) bool {
@@ -709,10 +693,10 @@ func checkLychee(root string) Finding {
 }
 
 // checkWorkflows verifies the .github surface in its two regimes: the
-// checksum-update workflow and the composite actions are content-pinned
-// (limen machinery — the write-capable workflow's hardening must never
-// drift), while the CI and security workflows and the renovate config need
-// only exist (limen fix seeds the canonical ones; their content is the
+// checksum-update workflow, the composite actions, the shared CI lanes and the
+// security workflow are content-pinned (limen machinery — the write-capable
+// workflow's hardening must never drift), while the CI workflow and the
+// renovate config need only exist (limen fix seeds the canonical ones; their content is the
 // project's own after that). The release workflow is required exactly when the repository
 // carries a goreleaser config — releasing is opt-in.
 func checkWorkflows(root string) Finding {
@@ -734,7 +718,11 @@ func checkWorkflows(root string) Finding {
 		return *f
 	}
 
-	for _, seeded := range []string{pathWorkflowCI, pathWorkflowSecurity, pathRenovate} {
+	if f := checkPinned(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity); f != nil {
+		return *f
+	}
+
+	for _, seeded := range []string{pathWorkflowCI, pathRenovate} {
 		if !exists(filepath.Join(root, filepath.FromSlash(seeded))) {
 			return fail(
 				rule,

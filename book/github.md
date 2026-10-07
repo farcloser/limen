@@ -324,7 +324,7 @@ The decided merge model, enforced by both the repository settings and the
 
   <a id="security"></a>
   **Security.** The vulnerability scans are not in `ci.yaml` at all. A canonical
-  `security.yaml`, seeded once like `ci.yaml`, runs the project's `just security`
+  `security.yaml`, content-pinned like `limen-verify.yaml`, runs the project's `just security`
   (the shared `do::security::default`, plus whatever scans the project adds, as
   `lint` and `test` do for `ci.yaml`) on one linux leg (the scan loops over every
   supported platform itself) on every push and pull
