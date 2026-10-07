@@ -1368,7 +1368,8 @@ func TestWorkflowsRule(t *testing.T) {
 
 	// The release workflow is required exactly when goreleaser config exists.
 	releasing := compliantFiles()
-	releasing[".release-go.yaml"] = releaseGoHeader + "\nversion: 2\n"
+	releasing[".release-go.yaml"] = releaseGoHeader + "\nversion: 2\n\n" + changelogSection
+	releasing[".github/release.yml"] = limen.CanonicalReleaseNotes
 
 	if f := findingByRule(rules.Check(writeRepo(t, releasing), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error(".release-go.yaml without a release workflow should fail")
@@ -1383,6 +1384,89 @@ func TestWorkflowsRule(t *testing.T) {
 // releaseGoHeader is the schema pointer .release-go.yaml opens with.
 const releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/static/schema.json"
 
+// changelogSection is the `changelog:` section limen holds .release-go.yaml to.
+const changelogSection = "changelog:\n  use: github-native\n"
+
+// TestReleaseNotes: where a project releases, its .release-go.yaml carries
+// the canonical `changelog:` section (comments in it allowed) and its
+// .github/release.yml is limen's byte for byte; fix appends or replaces the
+// section with the rest of the file intact, and writes release.yml.
+func TestReleaseNotes(t *testing.T) {
+	t.Parallel()
+
+	releasing := func(releaseGo string) map[string]string {
+		files := compliantFiles()
+		files[".release-go.yaml"] = releaseGoHeader + "\n" + releaseGo
+		files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
+		files[".github/release.yml"] = limen.CanonicalReleaseNotes
+
+		return files
+	}
+
+	commented := "version: 2\n\nchangelog: # GitHub's\n  # from pull-request titles\n  use: github-native # grouped\n"
+	if f := findingByRule(
+		rules.Check(writeRepo(t, releasing(commented)), rules.DefaultPolicy()),
+		"workflows",
+	); !f.OK() {
+		t.Errorf("a canonical section with comments should pass: %s", f.Message)
+	}
+
+	for name, tc := range map[string]struct{ before, after string }{
+		"missing": {
+			before: "version: 2\n",
+			after:  "version: 2\n\n" + changelogSection,
+		},
+		"other": {
+			before: "version: 2\nchangelog:\n  use: git\n  filters:\n    exclude:\n      - '^docs:'\n\nrelease:\n  draft: true\n",
+			after:  "version: 2\n" + changelogSection + "\nrelease:\n  draft: true\n",
+		},
+	} {
+		dir := writeRepo(t, releasing(tc.before))
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); f.OK() ||
+			!strings.Contains(f.Message, "changelog") {
+			t.Errorf("%s: should fail naming the changelog section: %v %s", name, f.OK(), f.Message)
+		}
+
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+		if data, _ := os.ReadFile(
+			filepath.Join(dir, ".release-go.yaml"),
+		); string(
+			data,
+		) != releaseGoHeader+"\n"+tc.after {
+			t.Errorf("%s: after fix: %q", name, data)
+		}
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); !f.OK() {
+			t.Errorf("%s: after fix: %s", name, f.Message)
+		}
+	}
+
+	drifted := releasing("version: 2\n\n" + changelogSection)
+	drifted[".github/release.yml"] = limen.CanonicalReleaseNotes + "# local edit\n"
+	dir := writeRepo(t, drifted)
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); f.OK() {
+		t.Error("a drifted release.yml should fail (content-pinned)")
+	}
+
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	if data, _ := os.ReadFile(
+		filepath.Join(dir, filepath.FromSlash(".github/release.yml")),
+	); string(
+		data,
+	) != limen.CanonicalReleaseNotes {
+		t.Error("fix should reset release.yml")
+	}
+
+	// Not releasing: no release.yml is required.
+	if f := findingByRule(rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()), "workflows"); !f.OK() {
+		t.Errorf("a repository without .release-go.yaml owes no release.yml: %s", f.Message)
+	}
+}
+
 // TestReleaseGoNameAndHeader: a goreleaser configuration under a default name
 // fails naming .release-go.yaml, as does a .release-go.yaml without its
 // schema header; fix renames the first and adds the header to both, content
@@ -1390,7 +1474,7 @@ const releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/
 func TestReleaseGoNameAndHeader(t *testing.T) {
 	t.Parallel()
 
-	const body = "version: 2\nproject_name: x\n"
+	const body = "version: 2\nproject_name: x\n\n" + changelogSection
 
 	for _, stray := range []string{".goreleaser.yaml", ".goreleaser.yml"} {
 		files := compliantFiles()

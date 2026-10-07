@@ -236,6 +236,20 @@ Two roles deserve emphasis because they close the enforcement loop:
   tooling it is built and checked with (a new limen pin, a linter, a CI action) is not one,
   and neither is documentation (the readme, the licence file, `UPSTREAM.md`, a comment): it
   never triggers a release on its own, and goes out with the next real change.
+- **A release's notes are its pull requests' titles.** No one writes them, and no file
+  in the tree holds them: a hand-kept `CHANGELOG.md` puts every open pull request on the
+  same lines, so each merge forces a rebase on the others. The `changelog:` section of
+  `.release-go.yaml` is limen's inside a file otherwise the project's: `use:
+  github-native`, so goreleaser asks GitHub for the notes, and GitHub lists every pull
+  request merged since the previous tag. `.github/release.yml`, content-pinned wherever a
+  `.release-go.yaml` exists, groups them: **Breaking changes** (the `breaking` label),
+  **Changes**, then **Dependencies** (Renovate's pull requests, and any carrying the
+  `dependencies` label). So the title is the release note: it says what changed for a
+  consumer, not how. A pull request that breaks a consumer (an API removed or changed, a
+  behaviour a caller relied on) carries the `breaking` label; `gh label create breaking`
+  makes it the first time a repository needs one. `limen check` fails a missing or
+  different `changelog:` section and a drifted `release.yml`; `limen fix` sets the one and
+  resets the other.
 
 ## Extending the baseline
 

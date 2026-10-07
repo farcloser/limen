@@ -902,7 +902,8 @@ const (
 var strayGoreleaserFiles = []string{".goreleaser.yaml", ".goreleaser.yml"} //nolint:gochecknoglobals // read-only list.
 
 // checkReleaseGo fails a goreleaser configuration under a default name, or a
-// .release-go.yaml without its schema header; nil when neither applies
+// .release-go.yaml without its schema header or the canonical `changelog:`
+// section, beside a drifted .github/release.yml; nil when none applies
 // (releasing is opt-in).
 func checkReleaseGo(root, rule string) *Finding {
 	if stray, found := findFirst(root, strayGoreleaserFiles...); found {
@@ -924,7 +925,14 @@ func checkReleaseGo(root, rule string) *Finding {
 		return &f
 	}
 
-	return nil
+	if why, drifted := changelogDrift(string(data)); drifted {
+		f := fail(rule, releaseGoFile, releaseGoFile+" "+why+": a release's notes are GitHub's, from the titles "+
+			"of the pull requests it merged (limen fix sets it)")
+
+		return &f
+	}
+
+	return checkPinned(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes)
 }
 
 // checkShellcheck requires .limen/.shellcheckrc in every repository, matching

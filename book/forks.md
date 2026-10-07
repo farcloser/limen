@@ -28,8 +28,8 @@ work after it:
    request: every import, nested and vendored modules, generators, the README and the
    examples. A path renamed after the first tag strands every consumer on the old one, and
    Renovate then proposes versions that cannot resolve. What the fork drops (an upstream
-   command it replaces) goes in the same pull request. `UPSTREAM.md` (below) and a
-   `CHANGELOG.md` with an `Unreleased` section exist from this pull request on. (Renovate
+   command it replaces) goes in the same pull request. `UPSTREAM.md` (below) exists from
+   this pull request on. (Renovate
    skips a GitHub fork unless `renovate.json` says `forkProcessing: enabled`; enrolment's
    `limen fix` writes it, see [mandatory files](./mandatory-files.md).)
 2. **A behavioural baseline, before anything changes.** The test suite runs on every CI leg
@@ -49,9 +49,9 @@ work after it:
 5. **Audit, then correctness.** Read the code for what is wrong before improving it, and
    fix what is wrong first.
 6. **The first tag.** Its version comes from an API diff (`go doc -all` at the last tag
-   against `main`), not from the commit list. The changelog section is the `Unreleased` one
-   every pull request kept current, never written after the fact. Where the release notes
-   come from `CHANGELOG.md`, the release step refuses a version with no section.
+   against `main`), not from the commit list. Its notes are the titles of the pull requests
+   it merges, grouped by label ([release notes](./recipes.md)): every pull request that
+   breaks a consumer carried the `breaking` label when it merged, never added after the fact.
 7. **Then everything else:** performance, hardening, API work.
 
 ## Pitfalls
