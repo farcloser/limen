@@ -84,6 +84,7 @@ func compliantFiles() map[string]string {
 		".github/workflows/update-aqua-checksum.yaml":     limen.CanonicalWorkflowUpdateAquaChecksum,
 		".github/actions/setup-aqua/action.yaml":          limen.CanonicalActionSetupAqua,
 		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
+		".github/workflows/limen-verify.yaml":             limen.CanonicalWorkflowVerify,
 		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
 		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
 		// The shared Renovate configuration, content-pinned, and the seed
@@ -1085,6 +1086,7 @@ func TestYamlfmtConditional(t *testing.T) {
 		".aqua/aqua.yaml", ".aqua/aqua-policy.yaml", ".limen/aqua-registry.yaml", ".limen/aqua.yaml",
 		".github/workflows/update-aqua-checksum.yaml", ".github/actions/setup-aqua/action.yaml", ".github/workflows/ci.yaml",
 		".github/actions/windows-cache-image/action.yaml",
+		".github/workflows/limen-verify.yaml",
 		".github/workflows/security.yaml",
 	} {
 		delete(noYAML, y) // remove every *.yaml/*.yml in the set

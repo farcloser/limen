@@ -50,6 +50,7 @@ const (
 	pathActionSetupAqua  = ".github/actions/setup-aqua/action.yaml"
 	pathActionWinCache   = ".github/actions/windows-cache-image/action.yaml"
 	pathWorkflowCI       = ".github/workflows/ci.yaml"
+	pathWorkflowVerify   = ".github/workflows/limen-verify.yaml"
 	pathWorkflowSecurity = ".github/workflows/security.yaml"
 	pathWorkflowRelease  = ".github/workflows/release.yaml"
 	pathRenovate         = "renovate.json"
@@ -729,6 +730,10 @@ func checkWorkflows(root string) Finding {
 		return *f
 	}
 
+	if f := checkPinned(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify); f != nil {
+		return *f
+	}
+
 	for _, seeded := range []string{pathWorkflowCI, pathWorkflowSecurity, pathRenovate} {
 		if !exists(filepath.Join(root, filepath.FromSlash(seeded))) {
 			return fail(
@@ -737,6 +742,11 @@ func checkWorkflows(root string) Finding {
 				"no "+seeded+" (limen fix seeds the canonical one; the content is the project's afterwards)",
 			)
 		}
+	}
+
+	if tag, unedited := staleCISeed(root); unedited {
+		return fail(rule, pathWorkflowCI, pathWorkflowCI+" is limen "+tag+"'s seed, never edited: "+
+			"limen fix replaces it with the current one, which calls "+pathWorkflowVerify)
 	}
 
 	if f := checkReleaseGo(root, rule); f != nil {

@@ -124,8 +124,14 @@ var CanonicalActionSetupAqua string
 //go:embed .github/actions/windows-cache-image/action.yaml
 var CanonicalActionWindowsCacheImage string
 
+// CanonicalWorkflowVerify is the reusable workflow holding the shared CI
+// lanes, called from every repository's ci.yaml — content-pinned.
+//
+//go:embed .github/workflows/limen-verify.yaml
+var CanonicalWorkflowVerify string
+
 // CanonicalWorkflowCI seeds .github/workflows/ci.yaml once; the file is the
-// project's own afterwards (matrix trims, extra jobs, services).
+// project's own afterwards (its own jobs, a trimmed runner list).
 //
 //go:embed .github/workflows/ci.yaml
 var CanonicalWorkflowCI string
