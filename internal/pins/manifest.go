@@ -24,6 +24,7 @@
 // Two-space indentation, one scalar per line, comments and blank lines
 // anywhere. `version` is what moves; `digest.version` records what the
 // sha256 was computed for, so a stale digest is visible without the network.
+// A new entry leaves `digest:` out: `limen pins refresh` writes it.
 // The `renovate` line, the optional `extract-version` and `versioning` lines,
 // and the `version` line come in that order with nothing else between them:
 // that is the block the shared preset's regex reads.
@@ -102,6 +103,9 @@ var (
 	ErrNoSuchPin = errors.New("no such pin")
 	// ErrNoSuchField is a field `limen pins get` does not serve.
 	ErrNoSuchField = errors.New("no such field")
+	// ErrUnpinned is an entry whose digest `limen pins refresh` has not
+	// written yet.
+	ErrUnpinned = errors.New("no digest yet (run `limen pins refresh`)")
 )
 
 var (
@@ -132,7 +136,11 @@ type Entry struct {
 	SHA256        string
 
 	// Line indexes into the manifest: the digest's, for the in-place
-	// rewrite; the Renovate block's, to hold it to the order the preset reads.
+	// rewrite, with its `digest:` header and the entry's last line, where a
+	// missing digest goes; the Renovate block's, to hold it to the order the
+	// preset reads.
+	digestLine         int
+	lastLine           int
 	digestVersionLine  int
 	sha256Line         int
 	renovateLine       int
@@ -142,8 +150,12 @@ type Entry struct {
 }
 
 // Stale reports whether the digest was computed for another version than the
-// one pinned now — the state a Renovate bump leaves behind until a refresh.
+// one pinned now — the state a Renovate bump leaves behind until a refresh —
+// or was never computed.
 func (e Entry) Stale() bool { return e.DigestVersion != e.Version }
+
+// Pinned reports whether the entry carries a digest at all.
+func (e Entry) Pinned() bool { return e.sha256Line >= 0 }
 
 // ResolvedURL is the url with the version substituted.
 func (e Entry) ResolvedURL() string { return e.expand(e.URL) }
@@ -303,19 +315,26 @@ func (p *parser) line(index int, raw string) error {
 	case indent == entryIndent && strings.HasPrefix(trimmed, "- "):
 		p.manifest.Entries = append(p.manifest.Entries, newEntry())
 		p.current = &p.manifest.Entries[len(p.manifest.Entries)-1]
+		p.current.lastLine = index
 		p.inDigest = false
 
 		return setField(p.current, strings.TrimPrefix(trimmed, "- "), index)
 	case p.current == nil:
 		return fmt.Errorf("%w: line %d: field outside an entry", ErrSyntax, index+1)
 	case indent == fieldIndent:
+		p.current.lastLine = index
+
 		p.inDigest = trimmed == fieldDigest+":"
 		if p.inDigest {
+			p.current.digestLine = index
+
 			return nil
 		}
 
 		return setField(p.current, trimmed, index)
 	case indent == digestIndent && p.inDigest:
+		p.current.lastLine = index
+
 		return setDigestField(p.current, trimmed, index)
 	default:
 		return fmt.Errorf("%w: line %d: unexpected indentation", ErrSyntax, index+1)
@@ -341,7 +360,7 @@ func (p *parser) top(index int, trimmed string) error {
 // newEntry is an entry with every line index unset.
 func newEntry() Entry {
 	return Entry{
-		digestVersionLine: -1, sha256Line: -1,
+		digestLine: -1, lastLine: -1, digestVersionLine: -1, sha256Line: -1,
 		renovateLine: -1, extractVersionLine: -1, versioningLine: -1, versionLine: -1,
 	}
 }
@@ -440,10 +459,10 @@ func (e Entry) validate() error {
 		return fmt.Errorf("%w: %s: no url", ErrEntry, label)
 	case len(e.Verify) == 0:
 		return fmt.Errorf("%w: %s: no verify method (one of %s)", ErrEntry, label, strings.Join(Methods(), ", "))
-	case e.digestVersionLine < 0 || e.sha256Line < 0:
-		return fmt.Errorf("%w: %s: digest needs both version and sha256 (run `limen pins refresh` to fill them)",
-			ErrEntry, label)
-	case !sha256RE.MatchString(e.SHA256):
+	case (e.digestVersionLine < 0) != (e.sha256Line < 0):
+		return fmt.Errorf("%w: %s: digest needs both version and sha256, or neither"+
+			" (leave digest out and `limen pins refresh` writes it)", ErrEntry, label)
+	case e.Pinned() && !sha256RE.MatchString(e.SHA256):
 		return fmt.Errorf("%w: %s: sha256 must be 64 hex characters", ErrEntry, label)
 	}
 
@@ -521,6 +540,10 @@ func (m Manifest) Get(name, field string) (string, error) {
 		case fieldURL:
 			return entry.ResolvedURL(), nil
 		case fieldSHA256:
+			if !entry.Pinned() {
+				return "", fmt.Errorf("%w: %s", ErrUnpinned, name)
+			}
+
 			return entry.SHA256, nil
 		default:
 			return "", fmt.Errorf("%w: %q (one of version, url, sha256)", ErrNoSuchField, field)
@@ -530,12 +553,26 @@ func (m Manifest) Get(name, field string) (string, error) {
 	return "", fmt.Errorf("%w: %q", ErrNoSuchPin, name)
 }
 
-// Stale lists the entries whose digest was computed for another version.
+// Stale lists the entries whose digest was computed for another version,
+// or never.
 func (m Manifest) Stale() []string {
 	var names []string
 
 	for _, entry := range m.Entries {
 		if entry.Stale() {
+			names = append(names, entry.Name)
+		}
+	}
+
+	return names
+}
+
+// Unpinned lists the entries that carry no digest yet.
+func (m Manifest) Unpinned() []string {
+	var names []string
+
+	for _, entry := range m.Entries {
+		if !entry.Pinned() {
 			names = append(names, entry.Name)
 		}
 	}
@@ -551,10 +588,27 @@ func (m Manifest) String() string { return strconv.Itoa(len(m.Entries)) + " pin(
 
 // withDigest returns the manifest text with one entry's digest rewritten in
 // place: the two lines change, everything else is byte for byte the file
-// the project wrote.
-func (m Manifest) withDigest(index int, sha256 string) Manifest {
+// the project wrote. An entry without one gets its digest block after its
+// last line (or under its bare `digest:`), and the manifest is parsed again,
+// since every later line moved.
+func (m Manifest) withDigest(index int, sha256 string) (Manifest, error) {
 	entry := m.Entries[index]
 	lines := slices.Clone(m.lines)
+
+	if !entry.Pinned() {
+		block := []string{
+			strings.Repeat(" ", digestIndent) + fieldVersion + ": " + entry.Version,
+			strings.Repeat(" ", digestIndent) + fieldSHA256 + ": " + sha256,
+		}
+
+		insertAt := entry.digestLine + 1
+		if entry.digestLine < 0 {
+			block = append([]string{strings.Repeat(" ", fieldIndent) + fieldDigest + ":"}, block...)
+			insertAt = entry.lastLine + 1
+		}
+
+		return Parse([]byte(strings.Join(slices.Insert(lines, insertAt, block...), "\n") + "\n"))
+	}
 
 	lines[entry.digestVersionLine] = rewriteScalar(lines[entry.digestVersionLine], entry.Version)
 	lines[entry.sha256Line] = rewriteScalar(lines[entry.sha256Line], sha256)
@@ -563,7 +617,7 @@ func (m Manifest) withDigest(index int, sha256 string) Manifest {
 	out.Entries[index].DigestVersion = entry.Version
 	out.Entries[index].SHA256 = sha256
 
-	return out
+	return out, nil
 }
 
 // rewriteScalar replaces the value of a `key: value` line, keeping its

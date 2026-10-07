@@ -97,7 +97,10 @@ func refreshDue(ctx context.Context, root string, progress io.Writer, due func(E
 			continue
 		}
 
-		manifest = manifest.withDigest(index, sum)
+		manifest, err = manifest.withDigest(index, sum)
+		if err != nil {
+			return changed, fmt.Errorf(errFormat, entry.Name, err)
+		}
 
 		changed = append(changed, entry.Name)
 
