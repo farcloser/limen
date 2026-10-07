@@ -77,6 +77,9 @@ chapter; the procedure is limen's `skills/contribute`.
   `just lint` and `just test` green, the commit message written — ready to commit and push
   when the human is back, and say so once. Signing that never worked in the session is
   broken tooling (above).
+- **Read what the work needs, never the whole disk.** A targeted read outside the
+  repositories is fine when the work calls for it; a filesystem-wide walk is not: no
+  `find /`, `find ~`, disk-wide `mdfind`, or recursive grep over `/` or `~`.
 
 ## Communication
 
