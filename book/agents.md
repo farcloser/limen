@@ -204,7 +204,13 @@ branches are the human's.
   of a GitHub native stack, which GitHub itself bases on the layer below
   and lands into `main`. A change that cannot be green without another is
   stacked that way, or waits, with no pull request open, until the other
-  merges. The body names what it stacks on. A stack is reviewed and merged
+  merges. Before opening, the branch is checked against every open pull
+  request's head (`git merge-tree --write-tree <their head> HEAD`), and a
+  conflict means this one waits: two pull requests on the same lines cost
+  the later one a rebase, a force-push and a re-review at every merge of
+  the earlier, which a hand-kept changelog, with its one `[Unreleased]`
+  block every pull request appended to, once made the rule. The body names
+  what it stacks on. A stack is reviewed and merged
   whole, measured on a ruleset mirroring `main`'s: every layer is held to
   `main`'s rules at once (one unsigned commit, or one layer without its
   approval, refuses the whole merge, and nothing lands), so every layer is
