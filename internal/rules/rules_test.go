@@ -85,6 +85,7 @@ func compliantFiles() map[string]string {
 		".github/actions/setup-aqua/action.yaml":          limen.CanonicalActionSetupAqua,
 		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
 		".github/workflows/limen-verify.yaml":             limen.CanonicalWorkflowVerify,
+		".github/release.yml":                             limen.CanonicalReleaseNotes,
 		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
 		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
 		// The shared Renovate configuration, content-pinned, and the seed
@@ -1082,6 +1083,7 @@ func TestYamlfmtConditional(t *testing.T) {
 		".github/actions/windows-cache-image/action.yaml",
 		".github/workflows/limen-verify.yaml",
 		".github/workflows/security.yaml",
+		".github/release.yml",
 	} {
 		delete(noYAML, y) // remove every *.yaml/*.yml in the set
 	}
@@ -1396,8 +1398,8 @@ const changelogSection = "changelog:\n  use: github-native\n"
 
 // TestReleaseNotes: where a project releases, its .release-go.yaml carries
 // the canonical `changelog:` section (comments in it allowed) and its
-// .github/release.yml is limen's byte for byte; fix appends or replaces the
-// section with the rest of the file intact, and writes release.yml.
+// .github/release.yml is limen's byte for byte everywhere; fix appends or
+// replaces the section with the rest of the file intact, and writes release.yml.
 func TestReleaseNotes(t *testing.T) {
 	t.Parallel()
 
@@ -1405,7 +1407,6 @@ func TestReleaseNotes(t *testing.T) {
 		files := compliantFiles()
 		files[".release-go.yaml"] = releaseGoHeader + "\n" + releaseGo
 		files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
-		files[".github/release.yml"] = limen.CanonicalReleaseNotes
 
 		return files
 	}
@@ -1468,9 +1469,13 @@ func TestReleaseNotes(t *testing.T) {
 		t.Error("fix should reset release.yml")
 	}
 
-	// Not releasing: no release.yml is required.
-	if f := findingByRule(rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()), "workflows"); !f.OK() {
-		t.Errorf("a repository without .release-go.yaml owes no release.yml: %s", f.Message)
+	// Not releasing artifacts: release.yml is still required, since every
+	// tag has a release page.
+	noNotes := compliantFiles()
+	delete(noNotes, ".github/release.yml")
+
+	if f := findingByRule(rules.Check(writeRepo(t, noNotes), rules.DefaultPolicy()), "workflows"); f.OK() {
+		t.Error("a repository without release.yml should fail (content-pinned everywhere)")
 	}
 }
 

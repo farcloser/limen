@@ -151,8 +151,7 @@ var CanonicalWorkflowRelease string
 
 // CanonicalReleaseNotes is GitHub's release-notes configuration, how the
 // notes a release takes from its merged pull requests are grouped —
-// content-pinned, only where a .release-go.yaml exists, like the release
-// workflow.
+// content-pinned in every repository, since every tag has a release page.
 //
 //go:embed .github/release.yml
 var CanonicalReleaseNotes string

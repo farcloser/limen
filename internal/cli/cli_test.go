@@ -178,6 +178,7 @@ func compliantRepo(t *testing.T) string {
 		".github/actions/setup-aqua/action.yaml":          limen.CanonicalActionSetupAqua,
 		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
 		".github/workflows/limen-verify.yaml":             limen.CanonicalWorkflowVerify,
+		".github/release.yml":                             limen.CanonicalReleaseNotes,
 		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
 		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
 		".limen/renovate.json":                            limen.CanonicalRenovatePreset,

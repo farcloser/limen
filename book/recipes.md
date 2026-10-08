@@ -222,7 +222,11 @@ Two roles deserve emphasis because they close the enforcement loop:
   `just do release vX.Y.Z` verifies a clean tree, creates the *signed* tag and pushes it. For
   a repository without a `.release-go.yaml` — a Go module, a tap, a configuration — that
   signed tag **is** the release: there is nothing to build or publish, and Go's module
-  proxy, Renovate and `go get` all read the tag. A `.release-go.yaml` (project-owned, like
+  proxy, Renovate and `go get` all read the tag. **Every tag has a release page**, so the
+  recipe then creates it (`gh release create --verify-tag --generate-notes`, through the
+  pinned `gh` and the human's own auth), with the notes below; a retry finds the page and
+  leaves it. Six library repositories released bare tags for months, and no reader had
+  notes for any of them until this. A `.release-go.yaml` (project-owned, like
   the root .justfile) opts the repository into artifacts, and the two lanes below then share
   every guard. It is goreleaser's configuration under the lane's name, like `.lint-go.yaml`
   (the recipes pass it with `--config`), and its first line is
@@ -251,8 +255,8 @@ Two roles deserve emphasis because they close the enforcement loop:
   same lines, so each merge forces a rebase on the others. The `changelog:` section of
   `.release-go.yaml` is limen's inside a file otherwise the project's: `use:
   github-native`, so goreleaser asks GitHub for the notes, and GitHub lists every pull
-  request merged since the previous tag. `.github/release.yml`, content-pinned wherever a
-  `.release-go.yaml` exists, groups them: **Breaking changes** (the `breaking` label),
+  request merged since the previous tag; without goreleaser, the release recipe asks for
+  the same notes. `.github/release.yml`, content-pinned in every repository, groups them: **Breaking changes** (the `breaking` label),
   **Changes**, then **Dependencies** (Renovate's pull requests, and any carrying the
   `dependencies` label). So the title is the release note: it says what changed for a
   consumer, not how. A pull request that breaks a consumer (an API removed or changed, a

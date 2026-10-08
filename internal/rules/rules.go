@@ -693,8 +693,8 @@ func checkLychee(root string) Finding {
 }
 
 // checkWorkflows verifies the .github surface in its two regimes: the
-// checksum-update workflow, the composite actions, the shared CI lanes and the
-// security workflow are content-pinned (limen machinery — the write-capable
+// checksum-update workflow, the composite actions, the shared CI lanes, the
+// security workflow and the release-notes configuration are content-pinned (limen machinery — the write-capable
 // workflow's hardening must never drift), while the CI workflow and the
 // renovate config need only exist (limen fix seeds the canonical ones; their content is the
 // project's own after that). The release workflow is required exactly when the repository
@@ -719,6 +719,10 @@ func checkWorkflows(root string) Finding {
 	}
 
 	if f := checkPinned(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity); f != nil {
+		return *f
+	}
+
+	if f := checkPinned(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes); f != nil {
 		return *f
 	}
 
@@ -903,7 +907,7 @@ var strayGoreleaserFiles = []string{".goreleaser.yaml", ".goreleaser.yml"} //nol
 
 // checkReleaseGo fails a goreleaser configuration under a default name, or a
 // .release-go.yaml without its schema header or the canonical `changelog:`
-// section, beside a drifted .github/release.yml; nil when none applies
+// section; nil when none applies
 // (releasing is opt-in).
 func checkReleaseGo(root, rule string) *Finding {
 	if stray, found := findFirst(root, strayGoreleaserFiles...); found {
@@ -932,7 +936,7 @@ func checkReleaseGo(root, rule string) *Finding {
 		return &f
 	}
 
-	return checkPinned(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes)
+	return nil
 }
 
 // checkShellcheck requires .limen/.shellcheckrc in every repository, matching
