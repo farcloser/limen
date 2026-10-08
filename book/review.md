@@ -132,7 +132,11 @@ approval on a bot's, comes with `gh pr merge --auto --merge` on that pull reques
 a later 🛑 or ⚠️ at a newer head comes with `gh pr merge --disable-auto`. The arming is
 the verdict made executable, so it is never the author's; the ruleset keeps the human's
 approval as the gate, and dismisses it on a push, so the author asks again with the new
-head. A native stack is the one merge the reviewer makes itself: GitHub refuses
+head. GitHub does not always re-evaluate an armed merge when the approval lands: a pull
+request approved, green, clean and armed sat seven minutes, and a disarm and re-arm
+(`gh pr merge --disable-auto`, then `--auto --merge`) merged it within half a minute. So
+an approved, armed pull request that sits is re-armed by the reviewer; nobody presses
+merge. A native stack is the one merge the reviewer makes itself: GitHub refuses
 auto-merge on a stack's layers, so once every layer is green, ✅ at its head and
 approved, the reviewer merges the stack from its top layer through the asynchronous
 merge API (`PUT /repos/{owner}/{repo}/pulls/{top}/merge-async`), never from the middle
