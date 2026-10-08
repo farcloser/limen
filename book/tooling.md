@@ -554,6 +554,13 @@ pins:
   text in a write job. A new entry leaves `digest:` out: `limen pins refresh` writes the
   block, and until it does the `pins` rule fails the entry and `limen pins get <name>
   sha256` refuses it.
+- **A pin can be a workload, not a dependency.** A benchmark's compile input — the kernel
+  tree a cross-runtime bench builds inside each container — is a `pins.yaml` entry like any
+  other, fetched through `limen pins get` and verified the same way, but held where it is
+  by a `packageRule` in the repository's `renovate.json`: a newer tree is a heavier compile,
+  so a bump re-baselines every number the bench ever produced, and is made by hand, on
+  purpose. Before the entry, two scripts carried the same URL with no checksum at all
+  ([farcloser/ossein#109](https://github.com/farcloser/ossein/pull/109)).
 
 The methods, each a way to obtain a sha256 the entry can stand behind:
 
