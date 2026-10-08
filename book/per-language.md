@@ -583,6 +583,21 @@ over 4096 bytes, `ReadFile` on a file over the cap, is the caller's argument, no
 input's fault: it stays on the bad-argument sentinel even when the value came off disk.
 The package doc lists the limits and the sentinel each reports.
 
+## Go — a chaining API carries its first error
+
+A setter that returns its receiver so that calls chain, `g.SetLabel(…).SetShape(…)`, has
+nowhere to return an error, and the three ways out are not equal. Panicking turns a failed
+allocation deep in a library into a crash the caller never asked for. Dropping the error,
+the usual choice and what go-graphviz did for 210 setters, means the graph silently does
+not hold what the program set, and every one of those drops is an errcheck finding carved
+out of the lint baseline. The rule is the third way: the receiver records the first error
+it meets, `Err()` returns it, and the terminal operation, the one that consumes what the
+setters built (`Layout`, and so every render), returns it wrapped before doing anything,
+so a dropped error cannot pass silently and a caller that never reads `Err()` still cannot
+proceed on a half-built value. Closing the root forgets it. The chaining signature stays;
+the carve-out goes. The error is keyed by the root object, so a node's or an edge's failure
+is the graph's, which is what the terminal operation sees.
+
 ## Go — logging: a library writes nothing; a command speaks once, in main
 
 **A library package imports no logger and writes nothing to standard error.** Not behind
