@@ -299,7 +299,13 @@ pull request that changes one line needs 🎯 and 🧪 and nothing else; a pull 
 needs every section with two paragraphs each is two pull requests. 💡 and 📝 mean here
 what they mean in a review ([the shape of a review](./review.md#the-shape-of-a-review)):
 a suggestion that requests nothing, and a fact that asks nothing. Full URLs, @apostasie by
-handle, no link to the agent's tooling, as everywhere.
+handle, no link to the agent's tooling, as everywhere. And never a closing keyword (close,
+closes, closed, fix, fixes, fixed, resolve, resolves, resolved) directly before a reference
+to an issue or a pull request, as a number or as a URL: GitHub reads it as an instruction
+and executes it when the pull request merges. A body that said another pull request had
+been "closed … for four conflicts" closed that pull request the second its own merged,
+undoing a reopen and a review. A pull request that is not meant to close another says
+shut, or puts the reference first.
 
 ## Scope and priorities
 
