@@ -617,6 +617,19 @@ run on the same ref when a newer push arrives, so a Renovate rebase or a burst o
 to `main` shows a cancelled run before the one that counts. Merges are still gated on a
 full run of the final tree, and that is the only run that matters.
 
+**A workflow that pushes to the branch that fires it commits only what it owns.** Its own
+push fires it again, so it needs a fixed point: a run on its own commit must find nothing
+to commit. The checksum workflow has one, since it commits the whole dirty tree, and that
+tree is clean on the next run; that whole-tree guard is safe only while it is the one
+writer on `renovate/**`, and the day a second one shares the branch, each guards on its
+own file. A workflow that owns one file and guards on the whole tree has no fixed point
+when a sibling step dirties anything else: limen-install's installer-checksum
+workflow ran `setup-aqua` and the link step, which rewrote `.aqua/aqua-checksums.json`
+on a registry bump, saw a dirty tree, committed its own file unchanged, and the empty
+commit's push fired it again every thirty seconds, each push cancelling the checksum
+workflow's run on the same ref (https://github.com/farcloser/limen-install/pull/66). The
+guard is `git diff --quiet -- <the file>`, never `git status --porcelain`.
+
 ### The push credential — one-time org setup
 
 The fix-up commit carries a credential subtlety. When the workflow pushes with the default
