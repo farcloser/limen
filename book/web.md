@@ -42,3 +42,14 @@ carries no site lane: the book states each rule, and the site keeps its own reci
   the accessibility tree at phone width, not by looking: a `table` with `cell` children
   must still be there. Enforced on website-godolint in `site/style.css` (the
   `max-width: 600px` block) and on both rules tables.
+- **One top-level heading per page.** A screen reader's first move on a page is often a
+  jump to the h1, and the document outline starts there; a page whose title is an h2, the
+  same level as the landing page's section headings, has no top and its outline begins
+  mid-tree. Every page has exactly one h1, and the h1 is the page's title, not a slogan
+  above it. The trap is size: the landing page's h1 is a statement and is set large, and
+  copying that size onto a secondary page's title is what makes an author reach for h2
+  instead. So the stylesheet carries a page-title variant of the h1, sized between the
+  statement and a section heading, as its own token like every other size in the file;
+  a secondary page's title is a heading, not a claim. Checked by counting: one h1 in the
+  document, and it is the title. Enforced on website-godolint by `h1.page` and the
+  `--h1-page` token in `site/forkcloser.css`.
