@@ -638,6 +638,21 @@ of error handling and covers none of it, and it rots unnoticed — primordium's 
 carried 215 lines of it, with a sentinel missing from two of its own lists
 (https://github.com/mycophonic/primordium/pull/160).
 
+## Go — a precondition the program must meet at startup panics when missed
+
+A package whose every call needs something set first — an application name before any
+directory, a configuration before any client — panics at the first call made without
+it, naming what is missing. It does not degrade: no empty-string default, no zero value
+standing for "unset" that the code then builds a path or a connection on. This is
+[a type admits only its valid values](./index.md#generic-principles) at the one place
+a type cannot reach, the order of calls at startup; the check is a run of the test
+binary in a process of its own, where that call comes first, and the same shape checks
+a value the setter refuses. The trap: the degraded path looks like it works, and nobody
+reads it until it has done damage. primordium's `dirs` with no application name handed
+out the user's whole base directory — `~/.cache`, `~/Library/Application Support` — as
+the application's own, created it private, and returned it for every caller to fill
+and clean (https://github.com/mycophonic/primordium/pull/159).
+
 ## Enforcement
 
 `limen check [path]` evaluates the applicable per-language rules alongside the mandatory
