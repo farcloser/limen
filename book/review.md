@@ -77,8 +77,8 @@ evidence:
   toolchain requirements. A "security" bump is checked against the advisory list: a
   bump that leaves a published advisory open says so.
 - **What the bump touches that CI does not exercise**, and how that was covered.
-  Where CI cannot run it (a kernel build, a source-built formula, a binary that boots
-  a VM), the approval waits for the owning session's result on the pull request; it
+  Where CI cannot run it (a kernel build, a formula no install lane builds, a binary
+  that boots a VM), the approval waits for the owning session's result on the pull request; it
   is not given on green.
 - **Where the dependency lands**: shipped code, a test, a generator, a tool module.
   The depth of the check follows the exposure, and the approval says which it is.

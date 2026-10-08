@@ -135,6 +135,19 @@ against that base (bottle block stripped first, since upstream rewrites it at ev
 release); applied to the base it must reproduce the committed formula exactly, which is
 the check a refresh and its review make.
 
+**Testing the tap is the tap's job.** A consumer repository that installed itself from the
+live tap tested whatever release the tap's `main` pointed at, at an unpinned revision, not
+its own tree (ssh-agent, until farcloser/ssh-agent#23). The proof beyond linting, `brew
+install` (which builds every formula from source, a tap shipping no bottles), `brew test`,
+and the service started and stopped, runs in the tap's own CI from the **checkout**: the
+working tree is symlinked in as the tap, so a dependency on another formula of the same
+tap resolves to the same tree, and `HOMEBREW_NO_AUTO_UPDATE=1` is exported first, because
+brew's auto-update rebases every tap it finds, the symlinked checkout included, onto its
+remote. The install mutates the machine's live brew, so the recipe runs it on CI's macOS
+leg only (a `CI` guard) and skips, not fails, elsewhere. A project recipe that must hand
+brew's directory to a script **appends** it to `PATH`, never prepends: the script needs
+brew by name, and nothing else of Homebrew's may shadow a pin.
+
 ## Rust — cargo is pinned through rustup, never ambient
 
 The Rust modules (`just do lint rust`, `just do fix rust`) call `cargo`, and no repository
