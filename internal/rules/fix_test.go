@@ -1105,7 +1105,7 @@ func TestFixWorkflows(t *testing.T) {
 			}
 		case ".github/actions/setup-aqua/action.yaml", ".github/actions/windows-cache-image/action.yaml",
 			".github/workflows/limen-verify.yaml",
-			".github/workflows/security.yaml", "renovate.json":
+			".github/workflows/security.yaml", ".github/release.yml", "renovate.json":
 			if o.Action != rules.ActionCreated {
 				t.Errorf("%s: %s, want created", o.Path, o.Action)
 			}

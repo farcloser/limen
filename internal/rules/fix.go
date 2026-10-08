@@ -483,8 +483,8 @@ func remediateCI(root, rule string) Outcome {
 
 // remediateWorkflows brings the .github surface up to the baseline in its two
 // regimes (see checkWorkflows): the checksum-update workflow and the
-// composite actions, the shared CI lanes and the security workflow are
-// content-pinned exactly; the CI workflow and the renovate config are seeded
+// composite actions, the shared CI lanes, the security workflow and the
+// release-notes configuration are content-pinned exactly; the CI workflow and the renovate config are seeded
 // once and never overwritten; the release
 // workflow is seeded only where a goreleaser config makes it applicable.
 func remediateWorkflows(root string) []Outcome {
@@ -496,6 +496,7 @@ func remediateWorkflows(root string) []Outcome {
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
 		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
 		pinExact(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity),
+		pinExact(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes),
 		remediateCI(root, rule),
 		seedIfMissing(root, rule, pathRenovate, renovateSeed,
 			"seeded the canonical renovate config (the content is the project's own from here)"),
@@ -504,10 +505,8 @@ func remediateWorkflows(root string) []Outcome {
 	out = append(out, remediateReleaseGo(root, rule), remediateLintGithub(root, rule))
 
 	if exists(filepath.Join(root, releaseGoFile)) {
-		out = append(out,
-			seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
-				"seeded the canonical release workflow (the content is the project's own from here)"),
-			pinExact(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes))
+		out = append(out, seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
+			"seeded the canonical release workflow (the content is the project's own from here)"))
 	} else {
 		out = append(out, Outcome{
 			Rule:    rule,
