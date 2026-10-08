@@ -182,6 +182,16 @@ branches are the human's.
 - **Green before pushing.** The full `just lint` and `just test`, not one
   lane: what CI runs on other platforms (a linux-only package, a windows leg)
   is what a single lane on one machine misses.
+- **Generated means regenerated.** A file a generator writes is changed by
+  changing the generator and running it, never by editing the output to
+  what the generator would produce. A hand approximation of the generator's
+  rule (collapse every run of spaces, where the rule was delete the string
+  gap) wrote a message hadolint does not emit, reviewed and merged
+  (https://github.com/forkcloser/godolint/pull/72, corrected in
+  https://github.com/forkcloser/godolint/pull/76), and nothing could notice
+  until a lane regenerated from the pinned source and diffed
+  (https://github.com/forkcloser/godolint/pull/75). When the generator's
+  input is not in the tree, pinning it and adding that lane comes first.
 - **A hand bump follows the dashboard.** Renovate opens its own pull request
   for a new version within a minute of the release: four hand bumps to limen
   v0.9.0 each got a duplicate 20 to 45 seconds later, and
