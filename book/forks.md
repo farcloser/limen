@@ -79,6 +79,17 @@ that drives allocations, so its memory budgets were set explicitly. None of this
 generalizes beyond the shape of step 2: compare against the reference before trusting the
 fork.
 
+The bridge checks and frees what the sandbox does not. Address 0 is ordinary memory in a
+WebAssembly module, so a NULL the C side hands over neither traps nor crashes: a
+NULL-terminated array that was itself NULL was scanned from address 0 on every label, and
+harmless only while that word was zero; a `malloc` that returned NULL had its string written
+over the module's low memory. Natively both are instant segfaults. In the sandbox they are
+silent, so every pointer the bridge takes from C is checked for NULL by hand, and an
+allocation the module cannot make is an error, never a write. Ownership runs the other way
+with the same rule: what the library keeps of what the bridge hands it (a plugin list it
+reads for the life of a context) the library treats as static and never frees, so the
+bridge frees it on the matching close; until it did, every context left its list behind.
+
 ## `UPSTREAM.md`
 
 One file at the repository root, in this shape:
