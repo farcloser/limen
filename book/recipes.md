@@ -271,6 +271,11 @@ A new shared recipe goes into a module in limen's `.limen/just/` (a new concern 
 module plus its `mod` line in `do.just`); the content-pin then carries it
 to every repository on the next `limen fix`. A recipe only one project needs goes in that
 project's root `.justfile` — the `do` namespace keeps the shared names off the top level, so a
-project is free to define its own `lint`/`test`/`build` there. Global changes are
+project is free to define its own `lint`/`test`/`build` there. A project recipe that shares a
+name replaces, never extends: the baseline sets `allow-duplicate-recipes` so that a project can
+redefine `lint`, and the last definition is the whole recipe. A lane is added by appending it
+to the one `lint:` line; a second `lint:` line meant to add one silently dropped every
+baseline lane, and CI ran the one lane and reported green. `just --show lint` prints what
+will run. Global changes are
 proposed against limen itself, never edited locally: the shared files are locked by the
 content-pin, and drift is overwritten.
