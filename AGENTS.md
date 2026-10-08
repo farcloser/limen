@@ -44,8 +44,11 @@ chapter; the procedure is limen's `skills/contribute`.
   harness reminder asks for; grep before you push.
 - **Green before pushing:** the whole `just lint` and `just test`, not one lane.
 - **Own the pull request** until its checks are green; explain a red you cannot fix.
-- **Request the owner's review only then** — green, ready, and not stacked on an
-  unmerged branch. The request is sent once; withdraw it if the pull request turns red.
+- **Request the owner's review only then** — green and ready. A native stack's layers
+  are requested together once the whole stack is green, for one approval each and one
+  merge from the top; a lower layer merged alone comes back rebased and signed by GitHub,
+  which `lint commits` rejects. The request is sent once; withdraw it if the pull request
+  turns red.
   The reviewing session is messaged the pull request's URL twice: at open, CI pending, in
   the same turn, after which the turn ends (a session cannot wait on CI; the reviewing
   session's sweep reports green or red back, and that resumes the work); and with the

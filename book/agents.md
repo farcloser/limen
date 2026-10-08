@@ -184,9 +184,10 @@ branches are the human's.
 - **Green, then the reviewer.** Once the checks are green and the pull
   request is ready, request the repository owner's review — the human is
   told, not left to notice, and told once: a review request on a red pull
-  request is a request to watch the agent work. Ready also means
-  *mergeable on its own*: a pull request stacked on another waits,
-  unrequested, until its base has merged. The owner is whoever the repository says: a
+  request is a request to watch the agent work. A layer of a native stack
+  is ready when the whole stack is: its layers are requested together, for
+  one approval each and one merge from the top (see every pull request
+  targets `main`, below). The owner is whoever the repository says: a
   `CODEOWNERS` entry when there is one, else the organization's owner. The
   review request and a message to the reviewing session with the URL are
   one step, since a separate message to remember is the one that gets
@@ -203,8 +204,27 @@ branches are the human's.
   of a GitHub native stack, which GitHub itself bases on the layer below
   and lands into `main`. A change that cannot be green without another is
   stacked that way, or waits, with no pull request open, until the other
-  merges. The body names what it stacks on, and a stacked pull request is
-  not sent for review until its base has merged.
+  merges. The body names what it stacks on. A stack is reviewed and merged
+  whole, measured on a ruleset mirroring `main`'s: every layer is held to
+  `main`'s rules at once (one unsigned commit, or one layer without its
+  approval, refuses the whole merge, and nothing lands), so every layer is
+  requested once the whole stack is green, the owner approves each, and one
+  merge from the top lands them all, as one merge commit on `main`. A lower
+  layer merged alone is what to avoid, and leaves the layer above in one of
+  two states. When the merge deleted the branch (the baseline's setting),
+  GitHub retargets the layer above onto `main` and rebases it, as commits
+  committed and signed by GitHub, which `just do lint commits` rejects (the
+  signers file knows no GitHub key, and the bot-skip covers a bot's commits
+  only). When the branch stayed, nothing moves: the layer above keeps the
+  merged branch as its base, and deleting that branch by hand closes it
+  rather than retargeting it. The recovery is the same from either state,
+  the retarget first where GitHub did none (`gh pr edit <n> --base main`):
+  the agent rebases its own branches onto `main` locally, re-signing them,
+  and force-pushes with lease. On a layer, `lint commits` checks
+  everything since `main`, the layers below included (GitHub hands the
+  workflow the stack's trunk as the base ref): a red low in the stack is
+  fixed in the layer that owns the commit, and reddens every layer above
+  it until then.
 - **Not the agent's to do.** Merging, pushing to `main`, force-pushing shared
   branches, and tagging releases. Those are not trust questions; they are the
   rulesets and the release lane doing their job.
