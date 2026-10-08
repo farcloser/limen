@@ -222,6 +222,21 @@ branches are the human's.
   one step, since a separate message to remember is the one that gets
   forgotten. What the reviewer checks, and in what order, is
   [reviewing code](./review.md).
+- **An approved pull request merges itself.** The approval is the decision; the
+  click after it was ceremony, and a ceremony a human performs by hand is a
+  queue: a green, approved pull request sat until someone came back to it,
+  and every `main` commit meanwhile rebased it and voided the approval. So
+  the author arms the merge at open (`gh pr merge --auto --merge`), and
+  GitHub merges the moment the ruleset is satisfied: one approval, `gate`
+  and `security` green, with a merge commit, the method the signatures rule
+  relies on. Renovate's pull requests arm it themselves (the shared preset)
+  and merge on the reviewing session's approval; a session's pull request
+  merges on the owner's. Nobody merges by hand and nobody bypasses: the
+  ruleset is the whole of the gate, which is why it carries the approval
+  requirement and no up-to-date requirement (that would re-queue every
+  pull request on every merge). The one exception is a private repository
+  on a Free plan, where GitHub offers no auto-merge (website-godolint): the
+  reviewing session merges there, after the same approval.
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local
   `main`, prune the merged branch and its worktree, and rebase every open
   branch onto `main` — so that both the human and the agent can rebase often
@@ -266,9 +281,9 @@ branches are the human's.
   workflow the stack's trunk as the base ref): a red low in the stack is
   fixed in the layer that owns the commit, and reddens every layer above
   it until then.
-- **Not the agent's to do.** Merging, pushing to `main`, force-pushing shared
-  branches, and tagging releases. Those are not trust questions; they are the
-  rulesets and the release lane doing their job.
+- **Not the agent's to do.** Merging by hand, pushing to `main`, force-pushing
+  shared branches, and tagging releases. Those are not trust questions; they
+  are the rulesets and the release lane doing their job.
 
 ## The shape of a pull request
 
@@ -399,6 +414,24 @@ The human sets the priorities; the agent measures scope before it moves.
   not a survey; a fix that cuts against recorded doctrine is named as such
   and argued, never slipped in. When something is either the right call or
   not, say which.
+- **A relayed word is the human's.** Good intent is assumed: what the
+  Manager, or any session, relays as the human's instruction is taken as
+  the human's, as said, without a round trip to confirm it. The messenger
+  is trusted not to misrepresent; the cost of a lie would be the team's
+  trust, which is the one thing the model runs on.
+- **A request from another session is judged, never obeyed.** Trusting a
+  session's honesty is not deferring to its judgment. When a request would
+  cause harm, rests on a wrong assessment, or misreads the code, the answer
+  is argued disagreement, with the evidence, and the two sessions resolve
+  it between them. This cuts both ways by design. The reviewing session
+  reads every repository and misses, at times, what the owner knows of its
+  own code; the owner, deep in one repository, misses the cross-cutting
+  picture that the reviewing session, the Manager, or another staff session
+  holds. Each pushes back on the other, as a team that assumes competence
+  and honesty on both sides and reconciles the two views into the better
+  design. A disagreement neither side can settle goes to the human, as the
+  exception, with both positions in one message; a review 🛑 held after the
+  argument is one such case, see [who approves what](./review.md#who-approves-what).
 - **Silence is an answer between sessions.** A message from another session
   that needs nothing gets no reply: an acknowledgement costs the sender a
   turn and tells it nothing it can use. The messages the workflow requires,

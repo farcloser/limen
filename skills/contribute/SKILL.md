@@ -117,7 +117,15 @@ trailer eaten by a shell variable — in your tree, not in CI.
 ```
 git c push origin claudio/<date>-<topic>             # `git c` drops the sandbox's GIT_SSH_COMMAND
 gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
+gh pr merge --auto --merge                           # arms the merge: GitHub merges on the owner's approval
 ```
+
+An approved pull request merges itself: the ruleset wants one approval and
+green checks, and auto-merge, armed at open, merges the moment both hold.
+The owner's approval is the decision; nobody clicks merge, and a merge by
+hand or a bypass is never yours. (website-godolint is the exception, a
+private repository where GitHub offers no auto-merge: the reviewing session
+merges there.)
 
 No `-u` on the push — recording the upstream writes `.git/config`, which the
 sandbox denies; name the remote and branch instead.
@@ -161,7 +169,8 @@ leave for the human to find.
 
 On green, and only then — checks green, pull request ready — request the
 owner's review; that is how the human learns the work exists, and it is
-said once, never on a red pull request. A native stack's layers are
+said once, never on a red pull request. The approval merges it: nothing
+more to do after it but the after-merge step. A native stack's layers are
 requested together, once the whole stack is green (see Stacking). A
 requested pull request that turns red has its request
 withdrawn (`gh api -X DELETE repos/<org>/<repo>/pulls/<n>/requested_reviewers
@@ -248,5 +257,6 @@ refuses the whole merge and nothing lands. So:
 
 ## Never
 
-Merge, push to `main`, force-push a shared branch, tag a release. The rulesets
-and the release lane enforce these; the skill just says them out loud.
+Merge by hand or bypass a ruleset, push to `main`, force-push a shared
+branch, tag a release. The rulesets and the release lane enforce these; the
+skill just says them out loud.

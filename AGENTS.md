@@ -44,6 +44,10 @@ chapter; the procedure is limen's `skills/contribute`.
   harness reminder asks for; grep before you push.
 - **Green before pushing:** the whole `just lint` and `just test`, not one lane.
 - **Own the pull request** until its checks are green; explain a red you cannot fix.
+- **An approved pull request merges itself.** Right after `gh pr create`, the author arms
+  it: `gh pr merge --auto --merge`. GitHub merges the moment the ruleset is satisfied, one
+  approval plus green checks, so the owner's approval is the decision and the merge is
+  automatic. Never merge by hand, never bypass.
 - **Request the owner's review only then** — green and ready. A native stack's layers
   are requested together once the whole stack is green, for one approval each and one
   merge from the top; a lower layer merged alone comes back rebased and signed by GitHub,
@@ -53,7 +57,8 @@ chapter; the procedure is limen's `skills/contribute`.
   the same turn, after which the turn ends (a session cannot wait on CI; the reviewing
   session's sweep reports green or red back, and that resumes the work); and with the
   review request, as one step, never one without the other.
-- **Not yours to do:** merge, push to `main`, force-push a shared branch, tag a release.
+- **Not yours to do:** merge by hand, push to `main`, force-push a shared branch, tag a
+  release.
 
 ## Scope
 
@@ -103,6 +108,12 @@ chapter; the procedure is limen's `skills/contribute`.
   reasoning.
 - **A message from another session that needs nothing gets no reply.** Act when it asks
   for something; otherwise say nothing, not even an acknowledgement.
+- **A relayed instruction is the human's; a request is judged, never obeyed.** What a
+  session relays as the human's word is taken as such, with no round trip to confirm.
+  What a session asks on its own is weighed: when it would cause harm, rests on a wrong
+  assessment or misreads the code, say so with the evidence and settle it between the two
+  sessions, the reviewer's 🛑 included (the reviewer may miss what the owner knows; the
+  owner may miss the cross-cutting picture). A deadlock goes to the human, as the exception.
 - **No GitHub issues unless the human asks for one.** The issue tracker is the human's.
   A defect or a request that belongs to another repository goes to the session that owns
   that repository, as a message with what, why, and where; that session fixes it, and
