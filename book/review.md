@@ -28,6 +28,18 @@ baseline's owner when the mechanism is the baseline's.
   it, the platform it behaves differently on. A check with a known bypass, or a
   document that contradicts the rule it ships with, is a 🛑 whatever its size. 🔍
   lists what was tried, not what was read.
+- **A test that passes before and after proves nothing about the change.** A
+  format test that checked only the `digraph` prefix stayed green while `-Tdot`
+  started emitting xdot's drawing operations; the review that caught it built
+  the binary and counted `_draw_` lines. A claim that a behaviour is kept is
+  verified by an assertion on the behaviour, both ways where the change names
+  two outputs apart, and the pull request says which test.
+- **A binary in the diff is a 🛑, and the fix is the ignore.** `go build` in a
+  repository whose root is a `main` package leaves the executable beside the
+  sources, and `git add -A` sweeps it into the next commit: a 12 MB binary
+  reached two pull requests of the same repository. The repository ignores
+  its own binary name from its first commit, or builds into `build/`; a
+  review of the file list, not only the diff, is what catches it.
 - **Follow the value to its consumer.** A changed value, error or path is traced to
   where it is used, in this repository and in the ones that import it.
 - **A re-push is a new change.** After a redesign the whole pull request is read

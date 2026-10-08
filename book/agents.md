@@ -172,6 +172,15 @@ branches are the human's.
 - **Green before pushing.** The full `just lint` and `just test`, not one
   lane: what CI runs on other platforms (a linux-only package, a windows leg)
   is what a single lane on one machine misses.
+- **A hand bump follows the dashboard.** Renovate opens its own pull request
+  for a new version within a minute of the release: four hand bumps to limen
+  v0.9.0 each got a duplicate 20 to 45 seconds later, and
+  https://github.com/farcloser/limen-install/pull/59 was opened 32 seconds
+  before Renovate's https://github.com/farcloser/limen-install/pull/60;
+  closing one of each pair was @apostasie's to decide. A hand bump is for a
+  repository Renovate cannot serve (no limen CI App, a private repository in
+  a free organization), after the dependency dashboard has been read, not
+  for impatience.
 - **Push, open, own.** Push the branch, open the pull request with a
   description drawn from the commit messages in
   [the shape of a pull request](#the-shape-of-a-pull-request), message the reviewing session
@@ -302,6 +311,12 @@ The human sets the priorities; the agent measures scope before it moves.
   copied from the repository, and a placeholder only when it truly cannot be
   had, said as such. A model's memory is months stale and sounds sure; a
   remembered `aqua-registry` ref once got pinned and broke every install.
+- **A claim rests on a command that ran.** An empty grep is evidence of an
+  absence only if the grep itself succeeded: a shell that rejected a flag or
+  expanded a glob to nothing prints the same empty output as a clean tree,
+  and a description built on it ("the renamed API is not referenced") is
+  false the moment a reviewer builds the binary. The exit status is read
+  before silence is reported as a fact.
 - **Doctrine can lose the argument, never silently.** A fix or a design is
   checked against the book first. Contradicting it is allowed, since
   doctrine evolves, but the conflict is named and argued and then decided,
