@@ -117,15 +117,14 @@ trailer eaten by a shell variable — in your tree, not in CI.
 ```
 git c push origin claudio/<date>-<topic>             # `git c` drops the sandbox's GIT_SSH_COMMAND
 gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
-gh pr merge --auto --merge                           # arms the merge: GitHub merges on the owner's approval
 ```
 
 An approved pull request merges itself: the ruleset wants one approval and
-green checks, and auto-merge, armed at open, merges the moment both hold.
-The owner's approval is the decision; nobody clicks merge, and a merge by
-hand or a bypass is never yours. (website-godolint is the exception, a
-private repository where GitHub offers no auto-merge: the reviewing session
-merges there.)
+green checks, and GitHub's auto-merge, which the reviewing session arms with
+its ✅ at the head it read, merges the moment both hold. The owner's approval
+is the decision; you never arm the merge, never click it, never bypass.
+(website-godolint is the exception, a private repository where GitHub offers
+no auto-merge: the reviewing session merges there.)
 
 No `-u` on the push — recording the upstream writes `.git/config`, which the
 sandbox denies; name the remote and branch instead.
@@ -170,7 +169,9 @@ leave for the human to find.
 On green, and only then — checks green, pull request ready — request the
 owner's review; that is how the human learns the work exists, and it is
 said once, never on a red pull request. The approval merges it: nothing
-more to do after it but the after-merge step. A native stack's layers are
+more to do after it but the after-merge step. A push after the approval
+drops it (the ruleset dismisses stale reviews): request the review again,
+with the new head, and message the reviewing session, as at first. A native stack's layers are
 requested together, once the whole stack is green (see Stacking). A
 requested pull request that turns red has its request
 withdrawn (`gh api -X DELETE repos/<org>/<repo>/pulls/<n>/requested_reviewers
@@ -225,8 +226,10 @@ ruleset at once: one unsigned commit, or one layer without its approval,
 refuses the whole merge and nothing lands. So:
 
 - Request review on every layer at once, when the whole stack is green.
-  The owner approves each layer and merges once, from the top; the layers
-  land as one merge commit on `main`.
+  The owner approves each layer; GitHub refuses auto-merge on a stack, so
+  the reviewing session merges it once, from the top, through GitHub's
+  asynchronous merge API, when every layer is green, ✅ and approved; the
+  layers land as one merge commit on `main`.
 - If a lower layer merges alone, the layer above ends in one of two
   states. The merge deleted the branch (the baseline's setting): GitHub
   retargeted the layer onto `main` and rebased it as commits it committed

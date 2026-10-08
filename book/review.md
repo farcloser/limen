@@ -126,9 +126,19 @@ second is rebased and re-run after that merge, before its review request stands.
 The reviewing session approves bot-authored pull requests once verified. On a
 session-authored pull request it comments and stops: the shared account cannot
 approve itself, every participant knows it, and the review never says so. Merging is
-the ruleset's, on the approval ([an approved pull request merges itself](./agents.md));
-closing, tagging and dismissing alerts are @apostasie's, and a review that needs one of
-them says which and why, in one line, and ends.
+the ruleset's, on the approval ([an approved pull request merges itself](./agents.md)),
+and arming it is the reviewer's: a ✅ at a head on a session's pull request, or an
+approval on a bot's, comes with `gh pr merge --auto --merge` on that pull request, and
+a later 🛑 or ⚠️ at a newer head comes with `gh pr merge --disable-auto`. The arming is
+the verdict made executable, so it is never the author's; the ruleset keeps the human's
+approval as the gate, and dismisses it on a push, so the author asks again with the new
+head. A native stack is the one merge the reviewer makes itself: GitHub refuses
+auto-merge on a stack's layers, so once every layer is green, ✅ at its head and
+approved, the reviewer merges the stack from its top layer through the asynchronous
+merge API (`PUT /repos/{owner}/{repo}/pulls/{top}/merge-async`), never from the middle
+and never partially ([every pull request targets `main`](./agents.md)). Closing,
+tagging and dismissing alerts are @apostasie's, and a review that needs one
+of them says which and why, in one line, and ends.
 
 **A 🛑 is argued, not obeyed.** The reviewer reads every repository and may miss
 what the owner knows of its own code: a guard that lives in another file, a

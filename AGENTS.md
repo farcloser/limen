@@ -44,14 +44,16 @@ chapter; the procedure is limen's `skills/contribute`.
   harness reminder asks for; grep before you push.
 - **Green before pushing:** the whole `just lint` and `just test`, not one lane.
 - **Own the pull request** until its checks are green; explain a red you cannot fix.
-- **An approved pull request merges itself.** Right after `gh pr create`, the author arms
-  it: `gh pr merge --auto --merge`. GitHub merges the moment the ruleset is satisfied, one
-  approval plus green checks, so the owner's approval is the decision and the merge is
-  automatic. Never merge by hand, never bypass.
+- **An approved pull request merges itself.** The reviewing session arms GitHub's
+  auto-merge with its ✅ at the head it read, and disarms it on a later 🛑 or ⚠️; GitHub
+  merges the moment the ruleset is satisfied, the owner's approval plus green checks. The
+  author never arms it, never merges by hand, never bypasses. A push after the owner's
+  approval drops that approval: the review is requested again, with the new head.
 - **Request the owner's review only then** — green and ready. A native stack's layers
-  are requested together once the whole stack is green, for one approval each and one
-  merge from the top; a lower layer merged alone comes back rebased and signed by GitHub,
-  which `lint commits` rejects. The request is sent once; withdraw it if the pull request
+  are requested together once the whole stack is green, for one approval each; GitHub
+  refuses auto-merge on a stack, so the reviewing session merges it whole from the top,
+  never from the middle. A lower layer merged alone comes back rebased and signed by
+  GitHub, which `lint commits` rejects. The request is sent once; withdraw it if the pull request
   turns red.
   The reviewing session is messaged the pull request's URL twice: at open, CI pending, in
   the same turn, after which the turn ends (a session cannot wait on CI; the reviewing
