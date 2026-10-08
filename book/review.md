@@ -100,6 +100,15 @@ and workflow runs over time, not the head at a glance: a head that differs at ea
 look, on a base that has not moved, is two automations disagreeing about the same
 file, and every round costs a full CI run.
 
+**Two green pull requests are not a green `main`.** Each was green on a base without
+the other; what the second one's checks never saw is the first one's merge. A
+content-checked file is where this bites: a hand pull request made `ci.yaml` limen's
+seed byte for byte while a limen bump, converged on the base before it, left that seed
+alone. Each was green, and `main` was red on every leg once both merged
+(farcloser/homebrew-brews#80 and #81, fixed by #85). An approval on a pull request that
+touches a file another open pull request also touches says which merges first; the
+second is rebased and re-run after that merge, before its review request stands.
+
 ## Who approves what
 
 The reviewing session approves bot-authored pull requests once verified. On a
