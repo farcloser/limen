@@ -242,8 +242,15 @@ The decided merge model, enforced by both the repository settings and the
   own pull request, so requiring one approval means no single identity both
   proposes and lands. The repository-admin bypass keeps the cost off the
   human, who cannot get their own pull request approved by anyone on a solo
-  project; admin is a role no App and no write-only account holds. Force
-  pushes and branch deletion on the default branch are blocked.
+  project; admin is a role no App and no write-only account holds. **An
+  approval covers the head it was given on**: the ruleset dismisses it on
+  the next push, since an approved pull request merges itself and a push
+  after the human looked would otherwise land unread; the author asks
+  again with the new head. The same holds for Renovate's branches, which the
+  preset rebases on every `main` commit: each rebase drops the reviewing
+  session's approval, and the sweep gives it again at the rebased head, a
+  cost accepted over approvals that outlive what they approved. Force pushes
+  and branch deletion on the default branch are blocked.
 - **Merges wait for green CI.** The `limen:main` ruleset carries required
   status checks, without which auto-merge (and a hasty human) would merge on
   red. A fresh ruleset requires `gate` — the job in the canonical `ci.yaml`

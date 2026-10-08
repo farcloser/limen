@@ -407,7 +407,7 @@ func compliantResponses() map[string]stubResponse {
 			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
 		"GET repos/test/repo/rulesets/1": {
-			Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
+			Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
 		},
 		"GET repos/test/repo/rulesets/2": {
 			Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
@@ -1126,7 +1126,7 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 func TestRulesetMigratesLegacyContextsToGate(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":` +
 			`[{"context":"verify (ubuntu-24.04)"},{"context":"verify (windows-11-arm)"}]}}]}`,
@@ -1197,7 +1197,7 @@ func securityWorkflowResponse() stubResponse {
 func TestRulesetRequiresSecurityWithLane(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"gate"}]}}]}`,
 	}
@@ -1239,7 +1239,7 @@ func TestRulesetRequiresSecurityWithLane(t *testing.T) {
 func TestRulesetDropsSecurityWithoutLane(t *testing.T) {
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"gate"},{"context":"security"}]}}]}`,
 	}
@@ -1450,7 +1450,7 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 	// assertion, not proof of authorship. The reconcile must add the rule back.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
 	}
@@ -1484,7 +1484,7 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[]}}]}`,
 	}
@@ -1498,6 +1498,42 @@ func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // seria
 	}
 }
 
+// TestRulesetKeptApprovalsFixed: a ruleset that keeps an approval across
+// pushes, and nothing else wrong, fails naming the flag, and the reconcile
+// sends it as true.
+func TestRulesetKeptApprovalsFixed(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
+		Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],` +
+			`"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,` +
+			`"dismiss_stale_reviews_on_push":false,"allowed_merge_methods":["merge","squash","rebase"]}},` +
+			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
+			`{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,` +
+			`"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "ruleset-default-branch")
+	if finding.Status != github.StatusFail || !strings.Contains(finding.Current, "dismiss stale reviews") {
+		t.Fatalf("a ruleset keeping stale approvals: %v %q, want fail naming the flag", finding.Status, finding.Current)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == "ruleset-default-branch" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), `"dismiss_stale_reviews_on_push":true`) {
+		t.Errorf("the reconcile payload must dismiss stale reviews, got: %s", log)
+	}
+}
+
 func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	// The pre-"Fix merging" canonical shape: every required rule present — the
 	// rule-presence test alone reads it as compliant — plus required_linear_history
@@ -1508,7 +1544,7 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	// own status-check context.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},` +
 			`{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
@@ -1613,7 +1649,7 @@ func TestRulesetMergeMethodDriftFails(t *testing.T) { //nolint:paralleltest // s
 	// the repository level.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"allowed_merge_methods":["squash","rebase"]}},` +
+		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
 			`{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"my-ci"}]}}]}`,
 	}
