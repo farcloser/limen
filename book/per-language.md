@@ -653,6 +653,26 @@ out the user's whole base directory — `~/.cache`, `~/Library/Application Suppo
 the application's own, created it private, and returned it for every caller to fill
 and clean (https://github.com/mycophonic/primordium/pull/159).
 
+## Go — a library zeroes the process umask once, by name, and says what the children inherit
+
+The umask is process-wide state: the kernel strips its bits from the mode of every file
+and directory the process creates, so code asking for `0o644` gets `0o600` under an
+operator's `0o077` and never learns. A library that wants the mode asked for to be the
+mode the file gets zeroes the umask once, at startup, through a function named for the
+write (`Disable`), never as the side effect of a read: a `Get` that zeroes on its first
+call is the footgun the package exists to remove, and a `Set` has no place beside a
+`Disable`. `Get` returns the mask found, the operator's, and panics before `Disable`,
+since a umask cannot be read without being set. The package documents that every child
+process inherits the zeroed umask, so a tool following the `0o666`-less-umask convention
+then creates world-writable files; giving the mask back is the child's
+(`sh -c 'umask 077; exec "$@"'`), never a toggle around the spawn, which would strip what
+every other goroutine creates meanwhile. A drop-in for `os.WriteFile` honours the umask
+as `os.WriteFile` does, by creating with `perm`, never by re-applying a captured mask
+after the fact. The trap, from https://github.com/mycophonic/primordium/pull/158:
+`WriteFile`'s first call zeroed the umask as a side effect, and every program calling it
+without the library's initializer relied on that without knowing; the fix broke eight
+callers across four repositories, each of which now says what it wants.
+
 ## Enforcement
 
 `limen check [path]` evaluates the applicable per-language rules alongside the mandatory
