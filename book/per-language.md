@@ -268,6 +268,14 @@ silence dead, and dead silences fail lint: a directive that silences nothing is 
 (by nolintlint for a linter that runs, and by `just do lint go` for a disabled linter, a
 disabled revive rule, and a `#nosec` in a test file, which gosec does not judge).
 
+One warning is not a verdict: golangci-lint's "Skipped 0 issues by rules" for a
+*formatter* exclusion (gci, gofumpt, golines, goimports on a generated file) says only
+that the lint pass found nothing there, since formatters report through the separate
+format pass. The exclusion is live when removing it makes `just do lint go` rewrite the
+file; a generated file in a nested module, which the lint pass never enters, shows the
+same warning for the same reason. Test by removal before calling one dead (seen on
+go-graphviz's `bind.go` and `nori.pb.go`).
+
 ## Go — silencing a finding
 
 A finding is silenced by its **rule**, never by its **linter**. `//nolint:<linter>` is
