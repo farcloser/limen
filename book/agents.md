@@ -222,6 +222,21 @@ branches are the human's.
   one step, since a separate message to remember is the one that gets
   forgotten. What the reviewer checks, and in what order, is
   [reviewing code](./review.md).
+- **An approved pull request merges itself.** The approval is the decision; the
+  click after it was ceremony, and a ceremony a human performs by hand is a
+  queue: a green, approved pull request sat until someone came back to it,
+  and every `main` commit meanwhile rebased it and voided the approval. So
+  the author arms the merge at open (`gh pr merge --auto --merge`), and
+  GitHub merges the moment the ruleset is satisfied: one approval, `gate`
+  and `security` green, with a merge commit, the method the signatures rule
+  relies on. Renovate's pull requests arm it themselves (the shared preset)
+  and merge on the reviewing session's approval; a session's pull request
+  merges on the owner's. Nobody merges by hand and nobody bypasses: the
+  ruleset is the whole of the gate, which is why it carries the approval
+  requirement and no up-to-date requirement (that would re-queue every
+  pull request on every merge). The one exception is a private repository
+  on a Free plan, where GitHub offers no auto-merge (website-godolint): the
+  reviewing session merges there, after the same approval.
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local
   `main`, prune the merged branch and its worktree, and rebase every open
   branch onto `main` — so that both the human and the agent can rebase often
@@ -266,9 +281,9 @@ branches are the human's.
   workflow the stack's trunk as the base ref): a red low in the stack is
   fixed in the layer that owns the commit, and reddens every layer above
   it until then.
-- **Not the agent's to do.** Merging, pushing to `main`, force-pushing shared
-  branches, and tagging releases. Those are not trust questions; they are the
-  rulesets and the release lane doing their job.
+- **Not the agent's to do.** Merging by hand, pushing to `main`, force-pushing
+  shared branches, and tagging releases. Those are not trust questions; they
+  are the rulesets and the release lane doing their job.
 
 ## The shape of a pull request
 
