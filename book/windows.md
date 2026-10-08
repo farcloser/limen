@@ -31,6 +31,37 @@ of program.** A native `mktemp` answers `C:\…\tmp.X`; an MSYS `tar` reads that
 windows are Git for Windows' own MSYS2 build, never a native rewrite, and why git proper
 stays native: it exchanges no paths with the shell that the shell did not type.
 
+## Replacing a file that is open
+
+A file that another process holds open cannot be replaced with `os.Rename` on windows,
+whatever share mode the holder opened it with. Go's `os.Rename` is
+`MoveFileEx(MOVEFILE_REPLACE_EXISTING)`, and that call refuses a target with any open
+handle: `rename …: Access is denied.` `FILE_SHARE_DELETE` on the readers' handles lets
+the file be deleted or renamed away under them; it does not let another file take its
+name. Only a POSIX-semantics rename does that: `SetFileInformationByHandle` with
+`FileRenameInfoEx` and `FILE_RENAME_FLAG_REPLACE_IF_EXISTS | FILE_RENAME_FLAG_POSIX_SEMANTICS`,
+on NTFS from Windows 10 1709 on. Go uses it inside `os.Root` and nowhere else, so an
+atomic write-to-temp-then-rename built on `os.Rename` is atomic against readers on every
+platform but windows, where each attempt races the readers' open handles.
+
+Measured on the VM for https://github.com/mycophonic/primordium/pull/152: four goroutines
+reading a file in a loop through share-delete handles while a writer renamed a temp file
+over it 200 times. With `os.Rename`, 2 to 10 of 200 writes landed across five runs, every
+failure the rename with "Access is denied"; with the POSIX rename, 200 of 200 in five
+runs. No reader saw a torn file either way, so the readers' share mode is doing its half
+of the job; the rename has to do the other half. The fleet's primitive is primordium's
+`xos.Rename` (https://github.com/mycophonic/primordium/pull/168): the POSIX rename on
+a volume that has it, `os.Rename` where the request itself is refused (FAT, exFAT,
+some shares, older Windows), so there the held-file property is the volume's, not the
+call's; and `os.Rename` for a directory source, because the POSIX rename would replace
+an empty directory in its way where `MoveFileEx` refuses. Its `WriteFile` renames
+through it. A consumer that replaces a file readers may hold open does it with
+`xos.Rename`, never with `os.Rename`.
+
+A detail that cost a round trip: an error built with `errors.Join` prints its causes on
+following lines, so a log filtered to one line shows the outer sentinel ("failed to
+write resource") and never the cause. Read the lines after it.
+
 ## What runs a recipe
 
 A `shell: bash` step starts the system git-bash launcher, which prepends its own
