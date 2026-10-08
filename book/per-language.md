@@ -112,9 +112,41 @@ Two deliberate exceptions, named because they cut against doctrine:
   working tree, not a stale clone. Audit flags that only make sense on CI (`--online`
   does network calls) go through `LINT_HOMEBREW_AUDIT_FLAGS`.
 
-The proof beyond linting — `brew install --build-from-source` plus `brew test` — mutates
-the machine's live brew and therefore belongs to disposable CI runners, not to a shared
-recipe; a tap wires that in its own workflow.
+**What a formula pins.** Every source a formula fetches is pinned by content, like
+everything else: a tarball by its `sha256`, a resource and a backport patch likewise. A
+formula for one of our own repositories builds from that repository's signed release,
+`tag:` **and** `revision:` together: the tag names the release and Homebrew infers the
+version from it, the revision ties the checkout to that exact commit, and one Renovate
+`github-tags` manager rewrites both. Never `branch:` under a constant `version "dev"`:
+Homebrew compares versions to decide what is outdated, and `dev` equals `dev`, so a bump
+of the branch, or of a bare `revision:`, reaches no machine that already has the formula,
+and a `post_install` meant to re-run on upgrade never runs again (limen's own formula sat
+on a commit pin that way until limen-install had a release). Upstream's `head` line is
+stripped by the fork's patch: a build from a moving branch, pinned by nothing. The one
+accepted `branch:` is a meta-formula that installs nothing but its dependencies and a
+README; a change to its dependency list bumps its `revision`, so installed machines pick
+it up.
+
+**Forks of upstream formulas** are refreshed from a **pinned commit** of the upstream tap
+(homebrew-core), never from its default branch: the refresh script carries the commit, a
+run reproduces the committed formulas byte for byte, and taking upstream's changes means
+moving the pin. The fork's modifications live in a patch regenerated with `diff -U1`
+against that base (bottle block stripped first, since upstream rewrites it at every
+release); applied to the base it must reproduce the committed formula exactly, which is
+the check a refresh and its review make.
+
+**Testing the tap is the tap's job.** A consumer repository that installed itself from the
+live tap tested whatever release the tap's `main` pointed at, at an unpinned revision, not
+its own tree (ssh-agent, until farcloser/ssh-agent#23). The proof beyond linting, `brew
+install` (which builds every formula from source, a tap shipping no bottles), `brew test`,
+and the service started and stopped, runs in the tap's own CI from the **checkout**: the
+working tree is symlinked in as the tap, so a dependency on another formula of the same
+tap resolves to the same tree, and `HOMEBREW_NO_AUTO_UPDATE=1` is exported first, because
+brew's auto-update rebases every tap it finds, the symlinked checkout included, onto its
+remote. The install mutates the machine's live brew, so the recipe runs it on CI's macOS
+leg only (a `CI` guard) and skips, not fails, elsewhere. A project recipe that must hand
+brew's directory to a script **appends** it to `PATH`, never prepends: the script needs
+brew by name, and nothing else of Homebrew's may shadow a pin.
 
 ## Rust — cargo is pinned through rustup, never ambient
 
