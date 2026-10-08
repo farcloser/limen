@@ -68,6 +68,7 @@ work after it:
 | A release for tooling alone, then undone | A release carries a real change ([recipes](./recipes.md)) |
 | A pin CI cannot exercise (a macOS-only tool, a sandbox that cannot clone) | Say so on the pull request; a human runs it |
 | A failure on one operating system dismissed as flaky | A one-OS failure is a bug until shown otherwise (AGENTS.md: a flake is fixed when it is noticed) |
+| A leak test allowed one page of slack for the allocator's own layout; 49 bytes per instance lived under it for weeks | A resource test asserts exactly zero growth, over enough rounds that one byte a round crosses a page |
 
 ### Case study: go-graphviz
 
