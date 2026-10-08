@@ -375,6 +375,33 @@ any other consumer, or becomes part of the parent module.
 The baseline refuses `replace` by default (gomoddirectives), and `exclude` with it, being a
 replace by other means.
 
+## Go — paths are validated where they enter
+
+A path the user hands the program — a flag, an argument, a volume source, a cache or log
+location — is made absolute and validated at the input boundary, in the command layer
+that parses it, and nowhere deeper: `filepath.Abs`, then primordium's
+`pathcheck.Validate`; `pathcheck.ValidateComponent` for a bare name that becomes a
+directory (an instance id); `pathcheck.ValidateSocket` on the final absolute string, at
+the one place that assembles a socket path, because the `sun_path` limit (104 bytes on
+macOS, 108 on linux) binds the whole path and only that place has it. The check runs once,
+where the whole input exists, and the rest of the program takes a validated absolute path
+as a fact. A command-line flag shared by several commands carries its check once, as a
+`Validate` hook on a type the commands embed by name — an anonymous embedding promotes
+the method and runs it twice.
+
+Two scopes stay out, on purpose. A path that is only read is not checked: the rules are
+the filesystem's for what can be *created*, and a failed open says so itself. A path that
+belongs to another system — a guest's working directory, a container's mount destination,
+anything the host never resolves — is never checked with the host's rules: macOS limits
+applied to a linux guest path refuse valid input and catch nothing the guest would refuse.
+
+The trap the rule prevents is validation that wanders into the library, where host and
+guest paths meet in one function and a test of an unrelated feature ends up asserting it.
+ossein's first version did exactly that — the guest `Cwd` checked with macOS rules, the
+checks asserted from the cache tests, the Windows legs red in `internal/cli` — and was
+rebuilt as three checks in `cmd/ossein` plus the socket check where the path is joined,
+each with its own test ([farcloser/ossein#103](https://github.com/farcloser/ossein/pull/103)).
+
 ## Go — what golangci-lint cannot see
 
 golangci-lint's `govet` runs the same analyzers as `go vet`, with one structural gap: its
