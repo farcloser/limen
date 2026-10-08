@@ -26,3 +26,19 @@ carries no site lane: the book states each rule, and the site keeps its own reci
   first paint: it is allowed by the hash of its exact bytes, and the hash in the policy
   must follow every edit to the snippet, or the theme flashes on load and nothing in CI
   says why. Enforced on website-godolint by its `external` recipe and `site/_headers`.
+
+## UX
+
+- **A table reflows on a phone, and stays a table.** Three columns do not fit in 375px,
+  and a table scrolled sideways is unreadable: the reader drags every row to finish each
+  sentence, and the row's key scrolls out of view while they do. Below the breakpoint
+  each row stacks, the short cells on one line and the long one beneath, and the header
+  row is hidden from sight only. The trap is that the stacking is done by changing the
+  `display` of the table elements, and Chrome and Safari then drop the table from the
+  accessibility tree: a screen reader hears a run of text with no rows, no columns and no
+  headers. So the markup restates what the element already meant, `role="table"`,
+  `rowgroup`, `row`, `columnheader` and `cell`, on every table that reflows; redundant at
+  desktop width, the only thing holding the semantics at phone width. Verified by reading
+  the accessibility tree at phone width, not by looking: a `table` with `cell` children
+  must still be there. Enforced on website-godolint in `site/style.css` (the
+  `max-width: 600px` block) and on both rules tables.
