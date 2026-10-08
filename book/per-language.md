@@ -518,6 +518,7 @@ https://github.com/mycophonic/primordium/pull/151 (the `os` drop-in, differentia
 https://github.com/mycophonic/primordium/pull/157 (XDG and platform directories), and
 https://github.com/mycophonic/primordium/pull/165, where a 1,789-line port of Go's own
 `os` tests went under the score.
+
 ## Go — errors: a sentinel per fault class, wrapped at every site
 
 The baseline enforces the floor (err113, errorlint, wrapcheck): an error value is a
@@ -581,6 +582,7 @@ as xz does.
 over 4096 bytes, `ReadFile` on a file over the cap, is the caller's argument, not the
 input's fault: it stays on the bad-argument sentinel even when the value came off disk.
 The package doc lists the limits and the sentinel each reports.
+
 ## Go — logging: a library writes nothing; a command speaks once, in main
 
 **A library package imports no logger and writes nothing to standard error.** Not behind
@@ -608,6 +610,18 @@ logging package for three `Fprintf` calls.
 logger grows, and they turn every helper that reports into one that exits. A function
 returns its error; `main` prints it and exits. A real programmer error, an invariant the
 code itself violated, is a `panic` with its message, not a log line that happens to exit.
+
+## Go — a test that only the standard library can fail is not a test
+
+A test earns its place by a change to the package that would fail it. One that checks
+what the standard library guarantees — that `errors.New` returns an error carrying its
+message, that `errors.Is` finds a sentinel through `fmt.Errorf`'s `%w` once and twice,
+that two sentinels are distinct — cannot fail short of a change to Go, and goes. A
+package that is a set of sentinel errors and no logic needs no test file at all; the
+coverage gate is on the module, not the package. The trap: such a file reads as coverage
+of error handling and covers none of it, and it rots unnoticed — primordium's `fault`
+carried 215 lines of it, with a sentinel missing from two of its own lists
+(https://github.com/mycophonic/primordium/pull/160).
 
 ## Enforcement
 
