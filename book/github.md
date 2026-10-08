@@ -391,8 +391,8 @@ The decided merge model, enforced by both the repository settings and the
   signed by GitHub too, and fails: editing in a browser is not a way to
   contribute here.
 - **Squash commits default to the pull request title and body**, merged
-  branches are deleted automatically, auto-merge is allowed (every pull request
-  arms it at open and merges on its approval, see
+  branches are deleted automatically, auto-merge is allowed (the reviewing
+  session arms it with its verdict and the pull request merges on its approval, see
   [coding agents as contributors](./agents.md)), and web-UI commits require sign-off — belt and braces for a path
   `lint commits` already refuses.
 

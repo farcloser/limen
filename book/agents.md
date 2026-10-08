@@ -226,15 +226,20 @@ branches are the human's.
   click after it was ceremony, and a ceremony a human performs by hand is a
   queue: a green, approved pull request sat until someone came back to it,
   and every `main` commit meanwhile rebased it and voided the approval. So
-  the author arms the merge at open (`gh pr merge --auto --merge`), and
-  GitHub merges the moment the ruleset is satisfied: one approval, `gate`
-  and `security` green, with a merge commit, the method the signatures rule
-  relies on. Renovate's pull requests arm it themselves (the shared preset)
-  and merge on the reviewing session's approval; a session's pull request
-  merges on the owner's. Nobody merges by hand and nobody bypasses: the
-  ruleset is the whole of the gate, which is why it carries the approval
-  requirement and no up-to-date requirement (that would re-queue every
-  pull request on every merge). The one exception is a private repository
+  the reviewing session arms GitHub's auto-merge as part of its verdict,
+  with its ✅ at the head it read ([who approves what](./review.md#who-approves-what)),
+  and GitHub merges the moment the ruleset is satisfied: one approval,
+  `gate` and `security` green, with a merge commit, the method the
+  signatures rule relies on. Renovate's pull requests arm it themselves (the
+  shared preset) and merge on the reviewing session's approval; a session's
+  pull request merges on the owner's. The author never arms it: the arming
+  is the reviewer's judgment that the head is ready, and the reviewer takes
+  it back on a later 🛑 or ⚠️. Nobody merges by hand and nobody bypasses:
+  the ruleset is the whole of the gate, which is why it carries the approval
+  requirement, dismisses a stale approval on push (so an approval covers
+  the head it was given on, and a push after it means asking again, with
+  the new head), and has no up-to-date requirement (that would re-queue
+  every pull request on every merge). The one exception is a private repository
   on a Free plan, where GitHub offers no auto-merge (website-godolint): the
   reviewing session merges there, after the same approval.
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local
@@ -265,7 +270,11 @@ branches are the human's.
   `main`'s rules at once (one unsigned commit, or one layer without its
   approval, refuses the whole merge, and nothing lands), so every layer is
   requested once the whole stack is green, the owner approves each, and one
-  merge from the top lands them all, as one merge commit on `main`. A lower
+  merge from the top lands them all, as one merge commit on `main`. GitHub
+  refuses auto-merge on a stack's layers, so that merge is the reviewing
+  session's, made explicitly through GitHub's asynchronous merge API from
+  the top layer, only when every layer is green, ✅ at its head and
+  approved by the owner; never from the middle, never partial. A lower
   layer merged alone is what to avoid, and leaves the layer above in one of
   two states. When the merge deleted the branch (the baseline's setting),
   GitHub retargets the layer above onto `main` and rebases it, as commits
