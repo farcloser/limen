@@ -137,3 +137,14 @@ Each commit is ported, with its row, or gets a *Not incorporated* row saying why
 *Reviewed through* moves to the head the review covered. A fork whose *Reviewed through*
 is behind upstream's head is not ready to release: upstream may have fixed something the
 release would ship without.
+
+A differential test that needs the reference installed runs before every tag, by hand. CI
+has no copy of the upstream tool, so go-graphviz's whole-output comparison against the
+installed Graphviz is opt-in and never runs there: green CI says the fork agrees with
+itself, not with upstream, and a tag cut on it alone ships whatever drifted since the last
+time someone ran the comparison. So the release has two checks, not one: upstream reviewed
+through its head, above, and the differential test run on the release commit against the
+reference at the version the fork embeds, with its result recorded where the release is
+prepared (the mean difference, and the inputs over the threshold if any). The raster
+canvas's line joins and dash lengths were held to upstream's this way, by a comparison no
+CI leg could run.
