@@ -112,9 +112,20 @@ Two deliberate exceptions, named because they cut against doctrine:
   working tree, not a stale clone. Audit flags that only make sense on CI (`--online`
   does network calls) go through `LINT_HOMEBREW_AUDIT_FLAGS`.
 
-The proof beyond linting — `brew install --build-from-source` plus `brew test` — mutates
-the machine's live brew and therefore belongs to disposable CI runners, not to a shared
-recipe; a tap wires that in its own workflow.
+**What a formula pins.** Every source a formula fetches is pinned by content, like
+everything else: a tarball by its `sha256`, a resource and a backport patch likewise. A
+formula for one of our own repositories builds from that repository's signed release,
+`tag:` **and** `revision:` together: the tag names the release and Homebrew infers the
+version from it, the revision ties the checkout to that exact commit, and one Renovate
+`github-tags` manager rewrites both. Never `branch:` under a constant `version "dev"`:
+Homebrew compares versions to decide what is outdated, and `dev` equals `dev`, so a bump
+of the branch, or of a bare `revision:`, reaches no machine that already has the formula,
+and a `post_install` meant to re-run on upgrade never runs again (limen's own formula sat
+on a commit pin that way until limen-install had a release). Upstream's `head` line is
+stripped by the fork's patch: a build from a moving branch, pinned by nothing. The one
+accepted `branch:` is a meta-formula that installs nothing but its dependencies and a
+README; a change to its dependency list bumps its `revision`, so installed machines pick
+it up.
 
 ## Rust — cargo is pinned through rustup, never ambient
 
