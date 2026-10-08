@@ -161,9 +161,9 @@ leave for the human to find.
 
 On green, and only then — checks green, pull request ready — request the
 owner's review; that is how the human learns the work exists, and it is
-said once, never on a red pull request. Never on a stacked one either: a
-layer of a stack is not mergeable on its own, so it waits, unrequested,
-until the layer below has merged. A requested pull request that turns red has its request
+said once, never on a red pull request. A native stack's layers are
+requested together, once the whole stack is green (see Stacking). A
+requested pull request that turns red has its request
 withdrawn (`gh api -X DELETE repos/<org>/<repo>/pulls/<n>/requested_reviewers
 -f 'reviewers[]=<owner>'`) until it is green again. The human's comments
 on the pull request are the review: address them when pointed there or
@@ -209,8 +209,26 @@ Every pull request targets `main`; never open one against another pull
 request's branch, and never merge one into it. A change that cannot be green
 without an unmerged one is either a layer of a GitHub native stack, or a
 branch with no pull request yet, opened against `main` once the other has
-merged. Say what it stacks on in the body ("stacked on #N"), and request
-review only after #N has merged.
+merged. Say what it stacks on in the body ("stacked on #N").
+
+A stack is reviewed and merged whole. Every layer is held to `main`'s
+ruleset at once: one unsigned commit, or one layer without its approval,
+refuses the whole merge and nothing lands. So:
+
+- Request review on every layer at once, when the whole stack is green.
+  The owner approves each layer and merges once, from the top; the layers
+  land as one merge commit on `main`.
+- If a lower layer merges alone, the layer above ends in one of two
+  states. The merge deleted the branch (the baseline's setting): GitHub
+  retargeted the layer onto `main` and rebased it as commits it committed
+  and signed itself, which `just do lint commits` rejects. The branch
+  stayed: the layer still has it as its base, and deleting it by hand
+  closes the layer. Recover the same way from either, retargeting first
+  where GitHub did not (`gh pr edit <n> --base main`): rebase your own
+  branches onto `main` locally, re-signing them, and force-push with lease.
+- On a layer, `lint commits` checks everything since `main`, the layers
+  below included. A red low in the stack reddens every layer above it; fix
+  it in the layer that owns the commit.
 
 ## Scope
 
