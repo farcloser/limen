@@ -673,6 +673,23 @@ after the fact. The trap, from https://github.com/mycophonic/primordium/pull/158
 without the library's initializer relied on that without knowing; the fix broke eight
 callers across four repositories, each of which now says what it wants.
 
+## Go — a port from the standard library is read beside the toolchain's source when revisited
+
+A function ported from the standard library — `os.CreateTemp` under another share mode,
+`syscall.Open` with `FILE_SHARE_DELETE` — drifts as upstream moves. When it is touched,
+it is read beside the current toolchain's source, the one aqua pins under
+`pkgs/http/golang.org/dl/`, function by function, and each difference is adopted or
+named: a divergence kept goes in the package doc with the platforms or versions it
+concerns, so the next reader comparing the two does not find it again, and one adopted
+gets the differential check beside the original. The source is the reference, never
+memory: a review round's "upstream returns EINVAL there" read right and was wrong
+against the file. The trap: a difference that looks like a gap may be upstream's own
+doing elsewhere. Go's runtime sets the process's long-path bit on Windows from
+10.0.15063, so the `\\?\` prefix `os` adds to a long path is dead on every platform
+this project runs, and porting it would have been sixty lines nobody could exercise
+(https://github.com/mycophonic/primordium/pull/166, which adopted the one real
+difference, the FILE_FLAG bits of an open flag, and named the other).
+
 ## Enforcement
 
 `limen check [path]` evaluates the applicable per-language rules alongside the mandatory
