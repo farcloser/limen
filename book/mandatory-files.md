@@ -416,6 +416,12 @@ since nothing reads it any more. (Both configs must be passed explicitly; passin
 `--config` disables lychee's automatic discovery of `./lychee.toml`, which is why the recipe
 names both.)
 
+**A link resolves at lint time, not at release time.** The checker fetches every URL in
+the tree as it is, so a link to something the change itself is preparing is a 404 until
+that thing exists: a changelog section's `compare/v1.0.1...v1.0.2` written before the tag
+failed every verify leg of https://github.com/forkcloser/xz/pull/97. A page written before
+the tag links only what exists; the tag's own release page carries the comparison.
+
 ## Why these
 
 - **Git repository** — version control is the floor everything else stands on; a project
