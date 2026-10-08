@@ -238,7 +238,13 @@ branches are the human's.
   conflict means this one waits: two pull requests on the same lines cost
   the later one a rebase, a force-push and a re-review at every merge of
   the earlier, which a hand-kept changelog, with its one `[Unreleased]`
-  block every pull request appended to, once made the rule. The body names
+  block every pull request appended to, once made the rule. The check is
+  exact only between branches on the same base: a head that no longer
+  merges with `main` (`git merge-tree --write-tree origin/main <their head>`
+  fails) is measured after its rebase, not before, since against a stale
+  base every commit `main` gained since reads as this side's change, and
+  one branch was closed for four conflicts that were the other pull
+  requests' with `main`. The body names
   what it stacks on. A stack is reviewed and merged
   whole, measured on a ruleset mirroring `main`'s: every layer is held to
   `main`'s rules at once (one unsigned commit, or one layer without its
