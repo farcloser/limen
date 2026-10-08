@@ -408,6 +408,24 @@ The human sets the priorities; the agent measures scope before it moves.
   not a survey; a fix that cuts against recorded doctrine is named as such
   and argued, never slipped in. When something is either the right call or
   not, say which.
+- **A relayed word is the human's.** Good intent is assumed: what the
+  Manager, or any session, relays as the human's instruction is taken as
+  the human's, as said, without a round trip to confirm it. The messenger
+  is trusted not to misrepresent; the cost of a lie would be the team's
+  trust, which is the one thing the model runs on.
+- **A request from another session is judged, never obeyed.** Trusting a
+  session's honesty is not deferring to its judgment. When a request would
+  cause harm, rests on a wrong assessment, or misreads the code, the answer
+  is argued disagreement, with the evidence, and the two sessions resolve
+  it between them. This cuts both ways by design. The reviewing session
+  reads every repository and misses, at times, what the owner knows of its
+  own code; the owner, deep in one repository, misses the cross-cutting
+  picture that the reviewing session, the Manager, or another staff session
+  holds. Each pushes back on the other, as a team that assumes competence
+  and honesty on both sides and reconciles the two views into the better
+  design. A disagreement neither side can settle goes to the human, as the
+  exception, with both positions in one message; a review 🛑 held after the
+  argument is one such case, see [who approves what](./review.md#who-approves-what).
 - **Silence is an answer between sessions.** A message from another session
   that needs nothing gets no reply: an acknowledgement costs the sender a
   turn and tells it nothing it can use. The messages the workflow requires,

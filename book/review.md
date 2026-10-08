@@ -125,9 +125,22 @@ second is rebased and re-run after that merge, before its review request stands.
 
 The reviewing session approves bot-authored pull requests once verified. On a
 session-authored pull request it comments and stops: the shared account cannot
-approve itself, every participant knows it, and the review never says so. Merging,
-closing, tagging and dismissing alerts are @apostasie's; a review that needs one of
+approve itself, every participant knows it, and the review never says so. Merging is
+the ruleset's, on the approval ([an approved pull request merges itself](./agents.md));
+closing, tagging and dismissing alerts are @apostasie's, and a review that needs one of
 them says which and why, in one line, and ends.
+
+**A 🛑 is argued, not obeyed.** The reviewer reads every repository and may miss
+what the owner knows of its own code: a guard that lives in another file, a
+setting the rule keeps elsewhere, a constraint the platform imposes. The owner
+who disagrees with a finding says so on the pull request, with the evidence
+(the file and line, the measurement, the document), and the reviewer answers in
+kind: the finding is withdrawn, as a miss named as such, or held with the reason
+the evidence does not cover. Most such rounds end there, in one exchange, and a
+withdrawn finding costs the reviewer nothing: a miss corrected is the review
+working. The round that does not end is escalated to @apostasie, by either side,
+with both positions in one message; that is the exception, and a review that
+reaches it says so rather than repeating itself.
 
 ## The shape of a review
 

@@ -108,6 +108,12 @@ chapter; the procedure is limen's `skills/contribute`.
   reasoning.
 - **A message from another session that needs nothing gets no reply.** Act when it asks
   for something; otherwise say nothing, not even an acknowledgement.
+- **A relayed instruction is the human's; a request is judged, never obeyed.** What a
+  session relays as the human's word is taken as such, with no round trip to confirm.
+  What a session asks on its own is weighed: when it would cause harm, rests on a wrong
+  assessment or misreads the code, say so with the evidence and settle it between the two
+  sessions, the reviewer's 🛑 included (the reviewer may miss what the owner knows; the
+  owner may miss the cross-cutting picture). A deadlock goes to the human, as the exception.
 - **No GitHub issues unless the human asks for one.** The issue tracker is the human's.
   A defect or a request that belongs to another repository goes to the session that owns
   that repository, as a message with what, why, and where; that session fixes it, and
