@@ -336,6 +336,19 @@ The forms, per linter:
 - **single-purpose linters** (wrapcheck, noctx, gochecknoglobals, …): `//nolint:<linter>
   // reason` is already rule-level. Bare `//nolint` and `//nolint:all` are banned.
 
+A `#nosec G115` is the common case, and its reason is held to a shape: the bound, and
+where it was established ("readInfo bounded the nid through checkNid", "phys was checked
+against MaxInt64 >> BlkSizeBits just above", "the filter count is checked to be one to
+four"), never "safe" or "fits". Where nothing bounds the value, the finding is a bug and
+the answer is the check that refuses it with the module's sentinel (erofs `mkfs_stat.go`
+refuses a device number a 32-bit field would truncate; xz `format.go` rejects a size that
+wraps negative as corrupt), and the silence names that check. Never a file-level or
+module-level exclusion, however many findings: erofs answers 91 one by one, and answering
+them found four real truncations in a reader that had been fuzzed
+(https://github.com/forkcloser/erofs/pull/95, https://github.com/forkcloser/erofs/pull/96).
+Each finding is a place where an untrusted number meets a fixed width, which is where a
+format reader breaks.
+
 `just do lint go` enforces this after golangci-lint runs: nolintlint polices the *shape*
 of a directive, not which linter it names, so the recipe greps the tracked Go files for
 every banned form and fails with the fix spelled out.
