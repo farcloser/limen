@@ -127,6 +127,14 @@ accepted `branch:` is a meta-formula that installs nothing but its dependencies 
 README; a change to its dependency list bumps its `revision`, so installed machines pick
 it up.
 
+**Forks of upstream formulas** are refreshed from a **pinned commit** of the upstream tap
+(homebrew-core), never from its default branch: the refresh script carries the commit, a
+run reproduces the committed formulas byte for byte, and taking upstream's changes means
+moving the pin. The fork's modifications live in a patch regenerated with `diff -U1`
+against that base (bottle block stripped first, since upstream rewrites it at every
+release); applied to the base it must reproduce the committed formula exactly, which is
+the check a refresh and its review make.
+
 ## Rust — cargo is pinned through rustup, never ambient
 
 The Rust modules (`just do lint rust`, `just do fix rust`) call `cargo`, and no repository
