@@ -105,6 +105,16 @@ git configuration (`GIT_CONFIG_*` in the agent's environment), so the human's
 own git configuration is never modified and a shell the human opens never sees
 the bot.
 
+**A sandbox exclusion matches the bare command.** A command the human took out of
+the sandbox — `just kernel`, which boots a VM that the sandbox cannot — is excluded only as
+written, alone on its line. Wrapped in a pipe, a `$(…)`, an `&&` chain or an environment
+prefix, it runs sandboxed, and the capability is simply absent: Virtualization.framework
+reports no hardware, and the build that was meant to prove the change never happens. Run it
+on its own, read its result, and never report a build or a boot you did not watch finish.
+A toolchain bump went out marked ready on a sandboxed attempt that had not built, and the
+release failed on it ([farcloser/ossein-kernel#79](https://github.com/farcloser/ossein-kernel/pull/79),
+fixed in [#109](https://github.com/farcloser/ossein-kernel/pull/109)).
+
 **Breakage is reported, not routed around.** An agent that finds the rig not working —
 the installed ssh refused, signing unable to reach the agent, a recipe failing — says so
 first and stops there; a private workaround that keeps the work moving hides the defect
