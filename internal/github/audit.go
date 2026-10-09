@@ -929,6 +929,7 @@ type rulesetRuleParameters struct {
 	// A pointer: absent and zero are different answers, and only the first
 	// means "this ruleset does not say".
 	RequiredApprovingReviewCount *int                  `json:"required_approving_review_count"`
+	DismissStaleReviewsOnPush    *bool                 `json:"dismiss_stale_reviews_on_push"`
 	RequiredStatusChecks         []requiredStatusCheck `json:"required_status_checks"`
 	AllowedMergeMethods          []string              `json:"allowed_merge_methods"`
 }
@@ -1345,6 +1346,15 @@ func rulesetDrift(target rulesetTarget, detail rulesetDetail, payload map[string
 		}, true
 	}
 
+	if current, kept := staleApprovalsKept(detail, payload); kept {
+		return rulesetProblem{
+			current: "dismiss stale reviews on push: " + current,
+			desired: "true",
+			message: "keeps an approval across pushes — an approved pull request merges itself, so whatever " +
+				"is pushed after the approval would land unread",
+		}, true
+	}
+
 	if have[ruleRequiredChecks] && len(detail.statusCheckContexts()) == 0 {
 		return rulesetProblem{
 			current: "required status checks name no contexts",
@@ -1433,6 +1443,55 @@ func approvalShortfall(detail rulesetDetail, payload map[string]any) (string, in
 	}
 
 	return "(no pull request rule)", want, true
+}
+
+// staleApprovalsKept reports whether the live ruleset keeps an approval
+// across pushes where the canonical payload dismisses it. Absence is drift,
+// like the approval count: a flag that cannot be read cannot prove the
+// approval covers the head that merges. A canonical definition without a
+// pull_request rule (limen:tags) has nothing to compare.
+func staleApprovalsKept(detail rulesetDetail, payload map[string]any) (string, bool) {
+	rules, isRuleList := payload[jsonRulesKey].([]map[string]any)
+	if !isRuleList {
+		return "", false
+	}
+
+	wanted := false
+
+	for _, rule := range rules {
+		if rule[jsonTypeKey] != rulePullRequest {
+			continue
+		}
+
+		parameters, isObject := rule[jsonParametersKey].(map[string]any)
+		if !isObject {
+			return "", false
+		}
+
+		if flag, isBool := parameters["dismiss_stale_reviews_on_push"].(bool); isBool {
+			wanted = flag
+		}
+	}
+
+	if !wanted {
+		return "", false
+	}
+
+	for _, rule := range detail.Rules {
+		if rule.Type != rulePullRequest || rule.Parameters == nil {
+			continue
+		}
+
+		if rule.Parameters.DismissStaleReviewsOnPush == nil {
+			return "(not reported)", true
+		}
+
+		return strconv.FormatBool(
+			*rule.Parameters.DismissStaleReviewsOnPush,
+		), !*rule.Parameters.DismissStaleReviewsOnPush
+	}
+
+	return "(no pull request rule)", true
 }
 
 // canonicalApprovalCount extracts the required approving review count of the
@@ -1614,8 +1673,13 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 				// approve their own pull request, so requiring one approval means
 				// no single identity can both propose and land. The bypass below
 				// keeps the cost off the human.
-				"required_approving_review_count":   1,
-				"dismiss_stale_reviews_on_push":     false,
+				"required_approving_review_count": 1,
+				// An approval covers the head it was given on, and nothing
+				// else: a push after it (a review-round fix, a rebase) drops
+				// it, and the author asks again with the new head. Without
+				// this, auto-merge would land whatever was pushed after the
+				// human looked.
+				"dismiss_stale_reviews_on_push":     true,
 				"require_code_owner_review":         false,
 				"require_last_push_approval":        false,
 				"required_review_thread_resolution": false,
