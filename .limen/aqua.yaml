@@ -21,7 +21,7 @@ packages:
   - name: git-for-windows/git@v2.56.0.windows.1
     registry: local
   # --- toolchain + binary-release tools (standard registry, aqua-verified) ---
-  - name: golang/go@go1.27.1
+  - name: golang/go@go1.27.2
   - name: casey/just@1.58.0
   - name: koalaman/shellcheck@v0.11.0
   - name: google/yamlfmt@v0.21.0
