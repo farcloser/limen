@@ -671,7 +671,7 @@ func checkAgents(root string) Finding {
 }
 
 // checkLychee content-pins .limen/lychee.toml, the canonical configuration of
-// the lychee link checker behind `just do lint links`. It is unconditional: every
+// the lychee link checker behind `just do security links`. It is unconditional: every
 // repository carries a README, so every repository has markdown whose links can
 // be checked. A project's own exclusions live in a root .lint-links.toml (merged
 // by the recipe), which limen does not check; the name the overlay had before,
