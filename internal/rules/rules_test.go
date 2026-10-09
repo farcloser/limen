@@ -770,7 +770,7 @@ func canonicalPin(t *testing.T, name string) (line, version string) {
 	t.Helper()
 
 	prefix := "  - name: " + name + "@"
-	for l := range strings.SplitSeq(rules.CanonicalAquaPackages, "\n") {
+	for l := range strings.SplitSeq(limen.CanonicalAquaYAML+rules.CanonicalAquaPackages, "\n") {
 		if rest, ok := strings.CutPrefix(l, prefix); ok {
 			version, _, _ = strings.Cut(rest, " ")
 
@@ -778,7 +778,7 @@ func canonicalPin(t *testing.T, name string) (line, version string) {
 		}
 	}
 
-	t.Fatalf("the canonical .limen/aqua.yaml carries no one-line pin for %s", name)
+	t.Fatalf("neither canonical aqua manifest carries a one-line pin for %s", name)
 
 	return "", ""
 }
@@ -820,12 +820,69 @@ func TestAquaProjectOwnedParts(t *testing.T) {
 	files := compliantFiles()
 	manifest := withProjectEntries(t,
 		"  - name: junegunn/fzf@v0.60.0\n"+ // an extra package
-			"  - name: golang/go@go99.0.0\n") // a newer go than limen pins
+			"  - name: casey/just@99.0.0\n") // a newer just than limen pins
 	manifest = replaceRef(t, manifest, "v9.9.9") // Renovate-bumped registry ref
 
 	files[".aqua/aqua.yaml"] = manifest
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua"); !f.OK() {
 		t.Errorf("project-owned packages/override/ref should pass: %s", f.Message)
+	}
+}
+
+// TestAquaGoPinSeeded: the Go toolchain is the project's own pin. A manifest
+// without one fails naming it, and fix adds it above the import, at the
+// version limen's own manifest carries; a manifest pinning another version
+// is left alone.
+func TestAquaGoPinSeeded(t *testing.T) {
+	t.Parallel()
+
+	goLine, goVersion := canonicalPin(t, "golang/go")
+
+	files := compliantFiles()
+	files[".aqua/aqua.yaml"] = strings.Replace(limen.CanonicalAquaYAML, goLine, "", 1)
+	dir := writeRepo(t, files)
+
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua")
+	if f.OK() || !strings.Contains(f.Message, "golang/go") {
+		t.Fatalf("a manifest without the Go pin must fail naming it, got: %+v", f)
+	}
+
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(data)
+	pinAt := strings.Index(got, "  - name: golang/go@"+goVersion+"\n")
+	importAt := strings.Index(got, "  - import: ../.limen/aqua.yaml\n")
+
+	if pinAt < 0 || importAt < 0 || pinAt > importAt {
+		t.Errorf("fix must add the Go pin above the import:\n%s", got)
+	}
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
+		t.Errorf("after fix: %s", f.Message)
+	}
+
+	older := compliantFiles()
+	older[".aqua/aqua.yaml"] = strings.Replace(limen.CanonicalAquaYAML, goLine, "  - name: golang/go@go1.26.0\n", 1)
+	dir = writeRepo(t, older)
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); !f.OK() {
+		t.Errorf("a project's own Go version is its own: %s", f.Message)
+	}
+
+	rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	if data, _ := os.ReadFile(
+		filepath.Join(dir, ".aqua", "aqua.yaml"),
+	); !strings.Contains(
+		string(data),
+		"golang/go@go1.26.0",
+	) {
+		t.Error("fix must leave the project's Go version alone")
 	}
 }
 
@@ -836,7 +893,7 @@ func TestAquaOverrideBelowImport(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files[".aqua/aqua.yaml"] = limen.CanonicalAquaYAML + "  - name: golang/go@go99.0.0\n"
+	files[".aqua/aqua.yaml"] = limen.CanonicalAquaYAML + "  - name: casey/just@99.0.0\n"
 	dir := writeRepo(t, files)
 
 	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua")
@@ -853,7 +910,7 @@ func TestAquaOverrideBelowImport(t *testing.T) {
 
 	got := string(data)
 
-	override := strings.Index(got, "  - name: golang/go@go99.0.0\n")
+	override := strings.Index(got, "  - name: casey/just@99.0.0\n")
 	importAt := strings.Index(got, "  - import: ../.limen/aqua.yaml\n")
 
 	if override < 0 || importAt < 0 || override > importAt {

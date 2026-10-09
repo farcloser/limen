@@ -131,7 +131,7 @@ that binary — per platform for the analyzers — because `go tool` itself hono
 
 Every repository carries the module, not only Go ones: `git-validation` (commit hygiene),
 `godolint` (Dockerfiles) and `dot` (profile graphs; `forkcloser/dot`, graphviz compiled to WASM, a single Go
-binary) run everywhere, and every repository already pins `golang/go` in aqua to build them.
+binary) run everywhere, and every repository pins `golang/go` in its own aqua manifest to build them.
 A Go repository adds the three source analyzers.
 
 The doctrine is enforced from both sides: the `gotools` rule requires `tools/go.mod` with the
@@ -318,8 +318,18 @@ What the `.aqua/aqua.yaml` must carry — the manifest is **subset-pinned** (see
   (`- import: ../.limen/aqua.yaml`). Every other tool limen requires lives in that file, at
   the versions the pinned limen release carries: by default the canonical tools move with
   limen. Above the import, the project's own packages: extras, and **overrides** — a
-  canonical tool at a version of the project's choosing (a newer go, say), which Renovate
-  then bumps in the project. aqua takes a package's first declaration, so an entry above the
+  canonical tool at a version of the project's choosing (a newer just, say), which Renovate
+  then bumps in the project. One pin is the project's own by design and not in the import at
+  all: **`golang/go`, the Go toolchain**. A standard-library vulnerability is fixed by a Go
+  patch release, govulncheck reports it in every repository's security lane the day the
+  advisory lands, and the fix must not wait for a limen release; so `limen fix` seeds the pin
+  once, from limen's own manifest (the version the running release was built and tested
+  with), and Renovate bumps it per repository from then on, in the aqua group, landing on the
+  reviewing session's approval. A repository that lags is caught twice: `GOTOOLCHAIN=local`
+  refuses a `go.mod` ahead of the pin, loudly, and the security lane names the stdlib finding
+  until the bump lands. The `go.mod` baseline rule is unchanged: the directive stays the
+  earliest supported release, whatever the toolchain pinned to build. No other canonical pin
+  meets that test; the Go-built tools are already the project's, in `tools/go.mod`. aqua takes a package's first declaration, so an entry above the
   import wins and the same entry below it would be silently shadowed: the import closes the
   list (`limen fix` moves it there). A package is never listed twice, and never a
   **retired** one: the Go-built tools moved to `tools/go.mod` (see
@@ -418,7 +428,7 @@ canonical tool the project does not pin, since that one moves with limen.
 
 ```bash
 just do tools add    junegunn/fzf                    # add a tool at its latest version
-just do tools add    golang/go <version>              # or at a given one (here, overriding limen's go)
+just do tools add    casey/just <version>             # or at a given one (here, overriding limen's just)
 just do tools set    goreleaser/goreleaser <version>  # pin an existing tool to an exact version
 just do tools update golangci-lint                   # bump an existing tool (by COMMAND name) to its latest version
 just do tools remove junegunn/fzf                    # remove a tool entirely

@@ -386,7 +386,7 @@ version moves up; none requires a newer release.
 - **`.0`, unless a dependency needs a later patch.** The directive is the minimum a builder
   and every consumer must run: a module saying `go 1.N.8` refuses to build with `1.N.4`
   under `GOTOOLCHAIN=local`, and forces every importer up with it. Patch fixes reach a build
-  through the toolchain the repository pins (the aqua `golang/go` pin, kept at the latest
+  through the toolchain the repository pins (its own aqua `golang/go` pin, kept at the latest
   release), not through the directive. A module cannot sit below its dependencies, though:
   with a dependency on `go 1.N.8`, a module on `go 1.N.0` refuses to build, and
   `go mod tidy` raises it to `1.N.8`. So the directive is the higher of `1.N.0` and the

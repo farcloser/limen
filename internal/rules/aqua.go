@@ -117,6 +117,31 @@ var canonicalAqua = mustParseCanonicalAqua() //nolint:gochecknoglobals // parsed
 // canonicalImport is the package name of the canonical tool set's import.
 const canonicalImport = importPkgPrefix + "../" + aquaPackagesFile
 
+// missingBesidesImport reports whether a canonical package other than the
+// import is missing while the import is present: the case where appending
+// the missing ones would put them below the import.
+func (m *aquaManifest) missingBesidesImport() bool {
+	hasImport := false
+
+	for _, p := range m.pkgs {
+		if p.name == canonicalImport {
+			hasImport = true
+		}
+	}
+
+	if !hasImport {
+		return false
+	}
+
+	for _, name := range m.missingCanonicalPkgs() {
+		if name != canonicalImport {
+			return true
+		}
+	}
+
+	return false
+}
+
 // importNotLast reports whether the manifest imports the canonical tool set
 // but declares a package after it. aqua takes the first declaration of a
 // package: an entry above the import overrides the canonical version (a
@@ -549,8 +574,10 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 	// An import above other entries is taken out here, as a whole-text pass
 	// so every range planned below is computed on the stripped manifest, and,
 	// now missing, appended back at the end of the list by the package merge.
-	// A retired package is left in place: check names it for the owner.
-	if manifest.importNotLast() {
+	// The same when a canonical package is missing: appended after an import
+	// already last, it would land below it, shadowed. A retired package is
+	// left in place: check names it for the owner.
+	if manifest.importNotLast() || manifest.missingBesidesImport() {
 		if stripped, ok := manifest.withoutPkgs([]string{canonicalImport}); ok {
 			manifest = stripped
 
