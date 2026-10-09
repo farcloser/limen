@@ -26,6 +26,19 @@ carries no site lane: the book states each rule, and the site keeps its own reci
   first paint: it is allowed by the hash of its exact bytes, and the hash in the policy
   must follow every edit to the snippet, or the theme flashes on load and nothing in CI
   says why. Enforced on website-godolint by its `external` recipe and `site/_headers`.
+- **A claim on a page is tested against the thing it describes.** A project site shows
+  what the tool does: an output, a list of rules, a version to install. Written once and
+  read for years, each of those drifts silently the first time the tool changes, and a
+  reader who copies a stale example blames the tool. So every claim that can be derived
+  from the project is derived in a test and diffed against the page, by `just test`, and
+  the pinned version of the project the site describes is what the test runs. The trap is
+  the cheap version: a test that checks the page is well-formed, or that the tool runs,
+  proves nothing about the claim; the test must produce the claim from the tool and compare.
+  Then a bump of the project's pin, which Renovate makes, turns the site red until the
+  page follows, and that red is the trigger to update the copy, not a flake. Enforced on
+  website-godolint by its `hero` recipe, which re-lints the sample Dockerfile with the
+  pinned godolint and diffs the committed output the landing page was written from, and
+  its `pin` recipe, which fails unless the install commands name the pinned version.
 
 ## UX
 
