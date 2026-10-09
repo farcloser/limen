@@ -129,7 +129,10 @@ approve itself, every participant knows it, and the review never says so. Mergin
 the ruleset's, on the approval ([an approved pull request merges itself](./agents.md)),
 and arming it is the reviewer's: a ✅ at a head on a session's pull request, or an
 approval on a bot's, comes with `gh pr merge --auto --merge` on that pull request, and
-a later 🛑 or ⚠️ at a newer head comes with `gh pr merge --disable-auto`. The arming is
+a later 🛑 or ⚠️ at a newer head comes with `gh pr merge --disable-auto`. On a bot's
+pull request the disarm is a signal, not the gate: Renovate re-arms auto-merge after
+every rebase (its `platformAutomerge`), so what holds a Renovate bump is the approval
+the reviewer withholds; on a session's pull request the disarm holds. The arming is
 the verdict made executable, so it is never the author's; the ruleset keeps the human's
 approval as the gate, and dismisses it on a push, so the author asks again with the new
 head. GitHub does not always re-evaluate an armed merge when the approval lands: a pull
