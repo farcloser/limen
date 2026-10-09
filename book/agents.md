@@ -358,8 +358,9 @@ The human sets the priorities; the agent measures scope before it moves.
   clock, stays red on the slowest runner for weeks. The exceptions are
   flakes whose cause is known and whose fix was declined, each recorded in
   [known upstream bugs](./upstream.md): windows-11-arm's silent exit 4 or
-  127 ([windows](./windows.md#bash-dies-under-emulation)), and an aqua
-  download that stalls with no timeout. Each is rerun, and named on the
+  127 ([windows](./windows.md#bash-dies-under-emulation)), an aqua
+  download that stalls with no timeout, and a GitHub `503` on a link that
+  outlasts the links lane's one re-check. Each is rerun, and named on the
   pull request.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged;
   what survives judgment becomes code, tests, or book prose. They live under

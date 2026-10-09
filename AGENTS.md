@@ -75,7 +75,8 @@ chapter; the procedure is limen's `skills/contribute`.
   or by the owning session when it is another repository's. The rerun found the flake; it
   did not fix it. The exceptions are flakes whose cause is known and whose fix was
   declined, documented as such in the book's known upstream bugs (windows-11-arm's silent
-  exit 4 or 127, an aqua download that stalls with no timeout): each is rerun, and named.
+  exit 4 or 127, an aqua download that stalls with no timeout, a GitHub 503 on a link that
+  outlasts the links lane's re-check): each is rerun, and named.
 - **Doctrine can lose the argument, never silently.** A fix that cuts against the book is
   named as such and argued; it is decided, not discovered.
 - **Broken tooling is reported, never worked around in silence.** The rig — limen, the
