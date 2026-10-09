@@ -330,7 +330,8 @@ The decided merge model, enforced by both the repository settings and the
   targets pays one short job for the day it adds some.
 
   <a id="security"></a>
-  **Security.** The vulnerability scans are not in `ci.yaml` at all. A canonical
+  **Security.** The verdicts that move without the tree are not in `ci.yaml` at all: the
+  vulnerability scans, and the link check, whose verdict is the web's. A canonical
   `security.yaml`, content-pinned like `limen-verify.yaml`, runs the project's `just security`
   (the shared `do::security::default`, plus whatever scans the project adds, as
   `lint` and `test` do for `ci.yaml`) on one linux leg (the scan loops over every

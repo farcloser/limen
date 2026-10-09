@@ -284,7 +284,7 @@ governed by their own rules ([per-language](./per-language.md), [tooling](./tool
 Orientation recipes are flat — `just info`, a project's own `just run` — so the universal
 "where am I? / do the project thing" commands are unprefixed in every repo. Every *shared*
 recipe set lives under the `do` namespace instead — `just do tools add …`, `just do lint go`,
-`just do lint links`, `just do fix yaml` (see [project tooling](./tooling.md) for the `tools`
+`just do security links`, `just do fix yaml` (see [project tooling](./tooling.md) for the `tools`
 module). That namespace is exactly what frees the top level for a project's own recipes: a
 project may define its own `just lint` or `just test` (this repository does — they aggregate the
 `do::` recipes CI runs) with no collision. Invoking a module bare runs its
@@ -397,22 +397,25 @@ first; a development build carries none and refuses to seed, saying so.
 
 ## Link checking — `.limen/lychee.toml`
 
-Documentation rots at its edges: links die silently. `just do lint links` checks every link in
-the repository with [lychee](https://github.com/lycheeverse/lychee), and `.limen/lychee.toml`
+Documentation rots at its edges: links die silently. `just do security links` checks every
+link in the repository with [lychee](https://github.com/lycheeverse/lychee), and `.limen/lychee.toml`
 is its canonical configuration — **content-pinned** like the shared just modules, so the
 checker behaves identically everywhere. The baseline carries only exclusions that apply to
 every repository (hosts that appear in verbatim license texts but cannot be checked
 reliably), each documented in the file itself. The source of truth is this repository's own
 [`.limen/lychee.toml`](../.limen/lychee.toml), embedded into `limen` and exposed as
 `rules.CanonicalLychee`. The rule is unconditional: every repository carries a README, so
-every repository has links worth checking.
+every repository has links worth checking. The lane is the security lane's, not lint's: a
+link's verdict is the web's and moves without a push, the shape the
+[security lane](./github.md#security) exists for, so a dead or blipping link reddens `security`
+on one leg instead of every verify leg and `gate`.
 
-**Per-project exclusions go in a root `.lint-links.toml`.** The `lint links` recipe passes both
+**Per-project exclusions go in a root `.lint-links.toml`.** The `security links` recipe passes both
 files to lychee, which merges them — the exclude lists concatenate — so a project extends the
 baseline without touching it. Like the root `.justfile`, the root file is the project's own: `limen`
-neither checks nor overwrites it. The name follows the lane, as `.lint-go.yaml` does for the Go
-lint baseline, in the tool's own format; its former name, `.lychee.toml`, is reported as a stray,
-since nothing reads it any more. (Both configs must be passed explicitly; passing any
+neither checks nor overwrites it. The file keeps its `.lint-links.toml` name from the lane's
+lint days (a rename would touch every repository for a word), in the tool's own format; its
+former name, `.lychee.toml`, is reported as a stray, since nothing reads it any more. (Both configs must be passed explicitly; passing any
 `--config` disables lychee's automatic discovery of `./lychee.toml`, which is why the recipe
 names both.)
 
@@ -436,7 +439,7 @@ the tag links only what exists; the tag's own release page carries the compariso
 - **.justfile** — a discoverable, uniform set of commands; `just info` is the universal "where
   am I?" that makes any checkout self-describing.
 - **.limen/lychee.toml** — dead links are documentation rot; one shared checker configuration
-  keeps `just do lint links` meaningful (and identically strict) in every repo.
+  keeps `just do security links` meaningful (and identically strict) in every repo.
 
 ## Enforcement
 
