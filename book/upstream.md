@@ -44,6 +44,28 @@ would stop it.
 **Lifts when** aqua compares cleaned paths, case-insensitively, in this skip. Not reported
 upstream yet.
 
+## lychee retries 429 only, never a 5xx
+
+**Symptom.** The `links` lane fails on one or several legs with a GitHub `503` for a
+link that answers `200` a minute later (a `github.com/<owner>/<repo>/blob/...` page,
+most often), while the other legs of the same run pass. The lane fails five times a
+run, once per verify leg, since every leg checks the same links.
+
+**Cause.** lychee judges a rejected status retryable only when it is `429`
+([lychee-lib/src/retry.rs](https://github.com/lycheeverse/lychee/blob/lychee-v0.24.2/lychee-lib/src/retry.rs)),
+so `max_retries` and `retry_wait_time` in `.limen/lychee.toml` never apply to a server
+error: one `503` blip is a finding. GitHub's web front answers `503` on a blob page for
+seconds to minutes at a time.
+
+**Workaround.** The `links` recipe (`.limen/just/lint.just`) runs a second pass over the
+links that failed with a server error, once, a minute later; a `5xx` that persists past
+it is a finding, since a server still erroring after a minute may be gone. A blip longer
+than the minute still reddens the lane (limen#318's run, three legs, 503 at both
+checks), and is rerun by the author, named as this flake.
+
+**Lifts when** lychee retries server errors under its own retry settings. Whether
+upstream tracks it is unverified.
+
 ## aqua's downloads have no timeout
 
 **Symptom.** A step that runs a tool for the first time on a runner hangs with no
