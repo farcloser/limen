@@ -20,8 +20,10 @@ packages:
     registry: local
   - name: git-for-windows/git@v2.56.0.windows.2
     registry: local
-  # --- toolchain + binary-release tools (standard registry, aqua-verified) ---
-  - name: golang/go@go1.27.2
+  # --- binary-release tools (standard registry, aqua-verified) ---
+  # Not here: golang/go. The Go toolchain is each repository's own pin, in its
+  # .aqua/aqua.yaml above the import (seeded once by `limen fix`, Renovate's
+  # afterwards): a standard-library fix must not wait for a limen release.
   - name: casey/just@1.58.0
   - name: koalaman/shellcheck@v0.11.0
   - name: google/yamlfmt@v0.21.0
@@ -32,7 +34,7 @@ packages:
   - name: jqlang/jq@jq-1.8.2
   - name: cli/cli@v2.102.0
   # --- spec tooling (local registry; see .limen/aqua-registry.yaml) ---
-  - name: quint-co/quint@v0.33.0 # renovate: depName=quint-co/quint
+  - name: quint-co/quint@v0.33.0
     registry: local
   - name: forkcloser/curl@v8.22.0
     registry: local

@@ -672,7 +672,7 @@ func TestFixGoToolsAdvisoryWithoutGo(t *testing.T) { // Serial by design: t.Sete
 }
 
 // TestAquaGoDirective: the go directive of a seeded tools/go.mod comes from
-// the golang/go pin of the canonical tool set the manifest imports.
+// the repository's own golang/go pin.
 func TestAquaGoDirective(t *testing.T) {
 	t.Parallel()
 
@@ -692,8 +692,8 @@ func TestAquaGoDirective(t *testing.T) {
 	}
 }
 
-// canonicalGoVersion is the golang/go version the canonical aqua.yaml pins,
-// read from the manifest itself so a Renovate bump never breaks the test.
+// canonicalGoVersion is the golang/go version limen's own aqua.yaml pins (the
+// seed), read from the manifest itself so a Renovate bump never breaks the test.
 func canonicalGoVersion(t *testing.T) string {
 	t.Helper()
 
