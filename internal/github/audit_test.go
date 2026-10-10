@@ -936,6 +936,38 @@ func TestInferRepo(t *testing.T) {
 	}
 }
 
+// TestActionsDisabled: Actions switched off at the repository fails the
+// allowed-actions check naming it (every required check could never run),
+// and the fix enables them with the restricted policy.
+func TestActionsDisabled(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/actions/permissions"] = stubResponse{
+		Body: `{"enabled":false,"allowed_actions":"selected"}`,
+	}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, found := findingByCheck(findings, "actions-allowed")
+	if !found || finding.Status != github.StatusFail || finding.Current != "disabled" {
+		t.Fatalf("Actions disabled: %v %q, want fail naming it", finding.Status, finding.Current)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == "actions-allowed" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), "PUT repos/test/repo/actions/permissions") ||
+		!strings.Contains(string(log), `"enabled":true`) {
+		t.Errorf("expected Actions to be enabled via PUT, got: %s", log)
+	}
+}
+
 func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
 	responses["GET repos/test/repo/actions/permissions/fork-pr-contributor-approval"] = stubResponse{
