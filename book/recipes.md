@@ -250,6 +250,12 @@ Two roles deserve emphasis because they close the enforcement loop:
   tooling it is built and checked with (a new limen pin, a linter, a CI action) is not one,
   and neither is documentation (the readme, the licence file, `UPSTREAM.md`, a comment): it
   never triggers a release on its own, and goes out with the next real change.
+- **A release waits for an empty queue.** No tag while the repository has an open pull
+  request, a bot's included: what is open is either part of the release, in which case the
+  tag is early, or not, in which case it lands minutes after the tag and the next release is
+  a bump away, the churn this rule ends. The release recipe refuses while `gh pr list` is
+  not empty; closing or merging what is open is the human's, and the queue it leaves is the
+  release.
 - **A release's notes are its pull requests' titles.** No one writes them, and no file
   in the tree holds them: a hand-kept `CHANGELOG.md` puts every open pull request on the
   same lines, so each merge forces a rebase on the others. The `changelog:` section of
