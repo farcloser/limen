@@ -60,7 +60,8 @@ chapter; the procedure is limen's `skills/contribute`.
   session's sweep reports green or red back, and that resumes the work); and with the
   review request, as one step, never one without the other.
 - **Not yours to do:** merge by hand, push to `main`, force-push a shared branch, tag a
-  release.
+  release. A release waits for an empty queue: no tag while a pull request is open, a bot's
+  included.
 
 ## Scope
 
