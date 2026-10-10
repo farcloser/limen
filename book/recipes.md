@@ -71,7 +71,7 @@ The consequence, and the point: a recipe behaves identically on every machine th
 anything *not* pinned is unusable from a recipe by construction. (This is also why a
 language toolchain that lives outside aqua — a rustup-managed cargo, for instance — needs
 an explicit, documented decision before its recipes can work; the Rust one is in the
-[per-language rules](./per-language.md#rust--cargo-is-pinned-through-rustup-never-ambient).)
+[per-language rules](./rust.md).)
 
 ## Conventions every shared recipe follows
 
@@ -90,7 +90,7 @@ an explicit, documented decision before its recipes can work; the Rust one is in
   `BUILD_GO_LDFLAGS` for the build module. Lint *policy* is not a knob: what
   `just do lint go` accepts — a linter off, an exclusion, a module go-licenses must ignore
   — is declared in the project's `.lint-go.yaml`, a committed file with a defined vocabulary
-  ([per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml)),
+  ([per-language](./linting-go.md#one-lint-baseline-per-project-carve-outs-lint-goyaml)),
   never an exported variable. A
   project sets them once in the root `.justfile` (`export NAME := 'value'` — exports propagate
   into every module recipe), or on the invocation for a one-off. The exceptions that
@@ -167,7 +167,7 @@ What each shared module is *for* — mechanics live in the module files themselv
   commit hygiene over a range) in the default, plus the explicit `go` submodule (code, vet, mod,
   licenses, nilaway, and the informational deadcode report), `rust`, `homebrew`
   (formula style and audit through brew's own vendored tooling — see
-  [per-language rules](./per-language.md#homebrew-formulas)), and `github` (the live GitHub
+  [per-language rules](./homebrew.md)), and `github` (the live GitHub
   settings audit — `limen github check`, needing network and an authed `gh`; see
   [the github chapter](./github.md)). A linter's verdict is a function of the tree: the
   same tree gets the same answer tomorrow. What is not — a scan against a database that

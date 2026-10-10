@@ -87,7 +87,7 @@ in `.aqua/aqua.yaml` is what nothing here compiles: tools in other languages, li
 `limen` and `limen-lint-go`, one release, one archive, the checksums and signature of which
 are what every repository pins (the release workflow builds both with the pinned toolchain,
 so the provenance argument does not apply, and neither loads Go source; see
-[per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml)) —
+[per-language](./linting-go.md#one-lint-baseline-per-project-carve-outs-lint-goyaml)) —
 and the Go tools a write job must run without a toolchain, `gh` and `cosign`, until
 in-process verification retires them.
 
