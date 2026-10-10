@@ -10,6 +10,8 @@ every language, and a sub-document holds one language's form.
   - [Coding agents as contributors](./agents.md): identity, key, sandbox, the workflow, the
     shape of a pull request, how sessions talk.
   - [Reviewing code](./review.md): the reviewer's side; who approves what.
+  - [Identity and keys](./identity.md): the human's hardware-bound key, for authentication
+    and signing; what to do when the token is lost.
 - **The rig**: limen, what every repository carries and runs.
   - [Mandatory files](./mandatory-files.md): the pinned and seeded files, and why.
   - [The shared recipes](./recipes.md): the hermetic environment and the `just` lanes; releasing.
