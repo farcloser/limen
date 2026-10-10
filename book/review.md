@@ -75,6 +75,12 @@ succeeded*; a fetch whose error went to `/dev/null` has audited the past. Use th
 rig's transport (`git c fetch`) or the API, and say which. What could not be
 verified is stated as unverified, not inferred.
 
+A search that found nothing has verified the search, not the tree, until the same
+search finds something known to be there. `git grep -E` with `\b` matches nothing on
+macOS, whose ERE has no word boundary (`-P` or an explicit class does), and a claim
+that no file consumed a type two files switch on went out marked V. A negative result
+is V with its positive control named, or it is U.
+
 ## Dependency bumps
 
 A green run and a pin that matches upstream are the bump's preconditions, not its
