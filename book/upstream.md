@@ -57,9 +57,12 @@ so `max_retries` and `retry_wait_time` in `.limen/lychee.toml` never apply to a 
 error: one `503` blip is a finding. GitHub's web front answers `503` on a blob page for
 seconds to minutes at a time.
 
-**Workaround.** The `links` recipe (`.limen/just/lint.just`) runs a second pass over the
-links that failed with a server error, once, a minute later; a `5xx` that persists past
-it is a finding, since a server still erroring after a minute may be gone. A blip longer
+**Workaround.** The `links` recipe (`.limen/just/security.just`) runs a second pass over
+the links that failed with a server error, once, a minute later; a `5xx` that persists past
+it is a finding, since a server still erroring after a minute may be gone. The pages that
+failed most, our own repositories' files on github.com (AGENTS.md's links to this book),
+are excluded in `.limen/lychee.toml`: github.com throttles them from Actions runners, and a
+file in a repository we own is checked as a file by that repository's own lane. A blip longer
 than the minute still reddens the lane (limen#318's run, three legs, 503 at both
 checks), and is rerun by the author, named as this flake.
 
