@@ -325,7 +325,12 @@ What the `.aqua/aqua.yaml` must carry — the manifest is **subset-pinned** (see
   advisory lands, and the fix must not wait for a limen release; so `limen fix` seeds the pin
   once, from limen's own manifest (the version the running release was built and tested
   with), and Renovate bumps it per repository from then on, in the aqua group, landing on the
-  reviewing session's approval. A repository that lags is caught twice: `GOTOOLCHAIN=local`
+  reviewing session's approval. The seed is made on `main`, by the owner (`just do tools add
+  golang/go <version>`, or `limen fix` there), never on a Renovate branch: Renovate renders
+  `.aqua/aqua.yaml` on every run, so a line the converge added there was removed, added and
+  removed again, the branch force-pushed every minute (forkcloser/curl#50, seventeen times);
+  on a Renovate branch `limen fix` leaves that file alone and `limen check` names what `main`
+  needs. A repository that lags is caught twice: `GOTOOLCHAIN=local`
   refuses a `go.mod` ahead of the pin, loudly, and the security lane names the stdlib finding
   until the bump lands. The `go.mod` baseline rule is unchanged: the directive stays the
   earliest supported release, whatever the toolchain pinned to build. No other canonical pin

@@ -246,11 +246,13 @@ func runFix(ctx context.Context, version string, args []string, stdout, stderr i
 		return 2
 	}
 
-	// fix never creates a LICENSE: no License in the options.
+	// fix never creates a LICENSE: no License in the options. GITHUB_REF_NAME
+	// is the Actions runner's; a renovate/ branch is Renovate's.
 	outcomes := rules.Fix(ctx, root, rules.FixOptions{
-		Policy:      policyFor(ctx, root, discoverIdentity),
-		SelfVersion: releaseVersion(version),
-		ToolPins:    releaseToolPins(),
+		Policy:         policyFor(ctx, root, discoverIdentity),
+		SelfVersion:    releaseVersion(version),
+		ToolPins:       releaseToolPins(),
+		RenovateBranch: strings.HasPrefix(os.Getenv("GITHUB_REF_NAME"), "renovate/"),
 	})
 
 	return reportOutcomes(stdout, stderr, cmdFix, root, outcomes, *asJSON)

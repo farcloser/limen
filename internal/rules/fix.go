@@ -66,6 +66,12 @@ type FixOptions struct {
 	// limen that wrote its canonical files is the limen it pins — see
 	// mergeAquaManifest for the full argument.
 	SelfVersion string
+	// RenovateBranch is set when fix runs on a branch Renovate owns (the
+	// checksum workflow). Renovate renders .aqua/aqua.yaml itself on every
+	// run, so a line fix adds there is removed on the next, fix adds it
+	// again, and the branch is force-pushed forever: on such a branch fix
+	// leaves the project manifest alone and check names what main needs.
+	RenovateBranch bool
 	// ToolPins are the versions limen's own tools modules require (see
 	// ToolPins); a missing tool directive is seeded at them. Zero for a
 	// development build, which then refuses to seed one.
@@ -92,7 +98,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateGitattributes(root))
 	add(remediateAgents(root)...)
 	add(remediateJustfile(root)...)
-	add(remediateAqua(ctx, root, opts.SelfVersion)...)
+	add(remediateAqua(ctx, root, opts.SelfVersion, opts.RenovateBranch)...)
 	add(remediateGoTools(ctx, root, opts.ToolPins))
 	add(remediateLintGo(root)...)
 	add(remediateLychee(root)...)
@@ -720,7 +726,7 @@ func pinExact(root, rule, relPath, canonical string) Outcome {
 // describe a different package set. A manifest that cannot be parsed, a failed
 // regeneration, or anything merging cannot resolve (duplicate package entries)
 // ends as an advisory.
-func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
+func remediateAqua(ctx context.Context, root, selfVersion string, renovateBranch bool) []Outcome {
 	var (
 		out           []Outcome
 		advised       bool
@@ -738,14 +744,25 @@ func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 	}
 
 	name := aquaManifestFile
-	if !exists(filepath.Join(root, filepath.FromSlash(name))) {
+
+	switch {
+	case !exists(filepath.Join(root, filepath.FromSlash(name))):
 		// A seed that is not an advisory wrote the manifest.
 		var seeded []Outcome
 
 		seeded, pristine, advised = seedAqua(root, name, selfVersion)
 		out = append(out, seeded...)
 		manifestWrote = !advised
-	} else {
+	case renovateBranch:
+		// Renovate's file on Renovate's branch: whatever it lacks is main's
+		// to gain, by a fix run there (the check in CI names it).
+		out = append(out, Outcome{
+			Rule:    ruleAqua,
+			Action:  ActionNone,
+			Path:    name,
+			Message: name + " is Renovate's on this branch and left as is: what it lacks, `limen fix` adds on main",
+		})
+	default:
 		var merged []Outcome
 
 		merged, manifestWrote, advised = mergeAquaFile(root, name, selfVersion)
@@ -773,8 +790,10 @@ func remediateAqua(ctx context.Context, root, selfVersion string) []Outcome {
 
 	// Surface any residual failure (e.g. duplicate package entries, which
 	// merging cannot resolve safely), so fix never reports a broken aqua setup
-	// as resolved. Skipped when an advisory was already issued above.
-	if !advised {
+	// as resolved. Skipped when an advisory was already issued above, and on a
+	// Renovate branch, where the manifest was deliberately left to main and
+	// the check in CI says what it lacks.
+	if !advised && !renovateBranch {
 		if f := checkAqua(root); !f.OK() {
 			out = append(out, Outcome{Rule: ruleAqua, Action: ActionAdvisory, Path: f.Path, Message: f.Message})
 		}

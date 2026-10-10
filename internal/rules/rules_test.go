@@ -886,6 +886,57 @@ func TestAquaGoPinSeeded(t *testing.T) {
 	}
 }
 
+// TestAquaRenovateBranchLeavesManifest: on a Renovate branch, fix leaves
+// .aqua/aqua.yaml as Renovate rendered it, whatever it lacks, and the check
+// still names the gap; Renovate rewrites the file on every run, so a line fix
+// added there made the branch force-push forever.
+func TestAquaRenovateBranchLeavesManifest(t *testing.T) {
+	t.Parallel()
+
+	goLine, _ := canonicalPin(t, "golang/go")
+
+	files := compliantFiles()
+	manifest := strings.Replace(limen.CanonicalAquaYAML, goLine, "", 1)
+	files[".aqua/aqua.yaml"] = manifest
+	dir := writeRepo(t, files)
+
+	var left bool
+
+	for _, o := range rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), RenovateBranch: true}) {
+		if o.Rule == "aqua" && o.Path == ".aqua/aqua.yaml" {
+			if o.Action != rules.ActionNone || !strings.Contains(o.Message, "Renovate") {
+				t.Errorf(
+					"on a Renovate branch the manifest outcome must be none, naming Renovate: %s %s",
+					o.Action,
+					o.Message,
+				)
+			}
+
+			left = true
+		}
+
+		if o.Action == rules.ActionAdvisory && o.Rule == "aqua" {
+			t.Errorf("no aqua advisory on a Renovate branch, got: %s", o.Message)
+		}
+	}
+
+	if !left {
+		t.Error("fix reported nothing about the manifest")
+	}
+
+	if data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml")); string(data) != manifest {
+		t.Errorf("fix must leave Renovate's manifest alone:\n%s", data)
+	}
+
+	if f := findingByRule(
+		rules.Check(dir, rules.DefaultPolicy()),
+		"aqua",
+	); f.OK() ||
+		!strings.Contains(f.Message, "golang/go") {
+		t.Errorf("check must still name the missing pin: %v %s", f.OK(), f.Message)
+	}
+}
+
 // TestAquaOverrideBelowImport: aqua takes a package's first declaration, so an
 // override below the import would be shadowed by it. Check fails; fix moves the
 // import to the end of the list, keeps the override, and the rule passes.
