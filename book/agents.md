@@ -447,6 +447,16 @@ The human sets the priorities; the agent measures scope before it moves.
   turn and tells it nothing it can use. The messages the workflow requires,
   such as the reviewing session's at open and at the review request, are
   not this kind.
+- **A message goes to the one session with a stake in it.** Nearly every
+  message is one-to-one: a finding on a pull request goes to the session
+  that owns the pull request, and nowhere else; a defect in another
+  repository goes to its owner. A broadcast to every session is the
+  human's, and rare. Waiting on a merge is not a reason to message anyone:
+  watch the pull request with the tool, or ask the reviewing session to say
+  when it lands, and do the other work meanwhile. Every message a session
+  reads costs it a turn, and a message it had no stake in costs the turn
+  for nothing: a day of liberal messaging burned a visible share of the
+  team's budget on relays nobody acted on.
 
 These rules ship in two forms: compressed into the content-pinned `AGENTS.md`
 every repository carries — the harness-neutral file any coding agent reads —
