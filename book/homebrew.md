@@ -39,13 +39,22 @@ formula for one of our own repositories builds from that repository's signed rel
 version from it, the revision ties the checkout to that exact commit, and one Renovate
 `github-tags` manager rewrites both. Never `branch:` under a constant `version "dev"`:
 Homebrew compares versions to decide what is outdated, and `dev` equals `dev`, so a bump
-of the branch, or of a bare `revision:`, reaches no machine that already has the formula,
-and a `post_install` meant to re-run on upgrade never runs again (limen's own formula sat
-on a commit pin that way until limen-install had a release). Upstream's `head` line is
+of the branch, or of a bare `revision:`, reaches no machine that already has the formula
+(limen's own sat on a commit pin that way until limen-install had a release). Upstream's
+`head` line is
 stripped by the fork's patch: a build from a moving branch, pinned by nothing. The one
 accepted `branch:` is a meta-formula that installs nothing but its dependencies and a
 README; a change to its dependency list bumps its `revision`, so installed machines pick
 it up.
+
+**No `post_install` that writes outside the prefix.** Homebrew runs a formula's
+`post_install` in its sandbox, with writes allowed to the Cellar, the prefix's own
+directories (`etc`, `var`, the link directories), the formula's logs and Xcode's caches, and
+nothing under `$HOME`. One that writes to `$HOME` dies at its first write, `brew` prints a
+warning and moves on, and nothing looks wrong: limen's formula carried one for months that
+never ran once, and the machine's global pin never moved past the first install. A step that
+writes the user's home is the user's to run, from a shell, and a formula whose whole job was
+that step has no reason to exist: limen's was removed, and the machine toolset is aqua's.
 
 **Forks of upstream formulas** are refreshed from a **pinned commit** of the upstream tap
 (homebrew-core), never from its default branch: the refresh script carries the commit, a
