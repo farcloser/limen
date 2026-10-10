@@ -174,9 +174,12 @@ setup).
   first run has not happened yet fails too; not yet true and false deserve
   the same red. A self-hosted Renovate that keeps no dashboard declares
   `renovate-processing` as an exception.
-- **Actions hardened.** The default workflow token is read-only, workflows
+- **Actions hardened, and on.** The default workflow token is read-only, workflows
   cannot approve pull requests, and the allowed-actions policy is restricted —
-  GitHub-owned actions plus an explicitly pinned allowlist, never "all". This
+  GitHub-owned actions plus an explicitly pinned allowlist, never "all". Actions
+  switched off at the repository fails the same check: the required checks can
+  then never run, and a pull request waits on an empty check suite with nothing
+  naming the cause (forkcloser/xz, two hours of it during an unrelated outage). This
   mirrors the construction rules of the canonical workflows themselves (one
   SHA-pinned first-party action, everything else through aqua and `just`).
 - **Features off unless used, issues on.** Wiki, projects, discussions:

@@ -743,33 +743,48 @@ func (a *auditor) auditActionsAllowed() {
 
 	permissionsOutcome := a.client.getJSON(a.ctx, "/actions/permissions", &permissions)
 
+	// Enabled, with GitHub-owned actions plus a pinned allowlist: the fix for
+	// a policy of "all" and for Actions switched off alike.
+	restrict := func(ctx context.Context, apiClient client) error {
+		if err := apiClient.writeJSON(ctx, "PUT", "/actions/permissions", map[string]any{
+			"enabled":         true,
+			"allowed_actions": "selected",
+		}); err != nil {
+			return err
+		}
+
+		return apiClient.writeJSON(ctx, "PUT", "/actions/permissions/selected-actions", map[string]any{
+			"github_owned_allowed": true,
+			"verified_allowed":     false,
+			"patterns_allowed":     []string{},
+		})
+	}
+
 	switch {
 	case permissionsOutcome.err != nil || permissionsOutcome.notFound:
 		a.unverifiable(orNotFound(permissionsOutcome), checkActionsAllowed)
-	case permissions.Enabled && permissions.AllowedActions == allowedActionsAll:
+	case !permissions.Enabled:
+		// Off is not "restricted": every check the rulesets require can then
+		// never run, and a pull request waits on an empty check suite with
+		// nothing naming the cause (forkcloser/xz, two hours of it).
+		a.flag(checkActionsAllowed, StatusFail, "disabled", "enabled, selected",
+			"Actions are disabled for the repository — the required checks can never run; enable them with "+
+				"GitHub-owned actions plus a pinned allowlist",
+			&Change{
+				Check:   checkActionsAllowed,
+				Summary: "actions: disabled → enabled, selected (GitHub-owned only)",
+				apply:   restrict,
+			})
+	case permissions.AllowedActions == allowedActionsAll:
 		a.flag(checkActionsAllowed, StatusFail, allowedActionsAll, "selected",
 			"the allowed-actions policy must not be \"all\" — restrict to GitHub-owned plus a pinned allowlist",
 			&Change{
 				Check:   checkActionsAllowed,
 				Summary: "allowed actions: all → selected (GitHub-owned only)",
-				apply: func(ctx context.Context, apiClient client) error {
-					if err := apiClient.writeJSON(ctx, "PUT", "/actions/permissions", map[string]any{
-						"enabled":         true,
-						"allowed_actions": "selected",
-					}); err != nil {
-						return err
-					}
-
-					return apiClient.writeJSON(ctx, "PUT", "/actions/permissions/selected-actions", map[string]any{
-						"github_owned_allowed": true,
-						"verified_allowed":     false,
-						"patterns_allowed":     []string{},
-					})
-				},
+				apply:   restrict,
 			})
 	default:
-		a.flag(checkActionsAllowed, StatusOK, "", "",
-			"allowed-actions policy is restricted (or Actions disabled entirely)", nil)
+		a.flag(checkActionsAllowed, StatusOK, "", "", "allowed-actions policy is restricted", nil)
 	}
 }
 
