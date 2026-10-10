@@ -49,10 +49,13 @@ the DCO sign-off are different things and both are required; the git moves are i
 
 **If the token is lost or stolen.** Revoke the key on GitHub at once, as an authentication
 key *and* as a signing key: the two registrations are independent and either one left
-behind is a door. Then generate a new key on a new token and register it; commits signed
-with the old key stay verified, since a revocation is not a retroactive invalidation, and
-the `.lint-signers` entry for the old key stays for the same reason, with the new key
-added beside it.
+behind is a door. Then generate a new key on a new token and register it. Commits the old
+key signed keep their badge: GitHub records a verification at push time and never
+re-evaluates it when a key is later removed, revoked or expired
+([persistent commit signature verification](https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification#persistent-commit-signature-verification));
+only a commit signed with the removed key and pushed *after* the removal shows as
+unverified, its key unknown. Locally, verification reads `.lint-signers`, so the old key's
+entry stays there as the record, with the new key added beside it.
 
 **Changing the passphrase** rewrites the key file's protection, not the key:
 `ssh-keygen -p -f ~/.ssh/id_ed25519_sk`.
