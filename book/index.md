@@ -1,28 +1,23 @@
 # Farcloser: the engineering book
 
-This book covers everything related to developers tooling, style and
-architecture that is common to all our projects.
+Everything about tooling, style and architecture that is common to all our projects:
+generic where it states doctrine, specific and opinionated where it describes the shared
+tooling. One chapter per file, each readable on its own; a chapter holds what applies to
+every language, and links a sub-document for what applies to one.
 
-It is both generic (providing high-level guidance on generic doctrine decisions)
-and specific and opinionated (when it comes to our shared tooling).
-
-The book is divided in many sections, each cleanly covering a specific aspect,
-which can be read or referred to individually in relative isolation.
-
-## Generic principles
-
-We value above all:
-- absolute correctness: no spaghetti, half baked abstractions, no warnings tolerated, no "should work for now". It just works.
-- KISS: never over engineer for an hypothetical future expansion.
-Either the use case is genuinely generic now, or by design, or it should be kept SIMPLE
-- proper architecture and modularization: interfaces are *client-defined* to reduce hard dependencies, underlying details never leak into high level abstractions
-- consumers get the contract, and only the contract: a consumer of a library or a system gets to demand properties — that it behaves a certain way — and that contract is all it needs to know. A bug, or a violation of the contract, is the owner's to resolve, by clarifying the contract or fixing the implementation; anything else is off limits. How the owner tests its internals is not the consumer's business. A comment in package A does not narrate what package B does with A's output; it states A's own guarantee. A wrapper with a stated contract (the same as `os`, plus one Windows difference) does not grow an export outside that contract because a caller found it a convenient place for a platform split: the caller keeps its helper private, or the thing goes where its general meaning lives. The failure mode is spaghetti with leaky abstractions; what is wanted is clean, crisp, simple abstractions with no internal leakage
-- tests are black-box, and never bought with indirection: a test lives in the external test package (`package foo_test` in Go — the pinned lint enforces the boundary) and reaches only what a consumer reaches, never internals or private state. Production code is never given an interface, a function field, or any other indirection whose only purpose is to let a test substitute a fake — that is bad design, not testability; an interface is defined by a real client, never by a test. When the code path with the fix is not reachable from the outside, the question is how the test rig is modelled, never whether to open the code up. Some properties — a power loss, a filesystem failure — are not observable from a unit test at all; then there is no unit test, and a fake one that asserts a mock was called is worse than none, because it proves that the code calls itself. Correctness there is by construction and by reading; a real fault-injection environment is a separate, larger question
-- a package's tests are one contract, stated once and checked within a bound: the contract is written at the top of the test package from the sources that define it, a bounded walk holds the code to every edge of it, a fuzz target runs past the bound, and an older suite goes only when a mutation score shows the new one catches every mutant the old one did (see [the tests are one contract](./per-language.md#go--the-tests-are-one-contract-checked-within-a-bound)). Writing the contract down is where the bugs are found
-- a type admits only its valid values: a value that must not exist is removed by the type — sealed, unexported, returned by a function — not guarded at every call site, and not given a meaning by default (a zero value that silently stands for something). Nothing exported is mutable package state. The simplest shape that holds wins: no state kept twice, no helper that only forwards, and a declaration moves when the reason it sat somewhere goes: an error left in a build-tagged file after the build tag is gone is in the wrong file
-- a size that comes from input is bounded before anything is allocated from it: a dimension, a count or a length read from a file or a graph is checked against a named limit, with its own error, before the first allocation it drives, and a test runs at the limit. An unbounded size is a crash the input chooses. In go-graphviz a page is refused above its pixel budget, a node image above the pixel count its header declares (and the file is read no further than such an image can take), and an allocation the sandboxed module cannot make fails with an out-of-memory error instead of writing through the null pointer `malloc` returned; the budgets were set when a WebP header, misread by the library, asked for hundreds of millions of points a side
-- error handling is first-class citizen: a module has a small set of sentinels, one per fault class a caller acts on (invalid input, bad argument, transport failure passed through, not implemented), every error wraps one, and a caller compares with `errors.Is`, never by text (see [Go — errors](./per-language.md#go--errors-a-sentinel-per-fault-class-wrapped-at-every-site))
-- logging: a library writes nothing to standard error; a command with diagnostics uses `log/slog`, set up once in `main`, and a command whose output is messages prints them (see [Go — logging](./per-language.md#go--logging-a-library-writes-nothing-a-command-speaks-once-in-main))
-- pinned means by digest: every image, action, and tool is pinned to content, not to a tag — in code, in examples, and in documentation alike, because examples are what gets copied
-- every linter finding is judged, and none is ignored: it is fixed when the fix makes the code better, silenced inline when it does not — by its rule, never by its linter, with the reason the code is right as it is — and raised against the baseline when the rule itself is wrong. A linter serves the code; working code is never bent to satisfy one (see [judging a finding](./per-language.md#go--judging-a-finding) and [silencing a finding](./per-language.md#go--silencing-a-finding))
-- a comment names a trap, not a story: it says the one non-obvious thing a future editor would get wrong at that spot — a working-directory constraint, an ordering that matters — and nothing else. Where a tool comes from or which version runs is the hermetic PATH's job and the book's to explain once; what the code does, why a pin is what it is, what the pull request was about belongs in the commit message. One line beats five; none beats one when the code already says it. A comment is read against the code it sits on at every touch, since a wrong one is believed: a package doc that promised a function that never existed, kept from the port it came with (https://github.com/mycophonic/primordium/pull/163), and a method doc that said "without a syscall" over code that made one on every call (https://github.com/mycophonic/primordium/pull/162), each stood for months because nobody reads a comment they think they wrote
+| Chapter | What it holds |
+|---|---|
+| [Generic principles](./principles.md) | What we value above all: correctness, simplicity, contracts, types, errors, logging, pinning, linters, comments. Read first. |
+| [Coding agents as contributors](./agents.md) | A coding agent's identity, key and sandbox; the workflow from branch to merge; the shape of a pull request; how sessions talk to each other. |
+| [Reviewing code](./review.md) | The reviewer's side of the same workflow: the order of the questions, who approves what, the shape of a review. |
+| [Mandatory files](./mandatory-files.md) | Every file limen requires in every repository, content-pinned or seeded once, and why. |
+| [The shared recipes](./recipes.md) | The hermetic execution environment and every `just` recipe the baseline provides: lint, fix, test, build, security, release. |
+| [Project tooling](./tooling.md) | aqua and the pinned toolchain, Go-built tools, pinned artifacts, Renovate, the checksum workflow, machine setup. |
+| [GitHub settings](./github.md) | Repository and organization settings as configuration: rulesets, auto-merge, the security lane, the audit. |
+| [Testing](./testing.md) | What a test is for, what it may reach, and when a suite is replaced. Go: [testing-go](./testing-go.md). |
+| [Per-language rules](./per-language.md) | Rules that apply when a project uses a given language or tool: Shell, YAML, Homebrew, Rust, Go (lint baseline, findings, versions, errors, logging, paths). Being split into chapters like testing. |
+| [Windows](./windows.md) | What the Windows legs run, what differs there, and what breaks. |
+| [Forks](./forks.md) | Onboarding and maintaining a fork of an upstream project: provenance, order of work, pitfalls. |
+| [Project websites](./web.md) | A project's static site: what it loads, what it claims, how it reads on a phone. |
+| [Known upstream bugs](./upstream.md) | Bugs in tools we pin and do not own, each with its symptom, cause, workaround and lift. |
+| [Testing in a VM](./vm_testing.md) | Running the Windows legs in a local virtual machine. |

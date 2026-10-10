@@ -45,7 +45,7 @@ baseline's owner when the mechanism is the baseline's.
 - **A re-push is a new change.** After a redesign the whole pull request is read
   again as if for the first time, and two questions are asked of it: what can now
   go, and why each piece is where it is. A design question is judged against the
-  [generic principles](./index.md#generic-principles), not against the previous
+  [generic principles](./principles.md), not against the previous
   round.
 - **Shape blocks before the first release.** A flaw in an exported API — mutable
   state, a value the type should not admit, state kept twice — is a ⚠️ or a 🛑
