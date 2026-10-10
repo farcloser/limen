@@ -276,6 +276,12 @@ afterward if it says it changed your rc. Checksum enforcement and registry polic
 configured **per project**, not globally — the global config exists only to carry the
 scaffolder.
 
+The script runs with the system directories first on its `PATH`. On a machine that already
+has limen, `cat`, `mkdir` and the rest of coreutils, and `curl`, are aqua proxies, and a proxy
+parses the global config before it runs anything: a bootstrap that rewrites that config
+through a proxy truncates the file, fails in the proxy, and leaves every proxy on the
+machine failing. The same holds for any script that edits an aqua config on a limen machine.
+
 A second, optional bootstrap in the same repository, `limen-install-agent`, sets the
 machine up so a coding agent can commit and push as its own identity — see
 [coding agents as contributors](./agents.md).
