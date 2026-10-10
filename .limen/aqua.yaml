@@ -40,5 +40,5 @@ packages:
     registry: local
   # darwin/arm64 only. Its `docker` link shadows the machine's Docker on the
   # hermetic PATH there; aqua skips the package everywhere else.
-  - name: farcloser/ossein@v0.3.0
+  - name: farcloser/ossein@v0.3.1
     registry: local
