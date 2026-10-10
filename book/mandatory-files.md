@@ -18,8 +18,8 @@ lowest bar a repo can clear, and the first rule `limen` enforces.
 | `.limen/lychee.toml` | Present and canonical — the shared [link-checker configuration](#link-checking--limenlycheetoml). |
 | `.github/` workflows | The [CI surface](#ci-workflows--github): two content-pinned limen pieces, plus seeded-once workflows and renovate config. |
 | `tools/go.mod` | Declares the Go-built tools the recipes run as `tool` directives; a Go module adds the source analyzers — the [`gotools` rule](#the-gotools-rule--toolsgomod-tool-directives). |
-| `.limen/lint-go.yaml` | Go modules only. Present and canonical — the shared [Go lint baseline](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml) `limen-lint-go` renders with the project's carve-outs. |
-| `.lint-go.yaml` | Go modules only. The project's carve-outs from the Go lint baseline, seeded once and the project's own — the `lintgo` rule, in [per-language](./per-language.md#go--one-lint-baseline-per-project-carve-outs-lint-goyaml). A root `.golangci.yml` is a stray. |
+| `.limen/lint-go.yaml` | Go modules only. Present and canonical — the shared [Go lint baseline](./linting-go.md#one-lint-baseline-per-project-carve-outs-lint-goyaml) `limen-lint-go` renders with the project's carve-outs. |
+| `.lint-go.yaml` | Go modules only. The project's carve-outs from the Go lint baseline, seeded once and the project's own — the `lintgo` rule, in [per-language](./linting-go.md#one-lint-baseline-per-project-carve-outs-lint-goyaml). A root `.golangci.yml` is a stray. |
 
 `limen` resolves common spelling/extension variants (`LICENSE`, `LICENSE.md`, `LICENSE.txt`,
 `COPYING`; `README`, `README.md`, `README.txt`) so a repo is not failed on a technicality,
@@ -50,11 +50,11 @@ and none of them can be read as green. The order is:
    `limen fix` and the mechanical fixes (`just do fix …`). Every Go finding still left is
    exempted in `.lint-go.yaml`, by linter and path, as narrowly as turns the lane green, in
    one block whose comment marks it as the onboarding backlog. The other lanes have no overlay
-   ([per-language rules](./per-language.md)); their findings are fixed in the enrolment pull
+   ([linting](./linting.md)); their findings are fixed in the enrolment pull
    request itself.
 2. **Alignment empties the block.** One linter or one package per pull request, each green,
    each finding judged as any other is
-   ([judging a finding](./per-language.md#go--judging-a-finding)): fixed, silenced inline with
+   ([judging a finding](./linting.md#judging-a-finding)): fixed, silenced inline with
    its reason, or raised as a rule. The last alignment pull request deletes the block.
 
 The backlog block is the one carve-out that is not a judgment: every other carve-out records a
@@ -65,6 +65,14 @@ Two shortcuts are ruled out. Merging the enrolment red with the alignment "right
 leaves every pull request opened in between red for a reason unrelated to its change. And
 enrolment and alignment in one pull request mixes mechanical rewrites with judged code
 changes in one diff, which cannot be reviewed as either.
+
+Beside the files every repository carries, limen enforces rules that apply **only when a
+project uses a given language or tool**: if the trigger is present (a Go module, YAML files, a
+Homebrew tap), the requirement is mandatory; if it is absent, the rule does not apply and
+`limen` reports nothing for it. A pure-Go repository is never asked for a shell config, and a
+repository that ships YAML cannot quietly skip one. Those rules live with their topic:
+[linting](./linting.md) and its sub-documents, [dependencies](./dependencies.md),
+[homebrew](./homebrew.md), [rust](./rust.md).
 
 ## Allowed licenses
 
@@ -278,7 +286,7 @@ each project keeps room of its own:
 The `.limen/` directory also parks a few non-recipe config files to keep the repo root uncluttered
 (`.limen/.shellcheckrc`, `.limen/.yamlfmt`, `.limen/lint-go.yaml`, `.limen/aqua-registry.yaml`, `.limen/aqua.yaml`,
 `.limen/lychee.toml`). These are *not* just modules — only `*.just` files are — and they are
-governed by their own rules ([per-language](./per-language.md), [tooling](./tooling.md),
+governed by their own rules ([linting](./linting.md), [tooling](./tooling.md),
 [link checking](#link-checking--limenlycheetoml)), not the .justfile content-pin.
 
 Orientation recipes are flat — `just info`, a project's own `just run` — so the universal

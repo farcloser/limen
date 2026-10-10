@@ -145,7 +145,7 @@ setup).
   alerts, private vulnerability reporting. These are GitHub's own defenses;
   there is no repository for which "off" is the right setting. (Code scanning
   is deliberately *not* required: the SAST posture is the per-platform golangci
-  run plus govulncheck — see [per-language](./per-language.md) tooling; a
+  run plus govulncheck — see [linting-go](./linting-go.md); a
   repo may opt in via the exceptions file.)
 - **One dependency bot.** Dependabot *alerts* stay on because they are the
   vulnerability signal Renovate consumes; Dependabot *security updates* — the
