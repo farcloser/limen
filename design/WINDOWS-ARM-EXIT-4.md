@@ -75,7 +75,7 @@ the guest's package (Git 2.55.0.windows.2 arm64, bash 5.3.15(1)-release
 `x86_64-pc-cygwin`, `uname -r` 3.6.9-b4195d69.x86_64). MSYS2 documents that its arm64
 installer contains the x86_64 build: https://www.msys2.org/docs/arm64/. The runner
 image installs the arm64 Git for Windows asset
-(https://github.com/actions/runner-images/blob/main/images/windows/scripts/build/Install-Git.ps1,
+(https://github.com/actions/runner-images/blob/1b60920cc98c97c717d4790ffdfcb5350e21b5ad/images/windows/scripts/build/Install-Git.ps1,
 the `Test-IsArm64` branch) and prepends `C:\Program Files\Git\bin` to the machine PATH
 (`Add-MachinePathItem`, defined in `images/windows/scripts/helpers/PathHelpers.ps1`).
 The canary job recorded the runner's versions: Git 2.55.0.windows.5, bash
