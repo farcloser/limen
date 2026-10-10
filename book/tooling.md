@@ -261,15 +261,14 @@ whole global toolchain:
    tool: `limen` itself.
 4. Runs `aqua i -a` — after which **both `aqua` and `limen` are available globally**.
 
-Run it either way:
+Run it from a clone:
 
 ```bash
-# Homebrew (the formula ships only the bootstrap script; `brew upgrade limen` re-runs it):
-brew install farcloser/brews/limen
-
-# or directly:
 git clone https://github.com/farcloser/limen-install && ./limen-install/limen-install
 ```
+
+Never from a Homebrew formula: a `post_install` runs in Homebrew's sandbox and cannot write
+the user's home ([homebrew](./homebrew.md)).
 
 The script is idempotent — safe on a fresh machine and as an update; open a new shell
 afterward if it says it changed your rc. Checksum enforcement and registry policy remain
