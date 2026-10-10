@@ -10,6 +10,10 @@ The shape of every per-language rule is the same: **if the trigger is present, t
 requirement is mandatory; if it is absent, the rule does not apply** and `limen` reports
 nothing for it.
 
+This chapter is being split into chapters by topic, each generic with a language
+sub-document ([the index](./index.md)): Go's testing rules already live in
+[testing-go](./testing-go.md).
+
 ## Shell — `.limen/.shellcheckrc`
 
 | Trigger | Requirement |
@@ -478,47 +482,6 @@ much as the analyzer: assembly files are selected by their `_amd64.s` suffix, so
 arm64 host the file is not in the package at all; every Go analysis step iterates the full
 GOOS/GOARCH matrix for that reason (see [recipes](./recipes.md)).
 
-## Go — the tests are one contract, checked within a bound
-
-A package's tests state its contract once, as a comment at the top of
-`contract_test.go`, from the sources that define it — the specification, the man page,
-the platform's own documentation, the package's own docs — each rule cited or quoted.
-The files beside it hold the code to that comment and to nothing else:
-
-- `bounded_test.go` walks every input in a bound drawn from the contract's own edges:
-  for each class the contract names, its boundary, one step past it, and a middle; for
-  a stateful package, every sequence of calls up to a small length, held to a model after
-  each. The bound is what makes the check exhaustive; the contract is what keeps it small.
-- `fuzz_test.go` runs the same checks past the bound, seeded from it.
-- a hand-written test remains only for a case no bounded walk reaches — a device path, a
-  path past `MAX_PATH` — and its comment says which.
-- a drop-in for a standard-library package (`xos` for `os`) is checked beside it, call
-  for call, on the same filesystem state: what the caller saw and what was left on disk
-  must match, on every platform.
-
-An older suite goes only under a mutation score: single-point mutants of the package (a
-flipped comparison, a dropped `!`, an off-by-one, a deleted statement, an `error` made
-`nil`), each run against both suites, and the old suite is removed when the new one
-catches every mutant the old one did. The score is the evidence; the line count is not.
-
-Writing the contract down is where the bugs are found: stating a rule from its source
-and holding the code to it is what turned up seven in primordium in a week, six in its
-filesystem packages and one in a store, each a rule the code did not meet once written
-(https://github.com/mycophonic/primordium/pull/138,
-https://github.com/mycophonic/primordium/pull/139,
-https://github.com/mycophonic/primordium/pull/140,
-https://github.com/mycophonic/primordium/pull/143,
-https://github.com/mycophonic/primordium/pull/146,
-https://github.com/mycophonic/primordium/pull/147,
-https://github.com/mycophonic/primordium/pull/153). The shape, package by package:
-https://github.com/mycophonic/primordium/pull/141 (a path validator),
-https://github.com/mycophonic/primordium/pull/144 (an `io.ReadSeeker` wrapper),
-https://github.com/mycophonic/primordium/pull/145 (advisory locks, with blocking),
-https://github.com/mycophonic/primordium/pull/151 (the `os` drop-in, differential),
-https://github.com/mycophonic/primordium/pull/157 (XDG and platform directories), and
-https://github.com/mycophonic/primordium/pull/165, where a 1,789-line port of Go's own
-`os` tests went under the score.
-
 ## Go — errors: a sentinel per fault class, wrapped at every site
 
 The baseline enforces the floor (err113, errorlint, wrapcheck): an error value is a
@@ -626,25 +589,13 @@ logger grows, and they turn every helper that reports into one that exits. A fun
 returns its error; `main` prints it and exits. A real programmer error, an invariant the
 code itself violated, is a `panic` with its message, not a log line that happens to exit.
 
-## Go — a test that only the standard library can fail is not a test
-
-A test earns its place by a change to the package that would fail it. One that checks
-what the standard library guarantees — that `errors.New` returns an error carrying its
-message, that `errors.Is` finds a sentinel through `fmt.Errorf`'s `%w` once and twice,
-that two sentinels are distinct — cannot fail short of a change to Go, and goes. A
-package that is a set of sentinel errors and no logic needs no test file at all; the
-coverage gate is on the module, not the package. The trap: such a file reads as coverage
-of error handling and covers none of it, and it rots unnoticed — primordium's `fault`
-carried 215 lines of it, with a sentinel missing from two of its own lists
-(https://github.com/mycophonic/primordium/pull/160).
-
 ## Go — a precondition the program must meet at startup panics when missed
 
 A package whose every call needs something set first — an application name before any
 directory, a configuration before any client — panics at the first call made without
 it, naming what is missing. It does not degrade: no empty-string default, no zero value
 standing for "unset" that the code then builds a path or a connection on. This is
-[a type admits only its valid values](./index.md#generic-principles) at the one place
+[a type admits only its valid values](./principles.md) at the one place
 a type cannot reach, the order of calls at startup; the check is a run of the test
 binary in a process of its own, where that call comes first, and the same shape checks
 a value the setter refuses. The trap: the degraded path looks like it works, and nobody

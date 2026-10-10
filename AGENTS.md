@@ -157,7 +157,7 @@ chapter; the procedure is limen's `skills/contribute`.
 - **A comment names a trap, not a story.** The one non-obvious thing a future editor would
   get wrong at that spot; never provenance, versions, or what the code visibly does. The
   reasoning goes in the commit message. See the book's
-  [generic principles](https://github.com/farcloser/limen/blob/main/book/index.md#generic-principles).
+  [generic principles](https://github.com/farcloser/limen/blob/main/book/index.md).
 - **A module's `go` directive is the earliest Go release still supported upstream**, as
   its first version (`go 1.N.0`), or the patch a dependency requires when that is higher
   (what `go mod tidy` raises it to); never a newer release. The tools modules

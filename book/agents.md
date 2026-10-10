@@ -413,7 +413,7 @@ The human sets the priorities; the agent measures scope before it moves.
   guarantee and the version that carries it. The consumer has no say in how
   the owner tests its internals, and the owner does not describe its test
   design across the boundary. The rule is the book's
-  [generic principle](./index.md#generic-principles) applied to two sessions:
+  [generic principle](./principles.md) applied to two sessions:
   the boundary that keeps package A from narrating package B keeps one
   session's report from reaching into another's implementation.
 - **On GitHub, the human has a handle.** Anything public — a pull request
