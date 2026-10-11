@@ -105,7 +105,7 @@ Fix a finding; do not silence it. When silencing is the honest answer, silence
 the rule, never the linter: `//revive:disable-next-line:<rule>`,
 `// #nosec G### -- reason`, `//nolint:staticcheck // SA####: reason`. The lint
 recipe rejects `//nolint:revive`, `//nolint:gosec`, a bare `#nosec`, and a bare
-`//nolint` (`book/per-language.md`, "silencing a finding").
+`//nolint` (`book/linting-go.md`, "silencing a finding").
 
 Then commit, and lint the commit itself before pushing: `just do lint commits`
 judges a range, and a `just lint` run before the commit existed has not seen

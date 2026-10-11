@@ -64,7 +64,7 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
   # limen-lint-go, the Go lint driver every Go repository's lint recipes run
-  # (book/per-language.md, "one baseline, per-project carve-outs"): a module
+  # (book/linting-go.md, "one baseline, per-project carve-outs"): a module
   # of its own under cmd/ — its YAML parser must not enter limen's go.mod —
   # built here so it ships in the same archive, verified by the same
   # checksum and signature, and pinned by the same aqua entry as limen; the

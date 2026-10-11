@@ -36,13 +36,13 @@ var CanonicalGitignore string
 var CanonicalGitattributes string
 
 // CanonicalShellcheckrc is the repository's .shellcheckrc — the baseline every
-// repository that ships shell must carry. See book/per-language.md.
+// repository that ships shell must carry. See book/linting-shell.md.
 //
 //go:embed .limen/.shellcheckrc
 var CanonicalShellcheckrc string
 
 // CanonicalYamlfmt is the repository's .yamlfmt — the baseline every repository
-// that ships YAML must carry. See book/per-language.md.
+// that ships YAML must carry. See book/linting-yaml.md.
 //
 //go:embed .limen/.yamlfmt
 var CanonicalYamlfmt string
@@ -58,7 +58,7 @@ var CanonicalLycheeToml string
 // CanonicalLintGo is the repository's .limen/lint-go.yaml — the Go lint
 // baseline every Go module must carry verbatim; limen-lint-go reads it from
 // the tree and renders it with the project's root .lint-go.yaml. See
-// book/per-language.md.
+// book/linting-go.md.
 //
 //go:embed .limen/lint-go.yaml
 var CanonicalLintGo string

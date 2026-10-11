@@ -98,7 +98,7 @@ Early. We are bootstrapping from the ground floor:
       `.limen/just/` modules. See
       [`book/mandatory-files.md`](./book/mandatory-files.md) and [`cmd/limen/`](./cmd/limen).
 - [x] **Per-language rules** — conditional checks that fire only when a language is present:
-      shell → `.limen/.shellcheckrc`, and YAML → `.limen/.yamlfmt`. See [`book/per-language.md`](./book/per-language.md).
+      shell → `.limen/.shellcheckrc`, and YAML → `.limen/.yamlfmt`. See [linting](./book/linting.md).
 - [x] **Project tooling** — every repo pins its build/CI tooling through aqua: a committed
       `.aqua/aqua.yaml` with checksum enforcement on, plus a committed `.aqua/aqua-checksums.json`. See
       [`book/tooling.md`](./book/tooling.md) and [`cmd/limen/`](./cmd/limen).

@@ -8,7 +8,7 @@ import (
 )
 
 // The golangci-lint vocabulary an overlay may use, and what each key does to
-// the baseline (book/per-language.md, "one baseline, per-project carve-outs"):
+// the baseline (book/linting-go.md, "one baseline, per-project carve-outs"):
 //
 //	linters.disable, linters.enable  move a linter between the two sets
 //	formatters.enable                adds a formatter
