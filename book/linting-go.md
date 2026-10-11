@@ -5,16 +5,11 @@ go-licenses and `go vet`'s two blind spots, each a lane of `just do lint go`.
 
 ## One lint baseline, per-project carve-outs: `.lint-go.yaml`
 
-Linting Go takes many tools, each configured its own way: golangci-lint reads a long YAML
-file, go-licenses takes its allowed list and its ignores as flags, the rest take flags of
-their own. And golangci-lint has no overlay — one configuration file, first found wins, no
-`extends`, `include` or merge, a request upstream has parked since 2020 — so every Go
-repository used to carry its own hand-edited copy of the file, the copies drifted from the
-baseline and from each other, and a change to the lint policy could not be applied to any of
-them without a manual three-way merge, so it was not applied. The per-project ignores for
-go-licenses lived in an exported variable in the root `.justfile`, a hidden override.
-
-The shape now is one baseline, one overlay, rendered at lint time:
+golangci-lint has no overlay — one configuration file, first found wins, no `extends`,
+`include` or merge, a request upstream has parked since 2020 — so every Go repository used
+to carry its own hand-edited copy, the copies drifted from the baseline and from each other,
+and a change to the lint policy was never applied. The shape is one baseline, one overlay,
+rendered at lint time:
 
 - **The baseline is limen's**: `.limen/lint-go.yaml`, content-pinned like the other files
   under `.limen/`, never edited by a project, and read from the tree by `limen-lint-go`, the

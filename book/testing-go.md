@@ -38,22 +38,19 @@ flipped comparison, a dropped `!`, an off-by-one, a deleted statement, an `error
 catches every mutant the old one did. The score is the evidence; the line count is not.
 
 Writing the contract down is where the bugs are found: stating a rule from its source
-and holding the code to it is what turned up seven in primordium in a week, six in its
-filesystem packages and one in a store, each a rule the code did not meet once written
-(https://github.com/mycophonic/primordium/pull/138,
+and holding the code to it turned up seven in primordium in a week, each a rule the code
+did not meet once written (https://github.com/mycophonic/primordium/pull/138,
 https://github.com/mycophonic/primordium/pull/139,
 https://github.com/mycophonic/primordium/pull/140,
 https://github.com/mycophonic/primordium/pull/143,
 https://github.com/mycophonic/primordium/pull/146,
 https://github.com/mycophonic/primordium/pull/147,
-https://github.com/mycophonic/primordium/pull/153). The shape, package by package:
-https://github.com/mycophonic/primordium/pull/141 (a path validator),
-https://github.com/mycophonic/primordium/pull/144 (an `io.ReadSeeker` wrapper),
-https://github.com/mycophonic/primordium/pull/145 (advisory locks, with blocking),
-https://github.com/mycophonic/primordium/pull/151 (the `os` drop-in, differential),
-https://github.com/mycophonic/primordium/pull/157 (XDG and platform directories), and
-https://github.com/mycophonic/primordium/pull/165, where a 1,789-line port of Go's own
-`os` tests went under the score.
+https://github.com/mycophonic/primordium/pull/153). The shape, by kind of package: a path validator
+(https://github.com/mycophonic/primordium/pull/141), a stateful wrapper held to a model
+(https://github.com/mycophonic/primordium/pull/145, advisory locks), the `os` drop-in
+checked differentially (https://github.com/mycophonic/primordium/pull/151), and a
+1,789-line port of Go's own `os` tests retired under the score
+(https://github.com/mycophonic/primordium/pull/165).
 
 ## A test that only the standard library can fail is not a test
 
