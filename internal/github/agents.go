@@ -2,7 +2,7 @@
 //
 // Coding agents contribute through a dedicated account that is an
 // organization member and holds write access through the organization's
-// `agents` team (book/agents.md). A repository created without that grant is
+// `agents` team (book/identity.md). A repository created without that grant is
 // one the agents can read but not push to — which is what every repository
 // created by hand looked like until this check existed: the bot's work
 // failed at push time, on a 403 nobody had arranged.

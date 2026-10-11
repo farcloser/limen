@@ -7,14 +7,15 @@ every language, and a sub-document holds one language's form.
 
 - **[Principles](./principles.md)**: what we value above all. Read first.
 - **Working together**: how a change travels from a branch to `main`.
-  - [Coding agents as contributors](./agents.md): identity, key, sandbox, the workflow, the
-    shape of a pull request, how sessions talk.
+  - [Identity and keys](./identity.md): who a contributor is, human or bot, and the key that
+    proves it; what to do when a token is lost.
+  - [Coding agents as contributors](./agents.md): the workflow, the shape of a pull request, scope.
   - [Reviewing code](./review.md): the reviewer's side; who approves what.
-  - [Identity and keys](./identity.md): the human's hardware-bound key, for authentication
-    and signing; what to do when the token is lost.
+  - [Communicating](./communicating.md): where the conversation happens; one-to-one messages.
+  - [Releasing](./releasing.md): a signed tag, its page and notes, the CI and local lanes, the rules.
 - **The rig**: limen, what every repository carries and runs.
   - [Mandatory files](./mandatory-files.md): the pinned and seeded files, and why.
-  - [The shared recipes](./recipes.md): the hermetic environment and the `just` lanes; releasing.
+  - [The shared recipes](./recipes.md): the hermetic environment and the `just` lanes.
   - [Project tooling](./tooling.md): aqua, the Go-built tools, `pins.yaml`, Renovate, the
     checksum workflow, machine setup.
   - [GitHub settings](./github.md): rulesets, the CI and security lanes, the audit.

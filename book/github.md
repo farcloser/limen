@@ -188,7 +188,7 @@ setup).
   nothing. A repo that wants an exception either way declares it.
 - **The agents team has write.** Coding agents contribute through a dedicated
   account that holds write on every repository through the organization's
-  `agents` team (see [agents](./agents.md)). A repository created without the
+  `agents` team (see [identity and keys](./identity.md#per-repository)). A repository created without the
   grant is one the agents can read but not push to, and nothing says so until a
   push fails on a 403. `check` reports it; `fix` grants it — the one team grant
   the baseline applies itself, additive only: write for the canonical team,
@@ -260,7 +260,7 @@ The decided merge model, enforced by both the repository settings and the
   that `needs` the shared lanes (the `limen` call to the pinned
   `limen-verify.yaml`: every verify leg, fuzz and tools) and any job the
   project adds, and fails unless all of them succeeded — and, where the default branch carries
-  `security.yaml`, the `security` check beside it (see [security](#security)):
+  `security.yaml`, the `security` check beside it (see **Security** below):
   what the canonical workflows report, read from the default branch, never
   assumed from the seed. The check *names* remain project-owned, so reconciliation
   preserves whatever a repository already declared, exactly like the
@@ -430,7 +430,7 @@ Requiring signatures has two sharp edges worth knowing before they bite:
 
 The `limen:tags` ruleset restricts `v*` tag creation, update, and deletion to
 repository admins: the tag push is the release button (see the release lanes
-in [the recipes chapter](./recipes.md)), and the ruleset names who may press
+in [releasing](./releasing.md)), and the ruleset names who may press
 it.
 
 Both rulesets are canonical objects owned by limen — created when missing,
@@ -597,7 +597,7 @@ day; the sequence below is what avoids them.
    `topics` checks go green.
 7. **`.lint-signers` is the human's enrollment commit.** `limen bootstrap`
    does not seed it: the human's key is theirs to publish. It lands with the
-   first push, with the bot's key beside it (see [agents](./agents.md)), or is
+   first push, with the bot's key beside it (see [identity and keys](./identity.md)), or is
    copied from a sibling repository at the owner's instruction.
 
 Then the bot works as everywhere: its own branches, pull requests, the
