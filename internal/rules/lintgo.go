@@ -7,7 +7,7 @@ package rules
 // release, render the one with the other into the golangci-lint
 // configuration they run, under build/, and pass it with -c; a golangci-lint
 // configuration at the root is therefore a stray: golangci-lint never reads
-// it here, and it misleads whoever does (book/per-language.md, "one
+// it here, and it misleads whoever does (book/linting-go.md, "one
 // baseline, per-project carve-outs").
 const (
 	ruleLintGo     = "lintgo"
@@ -31,7 +31,7 @@ var strayGolangciConfigs = []string{".golangci.yml", ".golangci.yaml", ".golangc
 const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline (` + lintGoBaseline + `):
 # the baseline's sections, in its shape, holding only what this project adds,
 # changes or takes out. ` + "`just do lint go`" + ` renders the two on every run
-# (book/per-language.md, "one baseline, per-project carve-outs"). Seeded once;
+# (book/linting-go.md, "one baseline, per-project carve-outs"). Seeded once;
 # the file is the project's own. Every key the overlay accepts is below, with
 # what it does to the baseline; anything else is refused as baseline policy.
 #

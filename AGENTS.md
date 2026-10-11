@@ -140,12 +140,12 @@ chapter; the procedure is limen's `skills/contribute`.
   with limen for the baseline, or settled in the project's overlay, with the evidence —
   and decided before anything is silenced, since an exemption added later leaves every
   inline silence dead. See the book's
-  [judging a finding](https://github.com/farcloser/limen/blob/main/book/per-language.md#go--judging-a-finding).
+  [judging a finding](https://github.com/farcloser/limen/blob/main/book/linting.md#judging-a-finding).
 - **A linter finding is silenced by its rule, never by its linter:**
   `//revive:disable-next-line:<rule>`, `// #nosec G### -- reason`,
   `//nolint:staticcheck // SA####: reason`. Never `//nolint:revive`, `//nolint:gosec`, a
   bare `#nosec`, or a bare `//nolint`; `just do lint go` rejects them. See the book's
-  [per-language rules](https://github.com/farcloser/limen/blob/main/book/per-language.md).
+  [silencing a finding](https://github.com/farcloser/limen/blob/main/book/linting-go.md#silencing-a-finding).
 - **Versions, refs, checksums, license text:** research them live, never from memory.
 - **Consumers get the contract, and only the contract.** A consumer demands a property; a
   bug or a contract violation is the owner's to resolve, by clarifying the contract or
@@ -163,16 +163,16 @@ chapter; the procedure is limen's `skills/contribute`.
 - **A comment names a trap, not a story.** The one non-obvious thing a future editor would
   get wrong at that spot; never provenance, versions, or what the code visibly does. The
   reasoning goes in the commit message. See the book's
-  [generic principles](https://github.com/farcloser/limen/blob/main/book/index.md).
+  [generic principles](https://github.com/farcloser/limen/blob/main/book/principles.md).
 - **A module's `go` directive is the earliest Go release still supported upstream**, as
   its first version (`go 1.N.0`), or the patch a dependency requires when that is higher
   (what `go mod tidy` raises it to); never a newer release. The tools modules
   (`tools/go.mod`, `tools/<name>/go.mod`) are exempt. See the book's
-  [baseline version](https://github.com/farcloser/limen/blob/main/book/per-language.md#go--the-baseline-version).
+  [baseline version](https://github.com/farcloser/limen/blob/main/book/dependencies-go.md#the-baseline-version).
 - **A `replace` directive is never committed**, nor anything that permits one (a
   `gomoddirectives` `replace-local` or `replace-allow-list`). A local replace is a
   temporary tool for working on two modules in parallel, on your machine, and stays there.
   What ships requires a published version: a tag, or, when the change you need is not
   tagged yet, the commit that carries it (a pseudo-version), once it is on the owner's
   default branch. See the book's
-  [no replace, ever](https://github.com/farcloser/limen/blob/main/book/per-language.md#go--no-replace-ever).
+  [no replace, ever](https://github.com/farcloser/limen/blob/main/book/dependencies-go.md#no-replace-ever).

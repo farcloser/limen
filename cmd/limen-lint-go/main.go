@@ -3,7 +3,7 @@
 // against the baseline's floor, and prints the go-licenses flags. It ships in
 // limen's release, beside limen; the baseline is the repository's
 // .limen/lint-go.yaml, content-pinned by limen, and the carve-outs the
-// project's root .lint-go.yaml (book/per-language.md, "one baseline,
+// project's root .lint-go.yaml (book/linting-go.md, "one baseline,
 // per-project carve-outs").
 package main
 
