@@ -44,9 +44,12 @@ release *args:
             exit 1
         fi
     }
+    # A fourth segment is a fork's rebuild of the same upstream version
+    # (v10.6.1.2, book/forks.md): never a -suffix, which semver sorts before
+    # the release it rebuilds.
     require_version_tag() {
-        if ! printf '%s' "$1" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$'; then
-            echo "'$1' is not a version tag (vX.Y.Z or vX.Y.Z-prerelease, e.g. v0.0.0-test.1)." >&2
+        if ! printf '%s' "$1" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z][0-9A-Za-z.-]*)?$'; then
+            echo "'$1' is not a version tag (vX.Y.Z, vX.Y.Z-prerelease, or a fork's rebuild vX.Y.Z.N)." >&2
             exit 2
         fi
     }

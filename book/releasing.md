@@ -12,8 +12,12 @@ is the interface (`just do release`); this chapter is its rules and its lanes.
   proxy, Renovate and `go get` all read the tag. **Every tag has a release page**, so the
   recipe then creates it (`gh release create --verify-tag --generate-notes`, through the
   pinned `gh` and the human's own auth), with the notes below; a retry finds the page and
-  leaves it. Six library repositories released bare tags for months, and no reader had
-  notes for any of them until this. A `.release-go.yaml` (project-owned, like
+  leaves it. The recipe owns that page: a project's own release workflow uploads its
+  artifacts into it (`gh release upload`) and never creates it — two creators on one tag,
+  and the second fails with the assets unattached. Six library repositories released bare
+  tags for months, and no reader had notes for any of them until this. The tag is
+  `vX.Y.Z`, `vX.Y.Z-prerelease`, or a fork's rebuild of the same upstream version,
+  `vX.Y.Z.N` ([forks](./forks.md)). A `.release-go.yaml` (project-owned, like
   the root .justfile) opts the repository into artifacts, and the two lanes below then share
   every guard. It is goreleaser's configuration under the lane's name, like `.lint-go.yaml`
   (the recipes pass it with `--config`), and its first line is
