@@ -403,6 +403,18 @@ an advisory carrying the exact command. The version is the one limen's own `tool
 bumps it from there. A release carries those `go.mod` files because its build copies them in
 first; a development build carries none and refuses to seed, saying so.
 
+### The `baretools` rule — no Go-built tool run from `PATH`
+
+The Go-built tools are run as `build/tools/<name>`, where the recipes build them; nothing puts
+one on `PATH`. A bare `golangci-lint`, `godolint`, `govulncheck` (any of them) in command
+position in the project's own `.justfile`, under `hack/` or `scripts/`, or in a workflow under
+`.github/workflows/` runs whatever `PATH` holds: on a laptop, a stale aqua shim another project
+left in the shared bin directory, which aqua resolves against this repository's manifest and
+refuses; on a clean machine, nothing. The rule fails every such line, naming it; `limen fix`
+reports the same as an advisory, since the line is the project's to rewrite — `just do lint go`
+or `just do fix go`, which build the tool, or `build/tools/<name>` after one of them. The
+canonical `.limen/` recipes are not scanned: they are content-pinned.
+
 ## Link checking — `.limen/lychee.toml`
 
 Documentation rots at its edges: links die silently. `just do security links` checks every
