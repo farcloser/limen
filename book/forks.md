@@ -50,7 +50,7 @@ work after it:
    fix what is wrong first.
 6. **The first tag.** Its version comes from an API diff (`go doc -all` at the last tag
    against `main`), not from the commit list. Its notes are the titles of the pull requests
-   it merges, grouped by label ([release notes](./recipes.md)): every pull request that
+   it merges, grouped by label ([release notes](./releasing.md)): every pull request that
    breaks a consumer carried the `breaking` label when it merged, never added after the fact.
 7. **Then everything else:** performance, hardening, API work.
 
@@ -65,7 +65,7 @@ work after it:
 | An auto-resolved overlay conflict dropped a branch's own settings | Auto-resolve only when the overlay diff is the rule deletion alone |
 | Integer-conversion findings (gosec G115) waved off as noise: four were real truncation bugs | Judge every integer conversion in format-parsing code |
 | A squash of stacked branches silently reverted a merged change | Every pull request targets `main`; after a squash or rebase, `git diff` the new parent against the new head shows only the pull request's files |
-| A release for tooling alone, then undone | A release carries a real change ([recipes](./recipes.md)) |
+| A release for tooling alone, then undone | A release carries a real change ([releasing](./releasing.md)) |
 | A pin CI cannot exercise (a macOS-only tool, a sandbox that cannot clone) | Say so on the pull request; a human runs it |
 | A failure on one operating system dismissed as flaky | A one-OS failure is a bug until shown otherwise (AGENTS.md: a flake is fixed when it is noticed) |
 | A leak test allowed one page of slack for the allocator's own layout; 49 bytes per instance lived under it for weeks | A resource test asserts exactly zero growth, over enough rounds that one byte a round crosses a page |

@@ -286,7 +286,7 @@ machine failing. The same holds for any script that edits an aqua config on a li
 
 A second, optional bootstrap in the same repository, `limen-install-agent`, sets the
 machine up so a coding agent can commit and push as its own identity — see
-[coding agents as contributors](./agents.md).
+[identity and keys](./identity.md).
 
 ---
 
@@ -346,7 +346,7 @@ What the `.aqua/aqua.yaml` must carry — the manifest is **subset-pinned** (see
   import wins and the same entry below it would be silently shadowed: the import closes the
   list (`limen fix` moves it there). A package is never listed twice, and never a
   **retired** one: the Go-built tools moved to `tools/go.mod` (see
-  [above](#go-source-analyzers-are-gomod-tools)). `limen fix` never edits the project's
+  [above](#go-built-tools-are-gomod-tools)). `limen fix` never edits the project's
   entries: a lingering retired pin fails the check, which names it, and the owner deletes it
   by hand.
 
