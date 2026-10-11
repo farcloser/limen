@@ -1,6 +1,6 @@
 ---
 name: contribute
-description: How a coding agent contributes to a farcloser repository — its own branch in its own worktree, signed commits, the full lint and test before pushing, a pull request it owns until the checks are green, and a local main kept fresh. Use whenever the task ends in a commit, a push, or a pull request.
+description: How a coding agent contributes to a farcloser repository — its own branch in its own worktree, signed commits, the full lint and test, a local review before anything is pushed, a pull request opened at the reviewed head and owned until the checks are green, and a local main kept fresh. Use whenever the task ends in a commit, a push, or a pull request.
 ---
 
 # Contribute
@@ -86,7 +86,7 @@ are what prevents it.
 5. **One commit per thing.** Different things, different commits. Iteration
    on the same thing — a review round on the lines you just added, a fix to
    your own commit — is squashed into the commit it amends and the message
-   rewritten to tell the whole story once, before the review request:
+   rewritten to tell the whole story once, before the pull request is opened:
    ```
    git -C <path> reset --soft origin/main && git -C <path> commit -s -F -   # one commit, whole message
    git -C <path> c push --force-with-lease=<branch>:<old sha> origin <branch>
@@ -94,12 +94,12 @@ are what prevents it.
    Your own branch only; a shared branch is never rewritten. A stack of
    fix-ups leaves a message a later commit contradicts.
 
-## 3. Green before pushing
+## 3. Green before the review
 
 Run the whole `just lint` and `just test` — the aggregates, not a single lane.
 A lane on one machine misses what CI runs elsewhere: a linux-only package
 under a CGO project, a windows leg, a guest build. Fix what fails before
-pushing.
+anyone reads the change.
 
 Fix a finding; do not silence it. When silencing is the honest answer, silence
 the rule, never the linter: `//revive:disable-next-line:<rule>`,
@@ -107,24 +107,43 @@ the rule, never the linter: `//revive:disable-next-line:<rule>`,
 recipe rejects `//nolint:revive`, `//nolint:gosec`, a bare `#nosec`, and a bare
 `//nolint` (`book/linting-go.md`, "silencing a finding").
 
-Then commit, and lint the commit itself before pushing: `just do lint commits`
-judges a range, and a `just lint` run before the commit existed has not seen
-it. This is what catches a missing sign-off, a subject over the limit, or a
-trailer eaten by a shell variable — in your tree, not in CI.
+Then commit, and lint the commit itself: `just do lint commits` judges a
+range, and a `just lint` run before the commit existed has not seen it. This
+is what catches a missing sign-off, a subject over the limit, or a trailer
+eaten by a shell variable — in your tree, not in CI.
 
-## 4. Push, open the pull request, own it
+## 4. The review, in the worktree
+
+Nothing is pushed and no pull request exists until the change is reviewed.
+Message the reviewing session three things and end the turn:
+
+```
+<absolute worktree path>
+base: $(git -C <path> rev-parse origin/main)
+head: $(git -C <path> rev-parse HEAD)
+```
+
+The reviewing session reads `git diff <base>..<head>` there and answers by
+message, in the shape of a review (`book/review.md`): ✅ with the head it
+read, or 🛑 and ⚠️ to settle. Answer each finding by message — fix it and
+amend (one commit per thing, step 2.5), or argue it with the evidence; a
+new head is a new review, say its sha. When the reviewing session has sent
+the project manager its line, `reviewed: <org/repo> <branch> <head sha>`,
+the head is the one to open; any other head is refused downstream.
+
+## 5. Push, open the pull request at the reviewed head, own it
 
 ```
 git c push origin claudio/<date>-<topic>             # `git c` drops the sandbox's GIT_SSH_COMMAND
 gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
 ```
 
-An approved pull request merges itself: the ruleset wants one approval and
-green checks, and GitHub's auto-merge, which the reviewing session arms with
-its ✅ at the head it read, merges the moment both hold. The owner's approval
-is the decision; you never arm the merge, never click it, never bypass.
-(website-godolint is the exception, a private repository where GitHub offers
-no auto-merge: the reviewing session merges there.)
+Then bind the pull request in your own PR pane and own it to green. You
+never arm auto-merge: on a public repository the project manager arms it
+once it has matched the head against the review and confirmed green
+(below), and an approved pull request merges itself from there; a private
+repository is never armed, and the human merges by hand after approving.
+You never click merge, never bypass.
 
 No `-u` on the push — recording the upstream writes `.git/config`, which the
 sandbox denies; name the remote and branch instead.
@@ -156,36 +175,27 @@ bump names the version it pins, and when a later push changes what the
 pull request lands (a newer version, a narrower scope), the title and the
 body are updated with it (`gh pr edit --title … --body-file …`).
 
-Then message the reviewing session the pull request's full URL, CI pending,
-and end the turn. A session cannot wait on CI: the harness forbids polling
-it. The reviewing session's sweep reads the checks and reports green or red
-back to you, and that message is what resumes the procedure.
+The PR pane says when the checks finish; a session does not poll CI. On
+red, read the failed logs (`gh run view --job <id> --log-failed`) and sort
+the red: one that needs a redesign goes back to step 4, a new review; an
+environmental one (a links `503`, a flake whose cause is known) is said to
+the reviewing session, which sends the project manager `bypass-safe:
+<org/repo> <branch> <sha> <run URL>`. A red check is yours to turn
+green or to have named — never to leave for the human to find.
 
-On red, read the failed logs (`gh run view --job <id> --log-failed`), fix,
-push again, and message the reviewing session again, CI pending. A red
-check is yours to turn green or to explain in the pull request — never to
-leave for the human to find.
-
-On green, and only then — checks green, pull request ready — request the
-owner's review; that is how the human learns the work exists, and it is
-said once, never on a red pull request. The approval merges it: nothing
-more to do after it but the after-merge step. A push after the approval
-drops it (the ruleset dismisses stale reviews): request the review again,
-with the new head, and message the reviewing session, as at first. A native stack's layers are
-requested together, once the whole stack is green (see Stacking). A
-requested pull request that turns red has its request
-withdrawn (`gh api -X DELETE repos/<org>/<repo>/pulls/<n>/requested_reviewers
--f 'reviewers[]=<owner>'`) until it is green again. The human's comments
-on the pull request are the review: address them when pointed there or
-when next checking open pull requests.
-
-```
-owner="$(gh api "orgs/<org>/members?role=admin" -q '.[0].login')"   # a CODEOWNERS entry, when the repo has one
-gh pr edit claudio/<date>-<topic> --add-reviewer "$owner"
-```
-
-The review request and a second message to the reviewing session with the
-URL are one step: neither is ever made without the other.
+Message nobody about the pull request. The project manager finds it on
+GitHub itself, matches the branch and head against its ledger of
+`reviewed:` lines, confirms the checks, arms auto-merge (a public
+repository only), and binds the pull request in its own PR pane, which is
+the human's approval queue; a head it has no line for is refused as
+`UNREVIEWED:` for the human to decide, and a bound head that moves is
+disarmed the same way. The human approves on GitHub, and auto-merge
+merges: nothing more to do but the after-merge step. A push after the
+approval drops it (the ruleset dismisses stale reviews) and the whole flow
+runs again from step 4. No review request, no review comment, no message
+at open: review discussion lives in the sessions. The human's comments on a
+pull request, when there are any, are addressed when pointed there or when
+next checking open pull requests.
 
 A pull request that is green but deliberately held is said to be held, and
 why, so it is not taken for forgotten.
@@ -194,7 +204,7 @@ In anything public on GitHub — a pull request title or body, a comment, a
 commit message — the human is `@apostasie`, by handle, never "the owner" or
 "the human". Those are session words; GitHub has a name for the person.
 
-## 5. After a merge
+## 6. After a merge
 
 These commands aim at the clone, and from inside a worktree the harness
 refuses every one of them (step 1). A session that entered its worktree with
@@ -225,10 +235,10 @@ A stack is reviewed and merged whole. Every layer is held to `main`'s
 ruleset at once: one unsigned commit, or one layer without its approval,
 refuses the whole merge and nothing lands. So:
 
-- Request review on every layer at once, when the whole stack is green.
-  The owner approves each layer; GitHub refuses auto-merge on a stack, so
-  the reviewing session merges it once, from the top, through GitHub's
-  asynchronous merge API, when every layer is green, ✅ and approved; the
+- Each layer goes through steps 4 and 5 on its own: reviewed in the
+  worktree, opened at its reviewed head. The human approves each layer; GitHub refuses auto-merge on a stack, so the
+  project manager merges it once, from the top, through GitHub's
+  asynchronous merge API, when every layer is green and approved; the
   layers land as one merge commit on `main`.
 - If a lower layer merges alone, the layer above ends in one of two
   states. The merge deleted the branch (the baseline's setting): GitHub
@@ -261,5 +271,6 @@ refuses the whole merge and nothing lands. So:
 ## Never
 
 Merge by hand or bypass a ruleset, push to `main`, force-push a shared
-branch, tag a release. The rulesets and the release lane enforce these; the
-skill just says them out loud.
+branch, tag a release, comment a review onto a pull request, open a pull
+request at a head nobody reviewed. The rulesets, the release lane and the
+queue enforce these; the skill just says them out loud.

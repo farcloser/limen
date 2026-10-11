@@ -9,8 +9,8 @@ merge.
 
 ## The workflow
 
-The agent owns the whole path from a change to a green pull request, on its own branches
-in its own worktrees. The human's branches are the human's.
+The agent owns the whole path from a change to a reviewed, green pull request, on its own
+branches in its own worktrees. The human's branches are the human's.
 
 - **Its own branches, in their own worktrees.** Every task starts from a fresh
   `origin/main` in a git worktree, on a branch named after the bot
@@ -29,11 +29,12 @@ in its own worktrees. The human's branches are the human's.
   decisions, not as a diary. Different things get different commits: a fix and an unrelated
   doctrine paragraph are two. Iteration on the same thing is not: a review round, a
   correction to the commit's own message, is squashed into the commit it amends before the
-  review is requested, the message rewritten to tell the whole story once. A stack of
+  pull request is opened, the message rewritten to tell the whole story once. A stack of
   fix-ups leaves a message a later commit contradicts. The bot's own branch may be
   rewritten for this (`--force-with-lease` on the previous head); a shared branch never is.
-- **Green before pushing.** The full `just lint` and `just test`, not one lane: what CI runs
-  on other platforms is what a single lane on one machine misses.
+- **Green before the review.** The full `just lint` and `just test`, not one lane, in the
+  worktree, before anyone reads the change: what CI runs on other platforms is what a single
+  lane on one machine misses.
 - **Generated means regenerated.** A file a generator writes is changed by changing the
   generator and running it, never by editing the output to what the generator would
   produce. A hand approximation of a generator's rule wrote a message hadolint does not
@@ -47,36 +48,36 @@ in its own worktrees. The human's branches are the human's.
   closing one of each pair was @apostasie's to decide. A hand bump is for a repository
   Renovate cannot serve (no limen CI App, a private repository in a free organization),
   after the dependency dashboard has been read, not for impatience.
-- **Push, open, own.** Push the branch, open the pull request with a description drawn from
-  the commit messages ([the shape of a pull request](#the-shape-of-a-pull-request)),
-  message the reviewing session its URL with CI pending, and end the turn: a session cannot
-  wait on CI, so the reviewing session's sweep reads the checks and reports green or red
-  back, and that report resumes the work. On red: read the failed logs, fix, push, tell the
-  reviewing session again. A red check is the agent's to turn green or to explain, never
-  the human's to discover.
-- **Green, then the reviewer.** Once the checks are green and the pull request is ready,
-  request the repository owner's review — the human is told, not left to notice, and told
-  once: a request on a red pull request is a request to watch the agent work. The owner is
-  whoever the repository says: a `CODEOWNERS` entry when there is one, else the
-  organization's owner. The review request and the message to the reviewing session with
-  the URL are one step: a separate message to remember is the one that gets forgotten. A
-  layer of a native stack is requested when the whole stack is green (below). What the
-  reviewer checks, and in what order, is [reviewing code](./review.md).
-- **An approved pull request merges itself.** The approval is the decision; the click after
-  it was ceremony, and a ceremony performed by hand is a queue: a green, approved pull
-  request sat until someone came back, and every `main` commit meanwhile voided the
-  approval. So the reviewing session arms GitHub's auto-merge with its ✅ at the head it read
-  ([who approves what](./review.md#who-approves-what)), and GitHub merges the moment the
-  ruleset is satisfied: one approval, `gate` and `security` green, a merge commit (the
-  method the signatures rule relies on). Renovate's pull requests arm it themselves and
-  merge on the reviewing session's approval; a session's merge on the owner's. The author
-  never arms it; nobody merges by hand or bypasses. The ruleset is the whole of the gate:
-  it carries the approval requirement, dismisses a stale approval on push (an approval
-  covers the head it was given on; a push after it means asking again, with the new head),
-  and has no up-to-date requirement, which would re-queue every pull request on every
-  merge. The one exception is a private repository on a Free plan, where GitHub offers no
-  auto-merge (website-godolint): the reviewing session merges there, after the same
-  approval.
+- **The review is local; GitHub sees one reviewed pull request.** Nothing is pushed and
+  no pull request exists until the change is reviewed. The agent sends the reviewing session
+  its worktree path, the base sha and the head sha; the reviewing session reads the diff
+  there (`git diff <base>..<head>`) and answers by message, in the shape of a review
+  ([the shape of a review](./review.md#the-shape-of-a-review)), round after round until
+  settled, and then tells the project-manager session `reviewed: <org/repo> <branch> <head
+  sha>`. A commit after that line is a new review: the same exchange, a new sha. A pull
+  request that reached GitHub unreviewed, or at another head, is what the project manager
+  refuses. Review discussion lives in the sessions, never on the pull request: GitHub shows
+  one reviewed change and the human's approval.
+- **Open at the reviewed head, bind, babysit.** Push the branch, open the pull request with
+  a description drawn from the commit messages ([the shape of a pull
+  request](#the-shape-of-a-pull-request)), bind it in the session's own PR pane, and own it
+  to green. A red that needs a redesign goes back to the reviewing session, a new review; an
+  environmental red (a links `503`, a flake whose cause is known) gets the reviewing
+  session's `bypass-safe: <org/repo> <branch> <sha> <run URL>` line to the project manager,
+  and the agent says so. The agent messages nobody about the pull request itself.
+- **The project manager keeps the queue, and arms.** It watches GitHub itself and reads
+  every session pull request's branch and head, matches them against the ledger of
+  `reviewed:` lines, confirms the checks, arms GitHub's auto-merge (`gh pr merge --auto
+  --merge`; the author never does) and binds the pull request in its own PR pane, which is
+  the human's approval queue; a head it has no line for is refused as `UNREVIEWED:` for the
+  human to decide, and a bound head that moves is disarmed the same way. The human approves
+  on GitHub, and auto-merge merges the moment the ruleset is satisfied: one approval, `gate`
+  and `security` green, a merge commit. The ruleset dismisses a stale approval on push, so a
+  push after the approval means the whole flow again from the review; no session merges by
+  hand and nobody bypasses. Renovate's pull requests are the one GitHub-side review: the
+  project manager sweeps them to the reviewing session, which reviews, approves and arms
+  them there. A private repository is never armed (website-godolint): its pull request is
+  bound for the human, who merges by hand after approving.
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local `main`, prune the
   merged branch and its worktree, rebase every open branch onto `main`.
 - **Every pull request targets `main`.** None is based on another pull request's branch by
@@ -90,14 +91,13 @@ in its own worktrees. The human's branches are the human's.
   The check is exact only between branches on the same base: a head that no longer merges
   with `main` is measured after its rebase, since against a stale base every commit `main`
   gained reads as that side's change. The body names what it stacks on.
-- **A stack is merged whole, from the top.** Every layer is held to `main`'s rules at once
-  (one unsigned commit, one layer without its approval, and nothing lands), so every layer
-  is requested once the whole stack is green, the owner approves each, and one merge from
-  the top lands them all as one merge commit. GitHub refuses auto-merge on a stack's layers,
-  so that merge is the reviewing session's, through GitHub's asynchronous merge API from
-  the top layer, only when every layer is green, ✅ at its head and approved; never from the
-  middle, never partial. A lower layer merged alone leaves the layer above either retargeted
-  and rebased by GitHub, as commits GitHub signed, which `just do lint commits` rejects, or,
+- **A stack is merged whole, from the top.** Every layer is reviewed and opened the same
+  way, and held to `main`'s rules at once (one unsigned commit, one layer without its
+  approval, and nothing lands). GitHub refuses auto-merge on a stack's
+  layers, so the project manager merges it through GitHub's asynchronous merge API from the
+  top layer, once every layer is green and approved; never from the middle, never partial.
+  A lower layer merged alone leaves the layer above either retargeted and rebased by
+  GitHub, as commits GitHub signed, which `just do lint commits` rejects, or,
   when the merged branch stayed, still based on it — and deleting that branch by hand closes
   the layer above rather than retargeting it. The recovery is the same: retarget where
   GitHub did none (`gh pr edit <n> --base main`), rebase the bot's branches onto `main`
@@ -105,15 +105,16 @@ in its own worktrees. The human's branches are the human's.
   everything since `main`, the layers below included: a red low in the stack is fixed in
   the layer that owns the commit, and reddens every layer above it until then.
 - **Not the agent's to do.** Merging by hand, pushing to `main`, force-pushing shared
-  branches, tagging releases. Not trust questions: the rulesets and the release lane doing
-  their job.
+  branches, tagging releases, and commenting a review onto a pull request. Not trust
+  questions: the rulesets, the release lane and the queue doing their job.
 
 ## The shape of a pull request
 
-A pull request description is read before its diff, by the reviewing session and by
-@apostasie, usually from a terminal or a phone. It says why first and leaves the detail for
-last. Every section opens with the same marker every time, so the eye finds it without
-reading; a section with nothing to say is left out, and none is written to look complete:
+A pull request description is read before its diff, by @apostasie, usually from a terminal
+or a phone, after the reviewing session has read the change in the worktree. It says why
+first and leaves the detail for last. Every section opens with the same marker every time,
+so the eye finds it without reading; a section with nothing to say is left out, and none is
+written to look complete:
 
 | Marker | Section | What goes there |
 |---|---|---|

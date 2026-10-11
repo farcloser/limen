@@ -2,8 +2,9 @@
 
 A review judges a change against this book first and against itself second. The
 contributor rules are in [coding agents as contributors](./agents.md); this chapter is the
-reviewer's side of the same workflow, whoever the reviewer is: a session assigned the role,
-or a person.
+reviewer's side of the same workflow. The review is local: the reviewing session reads the
+change in the author's worktree, `git diff <base>..<head>`, before anything is pushed, and
+answers by message; GitHub sees one reviewed pull request and the human's approval.
 
 ## The order of the questions
 
@@ -63,8 +64,10 @@ truth, and the review says where:
   repository pins — the release, not the baseline's `main`.
 - A hand-made dependency bump, against what the automated path produced elsewhere: the
   resulting module set, line for line.
-- The state of a pull request — merged, closed, head, checks — re-read before it is
-  reported, never carried over from an earlier look.
+- The head under review, against the worktree: the sha the author named is the one the
+  diff was read at, and the `reviewed:` line carries that sha and no other. The state of a
+  pull request — merged, closed, head, checks — re-read before it is reported, never
+  carried over from an earlier look.
 
 A local clone is a source of truth once it has been fetched *and the fetch succeeded*; a
 fetch whose error went to `/dev/null` has audited the past. Use the rig's transport
@@ -114,50 +117,55 @@ while a limen bump, converged on the base before it, left that seed alone; each 
 and `main` was red on every leg once both merged (farcloser/homebrew-brews#80 and #81,
 fixed by #85). An approval on a pull request that touches a file another open pull request
 also touches says which merges first; the second is rebased and re-run after that merge,
-before its review request stands.
+before it is opened.
 
 ## Who approves what
 
-The reviewing session approves bot-authored pull requests once verified. On a
-session-authored pull request it comments and stops: the shared account cannot approve
-itself, every participant knows it, and the review never says so. Merging is the
-ruleset's, on the approval ([an approved pull request merges itself](./agents.md)), and
-arming it is the reviewer's: a ✅ at a head on a session's pull request, or an approval on a
-bot's, comes with `gh pr merge --auto --merge`, and a later 🛑 or ⚠️ at a newer head with
-`gh pr merge --disable-auto`. On a bot's pull request the disarm is a signal, not the gate:
-Renovate re-arms after every rebase, so what holds a Renovate bump is the approval the
-reviewer withholds; on a session's the disarm holds. The arming is the verdict made
-executable, so it is never the author's; the ruleset keeps the human's approval as the
-gate and dismisses it on a push, so the author asks again with the new head. GitHub does
-not always re-evaluate an armed merge when the approval lands: an approved, green, armed
-pull request sat seven minutes, and a disarm and re-arm merged it within half a minute; so
-an approved, armed pull request that sits is re-armed by the reviewer, and nobody presses
-merge. A native stack is the one merge the reviewer makes itself, from the top layer
-through the asynchronous merge API (`PUT /repos/{owner}/{repo}/pulls/{top}/merge-async`),
-once every layer is green, ✅ at its head and approved; never from the middle, never
-partially ([a stack is merged whole](./agents.md)). Closing, tagging and dismissing alerts
-are @apostasie's, and a review that needs one of them says which and why, in one line, and
-ends.
+The reviewing session reviews a session's change in its worktree and settles it by message,
+round after round; when settled, it sends the project-manager session one line,
+`reviewed: <org/repo> <branch> <head sha>`, and that line is the whole of its verdict on
+GitHub's side: the project manager binds the pull request the author opens at that head as
+the human's approval queue, and refuses any other head. A commit after the line is a new
+review, the same exchange, a new sha. The reviewing session leaves nothing on a session's
+pull request — no comment, no approval (the shared account cannot approve itself, every
+participant knows it, and nothing says so), no arming, which is the project manager's — and
+a red the author cannot fix is
+either a redesign, back in the worktree, or environmental, which the reviewing session says
+to the project manager as `bypass-safe: <org/repo> <branch> <sha> <run URL>`.
+
+Renovate's pull requests are the one review on GitHub: the project manager sweeps them to
+the reviewing session, which reviews each ([dependency bumps](#dependency-bumps)), approves
+it and arms auto-merge (`gh pr merge --auto --merge`); the preset rebases a bump on every
+`main` commit and each rebase drops the approval, which the sweep gives again at the rebased
+head. Renovate re-arms after every rebase, so what holds a bump is the approval the reviewer
+withholds. GitHub does not always re-evaluate an armed merge when the approval lands: an
+approved, green, armed pull request sat seven minutes, and a disarm and re-arm merged it
+within half a minute; so an approved, armed pull request that sits is re-armed by whoever
+armed it: the project manager on a session's, the reviewing session on Renovate's. A native
+stack is merged by the project manager, from the top layer through the asynchronous merge
+API (`PUT /repos/{owner}/{repo}/pulls/{top}/merge-async`), once every layer is green and
+approved; never from the middle, never partially ([a stack is merged whole](./agents.md)).
+Closing, tagging and dismissing alerts are @apostasie's, and a review that needs one of them
+says which and why, in one line, and ends.
 
 **A 🛑 is argued, not obeyed.** The reviewer reads every repository and may miss what the
 owner knows of its own code: a guard in another file, a setting the rule keeps elsewhere, a
-constraint the platform imposes. The owner who disagrees says so on the pull request, with
-the evidence (the file and line, the measurement, the document), and the reviewer answers in
-kind: the finding is withdrawn, as a miss named as such, or held with the reason the
-evidence does not cover. Most rounds end there; a withdrawn finding costs the reviewer
-nothing. The round that does not end is escalated to @apostasie, by either side, with both
-positions in one message, and a review that reaches it says so rather than repeating
-itself.
+constraint the platform imposes. The owner who disagrees says so, with the evidence (the
+file and line, the measurement, the document), and the reviewer answers in kind: the finding
+is withdrawn, as a miss named as such, or held with the reason the evidence does not cover.
+Most rounds end there; a withdrawn finding costs the reviewer nothing. The round that does
+not end is escalated to @apostasie, by either side, with both positions in one message, and
+a review that reaches it says so rather than repeating itself.
 
 ## The shape of a review
 
-A review is read from a terminal, often on a phone, usually by someone who already knows the
-change. It is short, and it says the verdict first. Every section opens with the same marker
-every time, so the eye finds it without reading:
+A review is a message to the author, read from a terminal, often on a phone, by someone who
+already knows the change. It is short, and it says the verdict first. Every section opens
+with the same marker every time, so the eye finds it without reading:
 
 | Marker | Section | Rule |
 |---|---|---|
-| ✅ / ❌ | **Verdict**, the first line | `✅ Ready` or `❌ Not ready`, the head it was read at, and the one-line reason. Nothing above it. An open 🛑 or ⚠️ makes it ❌ until fixed or decided. |
+| ✅ / ❌ | **Verdict**, the first line | `✅ Ready` or `❌ Not ready`, the head it was read at, and the one-line reason. Nothing above it. An open 🛑 or ⚠️ makes it ❌ until fixed or decided; ✅ is what the `reviewed:` line to the project manager follows. |
 | 🛑 | **Blocking** | What must change before merge: the defect, the evidence, the fix. One bullet per item. |
 | ⚠️ | **Decision** | Not a defect: a call the owner or @apostasie has to make, with the options and the recommendation. |
 | 💡 | **Non-blocking** | A suggestion or a follow-up. Never requests a change on its own. |
@@ -171,6 +179,6 @@ the conversation with the owner, raised here as one ⚠️ and settled there.
 
 Every section obeys: a finding names the defect, the evidence and the owner; full URLs for
 every pull request, run, commit or advisory; @apostasie by handle in anything public;
-nothing the author already knows — a constraint shared by everyone, a rule the pull request
-body states, a repeat of an earlier round. The same finding in several repositories is one
-review, to the owner of what they share.
+nothing the author already knows — a constraint shared by everyone, a rule the commit
+message states, a repeat of an earlier round. The same finding in several repositories is
+one review, to the owner of what they share.

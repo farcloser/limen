@@ -5,11 +5,12 @@ and what goes where.
 
 - **Instructions come in the conversation.** The agent keeps a running queue of them and
   loses none to another. A short list from the human is enough.
-- **Review happens on GitHub.** A review request is the signal that a pull request is green
-  and ready; it lands in the human's inbox and is sent once. The human's comments on the
-  pull request are the review; the agent addresses them when pointed there, or when it next
-  checks its open pull requests. A requested pull request that turns red has its request
-  withdrawn until it is green again.
+- **Review happens in the sessions; approval on GitHub.** The reviewing session reads a
+  change in the author's worktree and answers by message, before anything is pushed; the
+  pull request that follows carries the reviewed head, and the project-manager session binds
+  it as the human's approval queue ([coding agents as contributors](./agents.md)). The
+  human's comments on a pull request, when there are any, are addressed when pointed there,
+  or when the agent next checks its open pull requests.
 - **No GitHub issues unless the human asks for one.** The issue tracker is the human's: an
   issue is a lookup for them and a ticket nobody owns for the sessions. A defect or a
   request in a repository another session owns goes to that session as a message — what,
@@ -42,13 +43,13 @@ and what goes where.
   the exception, with both positions in one message; a 🛑 held after the argument is one such
   case ([who approves what](./review.md#who-approves-what)).
 - **Silence is an answer between sessions.** A message that needs nothing gets no reply: an
-  acknowledgement costs the sender a turn and tells it nothing. The messages the workflow
-  requires — the reviewing session's at open and at the review request — are not this kind.
+  acknowledgement costs the sender a turn and tells it nothing. The lines the workflow
+  requires — the review exchange, `reviewed:` and `bypass-safe:` — are not this kind.
 - **A message goes to the one session with a stake in it.** A finding on a pull request goes
   to the session that owns it, and nowhere else; a defect in another repository goes to its
   owner. A broadcast is the human's, and rare. Waiting on a merge is not a reason to message
-  anyone: watch the pull request, or ask the reviewing session to say when it lands, and do
-  other work meanwhile. Every message a session reads costs it a turn; a day of liberal
+  anyone: the pull request is bound in the session's own PR pane, which says when it lands,
+  and other work goes on meanwhile. Every message a session reads costs it a turn; a day of liberal
   messaging burned a visible share of the team's budget on relays nobody acted on.
 
 These rules ship in two forms: compressed into the content-pinned `AGENTS.md` every

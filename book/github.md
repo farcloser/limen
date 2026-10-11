@@ -212,8 +212,8 @@ The decided merge model, enforced by the repository settings and the `limen:main
   cost off the human, who cannot get their own pull request approved on a solo project;
   admin is a role no App and no write-only account holds. **An approval covers the head it
   was given on**: the ruleset dismisses it on the next push, since an approved pull request
-  merges itself and a push after the human looked would otherwise land unread; the author
-  asks again with the new head. The same holds for Renovate's branches, which the preset
+  merges itself and a push after the human looked would otherwise land unread; the new head
+  goes through the review again. The same holds for Renovate's branches, which the preset
   rebases on every `main` commit: each rebase drops the reviewing session's approval, and
   the sweep gives it again at the rebased head. Force pushes and branch deletion on the
   default branch are blocked.
@@ -321,9 +321,9 @@ The decided merge model, enforced by the repository settings and the `limen:main
   commits (Renovate, the checksum-update App), which GitHub signs. A commit made in the web
   UI is signed by GitHub too, and fails: editing in a browser is not a way to contribute.
 - **Squash commits default to the pull request title and body**, merged branches are
-  deleted automatically, auto-merge is allowed (the reviewing session arms it with its
-  verdict, [coding agents as contributors](./agents.md)), and web-UI commits require
-  sign-off — belt and braces for a path `lint commits` already refuses.
+  deleted automatically, auto-merge is allowed (the project manager arms it at the reviewed
+  head, [coding agents as contributors](./agents.md)), and web-UI commits require sign-off — belt
+  and braces for a path `lint commits` already refuses.
 
 Requiring signatures has two sharp edges:
 
