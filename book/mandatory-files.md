@@ -222,8 +222,8 @@ Two regimes:
   an agent about itself — a self-hosting knob, a module it must not reconverge, a testing
   quirk — goes below that line. `limen` requires the file to exist and never touches it.
 
-The step-by-step procedure (the commands for a worktree, a signed commit, a pull request and
-its review request) is a skill, `skills/contribute` in the limen repository, for harnesses
+The step-by-step procedure (the commands for a worktree, a signed commit, the local review
+and the pull request) is a skill, `skills/contribute` in the limen repository, for harnesses
 that load skills; `AGENTS.md` carries the rules without it.
 
 ## .justfile
