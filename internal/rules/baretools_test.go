@@ -26,7 +26,10 @@ lint-extra:
     just do tools update golangci-lint
     just do lint go
 `
-	files["scripts/check.sh"] = "#!/bin/sh\njust do lint go\nls tools/golangci-lint/go.mod\n"
+	files["scripts/check.sh"] = "#!/bin/sh\njust do lint go\nls tools/golangci-lint/go.mod\n" +
+		"if test -x build/tools/golangci-lint; then echo built golangci-lint; fi\n"
+	files[".github/actions/check/action.yaml"] = "runs:\n  using: composite\n  steps:\n" +
+		"    - run: just do lint go\n      shell: bash\n"
 	files[".github/workflows/extra.yaml"] = "on: push\njobs:\n  x:\n    steps:\n      - run: just do lint go\n" +
 		"      - uses: ./.github/actions/build\n        with:\n          tool: golangci-lint\n"
 
@@ -44,9 +47,12 @@ func TestBareToolsFailsPathInvocations(t *testing.T) {
 
 	files := compliantFiles()
 	files[".justfile"] += "\nproto:\n    go generate ./...\n    golangci-lint fmt ./... && godolint Dockerfile\n"
-	files["hack/vuln.sh"] = "#!/bin/sh\nset -e\ngo build ./... ; govulncheck ./...\n"
+	files["hack/vuln.sh"] = "#!/bin/sh\nset -e\ngo build ./... ; govulncheck ./...\n" +
+		"if ! golangci-lint run; then exit 1; fi\nexec nilaway ./...\n"
 	files[".github/workflows/extra.yaml"] = "on: push\njobs:\n  x:\n    steps:\n      - run: go-licenses check ./...\n" +
 		"      - run: |\n          deadcode ./...\n"
+	files[".github/actions/check/action.yaml"] = "runs:\n  using: composite\n  steps:\n" +
+		"    - run: time dot -Tsvg graph.dot\n      shell: bash\n"
 	dir := writeRepo(t, files)
 
 	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), ruleBareTools)
@@ -60,6 +66,9 @@ func TestBareToolsFailsPathInvocations(t *testing.T) {
 		".github/workflows/extra.yaml:5 runs `go-licenses` from PATH",
 		".github/workflows/extra.yaml:7 runs `deadcode` from PATH",
 		"hack/vuln.sh:3 runs `govulncheck` from PATH",
+		"hack/vuln.sh:4 runs `golangci-lint` from PATH",
+		"hack/vuln.sh:5 runs `nilaway` from PATH",
+		".github/actions/check/action.yaml:4 runs `dot` from PATH",
 		"build/tools/",
 	} {
 		if !strings.Contains(f.Message, want) {

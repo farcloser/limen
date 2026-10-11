@@ -21,11 +21,12 @@ import (
 const (
 	ruleBareTools = "baretools"
 	workflowsDir  = ".github/workflows"
+	actionsDir    = ".github/actions"
 	hackDir       = "hack"
 	scriptsDir    = "scripts"
 
 	bareToolsPassMessage = "no Go-built tool is run from PATH in " + justfileName + ", " + workflowsDir +
-		", " + hackDir + " or " + scriptsDir
+		", " + actionsDir + ", " + hackDir + " or " + scriptsDir
 	bareToolsAdvice = " — the recipes build the Go-built tools into build/tools/ and run that binary;" +
 		" nothing puts one on PATH, and a bare name finds a stale aqua shim at best:" +
 		" run `just do lint go` or `just do fix go`, or build/tools/<name> after one of them" +
@@ -33,10 +34,10 @@ const (
 )
 
 // bareToolDirs are the directories whose files the rule scans, every file,
-// recursively: the project's own scripts and workflows.
+// recursively: the project's own scripts, workflows and composite actions.
 //
 //nolint:gochecknoglobals // immutable baseline data.
-var bareToolDirs = []string{workflowsDir, hackDir, scriptsDir}
+var bareToolDirs = []string{workflowsDir, actionsDir, hackDir, scriptsDir}
 
 // majorSuffix is a module path's major-version element (`/v2`), which a
 // binary's name never carries.
@@ -70,10 +71,16 @@ func goToolNames() []string {
 
 // bareToolCommand matches a Go-built tool's name in command position: opening
 // the line (after indentation and just's `@` or `-` prefix), after a shell
-// separator, or as a workflow step's `run:` value. A name after a space, a
-// slash or a dash is an argument, a path or another word, and is not matched.
+// separator, a `!` or a `{`, after a shell word that takes a command (`if`,
+// `exec`, `time`, `xargs`, …), or as a workflow step's `run:` value. A name
+// after any other word, a slash or a dash is an argument, a path or another
+// word, and is not matched; so is one behind `env`'s assignments.
 var bareToolCommand = regexp.MustCompile(
-	`(?:^[ \t]*[@-]?|[;&|(` + "`" + `][ \t]*|\brun:[ \t]*)(` + strings.Join(goToolNames(), "|") + `)(?:[ \t]|$)`,
+	`(?:^[ \t]*[@-]?|[;&|(!{` + "`" + `][ \t]*|\b(?:if|elif|then|else|do|exec|env|command|time|nice|xargs)[ \t]+|\brun:[ \t]*)(` +
+		strings.Join(
+			goToolNames(),
+			"|",
+		) + `)(?:[ \t]|$)`,
 )
 
 // bareToolHit is one line that runs a Go-built tool from PATH.

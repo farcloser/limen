@@ -407,8 +407,9 @@ first; a development build carries none and refuses to seed, saying so.
 
 The Go-built tools are run as `build/tools/<name>`, where the recipes build them; nothing puts
 one on `PATH`. A bare `golangci-lint`, `godolint`, `govulncheck` (any of them) in command
-position in the project's own `.justfile`, under `hack/` or `scripts/`, or in a workflow under
-`.github/workflows/` runs whatever `PATH` holds: on a laptop, a stale aqua shim another project
+position (opening a line, after a shell separator, after `if`, `exec`, `time` or another word
+that takes a command, or as a `run:` step) in the project's own `.justfile`, under `hack/` or
+`scripts/`, or in a workflow or composite action under `.github/` runs whatever `PATH` holds: on a laptop, a stale aqua shim another project
 left in the shared bin directory, which aqua resolves against this repository's manifest and
 refuses; on a clean machine, nothing. The rule fails every such line, naming it; `limen fix`
 reports the same as an advisory, since the line is the project's to rewrite — `just do lint go`
