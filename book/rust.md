@@ -1,13 +1,11 @@
 # Rust
 
-The Rust lanes exist ahead of the first Rust repository; this records the toolchain decision
-so it is made rather than discovered.
+The Rust lanes (`just do lint rust`, `just do fix rust`) exist ahead of the first Rust
+repository; this records the toolchain decision so it is made rather than discovered.
 
 ## cargo is pinned through rustup, never ambient
 
-The Rust modules (`just do lint rust`, `just do fix rust`) call `cargo`, and no repository
-exercises them yet; this records the decision ahead of the first one, so it is made rather
-than discovered. cargo is not brew: brew is the subject under test and substitutes for
+cargo is not brew: brew is the subject under test and substitutes for
 nothing, which is why it alone is captured from the ambient PATH. A rustup-managed cargo in
 `~/.cargo/bin` is exactly the machine tool the hermetic PATH exists to hide — and, unlike
 brew, it has a pin story. The toolchain is pinned in two halves:
