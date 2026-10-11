@@ -290,7 +290,7 @@ the substrate walls is a settled, best-of-breed mapping.
 - `apple/containerization` (Swift framework + `cctl`, **daemonless** in-proc micro-VM,
   `make all`/Xcode 26, bring-your-own kernel, Apache-2.0):
   https://github.com/apple/containerization ;
-  https://github.com/apple/containerization/blob/main/Sources/cctl/RunCommand.swift
+  https://github.com/apple/containerization/blob/c35c140d462c78c26b61f6f2d877c9b210dec6ad/Sources/cctl/RunCommand.swift
 - UTM (QEMU + Apple-Virt backends, macOS-IPSW, Windows-ARM, `utmctl`, Apache-2.0):
   https://github.com/utmapp/UTM ; https://docs.getutm.app/guest-support/macos/
 - Lima (VZ/QEMU, Linux guests, container templates) — see LIMEN-LIMA;
