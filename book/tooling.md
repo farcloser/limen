@@ -127,7 +127,10 @@ the same toolchain and GOSUMDB, and Renovate's `gomod` manager finds nested `go.
 its own (the shared preset re-enables these modules, which Go lists as `// indirect`). The
 shared recipes build each tool natively once (`go -C tools build`, into `build/tools/`) and run
 that binary — per platform for the analyzers — because `go tool` itself honours
-`GOOS`/`GOARCH` and would cross-compile the tool.
+`GOOS`/`GOARCH` and would cross-compile the tool. Nothing puts one on `PATH`: a bare
+`golangci-lint` in a `.justfile`, a script or a workflow runs whatever `PATH` holds — on a
+laptop a stale aqua shim another project left behind, on a clean machine nothing — and the
+`baretools` rule fails it.
 
 Every repository carries the module, not only Go ones: `git-validation` (commit hygiene),
 `godolint` (Dockerfiles) and `dot` (profile graphs; `forkcloser/dot`, graphviz compiled to WASM, a single Go

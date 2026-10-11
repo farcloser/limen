@@ -213,7 +213,7 @@ func Check(root string, policy Policy) []Finding {
 		checkShellcheck(root),
 	}
 
-	findings = append(findings, checkGoTools(root))
+	findings = append(findings, checkGoTools(root), checkBareTools(root))
 
 	if f, ok := checkLintGo(root); ok {
 		findings = append(findings, f)

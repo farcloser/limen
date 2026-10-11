@@ -100,6 +100,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateJustfile(root)...)
 	add(remediateAqua(ctx, root, opts.SelfVersion, opts.RenovateBranch)...)
 	add(remediateGoTools(ctx, root, opts.ToolPins))
+	add(remediateBareTools(root))
 	add(remediateLintGo(root)...)
 	add(remediateLychee(root)...)
 	add(remediateWorkflows(root)...)
