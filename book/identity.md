@@ -162,6 +162,15 @@ session runs: the human's aqua `bin` first, read-only to it, whose proxies execu
 root's packages through `AQUA_ROOT_DIR`; a tool linked only in the root is reached through
 `just`, whose `PATH` is hermetic, or `aqua exec`.
 
+**A `Write` deny rule binds Bash too.** `permissions.deny` rules for the file tools are
+also compiled into the sandbox: a `Read` deny becomes a read denial for every command, and
+a `Write` deny becomes a write denial, even inside a directory the sandbox's write list
+allows. On 2026-10-12 the rules `Write(//~/.*)` and `Write(//~/.*/**)`, meant to keep the
+file tools out of the dotfiles, made the agent root under `~/.local/share` unwritable to
+Bash at once: aqua could not write its timestamps and `touch` in the root failed. Name the
+paths the file tools must not write one by one, and never with a pattern that covers a
+directory sessions write through the shell.
+
 **A sandbox exclusion matches the bare command.** A command the human took out of the
 sandbox — `just kernel`, which boots a VM the sandbox cannot — is excluded only as written,
 alone on its line. Wrapped in a pipe, a `$(…)`, an `&&` chain or an environment prefix, it
