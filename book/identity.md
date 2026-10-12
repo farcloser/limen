@@ -146,6 +146,19 @@ went out marked ready on a sandboxed attempt that had not built, and the release
 it ([farcloser/ossein-kernel#79](https://github.com/farcloser/ossein-kernel/pull/79), fixed
 in [#109](https://github.com/farcloser/ossein-kernel/pull/109)).
 
+**A change to the rig is tried in one session before it reaches them all.** Settings
+edits apply to every running session at once, and the harness itself runs through the rig:
+each Bash call starts as `env`, resolved through the harness's own `PATH` outside the
+sandbox, so with aqua first on `PATH` that `env` is the coreutils proxy, and an empty or
+sick aqua root stops every shell before any command runs. On 2026-10-12 a write-list and
+`env` change meant to give sessions a tool root of their own pointed `AQUA_ROOT_DIR` at a
+root nobody had populated; every session's shell died at once, and the bootstrap could not
+run from inside the sandbox because slsa-verifier keeps its TUF cache under `~/.sigstore`
+([known upstream bugs](./upstream.md)), which the same change had just made read-only. A
+throwaway project with its own `.claude/settings.local.json` and one fresh session would
+have shown both before anyone else was affected. Populate before you point, add before you
+remove, and restart for what only a restart applies.
+
 **Breakage is reported, not routed around.** An agent that finds the rig not working — the
 installed ssh refused, signing unable to reach the agent, a recipe failing — says so first
 and stops there: a private workaround that keeps the work moving hides the defect from the
