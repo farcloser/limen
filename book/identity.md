@@ -150,6 +150,18 @@ which the `tools` recipes and the contribute skill do by themselves. For that fi
 to run at all, the harness's own `env`, resolved through PATH outside the sandbox with the
 checkout's manifest, must not be an aqua proxy: limen's registry links no `env`.
 
+**A session's `PATH` is the harness's, and no rc file changes it.** Before every Bash call
+the harness sources a shell snapshot it wrote at process start, and that snapshot's
+`export PATH=` is a literal copied from the harness's own process environment, not read back
+from the shell that sourced the rc files. A line in `~/.zshrc` putting the agent root's
+`bin` first when `CLAUDECODE` is set never changed a session's `PATH`: on 2026-10-12 a
+snapshot written at 11:13, eighteen minutes after that line landed, still led with the
+human's aqua `bin`. The installer no longer writes the line
+([farcloser/limen-install#87](https://github.com/farcloser/limen-install/pull/87)). What a
+session runs: the human's aqua `bin` first, read-only to it, whose proxies execute the agent
+root's packages through `AQUA_ROOT_DIR`; a tool linked only in the root is reached through
+`just`, whose `PATH` is hermetic, or `aqua exec`.
+
 **A sandbox exclusion matches the bare command.** A command the human took out of the
 sandbox — `just kernel`, which boots a VM the sandbox cannot — is excluded only as written,
 alone on its line. Wrapped in a pipe, a `$(…)`, an `&&` chain or an environment prefix, it
