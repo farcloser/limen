@@ -37,6 +37,12 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   exception is `GOWORK`: a `go.work` in the tree (or a parent) deliberately puts recipes into
   workspace mode, at the eyes-open cost that a build under an active workspace can differ
   from CI.
+- **git's transport is the configured one**: `GIT_SSH_COMMAND` is set to the tracked
+  `core.sshCommand` where one is configured. A sandbox exports a value that outranks the
+  configuration, and every git a recipe spawns, the `go mod download` of a private module
+  first, would take it and fail where the configured transport works. With no
+  `core.sshCommand` the ambient value stays, since a sandbox's proxy may be the only route
+  out; with neither, plain `ssh`.
 - **The host's C compiler, for diagnostics and tests only.** cgo calls the C compiler it
   finds: Xcode's clang on macOS, `/usr/bin/gcc` on Linux, whatever the ambient `PATH` carries
   on Windows. No C toolchain is pinned, so two kinds of build run on the host's, as a named
