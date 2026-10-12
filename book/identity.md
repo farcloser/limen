@@ -172,6 +172,15 @@ went out marked ready on a sandboxed attempt that had not built, and the release
 it ([farcloser/ossein-kernel#79](https://github.com/farcloser/ossein-kernel/pull/79), fixed
 in [#109](https://github.com/farcloser/ossein-kernel/pull/109)).
 
+**A read denial on the keychain blinds every keychain client.** The login keychain's
+contents are encrypted, but a client still has to open the file: with
+`Read(~/Library/Keychains)` in the deny list, `security find-generic-password` reports the
+item missing, `gh auth token` prints nothing, and every `gh` call fails with 401 as if the
+bot's token had expired. gh keeps its token in the keychain, not in `hosts.yml`. On
+2026-10-12 the rule, added to a sweep of credential stores, took the bot offline for half an
+hour and was first read as an expired token. Deny the stores a session must never read; the
+keychain is one it uses.
+
 **A change to the rig is tried in one session before it reaches them all.** Settings
 edits apply to every running session at once, and the harness itself runs through the rig:
 each Bash call starts as `env`, resolved through the harness's own `PATH` outside the
