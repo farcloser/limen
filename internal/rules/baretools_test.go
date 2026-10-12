@@ -10,8 +10,9 @@ import (
 const ruleBareTools = "baretools"
 
 // TestBareToolsPassesBuiltBinaries: a tool run as build/tools/<name>, named in
-// a comment, as an argument, as a path element or as a cache variable is not a
-// bare invocation; nor is a recipe that delegates to the shared lanes.
+// a comment, as an argument, as a path element, as a cache variable or inside a
+// just `{{ }}` is not a bare invocation; nor is a recipe that delegates to the
+// shared lanes.
 func TestBareToolsPassesBuiltBinaries(t *testing.T) {
 	t.Parallel()
 
@@ -25,6 +26,10 @@ lint-extra:
     cd cmd/x && ../../build/tools/golangci-lint fmt --diff ./... # not golangci-lint from PATH
     just do tools update golangci-lint
     just do lint go
+
+smoke dot:
+    GO_GRAPHVIZ_DOT="{{ dot }}" go test -run Smoke ./... && echo {{ dot }}
+    {{ prefix }}godolint --version
 `
 	files["scripts/check.sh"] = "#!/bin/sh\njust do lint go\nls tools/golangci-lint/go.mod\n" +
 		"if test -x build/tools/golangci-lint; then echo built golangci-lint; fi\n"
@@ -46,7 +51,8 @@ func TestBareToolsFailsPathInvocations(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files[".justfile"] += "\nproto:\n    go generate ./...\n    golangci-lint fmt ./... && godolint Dockerfile\n"
+	files[".justfile"] += "\nproto:\n    go generate ./...\n    golangci-lint fmt ./... && godolint Dockerfile\n" +
+		"    { golangci-lint; } && (godolint)\n"
 	files["hack/vuln.sh"] = "#!/bin/sh\nset -e\ngo build ./... ; govulncheck ./...\n" +
 		"if ! golangci-lint run; then exit 1; fi\nexec nilaway ./...\n"
 	files[".github/workflows/extra.yaml"] = "on: push\njobs:\n  x:\n    steps:\n      - run: go-licenses check ./...\n" +
@@ -63,6 +69,8 @@ func TestBareToolsFailsPathInvocations(t *testing.T) {
 	for _, want := range []string{
 		".justfile:7 runs `golangci-lint` from PATH",
 		".justfile:7 runs `godolint` from PATH",
+		".justfile:8 runs `golangci-lint` from PATH",
+		".justfile:8 runs `godolint` from PATH",
 		".github/workflows/extra.yaml:5 runs `go-licenses` from PATH",
 		".github/workflows/extra.yaml:7 runs `deadcode` from PATH",
 		"hack/vuln.sh:3 runs `govulncheck` from PATH",
