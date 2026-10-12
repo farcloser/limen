@@ -83,6 +83,14 @@ var bareToolCommand = regexp.MustCompile(
 		) + `)(?:[ \t]|$)`,
 )
 
+// justInterpolation is a just `{{ expression }}` (a `${{ }}` workflow
+// expression matches the same). What it names is a variable or a parameter,
+// never a program on PATH, and its `{{` is no shell group: `X="{{ dot }}"`
+// passes a parameter. The span becomes one word character before the match,
+// not nothing: `{{ prefix }}godolint` runs a prefixed path, and an empty
+// replacement would leave `godolint` opening the line.
+var justInterpolation = regexp.MustCompile(`\{\{[^{}]*\}\}`)
+
 // bareToolHit is one line that runs a Go-built tool from PATH.
 type bareToolHit struct {
 	path string // repository-relative, slash-separated
@@ -109,6 +117,8 @@ func bareToolLines(relPath, text string) []bareToolHit {
 		if code, _, found := strings.Cut(line, " #"); found {
 			line = code
 		}
+
+		line = justInterpolation.ReplaceAllString(line, "_")
 
 		for _, m := range bareToolCommand.FindAllStringSubmatch(line, -1) {
 			hits = append(hits, bareToolHit{path: relPath, line: i + 1, name: m[1]})
