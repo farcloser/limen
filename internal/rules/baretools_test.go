@@ -51,7 +51,8 @@ func TestBareToolsFailsPathInvocations(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files[".justfile"] += "\nproto:\n    go generate ./...\n    golangci-lint fmt ./... && godolint Dockerfile\n"
+	files[".justfile"] += "\nproto:\n    go generate ./...\n    golangci-lint fmt ./... && godolint Dockerfile\n" +
+		"    { golangci-lint; } && (godolint)\n"
 	files["hack/vuln.sh"] = "#!/bin/sh\nset -e\ngo build ./... ; govulncheck ./...\n" +
 		"if ! golangci-lint run; then exit 1; fi\nexec nilaway ./...\n"
 	files[".github/workflows/extra.yaml"] = "on: push\njobs:\n  x:\n    steps:\n      - run: go-licenses check ./...\n" +
@@ -68,6 +69,8 @@ func TestBareToolsFailsPathInvocations(t *testing.T) {
 	for _, want := range []string{
 		".justfile:7 runs `golangci-lint` from PATH",
 		".justfile:7 runs `godolint` from PATH",
+		".justfile:8 runs `golangci-lint` from PATH",
+		".justfile:8 runs `godolint` from PATH",
 		".github/workflows/extra.yaml:5 runs `go-licenses` from PATH",
 		".github/workflows/extra.yaml:7 runs `deadcode` from PATH",
 		"hack/vuln.sh:3 runs `govulncheck` from PATH",

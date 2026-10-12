@@ -72,15 +72,17 @@ func goToolNames() []string {
 // bareToolCommand matches a Go-built tool's name in command position: opening
 // the line (after indentation and just's `@` or `-` prefix), after a shell
 // separator, a `!` or a `{`, after a shell word that takes a command (`if`,
-// `exec`, `time`, `xargs`, …), or as a workflow step's `run:` value. A name
-// after any other word, a slash or a dash is an argument, a path or another
-// word, and is not matched; so is one behind `env`'s assignments.
+// `exec`, `time`, `xargs`, …), or as a workflow step's `run:` value, and
+// followed by a blank, a shell separator or the end of the line. A name after
+// any other word, a slash or a dash is an argument, a path or another word,
+// and is not matched; so is one behind `env`'s assignments, and one that runs
+// on into a dash or a slash (`godolint-wrapper`, `godolint/x`).
 var bareToolCommand = regexp.MustCompile(
 	`(?:^[ \t]*[@-]?|[;&|(!{` + "`" + `][ \t]*|\b(?:if|elif|then|else|do|exec|env|command|time|nice|xargs)[ \t]+|\brun:[ \t]*)(` +
 		strings.Join(
 			goToolNames(),
 			"|",
-		) + `)(?:[ \t]|$)`,
+		) + `)(?:[ \t;&|)>]|$)`,
 )
 
 // justInterpolation is a just `{{ expression }}` (a `${{ }}` workflow
