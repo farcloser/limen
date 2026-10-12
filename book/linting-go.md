@@ -152,8 +152,8 @@ Each finding is a place where an untrusted number meets a fixed width, which is 
 format reader breaks.
 
 `just do lint go` enforces this after golangci-lint runs: nolintlint polices the *shape*
-of a directive, not which linter it names, so the recipe greps the tracked Go files for
-every banned form and fails with the fix spelled out.
+of a directive, not which linter it names, so the recipe greps every Go file in the working
+tree, untracked ones included, for every banned form and fails with the fix spelled out.
 
 ## Fixing a shadowed error
 
