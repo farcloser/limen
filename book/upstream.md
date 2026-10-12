@@ -144,3 +144,32 @@ prefix with a hyphenated sibling in the list: a project that allows `github.com/
 
 **Lifts when** depguard checks every entry that is a prefix of the import, not the one its
 search lands on. No upstream issue names it (searched 2026-10-11).
+
+## sigstore-go's TUF cache has no path override, so slsa-verifier always writes `$HOME/.sigstore`
+
+**Symptom.** An aqua install of a package with SLSA provenance fails wherever `~/.sigstore`
+is not writable, such as the Claude Code sandbox with that directory off its write list:
+`SLSA verification failed: open /Users/…/.sigstore/root/tuf-repo-cdn.sigstore.dev/tuf_tmp…:
+operation not permitted`, then `download aqua: verify the asset: verify a package with
+slsa-verifier` (`aqua update-aqua`, 2026-10-12). `TUF_ROOT` is set and ignored.
+
+**Cause.** slsa-verifier builds its trusted root from sigstore-go's `tuf.DefaultOptions()`
+and sets no cache path
+([verifiers/utils/sigstore_tuf.go](https://github.com/slsa-framework/slsa-verifier/blob/30d0be3bbab553fc51557377baba2f7572dfc212/verifiers/utils/sigstore_tuf.go#L49)).
+`DefaultOptions` puts the cache at `$HOME/.sigstore/root` from `os.UserHomeDir()` and reads
+no environment variable
+([pkg/tuf/options.go](https://github.com/sigstore/sigstore-go/blob/a061819fe7f864aa13c79377dbd01488b572b442/pkg/tuf/options.go#L132-L142));
+the client writes under it, one directory per mirror
+([pkg/tuf/client.go](https://github.com/sigstore/sigstore-go/blob/a061819fe7f864aa13c79377dbd01488b572b442/pkg/tuf/client.go#L39)).
+The older `sigstore/sigstore` TUF client honours `TUF_ROOT`
+([pkg/tuf/client.go](https://github.com/sigstore/sigstore/blob/ac7823789dc6a2935c29a76f896606e4474719d9/pkg/tuf/client.go#L563)),
+and so does cosign, which is why the variable looks as if it should work here.
+
+**Workaround.** The cache follows `HOME` and nothing else. A one-off install can run with
+`HOME` pointed at a writable directory; a sandboxed session cannot, since `HOME` is the
+harness's. Today `~/.sigstore` stays on the sandbox's write list for this reason alone, and
+the cost is named: whoever verifies against that TUF cache afterwards trusts what any
+sandboxed command could have written there.
+
+**Lifts when** sigstore-go reads a cache path from the environment, as `sigstore/sigstore`
+does with `TUF_ROOT`, or slsa-verifier passes `WithCachePath`. Not reported upstream yet.
