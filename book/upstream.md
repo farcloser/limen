@@ -119,3 +119,28 @@ shebang scan does); the patterns it matches are ASCII, so nothing it decides cha
 
 **Lifts when** never, as far as we know: it is how that awk is built. The entry stays as the
 reason for the `LC_ALL=C`.
+
+## depguard checks one allow entry per import
+
+**Symptom.** `just do lint go` reports an import of the module's own package,
+`github.com/<owner>/<mod>/<pkg>`, as "not allowed from list 'main'", while the rendered
+`build/golangci.yml` carries `github.com/<owner>/<mod>` in the allow list. It starts the day
+the project's `.lint-go.yaml` allows a sibling module whose path extends the module's by a
+hyphen (`github.com/<owner>/<mod>-<x>`).
+
+**Cause.** depguard sorts the allow list and, for an import, checks as a prefix only the last
+entry that sorts at or before it
+([settings.go, `strInPrefixList`](https://github.com/OpenPeeDeeP/depguard/blob/v2.2.1/settings.go)).
+`-` sorts before `/`, so `…/<mod>-<x>` sits between `…/<mod>` and `…/<mod>/<pkg>`: the
+search lands on the sibling, which is no prefix of the import, and the shorter entry that is
+one is never looked at.
+
+**Workaround.** The baseline allows `${MODULE_PATH}/` beside `${MODULE_PATH}`
+(`.limen/lint-go.yaml`): with the slash the entry sorts after every hyphenated sibling and
+before the module's packages, so the search lands on it. The same holds for any other allowed
+prefix with a hyphenated sibling in the list: a project that allows `github.com/x/y` and
+`github.com/x/y-z` and imports `github.com/x/y/pkg` adds `github.com/x/y/` in its
+`.lint-go.yaml`, naming this entry.
+
+**Lifts when** depguard checks every entry that is a prefix of the import, not the one its
+search lands on. No upstream issue names it (searched 2026-10-11).
