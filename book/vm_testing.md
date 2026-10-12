@@ -78,8 +78,10 @@ com.apple.hiservices-xpcservice"). Two settings in `~/.claude/settings.json` fix
 ```
 
 Both forms of each pattern are needed (bare for the naked command, `*` for invocations with
-arguments). The sandbox profile is built once at session start: settings edits do nothing to
-a live session, restart it.
+arguments). Claude Code reloads the settings files when they change: a new `env`
+variable, a write-list entry or an exclusion reaches every running session at its next
+command. Two things wait for a restart: a variable removed from `env` stays set in running
+sessions, and `PATH` is frozen in the session's shell snapshot, taken once at session start.
 
 With the exclusion in place, `utmctl` must still be the *whole* command. A pipe, a
 redirection, `&&`, `$(…)` or a wrapper script around it aborts the call with exit 134 before
