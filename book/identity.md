@@ -136,6 +136,20 @@ The bot's identity — name, email, signing key — is injected as session-scope
 configuration (`GIT_CONFIG_*` in the agent's environment): the human's own git
 configuration is never modified, and a shell the human opens never sees the bot.
 
+**The sessions' tool root.** Everything a session installs or caches lives under one
+directory of its own, `~/.local/share/limen-agent`, created by `limen-install-agent`: aqua's
+root (`AQUA_ROOT_DIR`), a home for the verifiers (`LIMEN_AGENT_HOME`: slsa-verifier keeps
+its TUF cache under `$HOME/.sigstore` and reads no other variable, [known upstream
+bugs](./upstream.md)), the Go module and build caches, cargo and the XDG cache. The
+sandbox's write list is the directories the installer was given plus that root; the
+human's aqua root, Go caches, cargo and sigstore cache are not writable to a session, so
+nothing a sandboxed command writes is ever executed outside the sandbox. The installer
+puts aqua in the root and nothing per repository: a session approves a checkout's policy
+and installs its pins itself, and every real install runs with `HOME` at the agent home,
+which the `tools` recipes and the contribute skill do by themselves. For that first command
+to run at all, the harness's own `env`, resolved through PATH outside the sandbox with the
+checkout's manifest, must not be an aqua proxy: limen's registry links no `env`.
+
 **A sandbox exclusion matches the bare command.** A command the human took out of the
 sandbox — `just kernel`, which boots a VM the sandbox cannot — is excluded only as written,
 alone on its line. Wrapped in a pipe, a `$(…)`, an `&&` chain or an environment prefix, it
