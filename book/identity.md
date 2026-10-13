@@ -213,6 +213,20 @@ which takes it as an argument after expansion and, with the variable unset, runs
 command ([#373](https://github.com/farcloser/limen/pull/373)). A conditional prefix is
 proven by running the recipe both ways, variable set and unset.
 
+**An excluded command names a fixed, human-owned binary by absolute path, or nothing.** A
+sandbox exclusion is matched on the typed command, but what runs unsandboxed is whatever
+that name resolves to. `just kernel` is the `kernel` recipe of the current `.justfile`,
+repository content a session edits; `ossein *` resolves through aqua into the agent root,
+which sessions write; `./build/ossein *` is a binary the session just built. Each was an
+escape with a prompt in front of it, and the prompt shows the name, not the contents. On
+2026-10-12 the list went from nine entries to one,
+`/Applications/UTM.app/Contents/MacOS/utmctl *`, after every owner was asked what it types:
+the VM boots the others served cannot run sandboxed, because the sandbox denies the
+`kern.hv_support` sysctl ([known upstream bugs](./upstream.md)), so a boot is a human-run
+step until Anthropic moves. The rule for the next request: a name on `PATH` or a recipe is
+refused on sight; a human-owned binary a session cannot replace, by its absolute path, may
+be weighed.
+
 **Breakage is reported, not routed around.** An agent that finds the rig not working — the
 installed ssh refused, signing unable to reach the agent, a recipe failing — says so first
 and stops there: a private workaround that keeps the work moving hides the defect from the

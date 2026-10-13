@@ -48,7 +48,7 @@ project_aqua := '''
     project_aqua() {
         local copy scratch rc=0
         copy=$(mktemp .aqua/aqua.yaml.XXXXXX)
-        scratch=$(mktemp -d)
+        scratch=$(mktemp -d "${TMPDIR:-/tmp}/limen-tools.XXXXXX")
         sed 's|^\([[:space:]]*\)- import: \(\.\./\.limen/aqua\.yaml\)[[:space:]]*$|\1# limen-import: \2|' .aqua/aqua.yaml > "$copy"
         (cd "$scratch" && env -u AQUA_GLOBAL_CONFIG AQUA_GITHUB_TOKEN="${AQUA_GITHUB_TOKEN:-$(gh auth token 2>/dev/null || true)}" aqua -c "$OLDPWD/$copy" "$@") || rc=$?
         rmdir "$scratch"
