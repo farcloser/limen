@@ -218,6 +218,21 @@ home's symlinks and their targets (`for f in ~/.* ~/*; do [ -L "$f" ] && readlin
 and keep the target readable or move the file; the alphabet scheme leaves `V*` readable for
 this reason alone.
 
+**A default that moves under a running fleet is checked before anything is written.** The
+agent installer's default socket moved from Secretive to taciturn the hour taciturn was
+released ([farcloser/limen-install#95](https://github.com/farcloser/limen-install/pull/95)),
+and the next run, on a machine where taciturn was not installed yet, pinned the dead path
+into the signer wrapper, the ssh command and the sandbox's socket list: signing stopped in
+every session until a re-run with `--socket` (2026-10-12). The same run showed a second
+defect the old socket had hidden: `core.sshCommand` is parsed by `sh` and then by ssh, so a
+path with a space needs ssh_config's double quotes inside the shell's single quotes,
+`-o 'IdentityAgent="…/Application Support/taciturn/agent.sock"'`; the bare single quotes
+vanish in `sh` and ssh reports "keyword identityagent extra arguments". The installer now
+refuses to run when the socket does not exist and writes the doubly quoted form
+([#97](https://github.com/farcloser/limen-install/pull/97)). An installer that pins a path
+proves the path exists first, and a change of default is tried on a machine that has the
+new thing before the fleet's installer learns it.
+
 **A change to the rig is tried in one session before it reaches them all.** Settings
 edits apply to every running session at once, and the harness itself runs through the rig:
 each Bash call starts as `env`, resolved through the harness's own `PATH` outside the
