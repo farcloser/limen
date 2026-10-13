@@ -60,8 +60,15 @@ runs:
         }
         Add-PartitionAccessPath -DiskNumber $disk.Number -PartitionNumber $part.PartitionNumber -AccessPath 'C:\vcache\'
         # Without it, Defender scans every file on its first read from the
-        # image, and lint pays what the restore saved.
-        Add-MpPreference -ExclusionPath 'C:\vcache', 'C:\vhd'
+        # image, and lint pays what the restore saved. A speed-up, never a
+        # requirement: some runner images (windows-11-arm) have no Defender
+        # service to take the exclusion, and the restore is worth as much
+        # without it.
+        try {
+          Add-MpPreference -ExclusionPath 'C:\vcache', 'C:\vhd'
+        } catch {
+          Write-Host "Defender exclusion skipped: $_"
+        }
         # The linter cache lives under the workspace (main.just pins it there).
         New-Item -ItemType Directory -Force -Path C:\vcache\golangci, "$env:GITHUB_WORKSPACE\build" | Out-Null
         New-Item -ItemType Junction -Path "$env:GITHUB_WORKSPACE\build\cache" -Target C:\vcache\golangci | Out-Null
