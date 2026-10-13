@@ -1,0 +1,10 @@
+# This repository's own link exclusions, merged with the canonical
+# .limen/lychee.toml by `just do security links` (the exclude lists concatenate).
+# Only what applies to this repository alone belongs here.
+
+exclude = [
+  # cygwin.com's gitweb rate-limits by request, not by client: two of three
+  # back-to-back requests answer 429, from a laptop as from a runner, past
+  # lychee's retries. One design note links it; the page itself is fine.
+  'https://cygwin\.com/git/',
+]
