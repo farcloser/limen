@@ -201,6 +201,14 @@ the `clang` shim runs `xcrun`, whose cache lives there. The fix is on the tool s
 list: `mktemp -d "$TMPDIR/x.XXXXXX"` works sandboxed, and cgo builds pin `CC` and `SDKROOT`
 from `xcode-select -p`, which removes `xcrun` from the path.
 
+**Bypass mode cannot be refused from the user's settings.** `disableBypassPermissionsMode:
+"disable"` is honoured in managed settings only; placed in `~/.claude/settings.json` it
+changes nothing, and a session switched to bypass mode a minute after it was written
+(2026-10-12). So the one sandbox exclusion, UTM's `utmctl` by absolute path, runs
+unprompted whenever a session is in bypass mode, and nothing in the rig prevents that mode.
+Bypass mode is the human's break-glass and stays one; the rule is to leave it the moment the
+emergency is over, and never to run a VM tool from a session in it.
+
 **A change to the rig is tried in one session before it reaches them all.** Settings
 edits apply to every running session at once, and the harness itself runs through the rig:
 each Bash call starts as `env`, resolved through the harness's own `PATH` outside the
