@@ -5,7 +5,7 @@
 
 packages:
   # No go_install entries: every Go-built tool is a tool directive in
-  # tools/go.mod (book/tooling.md, "Go-built tools are go.mod tools").
+  # .limen/tools/go.mod (book/tooling.md, "Go-built tools are go.mod tools").
   # limen itself: every repo pins the version that enforces it, so the binary
   # and the canonical files it embeds travel together (no version skew between
   # the checker and the checked). Graduates to the standard registry once

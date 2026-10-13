@@ -31,7 +31,7 @@ smoke dot:
     GO_GRAPHVIZ_DOT="{{ dot }}" go test -run Smoke ./... && echo {{ dot }}
     {{ prefix }}godolint --version
 `
-	files["scripts/check.sh"] = "#!/bin/sh\njust do lint go\nls tools/golangci-lint/go.mod\n" +
+	files["scripts/check.sh"] = "#!/bin/sh\njust do lint go\nls .limen/tools/golangci-lint/go.mod\n" +
 		"if test -x .build/tools/golangci-lint; then echo built golangci-lint; fi\n"
 	files[".github/actions/check/action.yaml"] = "runs:\n  using: composite\n  steps:\n" +
 		"    - run: just do lint go\n      shell: bash\n"

@@ -26,10 +26,10 @@ version moves up; none requires a newer release.
 - **A dependency that needs a newer release waits.** Taking a dependency on `go 1.(N+1)`
   would raise the module past the baseline: the module stays on the dependency's last
   release that supports the baseline until the baseline moves.
-- **The tools modules are the exception.** `tools/go.mod` and `tools/<name>/go.mod` are
-  built only by the repository's pinned toolchain and never imported, and `go mod tidy`
-  raises their directive to whatever the tools themselves require. Their directive is left
-  to that.
+- **The tools modules are the exception.** `.limen/tools/go.mod` and
+  `.limen/tools/<name>/go.mod` are built only by the repository's pinned toolchain and never
+  imported, and `go mod tidy` raises their directive to whatever the tools themselves require.
+  Their directive is left to that.
 
 ## No replace, ever
 

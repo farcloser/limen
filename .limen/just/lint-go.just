@@ -12,7 +12,7 @@ import 'lib.just'
 
 default: code vet mod licenses nilaway
 
-# golangci-lint, built here by the pinned toolchain from tools/golangci-lint
+# golangci-lint, built here by the pinned toolchain from .limen/tools/golangci-lint
 # (its own module, so its analyzers' dependencies stay upstream's; see _go-tool
 # in lib.just), on the configuration limen-lint-go renders from the baseline
 # and the project's .lint-go.yaml (see _golangci-config in lib.just: the file
@@ -101,22 +101,22 @@ _suppression-check:
 # excludes both analyzers.
 vet: (_banner "lint go" "vet") (_per-platform "go vet -asmdecl -buildtag ./...")
 
-# go.mod/go.sum tidiness, for the module and for tools/ (the Go-built tools'
+# go.mod/go.sum tidiness, for the module and for .limen/tools/ (the Go-built tools'
 # own module — see _go-tool in lib.just). Fails printing the diff; `just do fix
 # go mod` repairs.
 mod: (_banner "lint go" "mod")
     #!/usr/bin/env bash
     set -euo pipefail
     go mod tidy -diff
-    go -C tools mod tidy -diff
-    # The isolated tool modules too (tools/<name>/go.mod, see _go-tool).
-    for m in tools/*/go.mod; do
+    go -C .limen/tools mod tidy -diff
+    # The isolated tool modules too (.limen/tools/<name>/go.mod, see _go-tool).
+    for m in .limen/tools/*/go.mod; do
         [ -f "$m" ] && go -C "${m%/go.mod}" mod tidy -diff
     done
 
 # NilAway (go.uber.org/nilaway), Uber's nil-panic analyzer: not a golangci-lint
 # linter and never to become one (its false positives are by design), so a
-# lane of its own, built from tools/nilaway (a module of its own, pinned by
+# lane of its own, built from .limen/tools/nilaway (a module of its own, pinned by
 # pseudo-version) and run once per supported platform like the other
 # analyzers (see _per-platform in lib.just). limen-lint-go carries its flags
 # from the baseline and the project's .lint-go.yaml: -include-pkgs bounds

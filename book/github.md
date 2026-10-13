@@ -289,7 +289,7 @@ The decided merge model, enforced by the repository settings and the `limen:main
   only links. Links verify nothing, so without it an asset missing from a release, or failing
   its checksum, merges green and fails months later at first use. The job caches aqua's
   package store keyed on the exact pins, so an unchanged pin set costs seconds and a changed
-  one is always a real install; it feeds `gate`. (The Go-built tools are `tools/go.mod`
+  one is always a real install; it feeds `gate`. (The Go-built tools are `.limen/tools/go.mod`
   directives; the verify legs build them.)
 
   **Caches on the verify legs.** Each leg restores the same package store, per architecture

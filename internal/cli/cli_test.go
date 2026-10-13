@@ -184,7 +184,7 @@ func compliantRepo(t *testing.T) string {
 		".limen/renovate.json":                            limen.CanonicalRenovatePreset,
 		"renovate.json":                                   rules.CanonicalRenovateFor(""),
 		// The Go-built tools every repository declares (the gotools rule).
-		"tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
+		".limen/tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
 			"\tgithub.com/vbatts/git-validation\n" +
 			"\tgithub.com/forkcloser/godolint/cmd/godolint\n" +
 			"\tgithub.com/forkcloser/dot/cmd/dot\n)\n",
@@ -278,7 +278,7 @@ func TestRunFixAndBootstrap(t *testing.T) {
 // of suppressed. With no -org and no origin remote, the update-App step is a
 // warning that names the way forward, never a failure.
 // toolsSeededDir is a bootstrap target already carrying limen's own
-// tools/go.mod: the test binary is a development build, which embeds no tool
+// .limen/tools/go.mod: the test binary is a development build, which embeds no tool
 // pins and refuses to seed a tool directive (the rules tests cover seeding),
 // so a bootstrap meant to end compliant starts with the tools declared.
 // Bootstrapping it takes -force.
@@ -291,17 +291,17 @@ func toolsSeededDir(t *testing.T) string {
 		t.Skip("git is not on PATH, and bootstrap runs git init")
 	}
 
-	gomod, err := os.ReadFile(filepath.Join("..", "..", "tools", "go.mod"))
+	gomod, err := os.ReadFile(filepath.Join("..", "..", ".limen", "tools", "go.mod"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	dir := filepath.Join(t.TempDir(), "newrepo")
-	if err := os.MkdirAll(filepath.Join(dir, "tools"), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".limen", "tools"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "tools", "go.mod"), gomod, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".limen", "tools", "go.mod"), gomod, 0o600); err != nil {
 		t.Fatal(err)
 	}
 

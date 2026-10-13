@@ -53,14 +53,14 @@ code: (_banner "fix go" "go") (_go-tool "golangci-lint" "github.com/golangci/gol
         exit 1
     fi
 
-# Tidy go.mod/go.sum, for the module, for tools/ (the analyzers' module) and
-# for each isolated tool module (tools/<name>/go.mod, see _go-tool).
+# Tidy go.mod/go.sum, for the module, for .limen/tools/ (the analyzers' module) and
+# for each isolated tool module (.limen/tools/<name>/go.mod, see _go-tool).
 mod: (_banner "fix go" "mod")
     #!/usr/bin/env bash
     set -euo pipefail
     go mod tidy
-    go -C tools mod tidy
-    for m in tools/*/go.mod; do
+    go -C .limen/tools mod tidy
+    for m in .limen/tools/*/go.mod; do
         [ -f "$m" ] && go -C "${m%/go.mod}" mod tidy
     done
 

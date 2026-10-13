@@ -17,14 +17,14 @@ const (
 )
 
 // goRepoFiles is a compliant Go repository: the compliant fixture plus a
-// root go.mod, the analyzers in tools/go.mod, golangci-lint in its module and
+// root go.mod, the analyzers in .limen/tools/go.mod, golangci-lint in its module and
 // the Go lint baseline.
 func goRepoFiles() map[string]string {
 	files := compliantFiles()
 	files["go.mod"] = goModBare
-	files["tools/go.mod"] = goModWithTools
-	files["tools/golangci-lint/go.mod"] = goModGolangci
-	files["tools/nilaway/go.mod"] = goModNilaway
+	files[".limen/tools/go.mod"] = goModWithTools
+	files[".limen/tools/golangci-lint/go.mod"] = goModGolangci
+	files[".limen/tools/nilaway/go.mod"] = goModNilaway
 	files[lintGoBaseline] = rules.CanonicalLintGo
 
 	return files
