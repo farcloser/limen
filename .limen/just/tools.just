@@ -126,7 +126,7 @@ set pkg version: (_banner "tools" "set")
         if grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" "tools/${name}/go.mod" 2>/dev/null; then
             go -C "tools/${name}" get -tool '{{ pkg }}@{{ version }}'   # moves the pin
             go -C "tools/${name}" mod tidy
-            mkdir -p build/tools && GOOS='' GOARCH='' go -C "tools/${name}" build -o '../../build/tools/' '{{ pkg }}'
+            mkdir -p build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C "tools/${name}" build -o '../../build/tools/' '{{ pkg }}'
             exit 0
         fi
         if ! grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
@@ -192,7 +192,7 @@ update command="": (_banner "tools" "update")
         [ -n "$p" ] || return 0
         go -C "$dir" get -tool "${p}@latest"
         go -C "$dir" mod tidy
-        mkdir -p build/tools && GOOS='' GOARCH='' go -C "$dir" build -o '../../build/tools/' "$p"
+        mkdir -p build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C "$dir" build -o '../../build/tools/' "$p"
     }
     {{ project_aqua }}
     if [ -z '{{ command }}' ]; then
