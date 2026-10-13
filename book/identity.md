@@ -171,6 +171,15 @@ Bash at once: aqua could not write its timestamps and `touch` in the root failed
 paths the file tools must not write one by one, and never with a pattern that covers a
 directory sessions write through the shell.
 
+**A repository's worktree registry is closed to a session holding a live worktree in it.**
+`git worktree remove` and `git worktree prune` fail with "failed to delete
+'.git/worktrees/<name>': Operation not permitted" for every entry of that repository,
+whatever the session's working directory, while the session has a worktree of its own
+there; the same prune from a session without one succeeds (2026-10-13, saprobe-dsd and
+limen). The harness manages `.claude/worktrees` and keeps its hand on the registry it
+depends on. Prune from a session that holds no worktree in the repository, or leave the
+stale entries to the human; do not retry from the one that does.
+
 **A sandbox exclusion matches the bare command.** A command the human took out of the
 sandbox — `just kernel`, which boots a VM the sandbox cannot — is excluded only as written,
 alone on its line. Wrapped in a pipe, a `$(…)`, an `&&` chain or an environment prefix, it
@@ -214,7 +223,7 @@ emergency is over, and never to run a VM tool from a session in it.
 died with `fatal: unable to access '/Users/…/.gitconfig': Operation not permitted`, for the
 twenty minutes it took to see that the rule, not the dot-rules, was the cause (2026-10-12).
 The sandbox resolves the link and judges the target. Before denying a directory, list the
-home's symlinks and their targets (`for f in ~/.* ~/*; do [ -L "$f" ] && readlink "$f"; done`)
+home's symlinks and their targets (`for f in ~/.* ~/*; do [ -L "$f" ] && echo "$f -> $(readlink "$f")"; done`)
 and keep the target readable or move the file; the alphabet scheme leaves `V*` readable for
 this reason alone.
 
