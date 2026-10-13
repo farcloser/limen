@@ -76,6 +76,31 @@
       "algorithm": "sha256"
     },
     {
+      "id": "github_release/github.com/forkcloser/compress/v0.1.0/compress_0.1.0_darwin_arm64.tar.gz",
+      "checksum": "3617CC50FD77AC2E69F25DB9BC6C4376C74294333E39235D43EEBA17C7C18A49",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/forkcloser/compress/v0.1.0/compress_0.1.0_linux_amd64.tar.gz",
+      "checksum": "25930AB2C1BB521333464762E595B74EF9DEAF07AA422D6D236F71888D01C779",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/forkcloser/compress/v0.1.0/compress_0.1.0_linux_arm64.tar.gz",
+      "checksum": "1BD7B1C3A8228E25B9B5746585F06FE439DC8D76F32DD29545550A0F07D63C72",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/forkcloser/compress/v0.1.0/compress_0.1.0_windows_amd64.tar.gz",
+      "checksum": "156D68E3E50854871D27323FFAE4D32605408C580444C94D6F870040E5415692",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/forkcloser/compress/v0.1.0/compress_0.1.0_windows_arm64.tar.gz",
+      "checksum": "9776A0FE05702F2D5C407A981C3DBE0BF11E203E42651DC3349B00D18FB78E76",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/forkcloser/curl/v8.22.0/curl_8.22.0_darwin_arm64.tar.gz",
       "checksum": "E733869CF4FED3F5CB0F67E0AA37DD21216690D27C56525749E3F3A211227DD3",
       "algorithm": "sha256"

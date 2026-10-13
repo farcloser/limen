@@ -43,19 +43,19 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   first, would take it and fail where the configured transport works. With no
   `core.sshCommand` the ambient value stays, since a sandbox's proxy may be the only route
   out; with neither, plain `ssh`.
-- **The host's C compiler, for diagnostics and tests only.** cgo calls the C compiler it
-  finds: Xcode's clang on macOS, `/usr/bin/gcc` on Linux, whatever the ambient `PATH` carries
-  on Windows. On macOS the recipes name it: `CC`, `CXX` and `SDKROOT` point at the selected
+- **The host's C compiler, for diagnostics and tests only.** cgo calls the C compiler it finds:
+  Xcode's clang on macOS, `/usr/bin/gcc` on Linux, whatever the ambient `PATH` carries on
+  Windows. On macOS the recipes name it: `CC`, `CXX` and `SDKROOT` point at the selected
   developer directory's own clang and SDK (`xcode-select -p`), never at the `/usr/bin/clang`
-  shim, which runs `xcrun` and keeps its cache in the per-user temp directory that a sandbox
-  may deny. The Go-built tools are built with cgo off: pure Go, no compiler at all. No C
-  toolchain is pinned, so two kinds of build run on the host's, as a named exception: the race lanes (`test go race` and `build go race` force cgo; the detector needs
-  it) and the tests of a project that sets `GO_CGO`. Both are diagnostics, never shipped: a
-  compiler difference there can change what a test finds, never what a consumer runs. A
-  release artifact is not covered: one for macOS that links Apple's SDK
-  (Virtualization.framework, an `xcodebuild` bundle) builds with Xcode, which belongs to the
-  machine like the OS; on Linux and Windows a shipped cgo build needs a pinned C toolchain
-  (an ossein container).
+  shim, which runs `xcrun` and keeps its cache in the per-user temp directory that a sandbox may
+  deny. The Go-built tools are built with cgo off: pure Go, no compiler at all. No C toolchain
+  is pinned, so two kinds of build run on the host's, as a named exception: the race lanes
+  (`test go race` and `build go race` force cgo; the detector needs it) and the tests of a
+  project that sets `GO_CGO`. Both are diagnostics, never shipped: a compiler difference there
+  can change what a test finds, never what a consumer runs. A release artifact is not covered:
+  one for macOS that links Apple's SDK (Virtualization.framework, an `xcodebuild` bundle) builds
+  with Xcode, which belongs to the machine like the OS; on Linux and Windows a shipped cgo build
+  needs a pinned C toolchain (an ossein container).
 
 The coreutils are pinned too: `sort`, `date`, `mktemp`, `sha256sum`, `base64` and the rest
 on the hermetic PATH are aqua's, never the runner's. On macOS and Linux that is one Rust
@@ -70,6 +70,12 @@ script that branches on `uname` and expects BSD flags on macOS meets GNU there; 
 after fetching, never unpin the PATH for it. Call pinned tools from the project tree: an
 aqua shim finds its pin by walking up from the working directory, so a recipe that `cd`s
 into a temp dir outside the repository has no pinned tool there — hand it the path instead.
+
+The archive tools are pinned the same way: `tar` (and `gtar`, the name build scripts reach
+for on macOS), `xz`, `gzip`, `zstd`, `zip` and `unzip` are one pure-Go build on every
+platform, so a script that unpacks a source archive or packs an artifact runs the same
+program on a laptop, a Linux runner and a Windows one. The host's tar, GNU or bsdtar, is
+never on the hermetic PATH.
 
 The consequence, and the point: a recipe behaves identically on every machine that ran
 [machine setup](./tooling.md#machine-setup-limen-install-one-time-per-machine), and
