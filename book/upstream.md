@@ -175,3 +175,31 @@ sandbox's write list on 2026-10-12 ([farcloser/limen#367](https://github.com/far
 
 **Lifts when** sigstore-go reads a cache path from the environment, as `sigstore/sigstore`
 does with `TUF_ROOT`, or slsa-verifier passes `WithCachePath`. Not reported upstream yet.
+
+## Claude Code's sandbox denies `kern.hv_support`, so Virtualization.framework reports no hardware
+
+**Symptom.** Any Virtualization.framework program run inside a Claude Code sandboxed Bash call
+fails at configuration validation with `VZErrorDomain Code=2 "Invalid virtual machine
+configuration. Virtualization is not available on this hardware."` (`ossein run`,
+2026-10-12), on hardware where the same binary boots fine from a terminal. The unified log
+shows no sandbox denial for the process.
+
+**Cause.** The Seatbelt profile the sandbox runtime writes allows `sysctl-read` for a fixed
+list of named keys only
+([src/sandbox/macos-sandbox-utils.ts](https://github.com/anthropic-experimental/sandbox-runtime/blob/24eb39e94a6de386e83d126c52317d8e0fa49522/src/sandbox/macos-sandbox-utils.ts#L1167)),
+and `kern.hv_support` is not among them. Virtualization.framework reads that key to decide
+whether the machine supports virtualization, gets `EPERM`, and reports the only thing it can.
+Proven from inside the sandbox with `sysctlbyname`: `hw.ncpu` answers, `kern.hv_support` and
+`kern.hv_vmm_present` return `EPERM`. The binary's entitlement is not the problem: `ossein`
+carries `com.apple.security.virtualization`. The settings expose no knob for sysctls; only
+mach services are configurable (`sandbox.network.allowMachLookup`).
+
+**Workaround.** None inside the sandbox. A VM boot is a human-run step: a session builds and
+tests, the human types `just kernel`, `just guest-test` or `ossein run` in a terminal. The
+former unsandboxed exclusions for these commands were removed on 2026-10-12, because an
+exclusion that resolves into content a session can write (a recipe, a built binary, an aqua
+package in the agent root) is an escape, not a permission ([identity.md](./identity.md)).
+
+**Lifts when** the sandbox runtime allows reading `kern.hv_support` and `kern.hv_vmm_present`
+(both disclose one bit about the hardware) or exposes a configurable sysctl allowlist beside
+`allowMachLookup`. Reported to Anthropic by email on 2026-10-12.
