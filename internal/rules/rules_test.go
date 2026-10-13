@@ -69,7 +69,7 @@ func compliantFiles() map[string]string {
 		".aqua/aqua-checksums.json": "{}\n",
 		// Every repository declares the Go-built tools the recipes run (the
 		// gotools rule); without a root go.mod, the everywhere set is enough.
-		"tools/go.mod": goModToolsEverywhere,
+		".limen/tools/go.mod": goModToolsEverywhere,
 		// The aqua policy, local registry, and lychee config are content-pinned exactly.
 		".aqua/aqua-policy.yaml":    rules.CanonicalAquaPolicy,
 		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,

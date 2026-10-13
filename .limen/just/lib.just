@@ -54,7 +54,7 @@ _per-platform +cmd:
         done
     fi
 
-# The native build of one tools/go.mod tool into .build/tools/, shared by
+# The native build of one .limen/tools/go.mod tool into .build/tools/, shared by
 # _go-tool and the tools recipes (`{{ go_tool_build }} <pkg>`). GOOS/GOARCH
 # cleared: a per-platform leg would cross-compile the tool itself (exec format
 # error). Directory form of -o: go names the binary itself, which on windows
@@ -64,13 +64,13 @@ _per-platform +cmd:
 # -o is resolved relative to -C. CGO_ENABLED=0 throughout the tool builds:
 # the tools are pure Go, and with cgo on by default wherever a C compiler
 # exists, `net` alone would call one to build them.
-go_tool_build := "mkdir -p .build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C tools build -o '../.build/tools/'"
+go_tool_build := "mkdir -p .build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C .limen/tools build -o '../../.build/tools/'"
 
 # Every Go-built tool the recipes run — the Go-source analyzers and the rest
-# alike — is a `tool` directive in a module under tools/, built natively ONCE
+# alike — is a `tool` directive in a module under .limen/tools/, built natively ONCE
 # into .build/tools/ by the pinned go (book/tooling.md, "Go-built tools are
 # go.mod tools"). Never `go tool <name>` from a per-platform leg. Two homes:
-# tools/go.mod, shared by the small tools, and tools/<name>/go.mod for a tool
+# .limen/tools/go.mod, shared by the small tools, and .limen/tools/<name>/go.mod for a tool
 # whose dependency graph must stay its upstream's exactly (golangci-lint:
 # minimal version selection across a shared module would lift its analyzers'
 # dependencies past what upstream tested). The isolated module wins when both
@@ -81,12 +81,12 @@ _go-tool name pkg:
     #!/usr/bin/env bash
     set -euo pipefail
     pattern='^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)'
-    if grep -qE "$pattern" 'tools/{{ name }}/go.mod' 2>/dev/null; then
-        mkdir -p .build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C 'tools/{{ name }}' build -o '../../.build/tools/' '{{ pkg }}'
-    elif grep -qE "$pattern" tools/go.mod 2>/dev/null; then
+    if grep -qE "$pattern" '.limen/tools/{{ name }}/go.mod' 2>/dev/null; then
+        mkdir -p .build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C '.limen/tools/{{ name }}' build -o '../../../.build/tools/' '{{ pkg }}'
+    elif grep -qE "$pattern" .limen/tools/go.mod 2>/dev/null; then
         {{ go_tool_build }} '{{ pkg }}'
     else
-        echo "neither tools/{{ name }}/go.mod nor tools/go.mod carries 'tool {{ pkg }}' — add it: just do tools add {{ pkg }} (see book/tooling.md)" >&2
+        echo "neither .limen/tools/{{ name }}/go.mod nor .limen/tools/go.mod carries 'tool {{ pkg }}' — add it: just do tools add {{ pkg }} (see book/tooling.md)" >&2
         exit 1
     fi
 

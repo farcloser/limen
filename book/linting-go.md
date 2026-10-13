@@ -58,7 +58,7 @@ rendered at lint time:
 **NilAway is a lane of its own.** Uber's nil-panic analyzer is not a golangci-lint linter
 and will not become one: golangci-lint declined it because its false positives are by
 design, and its README labels it under active development with breaking changes. So it is
-`just do lint go nilaway`, in the lane's default set, built from `tools/nilaway` (a module of
+`just do lint go nilaway`, in the lane's default set, built from `.limen/tools/nilaway` (a module of
 its own, pinned by pseudo-version since upstream tags no releases, moved by Renovate inside
 the "go modules" group like every other digest update) and run once per supported platform.
 The driver carries its flags from the baseline: `-include-pkgs` bounds the analysis to the

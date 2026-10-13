@@ -1,5 +1,5 @@
 // Package toolpins carries the go.mod files of limen's own tools modules into
-// a release binary: tools/go.mod, and tools/<name>/go.mod for each isolated
+// a release binary: .limen/tools/go.mod, and .limen/tools/<name>/go.mod for each isolated
 // tool. go:embed cannot reach them where they live (each is a module of its
 // own), so the release's goreleaser hook copies them into release/ before the
 // build. The copies are gitignored, and a build reads them only when the
@@ -14,8 +14,8 @@ import (
 	"strings"
 )
 
-// sharedFile is the copy of tools/go.mod; every other <name>.go.mod is the
-// copy of tools/<name>/go.mod.
+// sharedFile is the copy of .limen/tools/go.mod; every other <name>.go.mod is the
+// copy of .limen/tools/<name>/go.mod.
 const sharedFile = "tools.go.mod"
 
 //go:embed all:release
@@ -27,8 +27,8 @@ var release embed.FS
 //nolint:gochecknoglobals // set by the linker; -X can only reach a package variable.
 var stamp string
 
-// GoMods returns the embedded tools/go.mod and, keyed by tool name, each
-// tools/<name>/go.mod: empty unless the release built this binary.
+// GoMods returns the embedded .limen/tools/go.mod and, keyed by tool name, each
+// .limen/tools/<name>/go.mod: empty unless the release built this binary.
 func GoMods() (shared string, isolated map[string]string) {
 	isolated = map[string]string{}
 	if stamp != "release" {

@@ -172,7 +172,7 @@ chapter; the procedure is limen's `skills/contribute`.
 - **A module's `go` directive is the earliest Go release still supported upstream**, as
   its first version (`go 1.N.0`), or the patch a dependency requires when that is higher
   (what `go mod tidy` raises it to); never a newer release. The tools modules
-  (`tools/go.mod`, `tools/<name>/go.mod`) are exempt. See the book's
+  (`.limen/tools/go.mod`, `.limen/tools/<name>/go.mod`) are exempt. See the book's
   [baseline version](https://github.com/farcloser/limen/blob/main/book/dependencies-go.md#the-baseline-version).
 - **A `replace` directive is never committed**, nor anything that permits one (a
   `gomoddirectives` `replace-local` or `replace-allow-list`). A local replace is a

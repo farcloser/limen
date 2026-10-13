@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -11,7 +12,7 @@ import (
 )
 
 // The gotools rule: every repository declares the Go-built tools the shared
-// recipes run as `tool` directives in tools/go.mod, a module of its own, so
+// recipes run as `tool` directives in .limen/tools/go.mod, a module of its own, so
 // each is compiled by the repository's pinned toolchain (see book/tooling.md,
 // "Go-built tools are go.mod tools"). These were aqua go_install packages
 // once; aqua builds such a package one time per tool version, with whichever
@@ -21,7 +22,7 @@ import (
 // than the go that built it. The tool directive is the only pin that makes
 // that impossible.
 //
-// The directives live in tools/go.mod and never in the project's go.mod: a
+// The directives live in .limen/tools/go.mod and never in the project's go.mod: a
 // tool directive drags the tool's dependency graph into the declaring module
 // as indirect requirements, and everything a module requires is inherited by
 // every consumer's module graph and go.sum. Three tools are required
@@ -31,8 +32,17 @@ import (
 const (
 	ruleGoTools    = "gotools"
 	goModFile      = "go.mod"
-	goToolsDir     = "tools"
+	goToolsDir     = ".limen/tools"
 	goToolsModFile = goToolsDir + slash + goModFile
+
+	// goToolsModulePath is the tools module's path element: the directory is
+	// dotted so `./...` skips it and a project's own tools/ is its own, and a
+	// module path element may not begin with a dot, so the two differ.
+	goToolsModulePath = "tools"
+
+	// legacyGoToolsDir is where the modules lived before the move; fix moves
+	// the directory once.
+	legacyGoToolsDir = "tools"
 
 	// go.mod directive keywords, as they open a line.
 	toolDirective   = "tool "
@@ -64,7 +74,7 @@ var goToolsEverywhere = []string{
 // retiredGoTools are tool directives a repository must no longer carry, each
 // with the package that replaced it. A directive that stays beside its
 // replacement builds nothing the recipes run but keeps its dependency graph
-// in tools/go.mod and go.sum. Check fails while one is declared; fix removes
+// in .limen/tools/go.mod and go.sum. Check fails while one is declared; fix removes
 // it with `go get -tool <pkg>@none`, which go accepts even when the package's
 // module no longer provides it.
 //
@@ -88,9 +98,9 @@ var goSourceAnalyzers = []string{
 }
 
 // isolatedGoTools are the tools a Go module declares each in a module of its
-// own, tools/<name>/go.mod, keyed by the name the tool builds as. A tool
+// own, .limen/tools/<name>/go.mod, keyed by the name the tool builds as. A tool
 // goes here when its dependency graph must stay its upstream's exactly:
-// minimal version selection across the shared tools/go.mod would lift the
+// minimal version selection across the shared .limen/tools/go.mod would lift the
 // analyzers golangci-lint bundles past the versions upstream tested, which
 // upstream states is unsupported, and a module of its own resolves to
 // upstream's go.mod and nothing else. Built here by the pinned toolchain
@@ -130,7 +140,7 @@ type ToolPins struct {
 	isolated map[string]map[string]string
 }
 
-// NewToolPins parses tools/go.mod (shared) and each tools/<name>/go.mod
+// NewToolPins parses .limen/tools/go.mod (shared) and each .limen/tools/<name>/go.mod
 // (isolated, keyed by name) into the versions they require.
 func NewToolPins(shared string, isolated map[string]string) ToolPins {
 	pins := ToolPins{shared: goModRequires(shared), isolated: map[string]map[string]string{}}
@@ -234,6 +244,10 @@ func checkGoTools(root string) Finding {
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
 	if err != nil {
+		if _, legacyErr := readRepoFile(root, legacyGoToolsDir+slash+goModFile); legacyErr == nil {
+			return fail(ruleGoTools, legacyGoToolsDir+slash+goModFile, legacyGoToolsMessage)
+		}
+
 		return fail(
 			ruleGoTools,
 			goToolsModFile,
@@ -263,6 +277,10 @@ func checkGoTools(root string) Finding {
 		Message: goToolsPassMessage,
 	}
 }
+
+// legacyGoToolsMessage is the check wording for a tools/ from before the move.
+const legacyGoToolsMessage = legacyGoToolsDir + "/: the tools modules live in " + goToolsDir +
+	"/ now, so a project's own " + legacyGoToolsDir + "/ is its own again (limen fix moves the directory)"
 
 // isolatedGoModFile is the go.mod of an isolated tool's module.
 func isolatedGoModFile(name string) string {
@@ -326,7 +344,7 @@ func retiredGoModToolsMessage(retired []string) string {
 	}
 
 	return "retired tool directive(s) for " + strings.Join(pairs, listSeparator) +
-		"; remove with go -C tools get -tool <pkg>@none && go -C tools mod tidy"
+		"; remove with go -C " + goToolsDir + " get -tool <pkg>@none && go -C " + goToolsDir + " mod tidy"
 }
 
 // goGetThenTidy runs one `go get` in the tools module followed by `go mod
@@ -452,9 +470,9 @@ func stripGoModToolDirectives(gomod string) string {
 	return strings.Join(out, "\n")
 }
 
-// remediateGoTools makes tools/go.mod carry the required tools and the
+// remediateGoTools makes .limen/tools/go.mod carry the required tools and the
 // project's go.mod (when there is one) carry none: it writes a bare
-// tools/go.mod when there is none (module path <root>/tools and the root's
+// .limen/tools/go.mod when there is none (module path <root>/tools and the root's
 // go directive in a Go repository; `tools` and the aqua-pinned go elsewhere),
 // adds the missing directives there with `go get -tool` at the versions this
 // limen's own tools modules pin (pins; never @latest, which would make the
@@ -467,12 +485,9 @@ func stripGoModToolDirectives(gomod string) string {
 func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 	rootMod := rootGoMod(root)
 
-	var done []string
-
-	if step, advisory := moveStrayGoTools(ctx, root, rootMod); advisory != nil {
-		return *advisory
-	} else if step != "" {
-		done = append(done, step)
+	done, stopped := moveGoTools(ctx, root, rootMod)
+	if stopped != nil {
+		return *stopped
 	}
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
@@ -489,7 +504,7 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 	retired := retiredGoModTools(string(toolsMod))
 
 	// The isolated modules count toward "nothing to do": a complete
-	// tools/go.mod says nothing about them.
+	// .limen/tools/go.mod says nothing about them.
 	var isolated []string
 	if rootMod != nil {
 		isolated = missingIsolatedGoTools(root)
@@ -516,8 +531,14 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 	}
 
 	if len(retired) > 0 {
-		step, advisory := goToolsGet(ctx, toolsRoot, atVersion(retired, "none"), retiredGoModToolsMessage(retired),
-			"removed retired tool directive(s) for ", " (go -C tools get -tool <pkg>@none, then go -C tools mod tidy)")
+		step, advisory := goToolsGet(
+			ctx,
+			toolsRoot,
+			atVersion(retired, "none"),
+			retiredGoModToolsMessage(retired),
+			"removed retired tool directive(s) for ",
+			" (go -C "+goToolsDir+" get -tool <pkg>@none, then go -C "+goToolsDir+" mod tidy)",
+		)
 		if advisory != nil {
 			return *advisory
 		}
@@ -584,6 +605,67 @@ func moveStrayGoTools(ctx context.Context, root string, rootMod []byte) (string,
 	return "moved tool directive(s) for " + strings.Join(stray, ", ") + " out of " + goModFile, nil
 }
 
+// moveGoTools runs the two moves that precede seeding: stray directives out of
+// the root go.mod, and a tools/ from before the directory's move. The steps
+// done, or the advisory that stopped it.
+func moveGoTools(ctx context.Context, root string, rootMod []byte) ([]string, *Outcome) {
+	var done []string
+
+	if step, advisory := moveStrayGoTools(ctx, root, rootMod); advisory != nil {
+		return nil, advisory
+	} else if step != "" {
+		done = append(done, step)
+	}
+
+	if step, advisory := moveLegacyGoTools(root); advisory != nil {
+		return nil, advisory
+	} else if step != "" {
+		done = append(done, step)
+	}
+
+	return done, nil
+}
+
+// moveLegacyGoTools renames a tools/ from before the move to .limen/tools/,
+// the whole directory (go.sum and the isolated modules with it), when the new
+// path carries no module yet: the step done ("" when there is nothing to
+// move), or the advisory when both carry a go.mod, which is the human's to
+// merge, or the rename failed.
+func moveLegacyGoTools(root string) (string, *Outcome) {
+	if _, err := readRepoFile(root, legacyGoToolsDir+slash+goModFile); err != nil {
+		return "", nil
+	}
+
+	if _, err := readRepoFile(root, goToolsModFile); err == nil {
+		advisory := Outcome{
+			Rule: ruleGoTools, Action: ActionAdvisory, Path: legacyGoToolsDir + slash + goModFile,
+			Message: legacyGoToolsDir + "/ and " + goToolsDir + "/ both carry a go.mod: merge " +
+				legacyGoToolsDir + "/ into " + goToolsDir + "/ by hand and delete it",
+		}
+
+		return "", &advisory
+	}
+
+	oldDir, newDir := filepath.Join(root, legacyGoToolsDir), filepath.Join(root, filepath.FromSlash(goToolsDir))
+	if err := os.MkdirAll(filepath.Dir(newDir), dirPermissions); err != nil {
+		advisory := goToolsAdvisory(goToolsModFile, "could not create "+filepath.Dir(goToolsDir)+": "+err.Error(), nil)
+
+		return "", &advisory
+	}
+
+	if err := os.Rename(oldDir, newDir); err != nil {
+		advisory := goToolsAdvisory(
+			goToolsModFile,
+			"could not move "+legacyGoToolsDir+"/ to "+goToolsDir+"/: "+err.Error(),
+			nil,
+		)
+
+		return "", &advisory
+	}
+
+	return "moved " + legacyGoToolsDir + "/ to " + goToolsDir + "/", nil
+}
+
 // goToolsGet moves the tool directives in the tools module to specs
 // (`pkg@version` adds or moves one, `pkg@none` removes it), then tidies. The
 // step done reads prefix, the specs, suffix; when a go step fails the
@@ -617,8 +699,14 @@ func addPinnedGoTools(ctx context.Context, toolsRoot string, pins ToolPins, miss
 		return "", &advisory
 	}
 
-	return goToolsGet(ctx, toolsRoot, specs, missingGoModToolsMessage(missing),
-		"added tool directive(s) for ", " at this limen's pins (go -C tools get -tool, then go -C tools mod tidy)")
+	return goToolsGet(
+		ctx,
+		toolsRoot,
+		specs,
+		missingGoModToolsMessage(missing),
+		"added tool directive(s) for ",
+		" at this limen's pins (go -C "+goToolsDir+" get -tool, then go -C "+goToolsDir+" mod tidy)",
+	)
 }
 
 // pinnedSpecs are pkgs as `go get` specs at the versions pins carry for them;
@@ -676,7 +764,7 @@ func remediateIsolatedGoTool(ctx context.Context, root string, rootMod []byte, n
 	}
 
 	if _, err := readRepoFile(root, modFile); err != nil {
-		seed := bareGoMod(string(rootMod), aquaGoDirective(root), goToolsDir+slash+name,
+		seed := bareGoMod(string(rootMod), aquaGoDirective(root), goToolsModulePath+slash+name,
 			"// "+name+"'s own module: its dependency graph stays exactly its upstream's,\n"+
 				"// which a shared tools module could not promise (book/tooling.md).\n")
 		if err := writeFile(root, modFile, seed); err != nil {
@@ -702,24 +790,26 @@ func remediateIsolatedGoTool(ctx context.Context, root string, rootMod []byte, n
 // language version as the project; elsewhere the module is `tools` and the
 // go directive is the caller's (the aqua-pinned go, see aquaGoDirective).
 func bareToolsGoMod(rootMod, goDirective string) string {
-	return bareGoMod(rootMod, goDirective, goToolsDir,
+	return bareGoMod(rootMod, goDirective, goToolsModulePath,
 		"// The Go-built tools the shared recipes run, pinned as tool directives\n"+
 			"// in a module of their own so their dependency graph never reaches the\n"+
 			"// project's go.mod (book/tooling.md).\n")
 }
 
-// bareGoMod is a tools module at relDir before any directive, opened by the
-// given comment: the root module's path with relDir appended and the root's
-// go directive in a Go repository, else `<relDir's last element>` and the
+// bareGoMod is a tools module before any directive, opened by the given
+// comment, with the module path element(s) pathSuffix (`tools`,
+// `tools/<name>`; never the dotted directory, which a module path may not
+// carry): the root module's path with pathSuffix appended and the root's go
+// directive in a Go repository, else `<pathSuffix's last element>` and the
 // caller's go directive.
-func bareGoMod(rootMod, goDirective, relDir, comment string) string {
-	module, goLine := relDir[strings.LastIndex(relDir, slash)+1:], goDirective
+func bareGoMod(rootMod, goDirective, pathSuffix, comment string) string {
+	module, goLine := pathSuffix[strings.LastIndex(pathSuffix, slash)+1:], goDirective
 
 	for raw := range strings.SplitSeq(rootMod, "\n") {
 		line := strings.TrimSpace(raw)
 		switch {
 		case strings.HasPrefix(line, moduleDirective):
-			module = strings.TrimSpace(strings.TrimPrefix(line, moduleDirective)) + slash + relDir
+			module = strings.TrimSpace(strings.TrimPrefix(line, moduleDirective)) + slash + pathSuffix
 		case strings.HasPrefix(line, "go "):
 			goLine = line
 		default:
@@ -764,7 +854,7 @@ func runGo(ctx context.Context, dir string, args ...string) string {
 func goToolsAdvisory(path, reason string, getArgs []string) Outcome {
 	manual := "go mod tidy"
 	if getArgs != nil {
-		manual = "go -C tools " + strings.Join(getArgs, " ") + " && go -C tools mod tidy"
+		manual = "go -C " + goToolsDir + " " + strings.Join(getArgs, " ") + " && go -C " + goToolsDir + " mod tidy"
 	}
 
 	return Outcome{

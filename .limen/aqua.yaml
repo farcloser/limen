@@ -10,7 +10,7 @@ packages:
   # and treats a separate `version:` key as hand-held, and Renovate reads only
   # that form.
   # No Go-built tool is pinned here: every one is a `tool` directive in
-  # tools/go.mod, built by the pinned go (book/tooling.md, "Go-built tools
+  # .limen/tools/go.mod, built by the pinned go (book/tooling.md, "Go-built tools
   # are go.mod tools"). aqua's go_install would build it once per tool
   # version, with whichever go ran first, and share that binary.
   # The coreutils under their bare names, the same pin on every platform:

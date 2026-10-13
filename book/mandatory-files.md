@@ -17,7 +17,7 @@ can clear, and the first rule `limen` enforces.
 | `.justfile` | Present, carrying the shared-baseline import; the rest is the project's own. The [`.limen/` modules](#justfile) it mounts are canonical. |
 | `.limen/lychee.toml` | Present and canonical: the shared [link-checker configuration](#link-checking--limenlycheetoml). |
 | `.github/` workflows | The [CI surface](#ci-workflows--github): content-pinned limen pieces, plus seeded-once workflows and Renovate config. |
-| `tools/go.mod` | The Go-built tools the recipes run, as `tool` directives; a Go module adds the source analyzers: the [`gotools` rule](#the-gotools-rule--toolsgomod-tool-directives). |
+| `.limen/tools/go.mod` | The Go-built tools the recipes run, as `tool` directives; a Go module adds the source analyzers: the [`gotools` rule](#the-gotools-rule--limentoolsgomod-tool-directives). |
 | `.limen/lint-go.yaml` | Go modules only. Present and canonical: the shared [Go lint baseline](./linting-go.md#one-lint-baseline-per-project-carve-outs-lint-goyaml) `limen-lint-go` renders with the project's carve-outs. |
 | `.lint-go.yaml` | Go modules only. The project's carve-outs from the Go lint baseline, seeded once and the project's own (the `lintgo` rule). A root `.golangci.yml` is a stray. |
 
@@ -354,24 +354,28 @@ enforcing. The corollary: an App registered under a non-default name is invisibl
 and only `fix`, run with the org token, puts it in the file. `bootstrap` runs the discovering
 step right after registering the App, so a fresh repository is complete from its first commit.
 
-### The `gotools` rule — `tools/go.mod` tool directives
+### The `gotools` rule — `.limen/tools/go.mod` tool directives
 
 Every repository declares the Go-built tools the shared recipes run as `tool` directives in
-`tools/go.mod`, a module of its own, so each is compiled by the repository's pinned toolchain
-without the tools' dependency graph entering the project's `go.mod` and every consumer's.
-Three are required everywhere — `git-validation`, `godolint`, `dot` — and a repository whose
-root carries a `go.mod` adds the Go-source analyzers `deadcode`, `govulncheck`,
-`go-licenses`. A `tool` directive in the project's own `go.mod` fails the rule. The reasoning
-is in [tooling](./tooling.md#go-built-tools-are-gomod-tools). `limen fix` creates
-`tools/go.mod` (module path `<module>/tools` and the root's `go` directive in a Go
-repository; `tools` and the aqua-pinned `go` elsewhere), adds a missing directive with `go
--C tools get -tool <pkg>@<version>` followed by `go -C tools mod tidy`, and strips any
-directive out of the root `go.mod`, tidying it; when the pinned `go` or the network is
+`.limen/tools/go.mod`, a module of its own, so each is compiled by the repository's pinned
+toolchain without the tools' dependency graph entering the project's `go.mod` and every
+consumer's. Three are required everywhere — `git-validation`, `godolint`, `dot` — and a
+repository whose root carries a `go.mod` adds the Go-source analyzers `deadcode`, `govulncheck`,
+`go-licenses`. A `tool` directive in the project's own `go.mod` fails the rule. The reasoning is
+in [tooling](./tooling.md#go-built-tools-are-gomod-tools). `limen fix` creates
+`.limen/tools/go.mod` (module path `<module>/tools` and the root's `go` directive in a Go
+repository; `tools` and the aqua-pinned `go` elsewhere), adds a missing directive with `go -C
+.limen/tools get -tool <pkg>@<version>` followed by `go -C .limen/tools mod tidy`, and strips
+any directive out of the root `go.mod`, tidying it; when the pinned `go` or the network is
 unavailable, the rule ends as an advisory carrying the exact command. The version is the one
-limen's own `tools/go.mod` (or `tools/<name>/go.mod`, for an isolated tool) requires in the
-running release, never `@latest`, which would make what a repository receives depend on the
-day `fix` ran; Renovate bumps it from there. A release carries those `go.mod` files because
-its build copies them in first; a development build carries none and refuses to seed.
+limen's own `.limen/tools/go.mod` (or `.limen/tools/<name>/go.mod`, for an isolated tool)
+requires in the running release, never `@latest`, which would make what a repository receives
+depend on the day `fix` ran; Renovate bumps it from there. A release carries those `go.mod`
+files because its build copies them in first; a development build carries none and refuses to
+seed. The modules sit under `.limen/`, beside the canonical files, and are the project's own all
+the same: `fix` seeds a missing one and moves a `tools/` from before the directory's move, once,
+and never overwrites what is there. The directory is dotted so that `./...`, ripgrep and the
+editors skip it, and so that `tools` is a project's to name.
 
 ### The `baretools` rule — no Go-built tool run from `PATH`
 

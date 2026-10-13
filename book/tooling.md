@@ -2,7 +2,7 @@
 
 Every Farcloser repository pins its build and CI tooling — `just`, `shellcheck`, `go`, the
 Go-built analyzers, and the rest — through [aqua](https://aquaproj.github.io/) and the
-`tools/go.mod` directives. Mandatory, with no exception, like the
+`.limen/tools/go.mod` directives. Mandatory, with no exception, like the
 [mandatory files](./mandatory-files.md): a repository declares its tools in a committed
 `.aqua/aqua.yaml`, and every human and agent who touches it gets the same verified versions.
 
@@ -78,18 +78,18 @@ the release workflow with the pinned toolchain, and neither loads Go source); an
 tools a write job must run without a toolchain, `gh` and `cosign`, until in-process
 verification retires them.
 
-**One module per tool whose graph must stay upstream's.** The shared `tools/go.mod` resolves
-every directive's dependencies together, and minimal version selection lifts a dependency two
-tools share to the newest either wants — a binary its upstream never tested. golangci-lint
-bundles over a hundred analyzers and says so itself: source builds are unsupported, the `go
-tool` form tolerable only from a dedicated module. So it lives in `tools/golangci-lint/go.mod`,
-alone, resolving to exactly upstream's graph; `_go-tool` in `lib.just` builds from the
-isolated module when one exists and from `tools/go.mod` otherwise, and the `gotools` rule
-seeds the module in every Go repository. NilAway gets the same in `tools/nilaway/go.mod`, for
-a different reason: no tagged release, a pin by pseudo-version, breaking changes announced
-upstream. The one hand check at each bump: an upstream `replace` directive, which does not
-apply across modules and would make a source build a different program from the release —
-none today.
+**One module per tool whose graph must stay upstream's.** The shared `.limen/tools/go.mod`
+resolves every directive's dependencies together, and minimal version selection lifts a
+dependency two tools share to the newest either wants — a binary its upstream never tested.
+golangci-lint bundles over a hundred analyzers and says so itself: source builds are
+unsupported, the `go tool` form tolerable only from a dedicated module. So it lives in
+`.limen/tools/golangci-lint/go.mod`, alone, resolving to exactly upstream's graph; `_go-tool` in
+`lib.just` builds from the isolated module when one exists and from `.limen/tools/go.mod`
+otherwise, and the `gotools` rule seeds the module in every Go repository. NilAway gets the same
+in `.limen/tools/nilaway/go.mod`, for a different reason: no tagged release, a pin by
+pseudo-version, breaking changes announced upstream. The one hand check at each bump: an
+upstream `replace` directive, which does not apply across modules and would make a source build
+a different program from the release — none today.
 
 For a tool that **loads Go source** — `deadcode`, `govulncheck`, `go-licenses`, anything on
 `go/packages` — the gap is a correctness failure, not only a provenance one: such a tool
@@ -104,14 +104,14 @@ root and passes.
 
 The fix is Go's own: every Go-built tool is a `tool` directive, built from a pinned
 requirement by the module's own pinned toolchain, so the skew is impossible by construction.
-They live in **`tools/go.mod`, a module of their own** (`<module>/tools` in a Go repository,
+They live in **`.limen/tools/go.mod`, a module of their own** (`<module>/tools` in a Go repository,
 `tools` elsewhere), not in the project's `go.mod`: a `tool` directive drags the tool's whole
 dependency graph into the declaring module as `// indirect` requirements, and everything a
 library's `go.mod` requires is inherited by every consumer's module graph, `go.sum` and
 dependency scanners. A zero-dependency library must stay one. The nested module keeps the pin
 next to the code, under the same toolchain and GOSUMDB, and Renovate's `gomod` manager finds
 nested `go.mod` files on its own (the shared preset re-enables these modules, which Go lists
-as `// indirect`). The recipes build each tool natively once (`go -C tools build`, into
+as `// indirect`). The recipes build each tool natively once (`go -C .limen/tools build`, into
 `.build/tools/`) and run that binary — per platform for the analyzers — because `go tool`
 honours `GOOS`/`GOARCH` and would cross-compile the tool. Nothing puts one on `PATH`: a bare
 `golangci-lint` in a `.justfile`, a script or a workflow runs whatever `PATH` holds — on a
@@ -122,7 +122,7 @@ Every repository carries the module, not only Go ones: `git-validation` (commit 
 `godolint` (Dockerfiles) and `dot` (profile graphs; `forkcloser/dot`, graphviz compiled to
 WASM) run everywhere, and every repository pins `golang/go` in its own aqua manifest to build
 them. A Go repository adds the three source analyzers. The doctrine is enforced from both
-sides: the `gotools` rule requires `tools/go.mod` with the directives and rejects a `tool`
+sides: the `gotools` rule requires `.limen/tools/go.mod` with the directives and rejects a `tool`
 directive in the project's `go.mod` (`limen fix` creates the module, adds the directives,
 moves any directive out of the root), and the `aqua` rule retires the old `go_install` pins
 (`limen fix` removes them). The local registry carries no `go_install` entry, and never will
@@ -130,10 +130,10 @@ again.
 
 Adding, pinning, bumping or removing one goes through the same recipes as an aqua package,
 never by hand: `just do tools add|set|remove` take the package path as it stands in
-`tools/go.mod`, `just do tools update` the command it builds as (or nothing, to move every
+`.limen/tools/go.mod`, `just do tools update` the command it builds as (or nothing, to move every
 tool, aqua packages included), and the recipes tell a Go package from an aqua slug by the
 first path element — a module root is a host and carries a dot, a GitHub owner cannot.
-Underneath they run `go -C tools get -tool <pkg>@<version>` (`@latest`, `@none`) and `go -C
+Underneath they run `go -C .limen/tools get -tool <pkg>@<version>` (`@latest`, `@none`) and `go -C
 tools mod tidy`, then build the tool into `.build/tools/`, the Go counterpart of the full
 `aqua install` the aqua recipes end with: a bad pin fails in the recipe, not at first use.
 
@@ -293,7 +293,7 @@ What `.aqua/aqua.yaml` must carry; the manifest is **subset-pinned** ([enforceme
   project. aqua takes a package's first declaration, so an entry above the import wins and
   the same entry below it would be silently shadowed: the import closes the list (`limen
   fix` moves it there). A package is never listed twice, and never a **retired** one (the
-  Go-built tools, now in `tools/go.mod`); `limen fix` never edits the project's entries, so a
+  Go-built tools, now in `.limen/tools/go.mod`); `limen fix` never edits the project's entries, so a
   lingering retired pin fails the check, which names it, and the owner deletes it by hand.
 - **`golang/go` is the project's own, by design, and not in the import.** A standard-library
   vulnerability is fixed by a Go patch release, govulncheck reports it in every repository's
@@ -327,7 +327,7 @@ it is the owner's edit on that pull request.
 > which follows the import) whenever it changes the manifest or the tool set, or the file is
 > missing. The catalog of local-registry packages is shared: to add one, it goes into limen's
 > canonical registry, not a single repo's. A Go-built tool never qualifies: it is a
-> `tools/go.mod` directive, the project's own.
+> `.limen/tools/go.mod` directive, the project's own.
 
 Bootstrap, from the repo root:
 

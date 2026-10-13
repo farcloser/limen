@@ -172,7 +172,7 @@ jobs:
   # checksum, would merge green and fail at first use. One linux leg pays for
   # the real install; aqua's package store is cached on the exact pins, so a
   # warm key costs seconds and a changed pin is always a real install. (The
-  # Go-built tools are tools/go.mod directives, built by the verify legs.)
+  # Go-built tools are .limen/tools/go.mod directives, built by the verify legs.)
   tools:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

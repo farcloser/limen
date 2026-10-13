@@ -44,7 +44,7 @@ Everything else the recipes use — `go`, `just`, and the whole lint/test/releas
 `cosign`, and `limen` itself) — is pinned and installed **by aqua**, so it is not a manual
 prerequisite; [`.aqua/aqua.yaml`](./.aqua/aqua.yaml) is the authoritative list. Every Go-built tool
 (`git-validation`, `godolint`, `dot`, and the source analyzers `deadcode`, `govulncheck`,
-`go-licenses`) is a `tool` directive in [`tools/go.mod`](./tools/go.mod), built by the pinned
+`go-licenses`) is a `tool` directive in [`.limen/tools/go.mod`](./.limen/tools/go.mod), built by the pinned
 `go` itself (see [`book/tooling.md`](./book/tooling.md#go-built-tools-are-gomod-tools)).
 
 ## Using `limen`

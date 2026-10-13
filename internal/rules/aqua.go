@@ -395,7 +395,7 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 }
 
 // retiredCanonicalPkgs are packages the baseline once required and now
-// forbids: every Go-built tool moved to tools/go.mod `tool` directives — see
+// forbids: every Go-built tool moved to .limen/tools/go.mod `tool` directives — see
 // book/tooling.md, "Go-built tools are go.mod tools", and the gotools rule.
 // aqua compiles a go_install package once per tool version, with whichever
 // project's pinned go ran it first, and then shares that binary across

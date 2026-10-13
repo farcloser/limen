@@ -6,9 +6,9 @@ set -eu
 
 dest=internal/toolpins/release
 
-cp tools/go.mod "$dest/tools.go.mod"
+cp .limen/tools/go.mod "$dest/tools.go.mod"
 
-for mod in tools/*/go.mod; do
-    name=${mod#tools/}
+for mod in .limen/tools/*/go.mod; do
+    name=${mod#.limen/tools/}
     cp "$mod" "$dest/${name%/go.mod}.go.mod"
 done
