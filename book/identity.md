@@ -209,6 +209,15 @@ unprompted whenever a session is in bypass mode, and nothing in the rig prevents
 Bypass mode is the human's break-glass and stays one; the rule is to leave it the moment the
 emergency is over, and never to run a VM tool from a session in it.
 
+**A read denial follows every symlink into the directory.** `~/.gitconfig` is a link into
+`~/Vault`; the day `Read(~/Vault)` joined the deny list, every git command in every session
+died with `fatal: unable to access '/Users/…/.gitconfig': Operation not permitted`, for the
+twenty minutes it took to see that the rule, not the dot-rules, was the cause (2026-10-12).
+The sandbox resolves the link and judges the target. Before denying a directory, list the
+home's symlinks and their targets (`for f in ~/.* ~/*; do [ -L "$f" ] && readlink "$f"; done`)
+and keep the target readable or move the file; the alphabet scheme leaves `V*` readable for
+this reason alone.
+
 **A change to the rig is tried in one session before it reaches them all.** Settings
 edits apply to every running session at once, and the harness itself runs through the rig:
 each Bash call starts as `env`, resolved through the harness's own `PATH` outside the
