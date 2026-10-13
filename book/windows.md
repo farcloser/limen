@@ -211,10 +211,12 @@ cached as a single file and attached at `C:\vcache` (`.github/actions/windows-ca
 download, decompression and attach take under a minute. A miss creates an empty image, and
 the run fills and saves it.
 
-The image is excluded from Defender's real-time scan for the job: without the exclusion
-every file in it is scanned on first read, and lint gives back what the restore saved.
-Measured on windows-11-arm, three runs each in one workflow run: 442 s with the file caches,
-359 s with the image, 275 s with the image and the exclusion.
+The image is excluded from Defender's real-time scan for the job: without the exclusion every
+file in it is scanned on first read, and lint gives back what the restore saved. The exclusion
+is a speed-up, not a requirement: a runner image with no Defender service to take it (seen on
+windows-11-arm) logs the refusal and keeps the image. Measured on windows-11-arm, three runs
+each in one workflow run: 442 s with the file caches, 359 s with the image, 275 s with the image
+and the exclusion.
 
 Tried and dropped, each slower or within the noise: Windows' own `tar` for the restore
 (native, but fed by an emulated `zstd`), no Go cache, no aqua cache, caching only the module
