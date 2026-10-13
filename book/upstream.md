@@ -165,11 +165,13 @@ The older `sigstore/sigstore` TUF client honours `TUF_ROOT`
 ([pkg/tuf/client.go](https://github.com/sigstore/sigstore/blob/ac7823789dc6a2935c29a76f896606e4474719d9/pkg/tuf/client.go#L563)),
 and so does cosign, which is why the variable looks as if it should work here.
 
-**Workaround.** The cache follows `HOME` and nothing else. A one-off install can run with
-`HOME` pointed at a writable directory; a sandboxed session cannot, since `HOME` is the
-harness's. Today `~/.sigstore` stays on the sandbox's write list for this reason alone, and
-the cost is named: whoever verifies against that TUF cache afterwards trusts what any
-sandboxed command could have written there.
+**Workaround.** The cache follows `HOME` and nothing else, so every aqua command that
+downloads and verifies runs with `HOME` at the sessions' agent home: the installer sets
+`LIMEN_AGENT_HOME`, and the `tools`, `fix aqua` and `lint aqua` recipes prefix
+`env ${LIMEN_AGENT_HOME:+HOME="$LIMEN_AGENT_HOME"}` (a word an expansion produces is never
+an assignment, hence `env`; [identity.md](./identity.md)). The human's `~/.sigstore` left the
+sandbox's write list on 2026-10-12 ([farcloser/limen#367](https://github.com/farcloser/limen/pull/367),
+[#373](https://github.com/farcloser/limen/pull/373)).
 
 **Lifts when** sigstore-go reads a cache path from the environment, as `sigstore/sigstore`
 does with `TUF_ROOT`, or slsa-verifier passes `WithCachePath`. Not reported upstream yet.
