@@ -124,7 +124,7 @@ reason for the `LC_ALL=C`.
 
 **Symptom.** `just do lint go` reports an import of the module's own package,
 `github.com/<owner>/<mod>/<pkg>`, as "not allowed from list 'main'", while the rendered
-`build/golangci.yml` carries `github.com/<owner>/<mod>` in the allow list. It starts the day
+`.build/golangci.yml` carries `github.com/<owner>/<mod>` in the allow list. It starts the day
 the project's `.lint-go.yaml` allows a sibling module whose path extends the module's by a
 hyphen (`github.com/<owner>/<mod>-<x>`).
 

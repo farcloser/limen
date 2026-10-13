@@ -145,7 +145,7 @@ recipes can work; the Rust one is in [rust](./rust.md).
 
 What each shared module is *for*; mechanics live in the module files:
 
-- **`build`**: the project's `cmd/` binaries into `build/`: an optimized, reproducible
+- **`build`**: the project's `cmd/` binaries into `.build/`: an optimized, reproducible
   `release` shape plus `debug`, `race` and (Linux) `static`, version-stamped from
   `git describe`. The release shape is the **twin** of the goreleaser configuration where a
   project ships one: the flag sets are kept aligned, and a change to either lands in both
@@ -184,7 +184,7 @@ What each shared module is *for*; mechanics live in the module files:
   `escape` by default (every bounds check the compiler could not eliminate, every value it
   moved to the heap, every function it refused to inline; compile-only and quick), and,
   named, `bench` with allocation stats and `profile` with pprof's top entries and rendered
-  call graphs, slow and writing under `build/`. None fails and none asserts, which is why
+  call graphs, slow and writing under `.build/`. None fails and none asserts, which is why
   they are neither `lint` nor `test`, and nothing in CI runs them. No default.
 - **`fix`**: the mutating counterparts, separate from `lint`. In the default: `limen`
   (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate

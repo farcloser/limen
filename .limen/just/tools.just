@@ -31,7 +31,7 @@ aqua_api := 'AQUA_GITHUB_TOKEN="${AQUA_GITHUB_TOKEN:-$(gh auth token 2>/dev/null
 # The mutating recipes end by really installing the tool, never by linking:
 # a FULL `aqua install` for an aqua package (links verify nothing — lazy pulls
 # are a CI economy, wrong at the moment a pin changes; on a warm machine the
-# full install is incremental), and a native build into build/tools/ for a
+# full install is incremental), and a native build into .build/tools/ for a
 # Go tool (the same build _go-tool does before a recipe runs it). Either way a
 # bad pin fails here, not at first use.
 #
@@ -126,7 +126,7 @@ set pkg version: (_banner "tools" "set")
         if grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" "tools/${name}/go.mod" 2>/dev/null; then
             go -C "tools/${name}" get -tool '{{ pkg }}@{{ version }}'   # moves the pin
             go -C "tools/${name}" mod tidy
-            mkdir -p build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C "tools/${name}" build -o '../../build/tools/' '{{ pkg }}'
+            mkdir -p .build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C "tools/${name}" build -o '../../.build/tools/' '{{ pkg }}'
             exit 0
         fi
         if ! grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
@@ -192,7 +192,7 @@ update command="": (_banner "tools" "update")
         [ -n "$p" ] || return 0
         go -C "$dir" get -tool "${p}@latest"
         go -C "$dir" mod tidy
-        mkdir -p build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C "$dir" build -o '../../build/tools/' "$p"
+        mkdir -p .build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C "$dir" build -o '../../.build/tools/' "$p"
     }
     {{ project_aqua }}
     if [ -z '{{ command }}' ]; then
@@ -243,7 +243,7 @@ remove pkg: (_banner "tools" "remove")
         # An isolated module (tools/<name>/go.mod) is the tool's alone: it
         # goes as a whole, go.sum included.
         if grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" "tools/${name}/go.mod" 2>/dev/null; then
-            rm -rf "tools/${name}" "build/tools/${name}" "build/tools/${name}.exe"
+            rm -rf "tools/${name}" ".build/tools/${name}" ".build/tools/${name}.exe"
             exit 0
         fi
         if ! grep -qE "^(tool[[:space:]]+)?[[:space:]]*${esc}([[:space:]]|$)" tools/go.mod 2>/dev/null; then
@@ -252,7 +252,7 @@ remove pkg: (_banner "tools" "remove")
         fi
         go -C tools get -tool '{{ pkg }}@none'   # drops the directive
         go -C tools mod tidy                     # and the requirements only it needed
-        rm -f "build/tools/${name}" "build/tools/${name}.exe"
+        rm -f ".build/tools/${name}" ".build/tools/${name}.exe"
         exit 0
     fi
     if ! grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*${esc}([[:space:]]|@|$)" .aqua/aqua.yaml; then

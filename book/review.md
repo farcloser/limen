@@ -36,7 +36,7 @@ baseline's owner when the mechanism is the baseline's.
 - **A binary in the diff is a 🛑, and the fix is the ignore.** `go build` in a repository
   whose root is a `main` package leaves the executable beside the sources, and `git add -A`
   sweeps it into the next commit: a 12 MB binary reached two pull requests. The repository
-  ignores its own binary name from its first commit, or builds into `build/`; a review of
+  ignores its own binary name from its first commit, or builds into `.build/`; a review of
   the file list, not only the diff, catches it.
 - **Follow the value to its consumer.** A changed value, error or path is traced to where it
   is used, in this repository and in the ones that import it.

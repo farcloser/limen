@@ -112,7 +112,7 @@ dependency scanners. A zero-dependency library must stay one. The nested module 
 next to the code, under the same toolchain and GOSUMDB, and Renovate's `gomod` manager finds
 nested `go.mod` files on its own (the shared preset re-enables these modules, which Go lists
 as `// indirect`). The recipes build each tool natively once (`go -C tools build`, into
-`build/tools/`) and run that binary — per platform for the analyzers — because `go tool`
+`.build/tools/`) and run that binary — per platform for the analyzers — because `go tool`
 honours `GOOS`/`GOARCH` and would cross-compile the tool. Nothing puts one on `PATH`: a bare
 `golangci-lint` in a `.justfile`, a script or a workflow runs whatever `PATH` holds — on a
 laptop a stale aqua shim another project left behind, on a clean machine nothing — and the
@@ -134,7 +134,7 @@ never by hand: `just do tools add|set|remove` take the package path as it stands
 tool, aqua packages included), and the recipes tell a Go package from an aqua slug by the
 first path element — a module root is a host and carries a dot, a GitHub owner cannot.
 Underneath they run `go -C tools get -tool <pkg>@<version>` (`@latest`, `@none`) and `go -C
-tools mod tidy`, then build the tool into `build/tools/`, the Go counterpart of the full
+tools mod tidy`, then build the tool into `.build/tools/`, the Go counterpart of the full
 `aqua install` the aqua recipes end with: a bad pin fails in the recipe, not at first use.
 
 ## Tools without upstream binaries: the sourcing ladder

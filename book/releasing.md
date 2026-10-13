@@ -31,7 +31,7 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   <cosign-key> vX.Y.Z` does the same tag work, then runs goreleaser with key-based cosign; the
   key path is a mandatory argument, and the passphrase is prompted (or piped in with
   `--cosign-password-stdin`, keeping it out of argv and shell history). `just do release
-  --local --dry-run` builds an unsigned snapshot into `build/release/` in either lane. The
+  --local --dry-run` builds an unsigned snapshot into `.build/release/` in either lane. The
   workflow contains no release logic of its own.
 - **A release carries a real change.** A repository releases when it has something new for its
   consumers: a change in its own code, or in an upstream it ships. A change to the tooling it

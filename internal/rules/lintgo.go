@@ -5,7 +5,7 @@ package rules
 // carve-outs from it in a root .lint-go.yaml, seeded once and the project's
 // own. The lint recipes have limen-lint-go, the driver shipped in limen's
 // release, render the one with the other into the golangci-lint
-// configuration they run, under build/, and pass it with -c; a golangci-lint
+// configuration they run, under .build/, and pass it with -c; a golangci-lint
 // configuration at the root is therefore a stray: golangci-lint never reads
 // it here, and it misleads whoever does (book/linting-go.md, "one
 // baseline, per-project carve-outs").
@@ -15,7 +15,7 @@ const (
 	lintGoOverlay  = ".lint-go.yaml"
 
 	strayGolangciMessage = " is a golangci-lint configuration nothing here reads: the recipes render theirs" +
-		" under build/ from " + lintGoBaseline + " and " + lintGoOverlay +
+		" under .build/ from " + lintGoBaseline + " and " + lintGoOverlay +
 		" — move its carve-outs into " + lintGoOverlay + " and delete it"
 )
 
