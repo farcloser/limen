@@ -61,8 +61,10 @@ _per-platform +cmd:
 # means the .exe suffix the loader needs — git-bash then resolves the bare
 # build/tools/<name> the recipes call to it. (go strips a /vN major suffix
 # when naming, so github.com/google/go-licenses/v2 lands as go-licenses.)
-# -o is resolved relative to -C.
-go_tool_build := "mkdir -p build/tools && GOOS='' GOARCH='' go -C tools build -o '../build/tools/'"
+# -o is resolved relative to -C. CGO_ENABLED=0 throughout the tool builds:
+# the tools are pure Go, and with cgo on by default wherever a C compiler
+# exists, `net` alone would call one to build them.
+go_tool_build := "mkdir -p build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C tools build -o '../build/tools/'"
 
 # Every Go-built tool the recipes run — the Go-source analyzers and the rest
 # alike — is a `tool` directive in a module under tools/, built natively ONCE
@@ -80,7 +82,7 @@ _go-tool name pkg:
     set -euo pipefail
     pattern='^(tool[[:space:]]+)?[[:space:]]*{{ pkg }}([[:space:]]|$)'
     if grep -qE "$pattern" 'tools/{{ name }}/go.mod' 2>/dev/null; then
-        mkdir -p build/tools && GOOS='' GOARCH='' go -C 'tools/{{ name }}' build -o '../../build/tools/' '{{ pkg }}'
+        mkdir -p build/tools && GOOS='' GOARCH='' CGO_ENABLED=0 go -C 'tools/{{ name }}' build -o '../../build/tools/' '{{ pkg }}'
     elif grep -qE "$pattern" tools/go.mod 2>/dev/null; then
         {{ go_tool_build }} '{{ pkg }}'
     else

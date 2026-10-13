@@ -45,8 +45,11 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   out; with neither, plain `ssh`.
 - **The host's C compiler, for diagnostics and tests only.** cgo calls the C compiler it
   finds: Xcode's clang on macOS, `/usr/bin/gcc` on Linux, whatever the ambient `PATH` carries
-  on Windows. No C toolchain is pinned, so two kinds of build run on the host's, as a named
-  exception: the race lanes (`test go race` and `build go race` force cgo; the detector needs
+  on Windows. On macOS the recipes name it: `CC`, `CXX` and `SDKROOT` point at the selected
+  developer directory's own clang and SDK (`xcode-select -p`), never at the `/usr/bin/clang`
+  shim, which runs `xcrun` and keeps its cache in the per-user temp directory that a sandbox
+  may deny. The Go-built tools are built with cgo off: pure Go, no compiler at all. No C
+  toolchain is pinned, so two kinds of build run on the host's, as a named exception: the race lanes (`test go race` and `build go race` force cgo; the detector needs
   it) and the tests of a project that sets `GO_CGO`. Both are diagnostics, never shipped: a
   compiler difference there can change what a test finds, never what a consumer runs. A
   release artifact is not covered: one for macOS that links Apple's SDK
