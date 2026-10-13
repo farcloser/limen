@@ -132,9 +132,15 @@ enclave to sign; it can never read a key. Three consequences the script handles:
   ProxyCommand helper speaks authenticated HTTP CONNECT to the same proxy. The proxy's
   domain allowlist still applies; nothing is bypassed.
 
-The bot's identity — name, email, signing key — is injected as session-scoped git
-configuration (`GIT_CONFIG_*` in the agent's environment): the human's own git
-configuration is never modified, and a shell the human opens never sees the bot.
+The bot's git configuration is one file, `~/.claude/gitconfig`, written whole by
+`limen-install-agent` and named by `GIT_CONFIG_GLOBAL` in the sessions' environment: the
+identity, the signing wrapper, the ssh command, the `c` alias, an empty excludes file,
+`push.autosetupremote` off, the gh credential helper. A session's git reads neither the
+human's `~/.gitconfig` nor `~/.config/git`, so neither needs to be readable, and a shell
+the human opens never sees the bot. It replaced a numbered `GIT_CONFIG_*` block in the
+environment on 2026-10-12, the day a read deny on the directory the human's `.gitconfig`
+links into took git down in every session
+([farcloser/limen-install#97](https://github.com/farcloser/limen-install/pull/97)).
 
 **The sessions' tool root.** Everything a session installs or caches lives under one
 directory of its own, `~/.local/share/limen-agent`, created by `limen-install-agent`: aqua's
