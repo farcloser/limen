@@ -16,7 +16,7 @@ human's request, and never commit on `main`.
 git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_COMMAND, which outranks the rig's core.sshCommand
 git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/main
 test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
-cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow .aqua/aqua-policy.yaml && ${LIMEN_AGENT_HOME:+HOME="$LIMEN_AGENT_HOME"} aqua install
+cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow .aqua/aqua-policy.yaml && env ${LIMEN_AGENT_HOME:+HOME="$LIMEN_AGENT_HOME"} aqua install
 ```
 
 One topic per branch and per pull request. The bot's login is the branch

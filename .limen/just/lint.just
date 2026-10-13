@@ -288,7 +288,7 @@ aqua: (_banner "lint" "aqua")
     }
     trap restore EXIT
     # --log-level warn: the per-package INFO lines are noise when nothing is wrong.
-    aqua --log-level warn update-checksum --prune
+    {{ agent_home }} aqua --log-level warn update-checksum --prune
     if [ -n "$had" ] && cmp -s .aqua/aqua-checksums.json "$tmpdir/snapshot"; then
         exit 0
     fi
