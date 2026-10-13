@@ -225,3 +225,23 @@ skill names both.
 **Lifts when** the runtime lets `git init` create `.git/hooks` with the `*.sample` files, or
 distinguishes a new repository from an existing one. Reported to Anthropic by email on
 2026-10-12.
+
+## Claude Code's auto-mode classifier denies a plain file read under a merge label
+
+**Symptom.** In auto mode, right after refusing `gh api -X PUT repos/<o>/<r>/pulls/<n>/update-branch`
+as "Merge Without Review", the classifier refused a plain `cat <task output file>` with the
+same label; the Read tool on the same file worked (The Project Manager, 2026-10-12). The
+same session saw a PR binding refused as "Merge Without Review" until a "Reviewed at <sha>"
+comment preceded it, and a poller restart refused as "Auto-Mode Bypass".
+
+**Cause.** The classifier judges each command with the recent conversation as context, and a
+denial colours the commands that follow it: a read of a file carries nothing of a merge, and
+was refused for the company it kept. Not a sandbox rule; no setting of ours is involved.
+
+**Workaround.** After a classifier denial, do the next read with the Read tool rather than
+`cat`, and put the reviewed sha in a comment before any merge-adjacent call. An allow rule
+for the routine commands the classifier keeps refusing is Apostasie's call
+([identity.md](./identity.md)).
+
+**Lifts when** the classifier judges a command on what it does, not on the preceding
+denial. Reported to Anthropic by email on 2026-10-12.
