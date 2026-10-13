@@ -203,6 +203,16 @@ throwaway project with its own `.claude/settings.local.json` and one fresh sessi
 have shown both before anyone else was affected. Populate before you point, add before you
 remove, and restart for what only a restart applies.
 
+**A word an expansion produces is never an assignment.** The shell recognises `NAME=value`
+before it expands anything, so `HOME="$X" aqua install` typed is an assignment, and
+`${X:+HOME="$X"} aqua install` is a command named `HOME=/…` that does not exist. The
+prefix that gave sessions' installs their own home shipped in that second form
+([farcloser/limen#367](https://github.com/farcloser/limen/pull/367)) and was never reached
+before the recipe died earlier, so nobody saw it fail. Pass the assignment through `env`,
+which takes it as an argument after expansion and, with the variable unset, runs the bare
+command ([#373](https://github.com/farcloser/limen/pull/373)). A conditional prefix is
+proven by running the recipe both ways, variable set and unset.
+
 **Breakage is reported, not routed around.** An agent that finds the rig not working — the
 installed ssh refused, signing unable to reach the agent, a recipe failing — says so first
 and stops there: a private workaround that keeps the work moving hides the defect from the
