@@ -83,7 +83,7 @@ jobs:
         # job pays only for what its recipes run.
         run: aqua install --only-link
 
-      # The Go build and module caches, plus the linter's (build/cache/, see
+      # The Go build and module caches, plus the linter's (.build/cache/, see
       # main.just). The per-platform analysis legs compile the whole module
       # graph five times, cold, on every run without this. Paths come from the
       # pinned go itself — they differ per OS — and the key carries its version
@@ -102,7 +102,7 @@ jobs:
           path: |
             ${{ steps.gocache.outputs.build }}
             ${{ steps.gocache.outputs.mod }}
-            build/cache
+            .build/cache
           key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-

@@ -164,11 +164,15 @@ tooling, and each family pinned explicitly so a format never drifts if the fallb
 
 ## .gitignore
 
-A `.gitignore` must exist and carry four patterns: `/build`, `/_scratch`, `.claude` and
+A `.gitignore` must exist and carry four patterns: `/.build`, `/_scratch`, `.claude` and
 `.idea` — what the recipes, the working sessions and the editors write inside a checkout,
 none of it ever committed. There is no repository-local `tmp/`: a disposable file that
-persists between runs goes under `build/`, in a subdirectory named for what it holds, and one
+persists between runs goes under `.build/`, in a subdirectory named for what it holds, and one
 that lives for a single command goes in a `mktemp -d` under `$TMPDIR`, removed by a `trap`.
+The directory is dotted so that `go`'s `./...`, ripgrep and the editors skip it by
+construction, and so that a project may have a `build/` of its own, a source directory in
+the Go world. A checkout from before the rename still carries a `build/` of old output: delete
+it by hand, and leave or drop its `/build` line as you like, `limen fix` appends `/.build`.
 Spelling is free (`.idea`, `.idea/`, `/.idea`, `**/.idea` all count); a commented-out or
 negated pattern does not. The check names a missing pattern, and `limen fix` appends the
 missing ones in one marked block at the end, never touching the rest.
@@ -371,7 +375,7 @@ its build copies them in first; a development build carries none and refuses to 
 
 ### The `baretools` rule — no Go-built tool run from `PATH`
 
-The Go-built tools are run as `build/tools/<name>`, where the recipes build them; nothing
+The Go-built tools are run as `.build/tools/<name>`, where the recipes build them; nothing
 puts one on `PATH`. A bare `golangci-lint`, `godolint`, `govulncheck` (any of them) in
 command position — opening a line, after a shell separator, after `if`, `exec`, `time` or
 another word that takes a command, or as a `run:` step — in the project's own `.justfile`,
@@ -380,7 +384,7 @@ whatever `PATH` holds: on a laptop, a stale aqua shim another project left in th
 directory, which aqua resolves against this repository's manifest and refuses; on a clean
 machine, nothing. The rule fails every such line, naming it; `limen fix` reports the same as
 an advisory, since the line is the project's to rewrite: `just do lint go` or `just do fix
-go`, which build the tool, or `build/tools/<name>` after one of them. The canonical `.limen/`
+go`, which build the tool, or `.build/tools/<name>` after one of them. The canonical `.limen/`
 recipes are not scanned: they are content-pinned.
 
 ## Link checking — `.limen/lychee.toml`

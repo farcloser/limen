@@ -9,7 +9,7 @@ import (
 
 const ruleBareTools = "baretools"
 
-// TestBareToolsPassesBuiltBinaries: a tool run as build/tools/<name>, named in
+// TestBareToolsPassesBuiltBinaries: a tool run as .build/tools/<name>, named in
 // a comment, as an argument, as a path element, as a cache variable or inside a
 // just `{{ }}` is not a bare invocation; nor is a recipe that delegates to the
 // shared lanes.
@@ -19,11 +19,11 @@ func TestBareToolsPassesBuiltBinaries(t *testing.T) {
 	files := compliantFiles()
 	files[".justfile"] += `
 # golangci-lint is built by the lint go lane; the recipes below run that binary.
-export GOLANGCI_LINT_CACHE := justfile_directory() / 'build/cache/golangci-lint'
+export GOLANGCI_LINT_CACHE := justfile_directory() / '.build/cache/golangci-lint'
 
 lint-extra:
-    build/tools/golangci-lint run -c build/golangci-lint-go.yml ./...
-    cd cmd/x && ../../build/tools/golangci-lint fmt --diff ./... # not golangci-lint from PATH
+    .build/tools/golangci-lint run -c .build/golangci-lint-go.yml ./...
+    cd cmd/x && ../../.build/tools/golangci-lint fmt --diff ./... # not golangci-lint from PATH
     just do tools update golangci-lint
     just do lint go
 
@@ -32,11 +32,11 @@ smoke dot:
     {{ prefix }}godolint --version
 `
 	files["scripts/check.sh"] = "#!/bin/sh\njust do lint go\nls tools/golangci-lint/go.mod\n" +
-		"if test -x build/tools/golangci-lint; then echo built golangci-lint; fi\n"
+		"if test -x .build/tools/golangci-lint; then echo built golangci-lint; fi\n"
 	files[".github/actions/check/action.yaml"] = "runs:\n  using: composite\n  steps:\n" +
 		"    - run: just do lint go\n      shell: bash\n"
 	files[".github/workflows/extra.yaml"] = "on: push\njobs:\n  x:\n    steps:\n      - run: just do lint go\n" +
-		"      - uses: ./.github/actions/build\n        with:\n          tool: golangci-lint\n"
+		"      - uses: ./.github/actions/.build\n        with:\n          tool: golangci-lint\n"
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), ruleBareTools)
 	if !f.OK() {
@@ -77,7 +77,7 @@ func TestBareToolsFailsPathInvocations(t *testing.T) {
 		"hack/vuln.sh:4 runs `golangci-lint` from PATH",
 		"hack/vuln.sh:5 runs `nilaway` from PATH",
 		".github/actions/check/action.yaml:4 runs `dot` from PATH",
-		"build/tools/",
+		".build/tools/",
 	} {
 		if !strings.Contains(f.Message, want) {
 			t.Errorf("message should contain %q, got %q", want, f.Message)

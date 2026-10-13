@@ -40,7 +40,7 @@ rendered at lint time:
 
 - **The rendered configuration is a build artifact.** `just do lint go` has `limen-lint-go`
   check the pinned golangci-lint against the baseline's floor, render the baseline with the
-  overlay into `build/golangci.yml`, and print how many carve-outs it applied; golangci-lint
+  overlay into `.build/golangci.yml`, and print how many carve-outs it applied; golangci-lint
   then runs with `-c` on that file, which also makes it ignore any configuration at the root.
   The licenses lane splices in the flags the driver prints for it. Nothing is committed, and
   nothing at the root invites a hand edit: a root `.golangci.yml` is a stray that `limen check`

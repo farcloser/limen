@@ -95,9 +95,9 @@ export CXX := if xcode_bin == '' { env('CXX', '') } else { xcode_bin / 'clang++'
 export SDKROOT := if xcode_sdk == '' { env('SDKROOT', '') } else { xcode_sdk }
 
 # Hermetic, per-project linter cache (same doctrine as PATH and GOROOT: no
-# shared mutable state across repos). Lives under build/ — gitignored, and
+# shared mutable state across repos). Lives under .build/ — gitignored, and
 # local runs behave like CI instead of diverging on cache state.
-export GOLANGCI_LINT_CACHE := justfile_directory() / 'build/cache/golangci-lint'
+export GOLANGCI_LINT_CACHE := justfile_directory() / '.build/cache/golangci-lint'
 
 # just's default recipe is the first one defined, so a project's first own
 # recipe replaces this one.

@@ -58,7 +58,7 @@ brew install farcloser/brews/limen    # or run the limen-install script directly
 ```
 
 (For hacking on limen itself, build it from your clone with `just do build go`, which writes
-`build/limen`: the checkout you are working on, built by the pinned `go`.)
+`.build/limen`: the checkout you are working on, built by the pinned `go`.)
 
 ```bash
 limen check [path]            # check the repo at path (default ".")

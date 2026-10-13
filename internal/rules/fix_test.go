@@ -124,7 +124,7 @@ func TestFixAppendsRequiredGitignore(t *testing.T) {
 
 	data, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	if want := own + "\n\n# Required by limen (book/mandatory-files.md, \".gitignore\").\n" +
-		"/build\n/_scratch\n.claude\n"; string(data) != want {
+		"/.build\n/_scratch\n.claude\n"; string(data) != want {
 		t.Errorf(".gitignore after fix:\n%q\nwant:\n%q", data, want)
 	}
 
@@ -145,7 +145,7 @@ func TestFixAppendsRequiredGitignore(t *testing.T) {
 func TestFixGitignoreAfterNegation(t *testing.T) {
 	t.Parallel()
 
-	dir := writeRepo(t, map[string]string{".gitignore": "/build\n/_scratch\n.claude\n.idea\n!build/\n"})
+	dir := writeRepo(t, map[string]string{".gitignore": "/.build\n/_scratch\n.claude\n.idea\n!.build/\n"})
 
 	if o := outcomeFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "gitignore"); o.Action != rules.ActionMerged {
 		t.Fatalf("gitignore action = %s (%s), want merged", o.Action, o.Message)

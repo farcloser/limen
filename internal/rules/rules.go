@@ -352,7 +352,7 @@ func checkGitignore(root string) Finding {
 // or drop.
 //
 //nolint:gochecknoglobals // immutable table.
-var gitignoreRequired = []string{"/build", "/_scratch", ".claude", ".idea"}
+var gitignoreRequired = []string{"/.build", "/_scratch", ".claude", ".idea"}
 
 // missingGitignorePatterns lists the required patterns the file does not
 // carry. Spellings are compared normalized (normalizeIgnorePattern), so
@@ -987,7 +987,7 @@ func skippedDirs() map[string]bool {
 		gitDirName:     true,
 		"node_modules": true,
 		"vendor":       true,
-		"build":        true,
+		".build":       true,
 		"tmp":          true,
 		"target":       true,
 		".svelte-kit":  true,

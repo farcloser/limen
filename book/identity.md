@@ -245,7 +245,7 @@ proven by running the recipe both ways, variable set and unset.
 sandbox exclusion is matched on the typed command, but what runs unsandboxed is whatever
 that name resolves to. `just kernel` is the `kernel` recipe of the current `.justfile`,
 repository content a session edits; `ossein *` resolves through aqua into the agent root,
-which sessions write; `./build/ossein *` is a binary the session just built. Each was an
+which sessions write; `./.build/ossein *` is a binary the session just built. Each was an
 escape with a prompt in front of it, and the prompt shows the name, not the contents. On
 2026-10-12 the list went from nine entries to one,
 `/Applications/UTM.app/Contents/MacOS/utmctl *`, after every owner was asked what it types:

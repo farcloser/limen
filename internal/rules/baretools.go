@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// The baretools rule: the Go-built tools are run as build/tools/<name>, where
+// The baretools rule: the Go-built tools are run as .build/tools/<name>, where
 // the recipes build them from the tools modules; nothing puts one on PATH. A
 // bare `golangci-lint` in the project's own .justfile, a script or a workflow
 // runs whatever PATH holds instead: on a laptop, a stale aqua shim another
@@ -27,9 +27,9 @@ const (
 
 	bareToolsPassMessage = "no Go-built tool is run from PATH in " + justfileName + ", " + workflowsDir +
 		", " + actionsDir + ", " + hackDir + " or " + scriptsDir
-	bareToolsAdvice = " — the recipes build the Go-built tools into build/tools/ and run that binary;" +
+	bareToolsAdvice = " — the recipes build the Go-built tools into .build/tools/ and run that binary;" +
 		" nothing puts one on PATH, and a bare name finds a stale aqua shim at best:" +
-		" run `just do lint go` or `just do fix go`, or build/tools/<name> after one of them" +
+		" run `just do lint go` or `just do fix go`, or .build/tools/<name> after one of them" +
 		" (see book/tooling.md, \"Go-built tools are go.mod tools\")"
 )
 

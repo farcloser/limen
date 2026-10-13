@@ -32,21 +32,21 @@ go_fixers := "wsl_v5,godot,tagalign,nolintlint"
 # because two formatters undoing each other never settle: loop for the benign
 # case, fail loudly for the other. Then the tree is proven to still compile,
 # tests included, with `go vet`, the type-check that covers _test.go.
-code: (_banner "fix go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") _golangci-config (_per-platform "build/tools/golangci-lint run --fix --enable-only " + go_fixers + " -c build/golangci.yml")
+code: (_banner "fix go" "go") (_go-tool "golangci-lint" "github.com/golangci/golangci-lint/v2/cmd/golangci-lint") _golangci-config (_per-platform ".build/tools/golangci-lint run --fix --enable-only " + go_fixers + " -c .build/golangci.yml")
     #!/usr/bin/env bash
     set -euo pipefail
     max=5
     pass=0
     # Check first: an already-formatted tree costs one --diff and no rewrite.
-    while ! build/tools/golangci-lint fmt --diff -c build/golangci.yml >/dev/null 2>&1; do
+    while ! .build/tools/golangci-lint fmt --diff -c .build/golangci.yml >/dev/null 2>&1; do
         pass=$((pass + 1))
         if [ "${pass}" -gt "${max}" ]; then
             echo "formatters did not converge after ${max} passes — they are fighting each other." >&2
             echo "The residual diff below reverses on the next pass; fix the formatter config." >&2
-            build/tools/golangci-lint fmt --diff -c build/golangci.yml >&2 || true
+            .build/tools/golangci-lint fmt --diff -c .build/golangci.yml >&2 || true
             exit 1
         fi
-        build/tools/golangci-lint fmt -c build/golangci.yml
+        .build/tools/golangci-lint fmt -c .build/golangci.yml
     done
     if ! go vet ./...; then
         echo "the fixers left a tree that does not compile (or vet): repair what they broke above, then run again." >&2

@@ -13,7 +13,7 @@ Desktop.ini
 .claude/
 
 # Build output and Go artifacts
-/build
+/.build
 
 # Scratch / work-in-progress files
 # *.local

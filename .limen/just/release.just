@@ -32,7 +32,7 @@ release *args:
     usage() {
         echo "usage: just do release <tag>                                               # signed tag + push; CI builds, signs (keyless), publishes (no .release-go.yaml: the release page, with notes)" >&2
         echo "       just do release --local <cosign-key> <tag> [--cosign-password-stdin] # fully local, key-based cosign" >&2
-        echo "       just do release --local --dry-run                                   # local unsigned snapshot into build/release/" >&2
+        echo "       just do release --local --dry-run                                   # local unsigned snapshot into .build/release/" >&2
         echo "       just do release --ci                                                # workflow half of the default lane (GitHub Actions only)" >&2
     }
     require_clean() {
