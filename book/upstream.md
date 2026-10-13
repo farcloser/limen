@@ -203,3 +203,25 @@ package in the agent root) is an escape, not a permission ([identity.md](./ident
 **Lifts when** the sandbox runtime allows reading `kern.hv_support` and `kern.hv_vmm_present`
 (both disclose one bit about the hardware) or exposes a configurable sysctl allowlist beside
 `allowMachLookup`. Reported to Anthropic by email on 2026-10-12.
+
+## Claude Code's sandbox refuses `git clone` inside a session's root
+
+**Symptom.** `git clone <url> <dir>` run from a session, with `<dir>` under the session's
+working directory, dies at once: `fatal: cannot copy
+'…/git-core/templates/hooks/commit-msg.sample' to '<dir>/.git/hooks/commit-msg.sample':
+Operation not permitted` (2026-10-12). The same clone under `$TMPDIR` succeeds.
+
+**Cause.** The sandbox runtime protects `.git/hooks` and `**/.git/hooks/**` beneath the working
+directory for every command, with no switch
+([src/sandbox/macos-sandbox-utils.ts](https://github.com/anthropic-experimental/sandbox-runtime/blob/24eb39e94a6de386e83d126c52317d8e0fa49522/src/sandbox/macos-sandbox-utils.ts#L122)).
+`git init`, which `clone` runs first, copies the template hook samples into the new
+repository's `.git/hooks`, and the first copy is refused. The protection is right for an
+existing repository; a repository being created has no hooks anyone will run.
+
+**Workaround.** Clone under `$TMPDIR`, which is outside the root and unprotected, or use the
+harness's worktree tool for a second checkout of a repository already present. The contribute
+skill names both.
+
+**Lifts when** the runtime lets `git init` create `.git/hooks` with the `*.sample` files, or
+distinguishes a new repository from an existing one. Reported to Anthropic by email on
+2026-10-12.
