@@ -10,7 +10,9 @@ and what goes where.
   pull request that follows carries the reviewed head, and the project-manager session binds
   it as the human's approval queue ([coding agents as contributors](./agents.md)). The
   human's comments on a pull request, when there are any, are addressed when pointed there,
-  or when the agent next checks its open pull requests.
+  or when the agent next checks its open pull requests. What reaches GitHub is the change
+  and its technical reasons, written for a reader who was not in the session; the exchange
+  that produced it stays here.
 - **No GitHub issues unless the human asks for one.** The issue tracker is the human's: an
   issue is a lookup for them and a ticket nobody owns for the sessions. A defect or a
   request in a repository another session owns goes to that session as a message — what,

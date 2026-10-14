@@ -16,8 +16,9 @@ answers by message; GitHub sees one reviewed pull request and the human's approv
    hold for every tool is the usual shape of this miss: the exception is right, the rule it
    patches is wrong.
 2. **Is it right?** The implementation: what it claims, verified as below.
-3. **Is it clean?** One commit per thing, trailers, comments that name a trap, no
-   scratchpads, no tooling links.
+3. **Is it clean?** One commit per thing, trailers, comments that name a trap, a commit
+   message and a description a reader outside the session can follow, no scratchpads, no
+   tooling links.
 
 A finding at step 1 outranks a clean pass at steps 2 and 3, and is raised with the
 baseline's owner when the mechanism is the baseline's.
