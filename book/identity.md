@@ -124,9 +124,13 @@ enclave to sign; it can never read a key. Three consequences the script handles:
 - **Host keys.** `~/.ssh/known_hosts` is unreadable, so GitHub's host keys are pinned into
   a file the sandbox can read, from GitHub's published list, and ssh runs with strict
   checking against it. No trust-on-first-use.
-- **The ssh client.** The Homebrew OpenSSH is built without OpenSSL and cannot use an ECDSA
-  key at all; Apple's `/usr/bin/ssh` and `ssh-keygen` serve the bot, via `core.sshCommand`
-  and `gpg.ssh.program`.
+- **The ssh client.** The toolset's own OpenSSH, the fork with security keys and ECDSA
+  built in, serves the bot by its real path: `core.sshCommand` runs its `ssh` with the bot
+  key's algorithm as the one accepted (the fork's default list carries no ECDSA, so the key
+  would never be offered), and `gpg.ssh.program` a wrapper around its `ssh-keygen`. The
+  real path, because a session's aqua root carries no openssh for the toolset's shim to
+  resolve, and git execs the signer with no shell in between; the installer resolves it
+  from the machine toolset and runs again after a bump moves it.
 - **The egress proxy.** Every outbound connection goes through the sandbox's per-session
   proxy, which requires credentials. The sandbox's own ssh wiring offers none, so a small
   ProxyCommand helper speaks authenticated HTTP CONNECT to the same proxy. The proxy's
