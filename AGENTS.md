@@ -33,6 +33,11 @@ chapter; the procedure is limen's `skills/contribute`.
   the pull requests it merged, so a title says what changed for a consumer; no
   `CHANGELOG.md` is kept by hand. One that breaks a consumer carries the `breaking` label
   (`gh label create breaking` the first time a repository needs it).
+- **A pull request is read by someone who was not in the session.** Its description says
+  what changes and why in the terms of the code: the defect or the gap, the mechanism, the
+  evidence it works. A decision appears as its technical reason; who asked, who decided and
+  how the review went stay in the session. Every reference resolves from the page: a URL, a
+  file and section, a published document.
 - **One commit per thing.** Different things get different commits; iteration on the
   same thing — a review round, a fix to your own commit — is squashed into the commit it
   amends before the pull request is opened. Never a stack of fix-ups for one change.

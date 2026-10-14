@@ -25,13 +25,15 @@ branches in its own worktrees. The human's branches are the human's.
   human's work, the human is the author and the bot the committer. No scratchpads:
   `AUDIT.md` and its kind are notes under `_scratch/` whose surviving findings become code,
   tests or book prose ([scratch is scratch](#scope-and-priorities)).
-- **One commit per thing.** The commit message is the record, so the history reads as
-  decisions, not as a diary. Different things get different commits: a fix and an unrelated
-  doctrine paragraph are two. Iteration on the same thing is not: a review round, a
-  correction to the commit's own message, is squashed into the commit it amends before the
-  pull request is opened, the message rewritten to tell the whole story once. A stack of
-  fix-ups leaves a message a later commit contradicts. The bot's own branch may be
-  rewritten for this (`--force-with-lease` on the previous head); a shared branch never is.
+- **One commit per thing.** The commit message is the record: the defect, the mechanism,
+  the trade-off, in the code's terms, for a reader who has the repository and nothing else;
+  the history reads as reasons, not as a diary. Different things get different commits: a
+  fix and an unrelated doctrine paragraph are two. Iteration on the same thing is not: a
+  review round, a correction to the commit's own message, is squashed into the commit it
+  amends before the pull request is opened, the message rewritten to tell the whole story
+  once. A stack of fix-ups leaves a message a later commit contradicts. The bot's own branch
+  may be rewritten for this (`--force-with-lease` on the previous head); a shared branch
+  never is.
 - **Green before the review.** The full `just lint` and `just test`, not one lane, in the
   worktree, before anyone reads the change: what CI runs on other platforms is what a single
   lane on one machine misses.
@@ -110,19 +112,27 @@ branches in its own worktrees. The human's branches are the human's.
 
 ## The shape of a pull request
 
-A pull request description is read before its diff, by @apostasie, usually from a terminal
-or a phone, after the reviewing session has read the change in the worktree. It says why
-first and leaves the detail for last. Every section opens with the same marker every time,
-so the eye finds it without reading; a section with nothing to say is left out, and none is
-written to look complete:
+A pull request description is read by someone who was not in the session: @apostasie from
+a phone after the fact, a maintainer a year on, the reader of the release notes, the next
+agent in the repository. It gives them what changed and why in the terms of the code and
+the system: the defect or the gap, the mechanism that answers it, the evidence that it
+works. A decision appears as the technical reason behind it; the conversation that produced
+it, who asked, who decided, what a review found at which head, is the session's and stays
+there. Every reference resolves from the page alone: a URL, a file and section, a published
+document. The test of a sentence is whether it means the same to a reader who has only the
+repository and GitHub.
+
+It says why first and leaves the detail for last. Every section opens with the same marker
+every time, so the eye finds it without reading; a section with nothing to say is left out,
+and none is written to look complete:
 
 | Marker | Section | What goes there |
 |---|---|---|
-| 🎯 | **Why** | The first line. What fails or is missing today, or who asked for what. One or two sentences; the reason the diff exists. |
+| 🎯 | **Why** | The first line. The defect, the gap or the requirement the change answers, in the system's terms: what is wrong or missing, and what it costs. One or two sentences; the reason the diff exists. |
 | 🛠️ | **What** | What changes, by file, package or component, as a reader would check it against the diff. |
-| 🧪 | **How** | How the change fixes the defect or satisfies the request, and how that was verified. With several commits, one numbered line per commit in history order, keyed by the commit's subject (never its sha, which every amend changes): what it does for the why, and its verification. Every claim is marked V, verified, with where or how, or U, unverified, with what is missing. |
+| 🧪 | **How** | How the change fixes the defect or satisfies the request, and how that was verified. With several commits, one numbered line per commit in history order, keyed by the commit's subject (never its sha, which every amend changes): what it does for the why, and its verification. Every claim is marked V, verified, with the test, command or document that establishes it, or U, unverified, with what is missing. |
 | 💡 | **Follow-ups** | What this leaves for later, non-blocking, with the reason it was not done here. |
-| 📝 | **Notes** | Facts the reader should know and nothing to do about them here: a stack ("stacked on #N"), a deliberate hold, a red inherited from `main`. |
+| 📝 | **Notes** | Facts about the change itself, with nothing to do about them here: a layer of a stack (stacked on its URL), a deliberate hold, a red inherited from `main`. |
 | 📎 | **Annex** | Everything long: measurements, tables, logs, history, the reproduction. Last, so the screen above it stays short. |
 
 The title says what the pull request lands and stays true as it changes: a version bump
@@ -133,9 +143,8 @@ The description is drawn from the commit messages, which remain the record; it d
 replace them and does not repeat the diff. Because every commit is one thing, the 🧪 lines
 and the commits are the same list, in the same order. The budget above the annex is one
 screen: a one-line change needs 🎯 and 🧪 and nothing else; a pull request that needs every
-section with two paragraphs each is two pull requests. 💡 and 📝 mean here what they mean in
-a review ([the shape of a review](./review.md#the-shape-of-a-review)). Full URLs,
-@apostasie by handle, no link to the agent's tooling, as everywhere. Never a closing keyword
+section with two paragraphs each is two pull requests. Full URLs, @apostasie by handle, no
+link to the agent's tooling, as everywhere. Never a closing keyword
 (close, closes, closed, fix, fixes, fixed, resolve, resolves, resolved) directly before a
 reference to an issue or a pull request, as a number or as a URL: GitHub executes it when
 the pull request merges, and a body that said another pull request had been "closed … for

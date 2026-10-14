@@ -58,8 +58,10 @@ are what prevents it.
    wrong clone once pushed a branch with no shared history to another
    repository.
 2. **Write the subject, the body and the co-author trailer; let `-s` add the
-   sign-off.** Subject line, blank line, the reasoning in prose, blank line,
-   then the one trailer you write, naming the model:
+   sign-off.** Subject line, blank line, the reasoning in prose (the defect, the
+   mechanism, the trade-off, in the code's terms, for a reader who has the
+   repository and nothing else), blank line, then the one trailer you write,
+   naming the model:
    ```
    Co-Authored-By: <Model> <noreply@vendor.example>
    ```
@@ -149,18 +151,19 @@ No `-u` on the push — recording the upstream writes `.git/config`, which the
 sandbox denies; name the remote and branch instead.
 
 The body follows the book's shape (`book/agents.md`, "The shape of a pull
-request"), why first and detail last, one fixed marker per section, only the
-sections that have content:
+request"): written for a reader who was not in the session, what changes and
+why in the code's terms, every reference a URL or a file; why first and detail
+last, one fixed marker per section, only the sections that have content:
 
 ```
-🎯 Why: <what fails or is missing, or who asked for what; one or two sentences>
+🎯 Why: <the defect, the gap or the requirement, in the system's terms: what is wrong or missing and what it costs; one or two sentences>
 🛠️ What: <what changes, by file or component>
-🧪 How: <how it fixes or satisfies, and how that was verified; mark each claim V or U>
-  1. <commit subject>: <what this commit does for the why>. V: <where or how>
+🧪 How: <how the change answers the why, and the evidence; each claim V with the test, command or document, or U with what is missing>
+  1. <commit subject>: <what this commit does for the why>. V: <the test or command>
   2. <commit subject>: <…>. U: <what could not be verified, and why>
 💡 Follow-ups: <left for later, non-blocking, with the reason>
-📝 Notes: <stacked on #N, a deliberate hold, a red inherited from main>
-📎 Annex: <measurements, tables, logs, history; last, so the rest fits one screen>
+📝 Notes: <facts about the change itself: stacked on <URL>, a deliberate hold, a red inherited from main>
+📎 Annex: <measurements, tables, logs; last, so the rest fits one screen>
 ```
 
 The description is drawn from the commit messages and does not repeat the
@@ -229,7 +232,7 @@ Every pull request targets `main`; never open one against another pull
 request's branch, and never merge one into it. A change that cannot be green
 without an unmerged one is either a layer of a GitHub native stack, or a
 branch with no pull request yet, opened against `main` once the other has
-merged. Say what it stacks on in the body ("stacked on #N").
+merged. Say what it stacks on in the body ("stacked on <URL>").
 
 A stack is reviewed and merged whole. Every layer is held to `main`'s
 ruleset at once: one unsigned commit, or one layer without its approval,
