@@ -18,21 +18,14 @@ chapter of its own holds it; the links say where.
   difference) grows no export outside it because a caller wanted a home for a platform
   split: the caller keeps its helper private, or the thing goes where its general meaning
   lives.
-- **Tests are black-box, never bought with indirection.** A test lives in the external test
-  package (`package foo_test` in Go; the pinned lint enforces it) and reaches only what a
-  consumer reaches. Production code is never given an interface, a function field or any
-  other indirection whose only purpose is a test's fake: that is bad design, not
-  testability; an interface is defined by a real client. When the fixed path is not
-  reachable from outside, the question is how the test rig is modelled, never whether to
-  open the code. A property no unit test can observe (a power loss, a filesystem failure)
-  gets no unit test: a mock that asserts it was called proves only that the code calls
-  itself. Correctness there is by construction and by reading; fault injection is a
-  separate, larger rig ([testing](./testing.md)).
-- **A package's tests are one contract, stated once, checked within a bound.** The contract
-  is written at the top of the test package from the sources that define it; a bounded walk
-  holds the code to every edge of it; a fuzz target runs past the bound; an older suite goes
-  only when a mutation score shows the new one catches every mutant the old one did
-  ([the tests are one contract](./testing-go.md#the-tests-are-one-contract-checked-within-a-bound)).
+- **Tests are black-box, never bought with indirection.** A test reaches only what a
+  consumer reaches; production code grows no seam whose only purpose is a test's fake. A
+  property no test can observe gets no test
+  ([what a test is for](./testing.md#what-a-test-is-for)).
+- **A package's tests hold it to a contract written from its sources, within a bound.**
+  Stated once, before the code is read; every edge walked; fuzzed past the bound; an older
+  suite replaced only under a mutation score
+  ([what a package's tests establish](./testing.md#what-a-packages-tests-establish)).
   Writing the contract down is where the bugs are found.
 - **A type admits only its valid values.** A value that must not exist is removed by the
   type — sealed, unexported, returned by a function — not guarded at every call site, and

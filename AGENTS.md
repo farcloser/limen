@@ -167,9 +167,9 @@ chapter; the procedure is limen's `skills/contribute`.
 - **Tests are black-box, never bought with indirection.** External test package
   (`package foo_test`), no reach into private state, and no interface, function field, or
   other indirection in production code whose only purpose is a test's fake: that is bad
-  design, not testability. A property no unit test can observe (a power loss, a
-  filesystem failure) gets none; a mock that asserts it was called proves only that the
-  code calls itself.
+  design, not testability. A crash is tested with a child process killed inside the
+  window; only what no process boundary reaches gets no test, and a mock that asserts it
+  was called proves only that the code calls itself.
 - **A comment names a trap, not a story.** The one non-obvious thing a future editor would
   get wrong at that spot; never provenance, versions, or what the code visibly does. The
   reasoning goes in the commit message. See the book's
