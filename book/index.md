@@ -28,8 +28,8 @@ every language, and a sub-document holds one language's form.
   - [Linting](./linting.md): [Go](./linting-go.md), [Shell](./linting-shell.md), [YAML](./linting-yaml.md).
   - [Dependencies](./dependencies.md): [Go](./dependencies-go.md).
   - [Boundaries](./boundaries.md): inputs, sizes, types, startup, process state; [Go](./boundaries-go.md).
-- **Testing**: [Testing](./testing.md): what a test is for, what it may reach, when a suite is
-  replaced; [Go](./testing-go.md).
+- **Testing**: [Testing](./testing.md): what a test is for, what a package's tests establish,
+  when a test goes, where the tests run; [Go](./testing-go.md).
 - **Forks**: [Forks](./forks.md): provenance, onboarding order, pitfalls, the release review.
 - **Websites**: [Project websites](./web.md): what a site loads, claims, and how it reads on a phone.
 - **Languages**: what fits no topic: [Homebrew](./homebrew.md), [Rust](./rust.md).
