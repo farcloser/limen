@@ -1,6 +1,7 @@
 # Boundaries — Go
 
-The Go form of [boundaries](./boundaries.md): paths, startup preconditions, the umask.
+The Go form of [boundaries](./boundaries.md): paths, startup preconditions, the umask, the
+holders and the files a process shares with its peers.
 
 ## Paths are validated where they enter
 
@@ -63,3 +64,51 @@ after the fact. The trap, from https://github.com/mycophonic/primordium/pull/158
 `WriteFile`'s first call zeroed the umask as a side effect, and every program calling it
 without the library's initializer relied on that without knowing; the fix broke eight
 callers across four repositories, each of which now says what it wants.
+
+## A holder is its PID and its start time
+
+A lock word or a slot that records a holder by PID is taken over when that PID is dead, and
+the kernel reuses PIDs: a process that got a dead holder's number kept the lock as if the
+holder lived, and every peer waited on it until the impostor exited. So the start time sits
+beside the PID, as the platform reports it: `sysctl kern.proc.pid` on macOS, field 22 of
+`/proc/<pid>/stat` counted after the last `)` on linux, `GetProcessTimes` on Windows. A
+holder is alive when its PID is and, where a start was recorded, when the process with that
+PID started then. A start the platform cannot read counts as the holder's own, so a live
+process is never taken for dead; a zero start means PID-only liveness, and is what an older
+file carries. The ordering that keeps a checker from pairing one process's PID with
+another's start: a start beside a PID is zero or that PID's own, and zero is always safe, so
+freeing writes the start first and the word after, putting a dead word back writes the word
+first and its own start after, and a lost takeover leaves the start zero. The start is read
+once per process and compared on the slow path only; the hot path's cost stayed where it
+was. In a test, the live PID that is not the test's own is its parent's, `os.Getppid()`,
+never 1: PID 1's start is unreadable to another user on some linux hosts, and an unreadable
+start counts as the holder's own, so the test hung instead of taking over
+(https://github.com/mycophonic/primordium/pull/212).
+
+## A shared mapping is extended, never shrunk, and rebuilt in place
+
+A file that several processes map is rebuilt inside the mapping every holder already has.
+`Truncate(0)` under a peer's mapping is `SIGBUS` past the end on POSIX and refused outright
+on Windows; a rename of a rebuilt sibling over the file is refused on Windows while any peer
+maps it, so the POSIX-semantics rename that replaces an open file
+([windows](./windows.md#replacing-a-file-that-is-open)) does not reach a mapped one. The
+rebuild extends the file if its writer never sized it, never shrinks it, clears and refills
+the table in its own mapping, writes the header's counts last, syncs, then removes the
+journal. The lock word, which sits inside every holder's mapping, is never written by the
+rebuild: the holders wait on it and find the new capacity when the lock is theirs. A failure
+to rebuild puts the dead writer's word back, so the next taker tries again and nobody reads
+the table it died in. One rebuild serves both the peer that takes a dead writer's lock and
+`New` on a fresh open; two paths for one job left `New`'s failing on Windows exactly when a
+peer was alive to map the file (https://github.com/mycophonic/primordium/pull/212,
+https://github.com/mycophonic/primordium/pull/214).
+
+## A truncated hash is a hint, never an identity
+
+An index keyed by the first 64 bits of a 256-bit digest will, in time, see two identifiers
+share a key, and a record that says nothing about which identifier wrote it serves one's
+content to the other. The record carries the next 64 bits of the same digest as its
+confirmation: a record under the key whose confirmation is another's, or that cannot be
+read, is no record, a miss and a refetch, never the wrong blob; an invalidation leaves
+another identifier's record alone. A wider record is an on-disk change, so a store opened
+over an index of the old width discards it with a warning and fetches each identifier again
+once; the blobs, addressed by content, stay (https://github.com/mycophonic/primordium/pull/209).
