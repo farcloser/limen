@@ -19,3 +19,13 @@ language; the Go form is [boundaries-go](./boundaries-go.md).
   is missing; it never degrades to a default that looks like it works.
 - **Process-wide state is changed once, by a function named for it**, never as the side
   effect of a read, and the package says what the children inherit.
+- **A process identifier is liveness, never identity.** The kernel hands identifiers out
+  again, so a holder recorded by its identifier alone is impersonated by whatever process
+  gets it next. A holder is its identifier and its start time; a start that cannot be read
+  counts as the holder's own. The failure runs toward holding, never toward takeover.
+- **A file other processes map is extended, never shrunk, and rebuilt in place.** Shrinking
+  it faults every peer past the new end; renaming another file over it is refused where the
+  mapping lives; a word the peers spin on inside the mapping is never written by a rebuild.
+- **A truncated hash is a hint, never an identity.** A key cut from a digest collides,
+  eventually. A record carries a second slice of the same digest as its confirmation; a
+  mismatch is a miss, and an invalidation never removes another identifier's record.

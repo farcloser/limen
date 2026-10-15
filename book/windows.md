@@ -48,7 +48,9 @@ over it 200 times. With `os.Rename`, 2 to 10 of 200 writes landed; with the POSI
 volume that has it, `os.Rename` where the request itself is refused (FAT, exFAT, some
 shares, older Windows), and `os.Rename` for a directory source, since the POSIX rename would
 replace an empty directory in its way. Its `WriteFile` renames through it. A consumer that
-replaces a file readers may hold open does it with `xos.Rename`, never with `os.Rename`.
+replaces a file readers may hold open does it with `xos.Rename`, never with `os.Rename`. A
+file a peer *maps* is out of reach of either rename: it is rebuilt in place
+([boundaries](./boundaries-go.md#a-shared-mapping-is-extended-never-shrunk-and-rebuilt-in-place)).
 
 An error built with `errors.Join` prints its causes on following lines, so a log filtered to
 one line shows the outer sentinel and never the cause. Read the lines after it.
