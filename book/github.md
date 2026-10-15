@@ -311,7 +311,17 @@ The decided merge model, enforced by the repository settings and the `limen:main
   key while the old one lingers until eviction; two generations of the Windows images and
   the Go caches are over budget on their own. So the canonical lanes restore everywhere and
   save on `main` only, on a miss (`actions/cache/restore` and `actions/cache/save`, never the
-  combined action, whose post step saves wherever it ran). A key is never overwritten, so the
+  combined action, whose post step saves wherever it ran). One content-pinned composite
+  action, `.github/actions/cache`, keeps a job's caches in three calls: `attach` before
+  setup-aqua (on Windows the caches live in one disk image that holds aqua's root, so it is
+  attached first), `restore` right after setup-aqua, before the job links or runs a tool (on
+  Linux and macOS, aqua's store first, then the Go caches as files: resolving their paths runs
+  `go`, which the store holds) and `save` at the end. A workflow names no platform and no cache
+  mechanism; what differs between jobs is an input (`go`, `linter-cache`, `aqua-fallback`),
+  not a copy of the steps that drifts apart unseen, which is how the verify and security
+  lanes came to share a Go key over different paths; the Go cache with the linter's is now
+  `go-lint-`, the one without it `go-`. Each mode is called once per job: attach and restore
+  leave what save needs in the job's environment, and a second call fails. A key is never overwritten, so the
   caches that accumulate (Go's build cache, the fuzz corpus, the Windows image that holds the
   Go caches) carry the UTC day in their key: without it `main` would keep the first build of a
   `go.sum` forever and the corpus would never grow, with it `main`'s first run of a day
@@ -319,9 +329,10 @@ The decided merge model, enforced by the repository settings and the `limen:main
   after each `ci` run there, and once a day, every entry under a canonical prefix that is not
   the newest of its family is deleted, through GitHub's own token with `actions: write` on
   that one job. A family is the key without its day, content hash and Go version, plus the
-  entry's version, which GitHub derives from the cached paths: verify's and security's Go
-  caches share a key but not their paths, and keying the family on the key alone would have
-  each delete the other in turn. A pull request restores `main`'s caches through the
+  entry's version, which GitHub derives from the cached paths: two entries under one key over
+  different paths are two families, never each other's older generation (the verify and
+  security Go caches were exactly that until `go-lint-` split them, and a family on the key
+  alone had each delete the other in turn). A pull request restores `main`'s caches through the
   fallback keys and pays for what its change touched, which is what a pull request should
   pay for.
 

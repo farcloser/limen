@@ -503,6 +503,7 @@ func remediateWorkflows(root string) []Outcome {
 		pinExact(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum),
 		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
+		pinExact(root, rule, pathActionCache, limen.CanonicalActionCache),
 		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
 		pinExact(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity),
 		pinExact(root, rule, pathWorkflowCaches, limen.CanonicalWorkflowCaches),

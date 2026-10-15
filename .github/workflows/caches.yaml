@@ -55,9 +55,8 @@ jobs:
           # and content hash (and, for the Go caches, without the Go version,
           # so a toolchain bump retires the old version's entry too), plus the
           # entry's version: GitHub tells entries apart by key and version,
-          # and the version follows the cached paths, so two lanes caching
-          # different paths under one key (verify's Go cache holds the
-          # linter's, security's does not) are two families, never each
+          # and the version follows the cached paths, so two entries caching
+          # different paths under one key are two families, never each
           # other's older generation. The first of each family is kept, the
           # rest deleted. Only the canonical prefixes; whatever else is in the
           # store is not ours to judge.
@@ -69,7 +68,7 @@ jobs:
               aqua-pkgs-*|go-*|fuzz-corpus-*|win-image-*) ;;
               *) continue ;;
             esac
-            family=$(printf '%s' "$key" | sed -E 's/-[0-9]{8}$//; s/-[0-9a-f]{64}$//; s/-+$//; s/^(go-[^-]+-[^-]+)-go[0-9][^-]*$/\1/')
+            family=$(printf '%s' "$key" | sed -E 's/-[0-9]{8}$//; s/-[0-9a-f]{64}$//; s/-+$//; s/^(go-(lint-)?[^-]+-[^-]+)-go[0-9][^-]*$/\1/')
             family="$family $version"
             if printf '%s' "$kept" | grep -qxF -- "$family"; then
               printf 'delete %s (%d MB)\n' "$key" "$((size / 1000000))"

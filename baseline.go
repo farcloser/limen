@@ -124,6 +124,13 @@ var CanonicalActionSetupAqua string
 //go:embed .github/actions/windows-cache-image/action.yaml
 var CanonicalActionWindowsCacheImage string
 
+// CanonicalActionCache is the composite action every canonical job keeps
+// its caches with, attach, restore and save, on every platform —
+// content-pinned.
+//
+//go:embed .github/actions/cache/action.yaml
+var CanonicalActionCache string
+
 // CanonicalWorkflowVerify is the reusable workflow holding the shared CI
 // lanes, called from every repository's ci.yaml — content-pinned.
 //
