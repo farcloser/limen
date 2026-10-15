@@ -16,11 +16,15 @@ work after it:
   Every local edit to upstream's source is a divergence `UPSTREAM.md` records, and
   reporting a bug upstream is a public act.
 - **API.** Keep upstream's shape, or trim it, and the breaking changes that buys.
-- **Versions.** What a change of output is worth: a change in what the code produces is a
-  minor version, not a patch. The tag names the upstream version (`v10.6.1` for OpenSSH
-  10.6p1); a rebuild without an upstream bump — a library bump, a patch — adds a fourth
-  segment, `v10.6.1.1`, `v10.6.1.2`, never a `-suffix`: semver sorts `X.Y.Z-1` *before*
-  `X.Y.Z`, so a suffixed rebuild would rank below what it replaces.
+- **Versions.** Two cases, decided by what the repository is. A *repackaging* builds and
+  ships upstream's code, patched or not (openssh, curl): its tag names the upstream version
+  (`v10.6.1` for OpenSSH 10.6p1), and a rebuild without an upstream bump — a library bump, a
+  patch — adds a fourth segment, `v10.6.1.1`, `v10.6.1.2`, never a `-suffix`: semver sorts
+  `X.Y.Z-1` *before* `X.Y.Z`, so a suffixed rebuild would rank below what it replaces. A
+  *code fork* carries code of its own on upstream's base (xz, blake3): its version line is
+  its own, with no relation to upstream's, and a Go module could take no fourth segment
+  anyway. In both, what a change of output is worth: a change in what the code produces is a
+  minor version, not a patch.
 - **Platforms.** Every operating system and architecture the fork claims, since CI has to
   run on each.
 - **Owner.** The session that keeps it day to day.

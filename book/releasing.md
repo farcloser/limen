@@ -14,8 +14,8 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   page and leaves it. The recipe owns that page: a project's own release workflow uploads its
   artifacts into it (`gh release upload`) and creates it only when none exists — a tag pushed
   by hand — since two creators on one tag leave the second failing with the assets
-  unattached. The tag is `vX.Y.Z`, `vX.Y.Z-prerelease`, or a fork's rebuild of the same
-  upstream version, `vX.Y.Z.N` ([forks](./forks.md)). A `.release-go.yaml` (project-owned,
+  unattached. The tag is `vX.Y.Z`, `vX.Y.Z-prerelease`, or a repackaging's rebuild of the
+  same upstream version, `vX.Y.Z.N` ([forks](./forks.md)). A `.release-go.yaml` (project-owned,
   like the root `.justfile`) opts the repository into artifacts, and the two lanes below share
   every guard. It is goreleaser's configuration under the lane's name, like `.lint-go.yaml`
   (the recipes pass it with `--config`), and its first line is
