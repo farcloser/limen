@@ -211,12 +211,16 @@ working directory, dies at once: `fatal: cannot copy
 '…/git-core/templates/hooks/commit-msg.sample' to '<dir>/.git/hooks/commit-msg.sample':
 Operation not permitted` (2026-10-12). The same clone under `$TMPDIR` succeeds.
 
-**Cause.** The sandbox runtime protects `.git/hooks` and `**/.git/hooks/**` beneath the working
-directory for every command, with no switch
+**Cause.** The sandbox runtime protects `.git/hooks` and `**/.git/hooks/**` beneath the
+working directory for every command, with no switch
 ([src/sandbox/macos-sandbox-utils.ts](https://github.com/anthropic-experimental/sandbox-runtime/blob/24eb39e94a6de386e83d126c52317d8e0fa49522/src/sandbox/macos-sandbox-utils.ts#L122)).
 `git init`, which `clone` runs first, copies the template hook samples into the new
 repository's `.git/hooks`, and the first copy is refused. The protection is right for an
-existing repository; a repository being created has no hooks anyone will run.
+existing repository; a repository being created has no hooks anyone will run. An empty
+`--template` directory gets past the hooks and dies one step later: `.git/config` beneath
+the working directory is protected under the same list unless `allowGitConfig` is set
+([L126](https://github.com/anthropic-experimental/sandbox-runtime/blob/24eb39e94a6de386e83d126c52317d8e0fa49522/src/sandbox/macos-sandbox-utils.ts#L126)),
+and `git init` cannot write `core.repositoryformatversion` (2026-10-14).
 
 **Workaround.** Clone under `$TMPDIR`, which is outside the root and unprotected, or use the
 harness's worktree tool for a second checkout of a repository already present. The contribute
