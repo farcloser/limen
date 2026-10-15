@@ -41,8 +41,8 @@ an HTML report under `.build/coverage/`, gated by `TEST_GO_COVER_MIN` when the p
 it. `fuzz` runs every `Fuzz*` target for `TEST_GO_FUZZ_TIME`, ten seconds by default; the
 verdict is a new file under `testdata/fuzz/`, not the exit code, and CI's own `fuzz` job
 runs it on one leg. `just do perf go bench` runs the benchmarks with allocation statistics.
-A project's `test` aggregate names the lanes it runs: primordium's is `unit`, `race` and
-`cover`; the bare `just do test go` default is `unit` alone.
+A project's `test` aggregate names `unit`, `race` and `cover`; the bare `just do test go`
+default is `unit` alone and is not an aggregate.
 
 A passing test's output is hidden twice, by `go test` without `-v` and by gotestsum's
 format: `GOTESTSUM_FORMAT=standard-verbose just do test go` shows it.
