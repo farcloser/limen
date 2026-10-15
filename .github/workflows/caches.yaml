@@ -5,7 +5,8 @@
 # a repository over budget runs cold at random. The canonical lanes save on
 # main only (a cache a pull request run saves is scoped to that pull request
 # and restorable by nothing else), and every pin or go.sum change starts a new
-# generation of every key while the old one lingers until eviction. This
+# generation of every key while the old one lingers until eviction (and the
+# caches that accumulate, Go's and the fuzz corpus, start one a day). This
 # keeps one generation per key on main: after each ci run on main, and once a
 # day, every entry under a canonical prefix that is not the newest of its
 # family is deleted. GitHub's own token, `gh` from the runner image; no
@@ -50,8 +51,8 @@ jobs:
           # Main's entries, newest first. Listed before the loop so a refused
           # token or a failed call fails the step: fed through a process
           # substitution, the loop would read nothing and pass, and the prune
-          # would silently not happen. A family is a key without its content
-          # hash (and, for the Go caches, without the Go version,
+          # would silently not happen. A family is a key without its UTC day
+          # and content hash (and, for the Go caches, without the Go version,
           # so a toolchain bump retires the old version's entry too), plus the
           # entry's version: GitHub tells entries apart by key and version,
           # and the version follows the cached paths, so two lanes caching
@@ -68,7 +69,7 @@ jobs:
               aqua-pkgs-*|go-*|fuzz-corpus-*|win-image-*) ;;
               *) continue ;;
             esac
-            family=$(printf '%s' "$key" | sed -E 's/-[0-9a-f]{64}$//; s/-+$//; s/^(go-[^-]+-[^-]+)-go[0-9][^-]*$/\1/')
+            family=$(printf '%s' "$key" | sed -E 's/-[0-9]{8}$//; s/-[0-9a-f]{64}$//; s/-+$//; s/^(go-[^-]+-[^-]+)-go[0-9][^-]*$/\1/')
             family="$family $version"
             if printf '%s' "$kept" | grep -qxF -- "$family"; then
               printf 'delete %s (%d MB)\n' "$key" "$((size / 1000000))"

@@ -311,16 +311,24 @@ The decided merge model, enforced by the repository settings and the `limen:main
   key while the old one lingers until eviction; two generations of the Windows images and
   the Go caches are over budget on their own. So the canonical lanes restore everywhere and
   save on `main` only, on a miss (`actions/cache/restore` and `actions/cache/save`, never the
-  combined action, whose post step saves wherever it ran), and a content-pinned
-  `caches.yaml` keeps one generation per key on `main`: after each `ci` run there, and once a
-  day, every entry under a canonical prefix that is not the newest of its family is deleted,
-  through GitHub's own token with `actions: write` on that one job. A family is the key
-  without its content hash and Go version, plus the entry's version, which GitHub derives
-  from the cached paths: verify's and security's Go caches share a key but not their paths,
-  and keying the family on the key alone would have each delete the other in turn. A pull
-  request restores
-  `main`'s caches through the fallback keys and pays for what its change touched, which is
-  what a pull request should pay for.
+  combined action, whose post step saves wherever it ran). A key is never overwritten, so the
+  caches that accumulate (Go's build cache, the fuzz corpus, the Windows image that holds the
+  Go caches) carry the UTC day in their key: without it `main` would keep the first build of a
+  `go.sum` forever and the corpus would never grow, with it `main`'s first run of a day
+  refreshes them. A content-pinned `caches.yaml` keeps one generation per key on `main`:
+  after each `ci` run there, and once a day, every entry under a canonical prefix that is not
+  the newest of its family is deleted, through GitHub's own token with `actions: write` on
+  that one job. A family is the key without its day, content hash and Go version, plus the
+  entry's version, which GitHub derives from the cached paths: verify's and security's Go
+  caches share a key but not their paths, and keying the family on the key alone would have
+  each delete the other in turn. A pull request restores `main`'s caches through the
+  fallback keys and pays for what its change touched, which is what a pull request should
+  pay for.
+
+  The Go cache is the one that matters. Measured on primordium's verify job at one commit,
+  three runs each: 545 s on Linux with no cache, 536 s with aqua's store alone, 253 s with
+  the Go caches alone and 194 s with both (608, 635, 393 and 444 s on macOS, where the runs
+  are noisier). Restoring the Go caches costs 13 to 23 s on Linux and 28 to 53 s on macOS.
 
   **Migration.** `ci.yaml` is seeded once and the project's own afterwards, so repositories
   created before the gate, fuzz and tools jobs existed do not have them. Their rulesets keep

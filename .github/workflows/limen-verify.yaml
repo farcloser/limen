@@ -89,10 +89,13 @@ jobs:
       # The Go build and module caches, plus the linter's (.build/cache/, see
       # main.just). The per-platform analysis legs compile the whole module
       # graph five times, cold, on every run without this. Paths come from the
-      # pinned go itself — they differ per OS — and the key carries its version
-      # and every go.sum; a stale restore is harmless (the build cache is
-      # content-addressed, the module cache is checksum-verified), so the
-      # fallback key is always worth taking.
+      # pinned go itself — they differ per OS — and the key carries its version,
+      # every go.sum and the UTC day: the build cache accumulates as the code
+      # changes, and a key is never overwritten, so without the day main would
+      # keep the first build of a go.sum forever; with it main refreshes the
+      # entry at most once a day. A stale restore is harmless (the build cache
+      # is content-addressed, the module cache is checksum-verified), so the
+      # fallback keys are always worth taking.
       - id: gocache
         if: runner.os != 'Windows'
         run: |
@@ -100,6 +103,7 @@ jobs:
             echo "build=$(go env GOCACHE)"
             echo "mod=$(go env GOMODCACHE)"
             echo "version=$(go env GOVERSION)"
+            echo "day=$(date -u +%Y%m%d)"
           } >> "$GITHUB_OUTPUT"
       - id: gomod
         if: runner.os != 'Windows'
@@ -109,8 +113,9 @@ jobs:
             ${{ steps.gocache.outputs.build }}
             ${{ steps.gocache.outputs.mod }}
             .build/cache
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}-${{ steps.gocache.outputs.day }}
           restore-keys: |
+            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}-
             go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-
             go-${{ runner.os }}-${{ runner.arch }}-
 
@@ -123,8 +128,10 @@ jobs:
       # The caches are saved on main only, and only on a miss. A cache a pull
       # request run saves is scoped to that pull request and restorable by
       # nothing else, so it would only spend the repository's budget; a key
-      # is never overwritten, so a hit has nothing to save (the cache budget:
-      # caches.yaml). On Windows the image this run filled becomes the key's.
+      # is never overwritten, so a hit has nothing to save, and the keys that
+      # accumulate carry the day so that main's first run of a day refreshes
+      # them (the cache budget: caches.yaml). On Windows the image this run
+      # filled becomes the key's.
       - if: runner.os != 'Windows' && github.ref == 'refs/heads/main' && steps.pkgs.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -165,16 +172,21 @@ jobs:
         run: aqua install --only-link
 
       # The cached corpus is what makes fuzzing cumulative across runs. Keyed
-      # on the fuzz sources so a changed target restarts its corpus;
-      # restore-keys keep the rest. Saved on main only (caches.yaml).
+      # on the fuzz sources so a changed target restarts its corpus, and on
+      # the UTC day so that main saves what a day of runs found (a key is
+      # never overwritten); restore-keys keep the rest. Saved on main only
+      # (caches.yaml).
       - id: fuzzdir
-        run: echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+          echo "day=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
       - id: corpus
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.fuzzdir.outputs.dir }}
-          key: fuzz-corpus-${{ runner.os }}-${{ hashFiles('**/*_fuzz_test.go', '**/fuzz_test.go') }}
+          key: fuzz-corpus-${{ runner.os }}-${{ hashFiles('**/*_fuzz_test.go', '**/fuzz_test.go') }}-${{ steps.fuzzdir.outputs.day }}
           restore-keys: |
+            fuzz-corpus-${{ runner.os }}-${{ hashFiles('**/*_fuzz_test.go', '**/fuzz_test.go') }}-
             fuzz-corpus-${{ runner.os }}-
 
       - name: Fuzz

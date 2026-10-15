@@ -66,15 +66,16 @@ jobs:
 
       # The Go build and module caches: the scan compiles the module graph
       # once per supported platform, cold without this. Keyed like
-      # limen-verify.yaml's; the paths differ (no linter cache), so the two
-      # are separate entries under one key, told apart by their version
-      # (caches.yaml).
+      # limen-verify.yaml's, day included; the paths differ (no linter cache),
+      # so the two are separate entries under one key, told apart by their
+      # version (caches.yaml).
       - id: gocache
         run: |
           {
             echo "build=$(go env GOCACHE)"
             echo "mod=$(go env GOMODCACHE)"
             echo "version=$(go env GOVERSION)"
+            echo "day=$(date -u +%Y%m%d)"
           } >> "$GITHUB_OUTPUT"
       - id: gomod
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -82,8 +83,9 @@ jobs:
           path: |
             ${{ steps.gocache.outputs.build }}
             ${{ steps.gocache.outputs.mod }}
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}-${{ steps.gocache.outputs.day }}
           restore-keys: |
+            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}-
             go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-
             go-${{ runner.os }}-${{ runner.arch }}-
 
