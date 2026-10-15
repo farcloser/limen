@@ -51,6 +51,39 @@ baseline's owner when the mechanism is the baseline's.
 - **Fix the type before the call sites.** When a value should not exist, the recommendation
   is the type that cannot hold it; a guard is the fallback.
 
+## Reviewing a package
+
+A package review is the owner's whole read of one package, on @apostasie's ask, and ends in
+pull requests. The questions, in this order: is it useful, is it well designed, is the code
+correct, are the comments lean and meaningful, is the testing appropriate. Design and
+surface first; tests are where discipline slips, not where quality comes from. Each step
+below is done, or named as skipped with its reason; "done" with an unnamed gap is not done.
+
+- **Read all of it.** Every production file, every test, the package doc, the subpackages.
+- **Consumers.** Every exported symbol grepped across the fleet's clones. An unused export,
+  gratuitous surface and a shape that makes callers awkward are findings; a consumer gets
+  the contract, and only the contract.
+- **Dependencies.** Each third-party module pinned, maintained and needed, or the standard
+  library would do; said per module.
+- **Correctness.** Every edge reasoned about; a suspected defect reproduced with a
+  throwaway probe under `_scratch/` before it is fixed; a package that mirrors another
+  compared with it, call for call.
+- **Comments.** Each names a trap, not a story; a doc comment states the contract
+  ([principles](./principles.md)).
+- **Tests.** The full pass of [what a package's tests establish](./testing.md#what-a-packages-tests-establish).
+- **Performance.** Where the package exists for speed, a benchmark kept as a guard and the
+  hot path read for the regression a green suite does not show.
+- **A finding is a decision, not a fix.** A design finding is walked with @apostasie one at
+  a time and decided, keep, accept or fix, before any fix is written; a lock order that
+  reads as a hazard may be the fix for a race, and a panic on an invalid root may be the
+  design. Of sixteen findings in one sweep, four were kept as designed, two accepted, ten
+  fixed.
+- **Fixes.** One commit per thing, one pull request per topic, through the local review.
+- **Doctrine.** A lesson that holds beyond the package is a book change of its own, with
+  its evidence; decided per package, book entry or not, and said.
+- **The report.** What changed; what was found and left as is, named; what was verified and
+  how; which steps were skipped and why.
+
 ## Verify live, never from memory
 
 Every statement in a review was checked at the time of writing, against the source of
