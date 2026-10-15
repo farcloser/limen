@@ -490,10 +490,11 @@ func remediateCI(root, rule string) Outcome {
 
 // remediateWorkflows brings the .github surface up to the baseline in its two
 // regimes (see checkWorkflows): the checksum-update workflow and the
-// composite actions, the shared CI lanes, the security workflow and the
-// release-notes configuration are content-pinned exactly; the CI workflow and the renovate config are seeded
-// once and never overwritten; the release
-// workflow is seeded only where a goreleaser config makes it applicable.
+// composite actions, the shared CI lanes, the security and caches workflows
+// and the release-notes configuration are content-pinned exactly; the CI
+// workflow and the renovate config are seeded once and never overwritten; the
+// release workflow is seeded only where a goreleaser config makes it
+// applicable.
 func remediateWorkflows(root string) []Outcome {
 	const rule = "workflows"
 
@@ -503,6 +504,7 @@ func remediateWorkflows(root string) []Outcome {
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
 		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
 		pinExact(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity),
+		pinExact(root, rule, pathWorkflowCaches, limen.CanonicalWorkflowCaches),
 		pinExact(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes),
 		remediateCI(root, rule),
 		seedIfMissing(root, rule, pathRenovate, renovateSeed,

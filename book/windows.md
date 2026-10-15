@@ -211,7 +211,9 @@ linter cache as files means writing over 100,000 small files, most of a leg's ti
 350 s on windows-11-arm). The canonical CI workflow keeps them in one NTFS disk image,
 cached as a single file and attached at `C:\vcache` (`.github/actions/windows-cache-image`):
 download, decompression and attach take under a minute. A miss creates an empty image, and
-the run fills and saves it.
+the run fills it; on `main` it saves it, under the [cache budget](./github.md#cache-budget)
+like every other cache: the key carries the UTC day, so `main` refreshes the image at most
+once a day, and a restore falls back to the newest image of the same pins, then to any.
 
 The image is excluded from Defender's real-time scan for the job: without the exclusion every
 file in it is scanned on first read, and lint gives back what the restore saved. The exclusion

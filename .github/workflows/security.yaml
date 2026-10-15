@@ -51,7 +51,9 @@ jobs:
         uses: ./.github/actions/setup-aqua
 
       # aqua's package store, keyed on the exact pins (see limen-verify.yaml).
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restored here, saved after the scan on main only (caches.yaml).
+      - id: pkgs
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.AQUA_ROOT_DIR }}/pkgs
           key: aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.aqua/aqua.yaml', '.aqua/aqua-checksums.json', '.limen/aqua-registry.yaml') }}
@@ -63,19 +65,27 @@ jobs:
         run: aqua install --only-link
 
       # The Go build and module caches: the scan compiles the module graph
-      # once per supported platform, cold without this (see limen-verify.yaml).
+      # once per supported platform, cold without this. Keyed like
+      # limen-verify.yaml's, day included; the paths differ (no linter cache),
+      # so the two are separate entries under one key, told apart by their
+      # version (caches.yaml).
       - id: gocache
         run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-          echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          {
+            echo "build=$(go env GOCACHE)"
+            echo "mod=$(go env GOMODCACHE)"
+            echo "version=$(go env GOVERSION)"
+            echo "day=$(date -u +%Y%m%d)"
+          } >> "$GITHUB_OUTPUT"
+      - id: gomod
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ steps.gocache.outputs.build }}
             ${{ steps.gocache.outputs.mod }}
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}-${{ steps.gocache.outputs.day }}
           restore-keys: |
+            go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-${{ hashFiles('**/go.sum') }}-
             go-${{ runner.os }}-${{ runner.arch }}-${{ steps.gocache.outputs.version }}-
             go-${{ runner.os }}-${{ runner.arch }}-
 
@@ -85,3 +95,19 @@ jobs:
       # tree with no Go module, so this job is safe in every repository.
       - name: Scan
         run: just security
+
+      # Saved on main only, on a miss: a pull request run's save is scoped to
+      # that pull request and restorable by nothing else (the cache budget:
+      # caches.yaml). The scheduled run is on main too.
+      - if: github.ref == 'refs/heads/main' && steps.pkgs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.AQUA_ROOT_DIR }}/pkgs
+          key: ${{ steps.pkgs.outputs.cache-primary-key }}
+      - if: github.ref == 'refs/heads/main' && steps.gomod.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.gocache.outputs.build }}
+            ${{ steps.gocache.outputs.mod }}
+          key: ${{ steps.gomod.outputs.cache-primary-key }}
