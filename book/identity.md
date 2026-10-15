@@ -220,6 +220,18 @@ the `clang` shim runs `xcrun`, whose cache lives there. The fix is on the tool s
 list: `mktemp -d "$TMPDIR/x.XXXXXX"` works sandboxed, and cgo builds pin `CC` and `SDKROOT`
 from `xcode-select -p`, which removes `xcrun` from the path.
 
+**A file in `$TMPDIR` that nothing touches for four days is deleted at midnight.** The
+sandbox's `$TMPDIR` is a directory under `/tmp`, and macOS's `tmp_cleaner` (since 14.0)
+runs there daily at 00:00, removing every file whose access, modification and change times
+are all more than three days old. A clone kept there loses its untouched files one night,
+and git then shows each as a deletion that `commit -a` or `add -A` would record: on
+2026-10-14 the limen clone this book is written from woke with 111 tracked files gone, all
+last touched 2026-10-09, while everything touched since survived. A clone cannot move into
+the session root, where the harness refuses to write `.git/config` ([known upstream
+bugs](./upstream.md)), so a clone in `$TMPDIR` is checked with `git status` before every
+commit, restored with `git checkout -- .` when tracked files are missing, and never staged
+with `-a` or `-A`.
+
 **Bypass mode cannot be refused from the user's settings.** `disableBypassPermissionsMode:
 "disable"` is honoured in managed settings only; placed in `~/.claude/settings.json` it
 changes nothing, and a session switched to bypass mode a minute after it was written
