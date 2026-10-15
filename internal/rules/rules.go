@@ -738,6 +738,10 @@ func checkWorkflows(root string) Finding {
 		return *f
 	}
 
+	if f := checkReleasedCommands(root, rule); f != nil {
+		return *f
+	}
+
 	if exists(filepath.Join(root, formerLintGithubFile)) {
 		return fail(rule, formerLintGithubFile, formerLintGithubMessage)
 	}
