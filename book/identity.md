@@ -172,6 +172,18 @@ session runs: the human's aqua `bin` first, read-only to it, whose proxies execu
 root's packages through `AQUA_ROOT_DIR`; a tool linked only in the root is reached through
 `just`, whose `PATH` is hermetic, or `aqua exec`.
 
+**A proxy in aqua's `bin` runs only what the checkout declares.** The agent root's `bin`
+carries a proxy for every tool any repository ever pinned there, so `xz` is found on
+`PATH` from any directory; but the proxy resolves its name against the current directory's
+`aqua.yaml`, then a global config under `~/.config`, which the sandbox denies reading, and
+a tool neither declares fails with aqua's error 004, "command is not found", whatever the
+host has installed. On 2026-10-14 forkcloser/compress's interop tests looked `xz` and
+`zstd` up through a `just` recipe's hermetic `PATH` and were red in every session, while
+CI, on a runner with both tools, stayed green. A tool a repository runs, tests included,
+is pinned in that repository's `aqua.yaml`; one no registry carries (xz and zstd, as of
+aqua's standard registry v4.574.0) is probed first, and the test that cannot find it skips
+by name. What the host happens to have is not a dependency.
+
 **A `Write` deny rule binds Bash too.** `permissions.deny` rules for the file tools are
 also compiled into the sandbox: a `Read` deny becomes a read denial for every command, and
 a `Write` deny becomes a write denial, even inside a directory the sandbox's write list
