@@ -204,6 +204,7 @@ func Check(root string, policy Policy) []Finding {
 		checkLicense(root, policy),
 		checkEditorconfig(root),
 		checkGitignore(root),
+		checkTracked(root),
 		checkGitattributes(root),
 		checkAgents(root),
 		checkJustfile(root),

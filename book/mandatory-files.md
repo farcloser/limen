@@ -378,6 +378,18 @@ the same: `fix` seeds a missing one and moves a `tools/` from before the directo
 and never overwrites what is there. The directory is dotted so that `./...`, ripgrep and the
 editors skip it, and so that `tools` is a project's to name.
 
+### The `tracked` rule — no canonical file ignored by git
+
+`limen check` reads the disk, and so does every local lane; git decides what reaches a
+commit. A pattern in the project's `.gitignore` that matches a canonical file (an upstream
+fork's `.yamlfmt` ignoring `.limen/.yamlfmt`) leaves the tree green on the laptop and the
+file out of every commit, and CI's limen rule fails on a file that is there. The rule asks
+git itself, `git ls-files --others --ignored` under the canonical paths, by the tree's own
+`.gitignore` files alone (a global exclude would make the answer differ per machine), and
+fails naming the files. `limen fix` reports the same as an advisory: the pattern is the
+project's own, and narrowing or removing it is a hand edit. Where git cannot answer (no
+repository), the `git` rule speaks and this one says nothing.
+
 ### The `baretools` rule — no Go-built tool run from `PATH`
 
 The Go-built tools are run as `.build/tools/<name>`, where the recipes build them; nothing

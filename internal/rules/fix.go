@@ -95,6 +95,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateLicense(root, opts))
 	add(remediateEditorconfig(root))
 	add(remediateGitignore(root))
+	add(remediateTracked(ctx, root))
 	add(remediateGitattributes(root))
 	add(remediateAgents(root)...)
 	add(remediateJustfile(root)...)
