@@ -44,6 +44,13 @@ work after it:
 3. **Enrolment, green from day one.** The fork is enrolled in limen with the onboarding
    backlog block ([onboarding an existing repository](./mandatory-files.md#onboarding-an-existing-repository)),
    never merged known-red: a real regression then cannot hide among the expected failures.
+   Upstream's `.github/workflows/` go before `limen fix` runs, `ci.yaml` and `release.yaml`
+   first: both are seeded once and the project's own afterwards, so an existing one is kept
+   as it is, and upstream's CI has no `gate` job for the ruleset to require and upstream's
+   release workflow is unpinned. Delete them, then `limen fix` seeds the canonical pair.
+   Upstream's `.gitignore` is read for a pattern that would swallow a canonical file (one
+   fork's `.yamlfmt` pattern ignored `.limen/.yamlfmt`): a canonical file git ignores passes
+   every local lane and never reaches a commit.
 4. **Linter decisions by class, then one linter at a time.** A rule wrong for the whole
    codebase is disabled or excluded in the overlay before the per-linter series starts; an
    inline silence for a rule later disabled is dead weight. The series then lands one
