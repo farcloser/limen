@@ -27,7 +27,8 @@ every language, and a sub-document holds one language's form.
   - [Logging](./logging.md): [Go](./logging-go.md).
   - [Linting](./linting.md): [Go](./linting-go.md), [Shell](./linting-shell.md), [YAML](./linting-yaml.md).
   - [Dependencies](./dependencies.md): [Go](./dependencies-go.md).
-  - [Boundaries](./boundaries.md): inputs, sizes, types, startup, process state; [Go](./boundaries-go.md).
+  - [Boundaries](./boundaries.md): inputs, sizes, types, startup, process state, holders and
+    shared files; [Go](./boundaries-go.md).
 - **Testing**: [Testing](./testing.md): what a test is for, what a package's tests establish,
   when a test goes, where the tests run; [Go](./testing-go.md).
 - **Forks**: [Forks](./forks.md): provenance, onboarding order, pitfalls, the release review.

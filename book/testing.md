@@ -97,8 +97,10 @@ with an unnamed gap is not done.
 
 ## Where the tests run
 
-- **`just test` is the project's aggregate**, named in the root `.justfile` with the lanes
-  it runs, and what CI runs on every leg ([the shared recipes](./recipes.md)).
+- **`just test` is the project's aggregate**, named in the root `.justfile`, and what CI
+  runs on every leg ([the shared recipes](./recipes.md)). It names the unit, race and
+  coverage lanes, every project alike: a race detector nobody runs finds nothing, and a
+  coverage gate some repositories skip is not a gate.
 - **Fuzzing is CI's own job**, on one leg, with the corpus cached between runs, feeding the
   gate like a failing test ([github](./github.md#fuzz)); it is not in the aggregate.
 - **Benchmarks and profiles are `perf`**: reports that judge nothing, run by hand, never in
