@@ -511,7 +511,12 @@ func remediateWorkflows(root string) []Outcome {
 			"seeded the canonical renovate config (the content is the project's own from here)"),
 	}
 
-	out = append(out, remediateReleaseGo(root, rule), remediateLintGithub(root, rule))
+	out = append(
+		out,
+		remediateReleaseGo(root, rule),
+		remediateReleasedCommands(root, rule),
+		remediateLintGithub(root, rule),
+	)
 
 	if exists(filepath.Join(root, releaseGoFile)) {
 		out = append(out, seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,

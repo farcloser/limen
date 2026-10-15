@@ -33,6 +33,16 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   `--cosign-password-stdin`, keeping it out of argv and shell history). `just do release
   --local --dry-run` builds an unsigned snapshot into `.build/release/` in either lane. The
   workflow contains no release logic of its own.
+- **A command under `cmd/` is a product, and a product ships as a binary release.** A command
+  nobody can fetch is consumed by building it from source, which decides where it can live in
+  the tool layout ([tooling](./tooling.md#go-built-tools-are-gomod-tools)): `godolint` and
+  `dot` are tool directives partly because their releases carried no binaries. So a Go
+  repository with a main package under `cmd/` carries `.release-go.yaml`, and with it the
+  seeded release workflow; `limen check` fails one that does not, naming the commands, and
+  `limen fix` reports the same as an advisory, since the configuration is the project's to
+  write (limen's own is the model). A helper that is not a product, a generator or a
+  development tool, lives outside `cmd/`, under `internal/cmd/` or `hack/`, and the rule
+  does not read it.
 - **A release carries a real change.** A repository releases when it has something new for its
   consumers: a change in its own code, or in an upstream it ships. A change to the tooling it
   is built and checked with (a limen pin, a linter, a CI action) is not one, and neither is
