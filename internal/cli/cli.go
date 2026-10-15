@@ -190,6 +190,7 @@ func runCheck(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		return 2
 	}
 
+	//nolint:contextcheck // Check takes no context by design; the one rule that shells out bounds its own call.
 	findings := rules.Check(root, policyFor(ctx, root, resolveIdentity))
 
 	if *asJSON {
