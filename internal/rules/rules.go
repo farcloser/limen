@@ -49,6 +49,7 @@ const (
 	pathWorkflowChecksum = ".github/workflows/update-aqua-checksum.yaml"
 	pathActionSetupAqua  = ".github/actions/setup-aqua/action.yaml"
 	pathActionWinCache   = ".github/actions/windows-cache-image/action.yaml"
+	pathActionCache      = ".github/actions/cache/action.yaml"
 	pathWorkflowCI       = ".github/workflows/ci.yaml"
 	pathWorkflowVerify   = ".github/workflows/limen-verify.yaml"
 	pathWorkflowSecurity = ".github/workflows/security.yaml"
@@ -708,6 +709,7 @@ func checkWorkflows(root string) Finding {
 		{pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum},
 		{pathActionSetupAqua, limen.CanonicalActionSetupAqua},
 		{pathActionWinCache, limen.CanonicalActionWindowsCacheImage},
+		{pathActionCache, limen.CanonicalActionCache},
 		{pathWorkflowVerify, limen.CanonicalWorkflowVerify},
 		{pathWorkflowSecurity, limen.CanonicalWorkflowSecurity},
 		{pathWorkflowCaches, limen.CanonicalWorkflowCaches},
