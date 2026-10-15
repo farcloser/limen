@@ -10,6 +10,8 @@ every language, and a sub-document holds one language's form.
   - [Identity and keys](./identity.md): who a contributor is, human or bot, and the key that
     proves it; what to do when a token is lost.
   - [Coding agents as contributors](./agents.md): the workflow, the shape of a pull request, scope.
+  - [Maintaining a repository](./maintaining.md): the two jobs; what a maintainer knows,
+    decides, owes, and is not.
   - [Reviewing code](./review.md): the reviewer's side; reviewing a package; who approves what.
   - [Communicating](./communicating.md): where the conversation happens; one-to-one messages.
   - [Releasing](./releasing.md): a signed tag, its page and notes, the CI and local lanes, the rules.
