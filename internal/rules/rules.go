@@ -52,6 +52,7 @@ const (
 	pathWorkflowCI       = ".github/workflows/ci.yaml"
 	pathWorkflowVerify   = ".github/workflows/limen-verify.yaml"
 	pathWorkflowSecurity = ".github/workflows/security.yaml"
+	pathWorkflowCaches   = ".github/workflows/caches.yaml"
 	pathWorkflowRelease  = ".github/workflows/release.yaml"
 	pathRenovate         = "renovate.json"
 )
@@ -694,36 +695,27 @@ func checkLychee(root string) Finding {
 
 // checkWorkflows verifies the .github surface in its two regimes: the
 // checksum-update workflow, the composite actions, the shared CI lanes, the
-// security workflow and the release-notes configuration are content-pinned (limen machinery — the write-capable
-// workflow's hardening must never drift), while the CI workflow and the
-// renovate config need only exist (limen fix seeds the canonical ones; their content is the
-// project's own after that). The release workflow is required exactly when the repository
-// carries a goreleaser config — releasing is opt-in.
+// security and caches workflows and the release-notes configuration are
+// content-pinned (limen machinery — the write-capable workflow's hardening
+// must never drift), while the CI workflow and the renovate config need only
+// exist (limen fix seeds the canonical ones; their content is the project's
+// own after that). The release workflow is required exactly when the
+// repository carries a goreleaser config — releasing is opt-in.
 func checkWorkflows(root string) Finding {
 	const rule = "workflows"
 
-	if f := checkPinned(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum); f != nil {
-		return *f
-	}
-
-	if f := checkPinned(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua); f != nil {
-		return *f
-	}
-
-	if f := checkPinned(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage); f != nil {
-		return *f
-	}
-
-	if f := checkPinned(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify); f != nil {
-		return *f
-	}
-
-	if f := checkPinned(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity); f != nil {
-		return *f
-	}
-
-	if f := checkPinned(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes); f != nil {
-		return *f
+	for _, pinned := range []struct{ path, content string }{
+		{pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum},
+		{pathActionSetupAqua, limen.CanonicalActionSetupAqua},
+		{pathActionWinCache, limen.CanonicalActionWindowsCacheImage},
+		{pathWorkflowVerify, limen.CanonicalWorkflowVerify},
+		{pathWorkflowSecurity, limen.CanonicalWorkflowSecurity},
+		{pathWorkflowCaches, limen.CanonicalWorkflowCaches},
+		{pathReleaseNotes, limen.CanonicalReleaseNotes},
+	} {
+		if f := checkPinned(root, rule, pinned.path, pinned.content); f != nil {
+			return *f
+		}
 	}
 
 	for _, seeded := range []string{pathWorkflowCI, pathRenovate} {

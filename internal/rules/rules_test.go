@@ -88,6 +88,7 @@ func compliantFiles() map[string]string {
 		".github/release.yml":                             limen.CanonicalReleaseNotes,
 		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
 		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
+		".github/workflows/caches.yaml":                   limen.CanonicalWorkflowCaches,
 		// The shared Renovate configuration, content-pinned, and the seed
 		// extending it by the repository's name — what `limen fix` leaves
 		// behind (the renovate rule).
@@ -1191,6 +1192,7 @@ func TestYamlfmtConditional(t *testing.T) {
 		".github/actions/windows-cache-image/action.yaml",
 		".github/workflows/limen-verify.yaml",
 		".github/workflows/security.yaml",
+		".github/workflows/caches.yaml",
 		".github/release.yml",
 	} {
 		delete(noYAML, y) // remove every *.yaml/*.yml in the set

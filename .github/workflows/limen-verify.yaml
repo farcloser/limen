@@ -70,8 +70,11 @@ jobs:
       # (the store holds native binaries). A warm store turns every lazy first
       # use below into a link; the fallback key keeps the tools a pin bump did
       # not touch, and the changed one downloads and verifies as before.
-      - if: runner.os != 'Windows'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restored here; saved at the end of the job, on main only (the cache
+      # budget: caches.yaml).
+      - id: pkgs
+        if: runner.os != 'Windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.AQUA_ROOT_DIR }}/pkgs
           key: aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.aqua/aqua.yaml', '.aqua/aqua-checksums.json', '.limen/aqua-registry.yaml') }}
@@ -93,11 +96,14 @@ jobs:
       - id: gocache
         if: runner.os != 'Windows'
         run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "mod=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-          echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
-      - if: runner.os != 'Windows'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          {
+            echo "build=$(go env GOCACHE)"
+            echo "mod=$(go env GOMODCACHE)"
+            echo "version=$(go env GOVERSION)"
+          } >> "$GITHUB_OUTPUT"
+      - id: gomod
+        if: runner.os != 'Windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ steps.gocache.outputs.build }}
@@ -114,9 +120,25 @@ jobs:
       - name: Test
         run: just test
 
-      # On a miss, the image this run filled becomes the key's; a hit needs no
-      # save, since a cache key is never overwritten.
-      - if: runner.os == 'Windows' && steps.image.outputs.cache-hit != 'true'
+      # The caches are saved on main only, and only on a miss. A cache a pull
+      # request run saves is scoped to that pull request and restorable by
+      # nothing else, so it would only spend the repository's budget; a key
+      # is never overwritten, so a hit has nothing to save (the cache budget:
+      # caches.yaml). On Windows the image this run filled becomes the key's.
+      - if: runner.os != 'Windows' && github.ref == 'refs/heads/main' && steps.pkgs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.AQUA_ROOT_DIR }}/pkgs
+          key: ${{ steps.pkgs.outputs.cache-primary-key }}
+      - if: runner.os != 'Windows' && github.ref == 'refs/heads/main' && steps.gomod.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.gocache.outputs.build }}
+            ${{ steps.gocache.outputs.mod }}
+            .build/cache
+          key: ${{ steps.gomod.outputs.cache-primary-key }}
+      - if: runner.os == 'Windows' && github.ref == 'refs/heads/main' && steps.image.outputs.cache-hit != 'true'
         uses: ./.github/actions/windows-cache-image
         with:
           mode: save
@@ -144,10 +166,11 @@ jobs:
 
       # The cached corpus is what makes fuzzing cumulative across runs. Keyed
       # on the fuzz sources so a changed target restarts its corpus;
-      # restore-keys keep the rest.
+      # restore-keys keep the rest. Saved on main only (caches.yaml).
       - id: fuzzdir
         run: echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: corpus
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.fuzzdir.outputs.dir }}
           key: fuzz-corpus-${{ runner.os }}-${{ hashFiles('**/*_fuzz_test.go', '**/fuzz_test.go') }}
@@ -156,6 +179,12 @@ jobs:
 
       - name: Fuzz
         run: just do test go fuzz
+
+      - if: github.ref == 'refs/heads/main' && steps.corpus.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.fuzzdir.outputs.dir }}
+          key: ${{ steps.corpus.outputs.cache-primary-key }}
 
       # A crasher is a bug with a reproducer attached; the log names the
       # target, the input file is what reproduces it locally. Uploaded only
@@ -186,7 +215,8 @@ jobs:
       - name: Install aqua (pinned, checksum-verified)
         uses: ./.github/actions/setup-aqua
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: store
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.AQUA_ROOT_DIR }}/pkgs
           # The same key as the verify legs', so this job and the linux leg
@@ -196,3 +226,11 @@ jobs:
 
       - name: Install every pinned tool
         run: aqua install
+
+      # Saved on main only (caches.yaml); the verify leg that shares the key
+      # may have saved it first, and a key is never overwritten.
+      - if: github.ref == 'refs/heads/main' && steps.store.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.AQUA_ROOT_DIR }}/pkgs
+          key: ${{ steps.store.outputs.cache-primary-key }}

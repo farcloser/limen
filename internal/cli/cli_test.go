@@ -181,6 +181,7 @@ func compliantRepo(t *testing.T) string {
 		".github/release.yml":                             limen.CanonicalReleaseNotes,
 		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
 		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
+		".github/workflows/caches.yaml":                   limen.CanonicalWorkflowCaches,
 		".limen/renovate.json":                            limen.CanonicalRenovatePreset,
 		"renovate.json":                                   rules.CanonicalRenovateFor(""),
 		// The Go-built tools every repository declares (the gotools rule).

@@ -300,6 +300,28 @@ The decided merge model, enforced by the repository settings and the `limen:main
   moved still downloads and verifies at first use, so a stale restore only costs what it
   cannot reuse.
 
+  <a id="cache-budget"></a>
+  **The cache budget.** GitHub keeps 10 GB of Actions caches per repository and evicts the
+  least recently used beyond it, the current entries included, so a repository over budget
+  runs cold at random: a Windows leg measured at 8 minutes took 22 twice in one night because
+  its image had been evicted. Two things spend the budget for nothing. A cache a pull request
+  run saves is scoped to that pull request's merge ref and restorable by nothing else, not
+  the base branch, not another pull request; measured, those were half of several
+  repositories' budget. And every pin or `go.sum` change starts a new generation of every
+  key while the old one lingers until eviction; two generations of the Windows images and
+  the Go caches are over budget on their own. So the canonical lanes restore everywhere and
+  save on `main` only, on a miss (`actions/cache/restore` and `actions/cache/save`, never the
+  combined action, whose post step saves wherever it ran), and a content-pinned
+  `caches.yaml` keeps one generation per key on `main`: after each `ci` run there, and once a
+  day, every entry under a canonical prefix that is not the newest of its family is deleted,
+  through GitHub's own token with `actions: write` on that one job. A family is the key
+  without its content hash and Go version, plus the entry's version, which GitHub derives
+  from the cached paths: verify's and security's Go caches share a key but not their paths,
+  and keying the family on the key alone would have each delete the other in turn. A pull
+  request restores
+  `main`'s caches through the fallback keys and pays for what its change touched, which is
+  what a pull request should pay for.
+
   **Migration.** `ci.yaml` is seeded once and the project's own afterwards, so repositories
   created before the gate, fuzz and tools jobs existed do not have them. Their rulesets keep
   working (reconciliation preserves existing contexts), but the gate job is added to

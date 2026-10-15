@@ -143,6 +143,14 @@ var CanonicalWorkflowCI string
 //go:embed .github/workflows/security.yaml
 var CanonicalWorkflowSecurity string
 
+// CanonicalWorkflowCaches is the repository's .github/workflows/caches.yaml:
+// the cache budget's keeper, content-pinned in every repository. After each
+// ci run on main, and daily, it keeps one generation per cache key on main.
+// See book/github.md.
+//
+//go:embed .github/workflows/caches.yaml
+var CanonicalWorkflowCaches string
+
 // CanonicalWorkflowRelease seeds .github/workflows/release.yaml — only into
 // repositories that carry a .release-go.yaml (releasing is opt-in).
 //
