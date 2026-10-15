@@ -230,22 +230,32 @@ skill names both.
 distinguishes a new repository from an existing one. Reported to Anthropic by email on
 2026-10-12.
 
-## Claude Code's auto-mode classifier denies a plain file read under a merge label
+## Claude Code's auto-mode classifier judges a command by the denial before it
 
 **Symptom.** In auto mode, right after refusing `gh api -X PUT repos/<o>/<r>/pulls/<n>/update-branch`
 as "Merge Without Review", the classifier refused a plain `cat <task output file>` with the
 same label; the Read tool on the same file worked (The Project Manager, 2026-10-12). The
 same session saw a PR binding refused as "Merge Without Review" until a "Reviewed at <sha>"
-comment preceded it, and a poller restart refused as "Auto-Mode Bypass".
+comment preceded it, and a poller restart refused as "Auto-Mode Bypass". On 2026-10-15 a
+session refused `git c push --force-with-lease=<branch>:<sha> origin <branch>` twice as "Git
+Destructive" after an allow rule for exactly that form, `Bash(git c push
+--force-with-lease=*)`, had been added to the live user settings; the same bytes passed the
+rule in another session started before the rule as well; and the stuck session's next
+command, a plain `date`, was refused "Git Destructive" too (Fluffy).
 
 **Cause.** The classifier judges each command with the recent conversation as context, and a
 denial colours the commands that follow it: a read of a file carries nothing of a merge, and
-was refused for the company it kept. Not a sandbox rule; no setting of ours is involved.
+a `date` nothing of a push, and each was refused for the company it kept. Not a sandbox rule.
+An allow rule resolves before the classifier, by the documentation, and did in one session;
+why the other kept refusing the same bytes under the same rule is not known.
 
 **Workaround.** After a classifier denial, do the next read with the Read tool rather than
 `cat`, and put the reviewed sha in a comment before any merge-adjacent call. An allow rule
 for the routine commands the classifier keeps refusing is Apostasie's call
-([identity.md](./identity.md)).
+([identity.md](./identity.md)); a running session that keeps refusing under a verified rule
+is reported, with the exact command and label, rather than retried, since every retry adds
+to the context the next judgment reads. What clears such a session, a mode toggle or a
+restart, is unverified.
 
 **Lifts when** the classifier judges a command on what it does, not on the preceding
 denial. Reported to Anthropic by email on 2026-10-12.
