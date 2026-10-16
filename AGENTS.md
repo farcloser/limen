@@ -71,7 +71,7 @@ chapter; the procedure is limen's `skills/contribute`.
   rejects.
 - **Not yours to do:** merge by hand, push to `main`, force-push a shared branch, tag a
   release. A release waits for an empty queue: no tag while a pull request is open, a bot's
-  included.
+  included, unless the human parks it by number for that tag (`PARKED_PRS`).
 
 ## Scope
 
