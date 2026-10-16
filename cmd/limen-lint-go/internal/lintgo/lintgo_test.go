@@ -406,6 +406,12 @@ func TestOverlayRejected(t *testing.T) {
 			want:    "exclusions.generated is policy",
 		},
 		{name: "licenses key", overlay: "licenses:\n  deny: [GPL]\n", want: "unknown key licenses.deny"},
+		{name: "commands key", overlay: "commands:\n  shipped: [./cmd/x]\n", want: "unknown key commands.shipped"},
+		{
+			name:    "commands shape",
+			overlay: "commands:\n  unshipped: ./cmd/x\n",
+			want:    "commands.unshipped must be a list",
+		},
 		{
 			name:    "not a list",
 			overlay: "golangci:\n  linters:\n    disable: revive\n",

@@ -17,6 +17,7 @@ const (
 	keyLicenses     = "licenses"
 	keyGolangci     = "golangci"
 	keyNilaway      = "nilaway"
+	keyCommands     = "commands"
 )
 
 // The two placeholders the baseline carries, filled from the module's go.mod:

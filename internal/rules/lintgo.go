@@ -33,7 +33,7 @@ const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline
 # changes or takes out. ` + "`just do lint go`" + ` renders the two on every run
 # (book/linting-go.md, "one baseline, per-project carve-outs"). Seeded once;
 # the file is the project's own. Every key the overlay accepts is below, with
-# what it does to the baseline; anything else is refused as baseline policy.
+# what it does; anything else is refused as baseline policy.
 #
 # golangci:
 #   linters:
@@ -91,6 +91,10 @@ const lintGoOverlaySeed = `# This project's carve-outs from the Go lint baseline
 #     - github.com/example/project/internal/generated
 #   exclude-errors-in-files:         # appends file prefixes: NilAway has no per-line suppression
 #     - internal/legacy/
+# commands:
+#   unshipped:                       # the main packages under cmd/ no release ships (book/releasing.md):
+#     - ./cmd/gen                    #   built and run from the tree; one command per entry, read by
+#                                    #   limen's workflows rule, nothing for golangci-lint
 `
 
 // checkLintGo evaluates the rule; ok=false when the repository is not a Go
