@@ -12,7 +12,7 @@ import (
 // it is a command this repository builds for others, and a binary nobody can
 // fetch is consumed by building it from source, which decides where it can
 // live in the tool layout. A helper that is not a product lives elsewhere
-// (internal/cmd/, hack/).
+// (internal/cmd/, hack/, examples/<name>/).
 const commandsDir = "cmd"
 
 // packageMain matches a Go file's package clause when it is main, past any
