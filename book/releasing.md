@@ -42,7 +42,9 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   `limen fix` reports the same as an advisory, since the configuration is the project's to
   write (limen's own is the model). A helper that is not a product, a generator or a
   development tool, lives outside `cmd/`, under `internal/cmd/` or `hack/`, and the rule
-  does not read it.
+  does not read it. A runnable program that shows the library in use lives under
+  `examples/<name>/`, Go's usual home for one: outside `cmd/`, so the rule does not read it,
+  and unlike `_examples/`, still built, vetted and linted by `./...`.
 - **A release carries a real change.** A repository releases when it has something new for its
   consumers: a change in its own code, or in an upstream it ships. A change to the tooling it
   is built and checked with (a limen pin, a linter, a CI action) is not one, and neither is

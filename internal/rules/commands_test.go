@@ -51,11 +51,12 @@ func TestReleasedCommands(t *testing.T) {
 		t.Fatalf("released command: %+v", f)
 	}
 
-	// Not products: a helper outside cmd/, a library package under cmd/, a
-	// test file alone.
+	// Not products: a helper or an example outside cmd/, a library package
+	// under cmd/, a test file alone.
 	helpers := goRepoFiles()
 	helpers["internal/cmd/gen/main.go"] = mainGo
 	helpers["hack/tool/main.go"] = mainGo
+	helpers["examples/demo/main.go"] = mainGo
 	helpers["cmd/lib/lib.go"] = "package lib\n"
 	helpers["cmd/lib/lib_test.go"] = "package main\n"
 
