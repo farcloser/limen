@@ -51,7 +51,9 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   a bot's included: what is open is either part of the release, in which case the tag is
   early, or not, in which case it lands minutes after the tag and the next release is a bump
   away. The recipe refuses while `gh pr list` is not empty; closing or merging what is open is
-  the human's, and the queue it leaves is the release.
+  the human's, and the queue it leaves is the release. A pull request the human parks, one
+  the release must not carry, is not closed only to tag: its number goes in `PARKED_PRS`
+  (space-separated), the recipe prints it as skipped, and every other open one still blocks.
 - **A release's notes are its pull requests' titles.** No one writes them, and no file in the
   tree holds them: a hand-kept `CHANGELOG.md` puts every open pull request on the same lines,
   so each merge forces a rebase on the others. The `changelog:` section of `.release-go.yaml`
