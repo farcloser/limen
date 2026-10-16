@@ -10,8 +10,9 @@ The YAML form of [linting](./linting.md): yamlfmt, on one content-pinned configu
 
 YAML is whitespace-significant and drifts between authors and editors: indentation, quoting,
 flow against block style. Any project that ships YAML formats it the same way everywhere.
-[yamlfmt](https://github.com/google/yamlfmt) is the formatter; `.yamlfmt` is how its
-configuration travels with the code. A repo with YAML and no `.yamlfmt`, or one whose
+[forkcloser/yamlfmt](https://github.com/forkcloser/yamlfmt), the fleet's fork of
+[google/yamlfmt](https://github.com/google/yamlfmt) with its data-changing formats fixed, is
+the formatter; `.yamlfmt` is how its configuration travels with the code. A repo with YAML and no `.yamlfmt`, or one whose
 `.yamlfmt` differs from the baseline, fails.
 
 **What counts as YAML.** A `*.yaml` or `*.yml` file. The scan skips `.git` and vendored
