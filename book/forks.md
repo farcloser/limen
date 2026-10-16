@@ -128,6 +128,12 @@ Fork of https://github.com/<owner>/<repo> (`<branch>`).
 | Upstream commit | Why |
 |---|---|
 | [`<short-sha>`](https://github.com/<owner>/<repo>/commit/<full-sha>) | <why not> |
+
+## Changes upstream does not have
+
+| Change | Here |
+|---|---|
+| <a fix or a feature, as a consumer of upstream would meet it> | <pull request URL> |
 ```
 
 - **Forked from** is the upstream commit the fork started at, with that commit's date, and
@@ -141,6 +147,18 @@ Fork of https://github.com/<owner>/<repo> (`<branch>`).
 - **A reason says why, not just no.** "Exists here independently (`Writer.link`)", "touches
   the CLI we removed", "superseded by our own fix": enough for the next reviewer to agree
   without reading the commit again.
+- **The third table is why the fork exists**: what a consumer gets here and not upstream.
+  Bug fixes and features only, one row each in history order, each with the pull request
+  that landed it; a removal counts too (a command dropped, an API trimmed), since a user
+  coming from upstream meets it. Nothing menial: tooling, lint, CI, formatting, dependency
+  bumps, documentation and release bookkeeping stay out, whatever their number. A pull
+  request that adds such a change adds its row.
+- **A repackaging keeps the header and the third table.** A repository that builds and
+  ships upstream's code at a pin (openssh, curl) takes upstream whole, so the two commit
+  tables do not apply: its header says *Built from*, the upstream version or commit the pin
+  names, moving with the pin, and *Reviewed through* moves when the bump re-audits
+  upstream's scripts and the patch sites; the third table is its patches and the deviations
+  from upstream's build, each saying where it is made and why.
 
 ## Incorporating a commit
 
