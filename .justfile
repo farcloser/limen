@@ -12,9 +12,9 @@ export LIMEN_LINT_GO_BIN := LIMEN_BUILD / 'tools/limen-lint-go'
 default:
     @just --list
 
-lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode lint-lint-go
+lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode lint-lint-go lint-vet
 fix: build-lint-go do::fix::default do::fix::go::default
-test: do::test::go::default test-lint-go
+test: do::test::go::default test-lint-go test-vet
 security: do::security::default
 
 # limen-lint-go is the second binary of limen's release (see .release-go.yaml),
@@ -34,6 +34,19 @@ lint-lint-go:
 
 test-lint-go:
     cd cmd/limen-lint-go && gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
+
+# limen-vet, the analyzers `go vet -vettool` runs (cmd/limen-vet): a nested
+# module like limen-lint-go, for golang.org/x/tools, linted and tested here the
+# same way. Its test builds the tool and runs go vet with it.
+lint-vet:
+    go -C cmd/limen-vet mod tidy -diff
+    go -C cmd/limen-vet vet ./...
+    .build/tools/limen-lint-go -C cmd/limen-vet render -o .build/golangci-limen-vet.yml
+    cd cmd/limen-vet && ../../.build/tools/golangci-lint run -c ../../.build/golangci-limen-vet.yml ./...
+    cd cmd/limen-vet && ../../.build/tools/golangci-lint fmt --diff -c ../../.build/golangci-limen-vet.yml
+
+test-vet:
+    cd cmd/limen-vet && gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
 
 # Host-side helper, not baseline: presupposes macOS, UTM and a provisioned
 # Windows VM (book/vm_testing.md). The VM mounts this repository's parent as
