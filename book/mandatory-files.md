@@ -167,7 +167,9 @@ tooling, and each family pinned explicitly so a format never drifts if the fallb
 A `.gitignore` must exist and carry four patterns: `/.build`, `/_scratch`, `.claude` and
 `.idea` — what the recipes, the working sessions and the editors write inside a checkout,
 none of it ever committed. There is no repository-local `tmp/`: a disposable file that
-persists between runs goes under `.build/`, in a subdirectory named for what it holds, and one
+persists between runs goes under `.build/` (`$LIMEN_BUILD` to a recipe, a script or a
+workflow step: [the shared recipes](./recipes.md#conventions-every-shared-recipe-follows)), in a
+subdirectory named for what it holds, and one
 that lives for a single command goes in a `mktemp -d` under `$TMPDIR`, removed by a `trap`.
 The directory is dotted so that `go`'s `./...`, ripgrep and the editors skip it by
 construction, and so that a project may have a `build/` of its own, a source directory in

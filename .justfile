@@ -4,9 +4,9 @@ import '.limen/just/main.just'
 
 # Judge this repository by its own working tree, not the released pin: `go run`
 # compiles the current tree on every invocation; limen-lint-go, a module of
-# its own under cmd/, is built into .build/tools/ first (build-lint-go).
+# its own under cmd/, is built into $LIMEN_BUILD/tools/ first (build-lint-go).
 export LIMEN_BIN := 'go run ./cmd/limen'
-export LIMEN_LINT_GO_BIN := '.build/tools/limen-lint-go'
+export LIMEN_LINT_GO_BIN := LIMEN_BUILD / 'tools/limen-lint-go'
 
 # Bare `just` lists; `lint`, `test` and `security` below are what CI runs.
 default:
@@ -23,14 +23,14 @@ security: do::security::default
 # and tests it itself: the lint runs on the baseline rendered for that module
 # with its own .lint-go.yaml, using the golangci-lint the lint go lane built.
 build-lint-go:
-    mkdir -p .build/tools && GOOS='' GOARCH='' go -C cmd/limen-lint-go build -o '../../.build/tools/' .
+    mkdir -p "$LIMEN_BUILD/tools" && GOOS='' GOARCH='' go -C cmd/limen-lint-go build -o "$LIMEN_BUILD/tools/" .
 
 lint-lint-go:
     go -C cmd/limen-lint-go mod tidy -diff
     go -C cmd/limen-lint-go vet ./...
-    .build/tools/limen-lint-go -C cmd/limen-lint-go render -o .build/golangci-lint-go.yml
-    cd cmd/limen-lint-go && ../../.build/tools/golangci-lint run -c ../../.build/golangci-lint-go.yml ./...
-    cd cmd/limen-lint-go && ../../.build/tools/golangci-lint fmt --diff -c ../../.build/golangci-lint-go.yml
+    "$LIMEN_BUILD/tools/limen-lint-go" -C cmd/limen-lint-go render -o "$LIMEN_BUILD/golangci-lint-go.yml"
+    cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/golangci-lint" run -c "$LIMEN_BUILD/golangci-lint-go.yml" ./...
+    cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/golangci-lint" fmt --diff -c "$LIMEN_BUILD/golangci-lint-go.yml"
 
 test-lint-go:
     cd cmd/limen-lint-go && gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...

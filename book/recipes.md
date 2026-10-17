@@ -109,6 +109,16 @@ recipes can work; the Rust one is in [rust](./rust.md).
   *are* in the recipe's environment. `GO_CGO` is the shape: the recipes resolve
   `${CGO_ENABLED:-${GO_CGO:-0}}`, so the project declares its nature once, a single
   invocation can override either way, and unset still means pure Go.
+- **The output directory is `LIMEN_BUILD`, spelled once.** `main.just` exports it: the
+  checkout's `.build`, absolute, with forward slashes on windows. Every shared recipe writes
+  under it, and so does a project's: a root `.justfile` recipe uses `{{ LIMEN_BUILD }}` or
+  `$LIMEN_BUILD` (the import is flat, so both are in scope), and a script a recipe runs
+  reads `$LIMEN_BUILD` from its environment, with `${LIMEN_BUILD:?}` when the script is
+  meant to run only through `just`. In CI, the `setup-aqua` action (on windows the cache
+  image's attach, which runs first) exports the same path for every later step, so a
+  project's workflow writes `${{ env.LIMEN_BUILD }}/cache`, never a literal. In a recipe, a
+  script or a workflow step, the name lives in `main.just` alone; a literal there is what a
+  rename leaves behind.
 - **A knob composes with the recipe; it does not replace it.** Linker flags cannot ride in
   on `BUILD_GO_FLAGS`: go honours the *last* occurrence of a repeated flag, and the project's
   flags come after the `-ldflags` the recipe computed, so a project passing its own would
