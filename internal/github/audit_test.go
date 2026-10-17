@@ -503,7 +503,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 		"merge-methods", "squash-commit-defaults", "delete-branch-on-merge", "auto-merge",
 		"web-commit-signoff", "issues", "wiki", "forking", "secret-scanning",
 		"secret-scanning-push-protection", "dependabot-alerts", "dependabot-security-updates",
-		"ruleset-default-branch", "ruleset-version-tags", "renovate-processing",
+		"ruleset-default-branch", "ruleset-version-tags", "renovate-processing", "default-branch",
 	}
 	for _, check := range wantFail {
 		finding, found := findingByCheck(findings, check)
@@ -512,7 +512,7 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 		}
 	}
 
-	wantAdvisory := []string{"default-branch", "description"}
+	wantAdvisory := []string{"description"}
 	for _, check := range wantAdvisory {
 		finding, found := findingByCheck(findings, check)
 		if !found || finding.Status != github.StatusAdvisory {
@@ -601,6 +601,50 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 
 	if !strings.Contains(calls, "DELETE repos/test/repo/automated-security-fixes") {
 		t.Error("expected Dependabot security updates to be disabled (Renovate is the one bot)")
+	}
+}
+
+// TestRenameDefaultBranch: a default branch named otherwise is a
+// failing verdict whose fix renames it to main through the branch rename
+// endpoint.
+func TestRenameDefaultBranch(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
+	responses := compliantResponses()
+	responses["GET repos/test/repo"] = stubResponse{Body: strings.Replace(
+		compliantRepoJSON, `"default_branch": "main"`, `"default_branch": "master"`, 1,
+	)}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	if finding, _ := findingByCheck(findings, "default-branch"); finding.Status != github.StatusFail ||
+		finding.Current != "master" || finding.Desired != "main" {
+		t.Fatalf("default branch master: %+v, want a failing verdict master → main", finding)
+	}
+
+	var planned *github.Change
+
+	for i := range changes {
+		if changes[i].Check == "default-branch" {
+			planned = &changes[i]
+		}
+	}
+
+	if planned == nil || !strings.Contains(planned.Summary, "master → main") {
+		t.Fatalf("expected a planned rename, got %+v", changes)
+	}
+
+	if err := planned.Apply(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading call log: %v", err)
+	}
+
+	if calls := string(log); !strings.Contains(calls, "POST repos/test/repo/branches/master/rename") ||
+		!strings.Contains(calls, `"new_name":"main"`) {
+		t.Errorf("expected the branch rename call, got:\n%s", calls)
 	}
 }
 

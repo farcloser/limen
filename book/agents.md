@@ -13,7 +13,8 @@ The agent owns the whole path from a change to a reviewed, green pull request, o
 branches in its own worktrees. The human's branches are the human's.
 
 - **Its own branches, in their own worktrees.** Every task starts from a fresh
-  `origin/main` in a git worktree, on a branch named after the bot
+  `origin/HEAD`, the remote's default branch as the remote names it, in a git worktree, on
+  a branch named after the bot
   (`claudio/<YYYYMMDD>-<topic>`: the day it was cut, so a listing reads in date order), one
   topic per branch and per pull request. The worktree keeps the human's checkout untouched
   and lets tasks run side by side. In a new worktree: `aqua policy allow
