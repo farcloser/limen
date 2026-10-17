@@ -223,9 +223,9 @@ commits range="": (_banner "lint" "commits") (_go-tool "git-validation" "github.
     fi
     export GIT_CONFIG_COUNT=$n
     if [ -n "$range" ]; then
-        "$LIMEN_BUILD/tools/git-validation" -run DCO,short-subject,dangling-whitespace -range "$range"
+        "$LIMEN_BUILD/tools/git-validation" --run DCO,short-subject,dangling-whitespace --range "$range"
     else
-        "$LIMEN_BUILD/tools/git-validation" -run DCO,short-subject,dangling-whitespace
+        "$LIMEN_BUILD/tools/git-validation" --run DCO,short-subject,dangling-whitespace
     fi
     # .lint-signers lists everyone who authors here, email and key, in git's
     # allowed-signers format: every commit in the range must be signed by a
