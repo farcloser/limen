@@ -325,8 +325,9 @@ The decided merge model, enforced by the repository settings and the `limen:main
   caches that accumulate (Go's build cache, the fuzz corpus, the Windows image that holds the
   Go caches) carry the UTC day in their key: without it `main` would keep the first build of a
   `go.sum` forever and the corpus would never grow, with it `main`'s first run of a day
-  refreshes them. A content-pinned `caches.yaml` keeps one generation per key on `main`:
-  after each `ci` run there, and once a day, every entry under a canonical prefix that is not
+  refreshes them. A content-pinned `caches.yaml` keeps one generation per key on the
+  default branch, which it reads from the repository, never assumes by name: after each `ci`
+  run there, and once a day, every entry under a canonical prefix that is not
   the newest of its family is deleted, through GitHub's own token with `actions: write` on
   that one job. A family is the key without its day, content hash and Go version, plus the
   entry's version, which GitHub derives from the cached paths: two entries under one key over
