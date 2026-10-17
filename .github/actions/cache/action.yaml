@@ -10,7 +10,7 @@ inputs:
     required: false
     default: 'true'
   linter-cache:
-    description: true to keep the linter's .build/cache with the Go caches (restore).
+    description: true to keep the linter's $LIMEN_BUILD/cache with the Go caches (restore).
     required: false
     default: 'false'
   aqua-fallback:
@@ -82,7 +82,7 @@ runs:
           echo "mod=$(aqua exec -- go env GOMODCACHE)"
           echo "version=$(aqua exec -- go env GOVERSION)"
           echo "day=$(date -u +%Y%m%d)"
-          if [ "$LINTER" = true ]; then echo "lint=.build/cache"; else echo "lint="; fi
+          if [ "$LINTER" = true ]; then echo "lint=${LIMEN_BUILD}/cache"; else echo "lint="; fi
         } >> "$GITHUB_OUTPUT"
 
     # An empty line in path is dropped, so without linter-cache the list is
