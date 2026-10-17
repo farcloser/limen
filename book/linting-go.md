@@ -36,6 +36,7 @@ rendered at lint time:
   | `licenses.ignore` | appends the modules go-licenses skips (typically the false positives of google/go-licenses#186); the repository's own module is skipped by the lane itself, since its license is the `license` rule's business and go-licenses has no class for the Closed-source notice |
   | `nilaway.blocking` | overrides: `false` makes NilAway's findings print without failing the lane, for a project working off a backlog |
   | `nilaway.exclude-pkgs`, `nilaway.exclude-errors-in-files` | append: package and file prefixes NilAway leaves out, its only suppression |
+  | `commands.unshipped` | nothing for golangci-lint: the main packages under `cmd/` no release ships, one per entry as `./cmd/<name>`, which limen's `workflows` rule reads against `.release-go.yaml`'s builds ([releasing](./releasing.md)); the driver checks the shape and renders none of it |
   | anything else — `run`, `issues`, `output`, `severity`, `linters.default`, `exclusions.generated`, an unknown key | rejected with the key named: that is policy the baseline owns, never merged |
 
 - **The rendered configuration is a build artifact.** `just do lint go` has `limen-lint-go`

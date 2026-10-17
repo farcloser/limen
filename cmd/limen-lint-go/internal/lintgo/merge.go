@@ -22,6 +22,10 @@ import (
 //	                                 localmodule, not after it
 //	licenses.allowed                 replaces the allowed list
 //	licenses.ignore                  appends ignored modules
+//	commands.unshipped               nothing: the main packages under cmd/
+//	                                 no release ships, which limen's
+//	                                 workflows rule reads from the same
+//	                                 file; checked for shape here
 //
 // Everything else in golangci's schema — run, issues, output, severity,
 // exclusions.generated, paths-except — is policy the baseline owns, and an
@@ -45,6 +49,9 @@ const (
 	keyBlocking     = "blocking"
 	keyExcludePkgs  = "exclude-pkgs"
 	keyExcludeFiles = "exclude-errors-in-files"
+
+	// The commands section's key.
+	keyUnshipped = "unshipped"
 
 	// policyOwned rejects an overlay key the baseline owns.
 	policyOwned = "%w: %s.%s is policy the baseline owns, not a carve-out"
@@ -98,9 +105,11 @@ func merge(base *baseline, overlay document) (report, error) {
 			err = applier.licenses(base.licenses, sub)
 		case keyNilaway:
 			err = applier.nilaway(base.nilaway, sub)
+		case keyCommands:
+			err = commands(sub)
 		default:
-			err = fmt.Errorf("%w: unknown section %q (the sections are %s, %s and %s)",
-				ErrOverlay, key, keyGolangci, keyLicenses, keyNilaway)
+			err = fmt.Errorf("%w: unknown section %q (the sections are %s, %s, %s and %s)",
+				ErrOverlay, key, keyGolangci, keyLicenses, keyNilaway, keyCommands)
 		}
 
 		if err != nil {
@@ -495,6 +504,25 @@ func (m *merger) nilaway(base, over document) error {
 		default:
 			return fmt.Errorf("%w: unknown key %s (the keys are %s, %s and %s)",
 				ErrOverlay, path, keyBlocking, keyExcludePkgs, keyExcludeFiles)
+		}
+	}
+
+	return nil
+}
+
+// commands checks the commands section: unshipped is a list of names, and
+// there is no other key. Nothing of it reaches golangci-lint; limen's
+// workflows rule is its reader, and it is not a carve-out.
+func commands(over document) error {
+	for key, value := range over {
+		path := keyCommands + keyJoin + key
+
+		if key != keyUnshipped {
+			return fmt.Errorf("%w: unknown key %s (the key is %s)", ErrOverlay, path, keyUnshipped)
+		}
+
+		if _, err := stringList(value, path); err != nil {
+			return err
 		}
 	}
 

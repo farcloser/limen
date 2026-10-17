@@ -33,18 +33,25 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   `--cosign-password-stdin`, keeping it out of argv and shell history). `just do release
   --local --dry-run` builds an unsigned snapshot into `.build/release/` in either lane. The
   workflow contains no release logic of its own.
-- **A command under `cmd/` is a product, and a product ships as a binary release.** A command
-  nobody can fetch is consumed by building it from source, which decides where it can live in
-  the tool layout ([tooling](./tooling.md#go-built-tools-are-gomod-tools)): `godolint` and
-  `dot` are tool directives partly because their releases carried no binaries. So a Go
-  repository with a main package under `cmd/` carries `.release-go.yaml`, and with it the
-  seeded release workflow; `limen check` fails one that does not, naming the commands, and
-  `limen fix` reports the same as an advisory, since the configuration is the project's to
-  write (limen's own is the model). A helper that is not a product, a generator or a
-  development tool, lives outside `cmd/`, under `internal/cmd/` or `hack/`, and the rule
-  does not read it. A runnable program that shows the library in use lives under
-  `examples/<name>/`, Go's usual home for one: outside `cmd/`, so the rule does not read it,
-  and unlike `_examples/`, still built, vetted and linted by `./...`.
+- **A command under `cmd/` either ships or says it does not.** `cmd/` is where a Go
+  repository keeps its main packages, released or not, as Go projects do. The release
+  configuration, `.release-go.yaml`, says which of them ship: `limen check` fails a main under
+  `cmd/` that is neither one of its `builds` nor named in the project's list of unshipped
+  commands, `commands.unshipped` in the root `.lint-go.yaml`
+  ([linting Go](./linting-go.md#one-lint-baseline-per-project-carve-outs-lint-goyaml)), naming
+  the commands, and `limen fix` reports the same as an advisory, since both files are the
+  project's to write (limen's own `.release-go.yaml` is the model). The list is explicit, one
+  command per entry, so an unlisted main stays red, and an entry that names no such command
+  (one that ships, a directory, a pattern) fails too: a product whose release carries no
+  binaries is consumed by building it from source, which decides where it can live in the tool
+  layout ([tooling](./tooling.md#go-built-tools-are-gomod-tools)): `godolint` and `dot` were
+  tool directives partly because their releases carried no binaries. A helper the recipes build
+  and run from the tree, a DNS reconciler, a kernel builder, is an unshipped command and stays
+  under `cmd/`, declared; it does not move to `internal/cmd/`, an import fence that says
+  nothing of a main, nor to `hack/`, the home of the scripts around a build. A runnable program
+  that shows the library in use lives under `examples/<name>/`, Go's usual home for one:
+  outside `cmd/`, so the rule does not read it, and unlike `_examples/`, still built, vetted
+  and linted by `./...`.
 - **A release carries a real change.** A repository releases when it has something new for its
   consumers: a change in its own code, or in an upstream it ships. A change to the tooling it
   is built and checked with (a limen pin, a linter, a CI action) is not one, and neither is
