@@ -173,6 +173,18 @@ and `limen github fix` then configures default setup.
   itself, additive only: write for the canonical team, never a removal, never a person. The
   team and its members stay human work: a missing team is a failing verdict with the
   commands printed, never a fix.
+- **The default branch is `main`.** The canonical workflows read the default branch where
+  they can: the cache saves, the fuzz corpus and the cache budget's prune take it from the
+  event or the API, never from the name. They cannot in an `on:` filter, which takes no
+  expression: `ci`, `security` and the cache budget trigger on pushes to `main` by name, and a
+  repository whose default branch is named otherwise runs them on no push at all: no
+  push-triggered scan, no cache saved, no prune, and nothing saying so (forkcloser/go-licenses,
+  on `master` from its fork until renamed). So the name is the floor: `check` fails it, and
+  `fix` renames the branch (GitHub retargets the open pull requests and redirects the old
+  name; a clone re-points with `git remote set-head origin --auto`). The audit is the one
+  place that says it: everything else, the lanes included, works on whatever the default
+  branch is called, and a repository that drifts loses only what the three filters gate until
+  the next `limen github check`.
 - **The merge doctrine and the rulesets**, below.
 
 ## Mainline doctrine: pull requests always

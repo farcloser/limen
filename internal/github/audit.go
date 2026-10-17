@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -420,12 +421,7 @@ func (a *auditor) auditRepoObject() { //nolint:gocognit // a linear catalog of i
 		fields:      map[string]any{"allow_update_branch": true},
 	})
 
-	if settings.DefaultBranch != baselineDefaultBranch {
-		a.flag(checkDefaultBranch, StatusAdvisory, settings.DefaultBranch, baselineDefaultBranch,
-			"the default branch is not "+baselineDefaultBranch+" — renaming is disruptive, do it deliberately", nil)
-	} else {
-		a.flag(checkDefaultBranch, StatusOK, "", "", "default branch is "+baselineDefaultBranch, nil)
-	}
+	a.auditDefaultBranch(settings.DefaultBranch)
 
 	a.flagToggle(toggle{
 		check:       checkWebCommitSignoff,
@@ -564,6 +560,35 @@ func (a *auditor) auditSecretScanning(settings repoSettings) {
 				},
 			})
 	}
+}
+
+// auditDefaultBranch covers the default branch's name. The canonical
+// workflows read the default branch where they can and cannot in an `on:`
+// filter, which takes no expression: ci, security and the cache budget
+// trigger on pushes to main by name, so a repository whose default branch is
+// named otherwise runs them on no push at all, saves no cache and prunes
+// none, with nothing saying so. The fix renames the branch: GitHub retargets
+// the open pull requests and redirects the old name, and a clone re-points
+// with `git remote set-head origin --auto`.
+func (a *auditor) auditDefaultBranch(current string) {
+	if current == baselineDefaultBranch {
+		a.flag(checkDefaultBranch, StatusOK, "", "", "default branch is "+baselineDefaultBranch, nil)
+
+		return
+	}
+
+	a.flag(checkDefaultBranch, StatusFail, current, baselineDefaultBranch,
+		"the default branch must be "+baselineDefaultBranch+": the canonical workflows trigger on pushes to it "+
+			"by name, so another name runs them on no push and saves no cache",
+		&Change{
+			Check: checkDefaultBranch,
+			Summary: "default branch: " + current + " → " + baselineDefaultBranch +
+				" (renamed; open pull requests retarget, a clone re-points with `git remote set-head origin --auto`)",
+			apply: func(ctx context.Context, c client) error {
+				return c.writeJSON(ctx, "POST", "/branches/"+url.PathEscape(current)+"/rename",
+					map[string]any{"new_name": baselineDefaultBranch})
+			},
+		})
 }
 
 // auditSecurityToggles covers the R1 endpoints that answer through dedicated
