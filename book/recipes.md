@@ -114,7 +114,7 @@ recipes can work; the Rust one is in [rust](./rust.md).
   under it, and so does a project's: a root `.justfile` recipe uses `{{ LIMEN_BUILD }}` or
   `$LIMEN_BUILD` (the import is flat, so both are in scope), and a script a recipe runs
   reads `$LIMEN_BUILD` from its environment, with `${LIMEN_BUILD:?}` when the script is
-  meant to run only through `just`. In CI, the `setup-aqua` action (on windows the cache
+  meant to run only through `just`. In CI, the `setup-hermetic` action (on windows the cache
   image's attach, which runs first) exports the same path for every later step, so a
   project's workflow writes `${{ env.LIMEN_BUILD }}/cache`, never a literal. In a recipe, a
   script or a workflow step, the name lives in `main.just` alone; a literal there is what a
@@ -161,8 +161,8 @@ What each shared module is *for*; mechanics live in the module files:
   project ships one: the flag sets are kept aligned, and a change to either lands in both
   (each file's comment names the other). Pure Go by default; CGO is an explicit opt-in that
   adds the hardening flags.
-- **`tools`**: the aqua manifest operations (`add`, `set`, `update`, `remove`) that keep
-  `.aqua/aqua.yaml` and `.aqua/aqua-checksums.json` changing together
+- **`tools`**: the manifest operations (`add`, `set`, `update`, `remove`) that keep
+  `.hermetic/hermetic.yaml` and `.hermetic/aqua-checksums.json` changing together
   ([tooling](./tooling.md#day-to-day-changes--the-just-do-tools-recipes)).
 - **`lint`**: read-only verifiers. In the default: `limen` (this repository against the
   rules — first, since every other linter trusts the canonical files it verifies), `just`,
@@ -198,7 +198,7 @@ What each shared module is *for*; mechanics live in the module files:
   they are neither `lint` nor `test`, and nothing in CI runs them. No default.
 - **`fix`**: the mutating counterparts, separate from `lint`. In the default: `limen`
   (rewrite drifted canonical files), `just`, `yaml`, `aqua` (regenerate
-  `.aqua/aqua-checksums.json`). Named: the `go`, `rust` and `homebrew` submodules, and
+  `.hermetic/aqua-checksums.json`). Named: the `go`, `rust` and `homebrew` submodules, and
   `github` (plan shown, applied on consent). Nothing mutates under a lint name, and `fix`
   applies only what cannot change behaviour: for Go, the formatters plus the linter fixes
   that touch layout alone (blank lines, a comment's period, struct-tag alignment, `//nolint`

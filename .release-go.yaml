@@ -53,7 +53,7 @@ builds:
     # local dry run, which leaves the copies in place, embeds them unread.
     ldflags:
       - -s -w -X main.version={{ .Version }} -X github.com/farcloser/limen/internal/toolpins.stamp=release
-    # Exactly the platforms .aqua/aqua.yaml lists under checksum.supported_envs.
+    # Exactly the platforms .hermetic/hermetic.yaml lists under checksum.supported_envs.
     targets:
       - darwin_arm64
       - linux_amd64

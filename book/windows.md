@@ -90,7 +90,7 @@ The runner resolves the program of a `shell:` line by walking `PATH` and, for a 
 extension, appending each `PATHEXT` entry as `PATHEXT` spells it (`.COM;.EXE;…`, uppercase
 by default) and keeping the first that exists. The `PATH` element is used verbatim and
 joined with a backslash, so a step's shell is spelled
-`C:/Users/…/aquaproj-aqua/bin\bash.EXE`: both separators in one string, and an extension in
+`C:/Users/…/hermetic/bin\bash.EXE`: both separators in one string, and an extension in
 a case nobody wrote. Windows accepts it; a program that treats that string as text does not.
 
 Two of our tools did. aqua's proxy strips `.exe` from `argv[0]` case-sensitively, so it

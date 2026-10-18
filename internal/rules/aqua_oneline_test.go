@@ -64,7 +64,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 			"  - name: sharkdp/fd\n    version: v10.1.0 # held back on purpose\n")
 
 	files := compliantFiles()
-	files[".aqua/aqua.yaml"] = manifest
+	files[".hermetic/hermetic.yaml"] = manifest
 	dir := writeRepo(t, files)
 
 	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "aqua"); f.OK() ||
@@ -78,7 +78,7 @@ func TestAquaTwoLinePinsCollapsed(t *testing.T) {
 		t.Fatal("fix did not resolve the two-line pins")
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	out := string(data)
 
 	for _, want := range []string{
@@ -138,14 +138,14 @@ func TestAquaTwoLinePinsFoldIntoWholesaleReplacement(t *testing.T) {
 	manifest = strings.Replace(manifest, importLine, "", 1) // now missing
 
 	files := compliantFiles()
-	files[".aqua/aqua.yaml"] = manifest
+	files[".hermetic/hermetic.yaml"] = manifest
 	dir := writeRepo(t, files)
 
 	if !allResolvedOutcomes(outcomesFor(rules.Fix(t.Context(), dir, bootstrapOpts()), "aqua")) {
 		t.Fatal("fix did not resolve the manifest")
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 
 	out := string(data)
 	if !strings.Contains(out, "  - name: junegunn/fzf@v0.60.0\n") ||

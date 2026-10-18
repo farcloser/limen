@@ -67,7 +67,7 @@ type FixOptions struct {
 	// mergeAquaManifest for the full argument.
 	SelfVersion string
 	// RenovateBranch is set when fix runs on a branch Renovate owns (the
-	// checksum workflow). Renovate renders .aqua/aqua.yaml itself on every
+	// checksum workflow). Renovate renders .hermetic/hermetic.yaml itself on every
 	// run, so a line fix adds there is removed on the next, fix adds it
 	// again, and the branch is force-pushed forever: on such a branch fix
 	// leaves the project manifest alone and check names what main needs.
@@ -502,6 +502,7 @@ func remediateWorkflows(root string) []Outcome {
 	out := []Outcome{
 		pinExact(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum),
 		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
+		removeStaleDir(root, rule, pathActionSetupAquaOld, pathActionSetupAqua),
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
 		pinExact(root, rule, pathActionCache, limen.CanonicalActionCache),
 		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
@@ -729,9 +730,9 @@ func pinExact(root, rule, relPath, canonical string) Outcome {
 // pins, and the project's own packages and versions are left alone, with one
 // exception: an existing farcloser/limen pin moves to selfVersion when set,
 // because that version is baseline-owned (see mergeAquaManifest). Checksums
-// are then regenerated with the real tool (`aqua policy allow` + `aqua
-// update-checksum --prune`, in that order — the policy must be allowed before
-// aqua can read the local registry) whenever the manifest changed or the
+// are then regenerated with the real tool (`hermetic policy allow` +
+// `hermetic update-checksum --prune`, in that order — the policy must be
+// allowed before the local registry is read) whenever the manifest changed or the
 // checksums file is missing; they are never copied from limen, whose checksums
 // describe a different package set. A manifest that cannot be parsed, a failed
 // regeneration, or anything merging cannot resolve (duplicate package entries)
@@ -812,14 +813,16 @@ func remediateAqua(ctx context.Context, root, selfVersion string, renovateBranch
 	return out
 }
 
-// moveLegacyAqua moves aqua's files from the repository root, where limen kept
-// them before, into .aqua/: the manifest, its checksums, and the policy (which
-// pinExact then resets to the canonical). The registries section, local path
-// included, is reset by the merge that follows. Reports the move (nil when
-// there was nothing to move), or the outcome that stops the rule: both
-// locations populated, which the project merges by hand, or a failed move.
+// moveLegacyAqua moves the pin files from where limen kept them before, the
+// repository root and then .aqua/ under aqua's names, into .hermetic/ under
+// hermetic's: the manifest, its checksums, and the policy (which pinExact
+// then resets to the canonical). The registries section, local path
+// included, is reset by the merge that follows; an emptied .aqua/ goes with
+// its files. Reports the move (nil when there was nothing to move), or the
+// outcome that stops the rule: both locations populated, which the project
+// merges by hand, or a failed move.
 func moveLegacyAqua(root string) (moved, stop *Outcome) {
-	legacy, found := findFirst(root, legacyAquaFiles...)
+	legacy, found := findFirst(root, legacyAquaPaths()...)
 	if !found {
 		return nil, nil
 	}
@@ -829,32 +832,25 @@ func moveLegacyAqua(root string) (moved, stop *Outcome) {
 			Rule:    ruleAqua,
 			Action:  ActionAdvisory,
 			Path:    legacy,
-			Message: "aqua files exist both at the root and in " + aquaDir + "/: merge " + legacy + " into " + aquaDir + "/ and delete it",
+			Message: "pin files exist both at " + legacy + " and in " + aquaDir + "/: merge the first into " + aquaDir + "/ and delete it",
 		}
-	}
-
-	targets := map[string]string{
-		legacyAquaManifest:    aquaManifestFile,
-		legacyAquaManifestYml: aquaManifestFile,
-		legacyAquaChecksums:   aquaChecksumsFile,
-		legacyAquaPolicy:      aquaPolicyFile,
 	}
 
 	var names []string
 
-	for _, from := range legacyAquaFiles {
-		if !exists(filepath.Join(root, from)) {
+	for _, from := range legacyAquaPaths() {
+		if !exists(filepath.Join(root, filepath.FromSlash(from))) {
 			continue
 		}
 
-		destination := filepath.Join(root, filepath.FromSlash(targets[from]))
+		destination := filepath.Join(root, filepath.FromSlash(legacyAquaTarget(from)))
 		if err := os.MkdirAll(filepath.Dir(destination), dirPermissions); err != nil {
 			f := failed(ruleAqua, from, err)
 
 			return nil, &f
 		}
 
-		if err := os.Rename(filepath.Join(root, from), destination); err != nil {
+		if err := os.Rename(filepath.Join(root, filepath.FromSlash(from)), destination); err != nil {
 			f := failed(ruleAqua, from, err)
 
 			return nil, &f
@@ -863,6 +859,9 @@ func moveLegacyAqua(root string) (moved, stop *Outcome) {
 		names = append(names, from)
 	}
 
+	// The old directory, when the files were all it held.
+	_ = os.Remove(filepath.Join(root, legacyAquaDir))
+
 	return &Outcome{
 		Rule:   ruleAqua,
 		Action: ActionMerged,
@@ -870,7 +869,7 @@ func moveLegacyAqua(root string) (moved, stop *Outcome) {
 		Message: "moved " + strings.Join(
 			names,
 			", ",
-		) + " into " + aquaDir + "/ (allow the policy at its new path: aqua policy allow " + aquaPolicyFile + ")",
+		) + " into " + aquaDir + "/ (allow the policy at its new path: hermetic policy allow " + aquaPolicyFile + ")",
 	}, nil
 }
 
@@ -952,15 +951,15 @@ func regenerateAquaChecksumsOutcome(ctx context.Context, root string) Outcome {
 			Action: ActionAdvisory,
 			Path:   aquaChecksumsFile,
 			Message: fmt.Sprintf(
-				"could not regenerate checksums (%v) — run `aqua policy allow "+aquaPolicyFile+" && aqua update-checksum --prune` and commit the result",
+				"could not regenerate checksums (%v) — run `hermetic policy allow "+aquaPolicyFile+" && hermetic update-checksum --prune` and commit the result",
 				err,
 			),
 		}
 	}
 
-	action, msg := ActionCreated, "generated "+aquaChecksumsFile+" (aqua update-checksum --prune)"
+	action, msg := ActionCreated, "generated "+aquaChecksumsFile+" (hermetic update-checksum --prune)"
 	if existed {
-		action, msg = ActionOverwrote, "regenerated "+aquaChecksumsFile+" (aqua update-checksum --prune)"
+		action, msg = ActionOverwrote, "regenerated "+aquaChecksumsFile+" (hermetic update-checksum --prune)"
 	}
 
 	return Outcome{Rule: ruleAqua, Action: action, Path: aquaChecksumsFile, Message: msg}
@@ -980,25 +979,62 @@ func seededAquaManifest(selfVersion string) (seed, message string) {
 	return seed, "wrote canonical " + aquaManifestFile + " (limen pinned at the running " + selfVersion + ")"
 }
 
-// regenerateAquaChecksums authorizes the (content-pinned) policy, then has aqua
-// rebuild aqua-checksums.json for whatever the manifest now pins.
+// regenerateAquaChecksums authorizes the (content-pinned) policy, then has
+// hermetic rebuild aqua-checksums.json for whatever the manifest now pins;
+// hermetic's own walk finds the manifest from the repository root.
 func regenerateAquaChecksums(ctx context.Context, root string) error {
 	// --log-level warn: on failure the output lands in the advisory message, and
-	// aqua's per-package INFO lines would drown the actual error there.
+	// the per-package INFO lines would drown the actual error there.
 	for _, args := range [][]string{
 		{"--log-level", "warn", "policy", "allow", aquaPolicyFile},
 		{"--log-level", "warn", "update-checksum", "--prune"},
 	} {
-		// aqua on the hermetic PATH; args come from the fixed lists above.
-		cmd := exec.CommandContext(ctx, "aqua", args...) // #nosec G204 -- see above.
+		// hermetic on the PATH; args come from the fixed lists above.
+		cmd := exec.CommandContext(ctx, hermeticBinary, args...) // #nosec G204 -- see above.
 
 		cmd.Dir = root
 		if combined, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("aqua %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(combined)))
+			return fmt.Errorf(
+				"%s %s: %w: %s",
+				hermeticBinary,
+				strings.Join(args, " "),
+				err,
+				strings.TrimSpace(string(combined)),
+			)
 		}
 	}
 
 	return nil
+}
+
+// hermeticBinary is the toolset's resolver, on the PATH wherever limen runs:
+// the installer's root bin on a laptop, the setup action's on a runner.
+const hermeticBinary = "hermetic"
+
+// removeStaleDir removes a directory limen once seeded and has since moved,
+// the action's old home: nothing canonical calls it, and a project's own
+// workflow still naming it is a stale reference the check reports.
+func removeStaleDir(root, rule, old, current string) Outcome {
+	path := filepath.Join(root, filepath.FromSlash(old))
+	if _, err := os.Stat(path); err != nil { // a directory, which exists() does not answer for
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionNone,
+			Path:    old,
+			Message: "no " + old + " (the action is " + current + ")",
+		}
+	}
+
+	if err := os.RemoveAll(path); err != nil {
+		return failed(rule, old, err)
+	}
+
+	return Outcome{
+		Rule:    rule,
+		Action:  ActionOverwrote,
+		Path:    old,
+		Message: "removed " + old + ": the action is " + current,
+	}
 }
 
 // remediateGitattributes content-pins .gitattributes exactly: created if

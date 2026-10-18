@@ -17,7 +17,7 @@ git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_CO
 git -C <clone> c remote set-head origin --auto   # origin/HEAD is the remote's default branch, read from it, never assumed by name
 git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/HEAD
 test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
-cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow .aqua/aqua-policy.yaml && env ${LIMEN_AGENT_HOME:+HOME="$LIMEN_AGENT_HOME"} aqua install
+cd <clone>/.claude/worktrees/<date>-<topic> && hermetic policy allow .hermetic/policy.yaml && env ${LIMEN_AGENT_HOME:+HOME="$LIMEN_AGENT_HOME"} hermetic install
 ```
 
 One topic per branch and per pull request. The bot's login is the branch

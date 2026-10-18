@@ -297,9 +297,9 @@ The decided merge model, enforced by the repository settings and the `limen:main
   lands. Safe everywhere: the recipe says "no go.mod" and passes where there is no Go module.
 
   <a id="tools"></a>
-  **Tools.** A `tools` job, one linux leg, runs a real `aqua install` where every other job
+  **Tools.** A `tools` job, one linux leg, runs a real `hermetic install` where every other job
   only links. Links verify nothing, so without it an asset missing from a release, or failing
-  its checksum, merges green and fails months later at first use. The job caches aqua's
+  its checksum, merges green and fails months later at first use. The job caches hermetic's
   package store keyed on the exact pins, so an unchanged pin set costs seconds and a changed
   one is always a real install; it feeds `gate`. (The Go-built tools are `.limen/tools/go.mod`
   directives; the verify legs build them.)
@@ -325,10 +325,10 @@ The decided merge model, enforced by the repository settings and the `limen:main
   save on `main` only, on a miss (`actions/cache/restore` and `actions/cache/save`, never the
   combined action, whose post step saves wherever it ran). One content-pinned composite
   action, `.github/actions/cache`, keeps a job's caches in three calls: `attach` before
-  setup-aqua (on Windows the caches live in one disk image that holds aqua's root, so it is
-  attached first), `restore` right after setup-aqua, before the job links or runs a tool (on
-  Linux and macOS, aqua's store first, then the Go caches as files: resolving their paths runs
-  `go`, which the store holds) and `save` at the end. A workflow names no platform and no cache
+  setup-hermetic (on Windows the caches live in one disk image that holds hermetic's root, so
+  it is attached first), `restore` right after setup-hermetic, before the job runs a tool (on
+  Linux and macOS, hermetic's store first, then the Go caches as files: resolving their paths
+  runs `go`, which the store holds) and `save` at the end. A workflow names no platform and no cache
   mechanism; what differs between jobs is an input (`go`, `linter-cache`, `aqua-fallback`),
   not a copy of the steps that drifts apart unseen, which is how the verify and security
   lanes came to share a Go key over different paths; the Go cache with the linter's is now

@@ -27,17 +27,23 @@ const (
 	licenseFileName = "LICENSE"
 	ruleAqua        = "aqua"
 
-	// aqua's files live in .aqua/, one of the directories aqua itself
-	// searches; a local registry path inside them is relative to .aqua/.
-	aquaDir           = ".aqua"
-	aquaManifestFile  = aquaDir + "/" + legacyAquaManifest
+	// The project's pins live in .hermetic/, where hermetic's own walk finds
+	// them (aqua's finder never looks there: only hermetic resolves them); a
+	// local registry path inside them is relative to .hermetic/. The
+	// manifest and the policy carry hermetic's names; the checksums keep
+	// aqua's, the library writing that file beside the config under a fixed
+	// name.
+	aquaDir           = ".hermetic"
+	aquaManifestFile  = aquaDir + "/hermetic.yaml"
 	aquaChecksumsFile = aquaDir + "/" + legacyAquaChecksums
-	aquaPolicyFile    = aquaDir + "/" + legacyAquaPolicy
+	aquaPolicyFile    = aquaDir + "/policy.yaml"
 
 	// The canonical tool set, content-pinned, which the manifest imports.
 	aquaPackagesFile = ".limen/aqua.yaml"
 
-	// The same files at the repository root, where limen kept them before.
+	// The same files where limen kept them before: at the repository root,
+	// and then under .aqua/ with aqua's names.
+	legacyAquaDir         = ".aqua"
 	legacyAquaManifest    = "aqua.yaml"
 	legacyAquaManifestYml = "aqua.yml"
 	legacyAquaChecksums   = "aqua-checksums.json"
@@ -47,15 +53,18 @@ const (
 	// content-pinned limen machinery, the rest are seeded once and then the
 	// project's own.
 	pathWorkflowChecksum = ".github/workflows/update-aqua-checksum.yaml"
-	pathActionSetupAqua  = ".github/actions/setup-aqua/action.yaml"
-	pathActionWinCache   = ".github/actions/windows-cache-image/action.yaml"
-	pathActionCache      = ".github/actions/cache/action.yaml"
-	pathWorkflowCI       = ".github/workflows/ci.yaml"
-	pathWorkflowVerify   = ".github/workflows/limen-verify.yaml"
-	pathWorkflowSecurity = ".github/workflows/security.yaml"
-	pathWorkflowCaches   = ".github/workflows/caches.yaml"
-	pathWorkflowRelease  = ".github/workflows/release.yaml"
-	pathRenovate         = "renovate.json"
+	pathActionSetupAqua  = ".github/actions/setup-hermetic/action.yaml"
+	// Where the action lived while it installed upstream aqua; a project's
+	// own workflow naming it is a stale reference, and the directory a stray.
+	pathActionSetupAquaOld = ".github/actions/setup-aqua"
+	pathActionWinCache     = ".github/actions/windows-cache-image/action.yaml"
+	pathActionCache        = ".github/actions/cache/action.yaml"
+	pathWorkflowCI         = ".github/workflows/ci.yaml"
+	pathWorkflowVerify     = ".github/workflows/limen-verify.yaml"
+	pathWorkflowSecurity   = ".github/workflows/security.yaml"
+	pathWorkflowCaches     = ".github/workflows/caches.yaml"
+	pathWorkflowRelease    = ".github/workflows/release.yaml"
+	pathRenovate           = "renovate.json"
 )
 
 // matchesCanonicalMsg suffixes the OK message of every content-pinned rule.
@@ -124,7 +133,7 @@ var CanonicalLychee = limen.CanonicalLycheeToml //nolint:gochecknoglobals // imm
 const CanonicalJustfileImport = "import '.limen/just/main.just'"
 
 // CanonicalAquaPolicy, CanonicalAquaRegistry and CanonicalAquaPackages are the
-// canonical aqua policy (.aqua/aqua-policy.yaml), local registry
+// canonical policy (.hermetic/policy.yaml), local registry
 // (.limen/aqua-registry.yaml) and tool set (.limen/aqua.yaml) every repository
 // must carry verbatim. Unlike aqua.yaml (the project's manifest, which imports
 // the tool set) they are content-pinned. They are this repo's own files,
@@ -541,11 +550,11 @@ func containsLine(text, want string) bool {
 func checkAqua(root string) Finding {
 	const rule = "aqua"
 
-	if stray, found := findFirst(root, legacyAquaFiles...); found {
+	if stray, found := findFirst(root, legacyAquaPaths()...); found {
 		return fail(
 			rule,
 			stray,
-			stray+" belongs in "+aquaDir+"/, where limen keeps aqua's files (limen fix moves them)",
+			stray+" belongs in "+aquaDir+"/, where limen keeps the pins hermetic resolves (limen fix moves them)",
 		)
 	}
 
@@ -553,7 +562,7 @@ func checkAqua(root string) Finding {
 
 	data, err := readRepoFile(root, name)
 	if err != nil {
-		return fail(rule, "", "no "+name+" found (project tooling must be pinned via aqua)")
+		return fail(rule, "", "no "+name+" found (project tooling must be pinned in it, resolved by hermetic)")
 	}
 
 	manifest, parsed := parseAquaManifest(string(data))
@@ -570,7 +579,7 @@ func checkAqua(root string) Finding {
 	}
 
 	if !exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile))) {
-		return fail(rule, name, aquaChecksumsFile+" is missing (run `aqua update-checksum` and commit it)")
+		return fail(rule, name, aquaChecksumsFile+" is missing (run `hermetic update-checksum` and commit it)")
 	}
 
 	if f := checkPinned(root, rule, aquaPolicyFile, CanonicalAquaPolicy); f != nil {
@@ -593,9 +602,11 @@ func checkAqua(root string) Finding {
 	}
 }
 
-// readAquaManifest reads the project's aqua manifest: .aqua/aqua.yaml, or a
+// readAquaManifest reads the project's manifest: .hermetic/hermetic.yaml, or a
 // root one a repository not yet migrated still carries, so the rules that only
-// read it do not fail twice for a move the aqua rule already reports.
+// read it do not fail twice for a move the aqua rule already reports. The
+// .aqua/ layout is not a candidate: fix moves it before any reader runs, and
+// no check reads the manifest for anything the import does not carry.
 func readAquaManifest(root string) (data []byte, err error) {
 	for _, candidate := range []string{aquaManifestFile, legacyAquaManifest, legacyAquaManifestYml} {
 		if data, err = readRepoFile(root, candidate); err == nil {
@@ -618,9 +629,32 @@ func readAquaPins(root string) []byte {
 }
 
 // legacyAquaFiles are aqua's files at the repository root, where limen kept
-// them before .aqua/.
+// them first.
 var legacyAquaFiles = []string{ //nolint:gochecknoglobals // read-only list.
 	legacyAquaManifest, legacyAquaManifestYml, legacyAquaChecksums, legacyAquaPolicy,
+}
+
+// legacyAquaPaths are every place limen kept the pins before .hermetic/: the
+// root, and .aqua/ under aqua's names.
+func legacyAquaPaths() []string {
+	paths := make([]string, 0, 2*len(legacyAquaFiles))
+	for _, name := range legacyAquaFiles {
+		paths = append(paths, legacyAquaDir+"/"+name)
+	}
+
+	return append(paths, legacyAquaFiles...)
+}
+
+// legacyAquaTarget is where a legacy pin file lives now.
+func legacyAquaTarget(from string) string {
+	switch strings.TrimPrefix(from, legacyAquaDir+"/") {
+	case legacyAquaManifest, legacyAquaManifestYml:
+		return aquaManifestFile
+	case legacyAquaChecksums:
+		return aquaChecksumsFile
+	default:
+		return aquaPolicyFile
+	}
 }
 
 // checkGitattributes content-pins .gitattributes (see CanonicalGitattributes:
@@ -721,6 +755,12 @@ func checkWorkflows(root string) Finding {
 		}
 	}
 
+	// A directory, which exists() does not answer for.
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(pathActionSetupAquaOld))); err == nil {
+		return fail(rule, pathActionSetupAquaOld, pathActionSetupAquaOld+" is the action's old home, which nothing"+
+			" canonical calls any more: the action is "+pathActionSetupAqua+" (limen fix removes the old directory)")
+	}
+
 	for _, seeded := range []string{pathWorkflowCI, pathRenovate} {
 		if !exists(filepath.Join(root, filepath.FromSlash(seeded))) {
 			return fail(
@@ -771,29 +811,41 @@ func checkWorkflows(root string) Finding {
 
 // movedPaths maps each path limen has moved to where it lives now. fix moves
 // the file; a reference to the old path in a file the project owns (a
-// Renovate manager matching ^Justfile$, a CI cache key hashing the root
-// aqua.yaml) then matches nothing, silently: the manager stops proposing, the
-// key never changes.
+// Renovate manager matching ^Justfile$, a CI cache key hashing the old
+// manifest, a job calling the action under its old name) then matches
+// nothing, silently: the manager stops proposing, the key never changes, the
+// job fails on a missing action.
 //
 //nolint:gochecknoglobals // immutable table.
 var movedPaths = map[string]string{
-	"aqua.yaml":           aquaManifestFile,
-	"aqua-checksums.json": aquaChecksumsFile,
-	"aqua-policy.yaml":    aquaPolicyFile,
-	"Justfile":            justfileName,
-	".allowed_signers":    signersFile,
-	".goreleaser.yaml":    releaseGoFile,
-	".goreleaser.yml":     releaseGoFile,
-	formerLintGithubFile:  lintGithubFile,
+	"aqua.yaml":                 aquaManifestFile,
+	"aqua-checksums.json":       aquaChecksumsFile,
+	"aqua-policy.yaml":          aquaPolicyFile,
+	".aqua/aqua.yaml":           aquaManifestFile,
+	".aqua/aqua-checksums.json": aquaChecksumsFile,
+	".aqua/aqua-policy.yaml":    aquaPolicyFile,
+	"actions/setup-aqua":        "actions/setup-hermetic",
+	"Justfile":                  justfileName,
+	".allowed_signers":          signersFile,
+	".goreleaser.yaml":          releaseGoFile,
+	".goreleaser.yml":           releaseGoFile,
+	formerLintGithubFile:        lintGithubFile,
 }
 
 // movedPathRE finds a moved path as a whole name: what precedes it is no part
-// of a path, so `.aqua/aqua.yaml` and `.limen/aqua.yaml` are where the files
-// live now, not references to the old root ones. A name escaped inside a
-// regular expression (aqua\.yaml) is not recognized.
+// of a path, so `.limen/aqua.yaml` is where the canonical tool set lives, not
+// a reference to the old root manifest, while `.aqua/…` is matched with its
+// directory, the whole of the old location. A name escaped inside a regular
+// expression (aqua\.yaml) is not recognized.
 var movedPathRE = regexp.MustCompile(
-	`(?:^|[^\w./-])(aqua\.yaml|aqua-checksums\.json|aqua-policy\.yaml|Justfile|\.allowed_signers|\.goreleaser\.ya?ml|limen\.yaml)\b`,
+	`(?:^|[^\w./-])(\.aqua/aqua\.yaml|\.aqua/aqua-checksums\.json|\.aqua/aqua-policy\.yaml` +
+		`|aqua\.yaml|aqua-checksums\.json|aqua-policy\.yaml|Justfile|\.allowed_signers|\.goreleaser\.ya?ml|limen\.yaml)\b`,
 )
+
+// movedActionRE finds the setup action under its old name, which a workflow
+// always names inside a path (`./.github/actions/setup-aqua`), so the
+// whole-name guard above cannot carry it.
+var movedActionRE = regexp.MustCompile(`\b(actions/setup-aqua)\b`)
 
 // staleReferences lists, as "file:line: old → new", the references to moved
 // paths in the files a project owns that name paths: renovate.json and its
@@ -818,8 +870,10 @@ func staleReferences(root string) []string {
 		}
 
 		for index, line := range referenceLines(name, string(data)) {
-			for _, match := range movedPathRE.FindAllStringSubmatch(line, -1) {
-				stale = append(stale, fmt.Sprintf("%s:%d: %s → %s", name, index+1, match[1], movedPaths[match[1]]))
+			for _, re := range []*regexp.Regexp{movedPathRE, movedActionRE} {
+				for _, match := range re.FindAllStringSubmatch(line, -1) {
+					stale = append(stale, fmt.Sprintf("%s:%d: %s → %s", name, index+1, match[1], movedPaths[match[1]]))
+				}
 			}
 		}
 	}

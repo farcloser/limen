@@ -128,7 +128,7 @@ enclave to sign; it can never read a key. Three consequences the script handles:
   built in, serves the bot by its real path: `core.sshCommand` runs its `ssh` with the bot
   key's algorithm as the one accepted (the fork's default list carries no ECDSA, so the key
   would never be offered), and `gpg.ssh.program` a wrapper around its `ssh-keygen`. The
-  real path, because a session's aqua root carries no openssh for the toolset's shim to
+  real path, because a session's hermetic root carries no openssh for the toolset's link to
   resolve, and git execs the signer with no shell in between; the installer resolves it
   from the machine toolset and runs again after a bump moves it.
 - **The egress proxy.** Every outbound connection goes through the sandbox's per-session
@@ -147,18 +147,19 @@ links into took git down in every session
 ([farcloser/limen-install#97](https://github.com/farcloser/limen-install/pull/97)).
 
 **The sessions' tool root.** Everything a session installs or caches lives under one
-directory of its own, `~/.local/share/limen-agent`, created by `limen-install-agent`: aqua's
-root (`AQUA_ROOT_DIR`), a home for the verifiers (`LIMEN_AGENT_HOME`: slsa-verifier keeps
-its TUF cache under `$HOME/.sigstore` and reads no other variable, [known upstream
-bugs](./upstream.md)), the Go module and build caches, cargo and the XDG cache. The
-sandbox's write list is the directories the installer was given plus that root; the
-human's aqua root, Go caches, cargo and sigstore cache are not writable to a session, so
-nothing a sandboxed command writes is ever executed outside the sandbox. The installer
-puts aqua in the root and nothing per repository: a session approves a checkout's policy
-and installs its pins itself, and every real install runs with `HOME` at the agent home,
-which the `tools` recipes and the contribute skill do by themselves. For that first command
-to run at all, the harness's own `env`, resolved through PATH outside the sandbox with the
-checkout's manifest, must not be an aqua proxy: limen's registry links no `env`.
+directory of its own, `~/.local/share/limen-agent`, created by `limen-install-agent`: a
+hermetic root of their own (`HERMETIC_ROOT_DIR`, holding the toolset's pins copied from the
+machine's root and a store of its own), a home for the verifiers (`LIMEN_AGENT_HOME`:
+slsa-verifier keeps its TUF cache under `$HOME/.sigstore` and reads no other variable,
+[known upstream bugs](./upstream.md)), the Go module and build caches, cargo and the XDG
+cache. The sandbox's write list is the directories the installer was given plus that root;
+the human's tool roots, Go caches, cargo and sigstore cache are not writable to a session,
+so nothing a sandboxed command writes is ever executed outside the sandbox. The installer
+puts the pins in the root and nothing per repository: a session approves a checkout's
+policy and installs its pins itself, and every real install runs with `HOME` at the agent
+home, which the `tools` recipes and the contribute skill do by themselves. For that first
+command to run at all, the harness's own `env`, resolved through PATH outside the sandbox
+with the checkout's manifest, must not be a toolset link: limen's registry links no `env`.
 
 **A session's `PATH` is the harness's, and no rc file changes it.** Before every Bash call
 the harness sources a shell snapshot it wrote at process start, and that snapshot's
@@ -166,21 +167,22 @@ the harness sources a shell snapshot it wrote at process start, and that snapsho
 from the shell that sourced the rc files. A line in `~/.zshrc` putting the agent root's
 `bin` first when `CLAUDECODE` is set never changed a session's `PATH`: on 2026-10-12 a
 snapshot written at 11:13, eighteen minutes after that line landed, still led with the
-human's aqua `bin`. The installer no longer writes the line
+human's tool `bin`. The installer no longer writes the line
 ([farcloser/limen-install#87](https://github.com/farcloser/limen-install/pull/87)). What a
-session runs: the human's aqua `bin` first, read-only to it, whose proxies execute the agent
-root's packages through `AQUA_ROOT_DIR`; a tool linked only in the root is reached through
-`just`, whose `PATH` is hermetic, or `aqua exec`.
+session runs: the machine root's `bin` first, read-only to it, whose one binary dispatches
+into the sessions' root through `HERMETIC_ROOT_DIR`; a tool linked only in the sessions'
+root is reached through `just`, whose `PATH` is hermetic.
 
-**A proxy in aqua's `bin` runs only what the checkout declares.** The agent root's `bin`
-carries a proxy for every tool any repository ever pinned there, so `xz` is found on
-`PATH` from any directory; but the proxy resolves its name against the current directory's
-`aqua.yaml`, then a global config under `~/.config`, which the sandbox denies reading, and
-a tool neither declares fails with aqua's error 004, "command is not found", whatever the
-host has installed. On 2026-10-14 forkcloser/compress's interop tests looked `xz` and
+**A link in the root's `bin` runs only what the checkout declares.** The root's `bin`
+carries a link for every tool any repository ever pinned there, so `xz` is found on
+`PATH` from any directory; but the link resolves its name against the checkout's
+`.hermetic/hermetic.yaml`, found by hermetic's walk upward from the current directory, then
+the root's own pins, the toolset's, and a tool neither declares fails with the library's
+error 004, "command is not found", whatever the host has installed. On 2026-10-14
+forkcloser/compress's interop tests looked `xz` and
 `zstd` up through a `just` recipe's hermetic `PATH` and were red in every session, while
 CI, on a runner with both tools, stayed green. A tool a repository runs, tests included,
-is pinned in that repository's `aqua.yaml`; one no registry carries (xz and zstd, as of
+is pinned in that repository's `.hermetic/hermetic.yaml`; one no registry carries (xz and zstd, as of
 aqua's standard registry v4.574.0) is probed first, and the test that cannot find it skips
 by name. What the host happens to have is not a dependency.
 
@@ -279,8 +281,8 @@ new thing before the fleet's installer learns it.
 **A change to the rig is tried in one session before it reaches them all.** Settings
 edits apply to every running session at once, and the harness itself runs through the rig:
 each Bash call starts as `env`, resolved through the harness's own `PATH` outside the
-sandbox, so with aqua first on `PATH` that `env` is the coreutils proxy, and an empty or
-sick aqua root stops every shell before any command runs. On 2026-10-12 a write-list and
+sandbox, so with the toolset first on `PATH` that `env` is the coreutils link, and an empty
+or sick root stops every shell before any command runs. On 2026-10-12 a write-list and
 `env` change meant to give sessions a tool root of their own pointed `AQUA_ROOT_DIR` at a
 root nobody had populated; every session's shell died at once, and the bootstrap could not
 run from inside the sandbox because slsa-verifier keeps its TUF cache under `~/.sigstore`
@@ -290,8 +292,8 @@ have shown both before anyone else was affected. Populate before you point, add 
 remove, and restart for what only a restart applies.
 
 **A word an expansion produces is never an assignment.** The shell recognises `NAME=value`
-before it expands anything, so `HOME="$X" aqua install` typed is an assignment, and
-`${X:+HOME="$X"} aqua install` is a command named `HOME=/…` that does not exist. The
+before it expands anything, so `HOME="$X" hermetic install` typed is an assignment, and
+`${X:+HOME="$X"} hermetic install` is a command named `HOME=/…` that does not exist. The
 prefix that gave sessions' installs their own home shipped in that second form
 ([farcloser/limen#367](https://github.com/farcloser/limen/pull/367)) and was never reached
 before the recipe died earlier, so nobody saw it fail. Pass the assignment through `env`,

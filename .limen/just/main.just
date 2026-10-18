@@ -26,11 +26,16 @@ export BREW_BIN := env_var_or_default('BREW_BIN', `command -v brew || true`)
 # absent; Windows' ambient PATH already carries Git for Windows' own.
 export GPG_BIN := if os() == 'windows' { '' } else { env_var_or_default('GPG_BIN', `command -v gpg || true`) }
 
-# aqua-pinned tools + base system only, so an unpinned tool fails loudly.
-# Windows (git-bash) has no knowable base-system list and uses ';': pins are
+# The pinned tools + base system only, so an unpinned tool fails loudly. The
+# pins are hermetic's: its root's bin holds one link per tool, each a name for
+# the binary, which resolves the name from this repository's .hermetic/ pins.
+# The root is HERMETIC_ROOT_DIR (a session's own, from its settings) or the
+# binary's default for the platform, the one limen-install fills. Windows
+# (git-bash) has no knowable base-system list and uses ';': pins are
 # prepended to the ambient PATH there instead.
-aqua_bin := env_var_or_default('AQUA_ROOT_DIR', env_var_or_default('XDG_DATA_HOME', home_directory() / '.local/share') / 'aquaproj-aqua') / 'bin'
-export PATH := if os() == 'windows' { aqua_bin + ';' + env_var('PATH') } else { aqua_bin + ":/usr/bin:/bin:/usr/sbin:/sbin" }
+hermetic_root := env_var_or_default('HERMETIC_ROOT_DIR', if os() == 'macos' { home_directory() / 'Library/Application Support/hermetic' } else if os() == 'windows' { env_var_or_default('LOCALAPPDATA', home_directory() / 'AppData/Local') / 'hermetic' } else { env_var_or_default('XDG_DATA_HOME', home_directory() / '.local/share') / 'hermetic' })
+hermetic_bin := hermetic_root / 'bin'
+export PATH := if os() == 'windows' { hermetic_bin + ';' + env_var('PATH') } else { hermetic_bin + ":/usr/bin:/bin:/usr/sbin:/sbin" }
 
 # GO* variables tunnel through the pinned PATH, so each is emptied or pinned
 # (go treats '' as unset; `export` propagates into module recipes, `unexport`
@@ -98,7 +103,7 @@ export SDKROOT := if xcode_sdk == '' { env('SDKROOT', '') } else { xcode_sdk }
 # between runs goes under it, in a subdirectory named for what it holds. The
 # only spelling of the name: the shared recipes and the project's own use
 # {{ LIMEN_BUILD }} or $LIMEN_BUILD, a script a recipe runs reads it from the
-# environment, and CI's setup-aqua and windows-cache-image actions export the
+# environment, and CI's setup-hermetic and windows-cache-image actions export the
 # same path for the steps after them. Absolute, so a script that changes
 # directory still finds it; forward slashes on windows, which git-bash's own
 # tools and the native ones both read.

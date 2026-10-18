@@ -76,8 +76,9 @@ const (
 // errFormat is the uniform "limen: <error>" stderr line.
 const errFormat = "limen: %v\n"
 
-// aquaBinary is the aqua executable bootstrap shells out to.
-const aquaBinary = "aqua"
+// aquaBinary is the toolset's resolver bootstrap shells out to: hermetic, on
+// the PATH wherever limen runs.
+const aquaBinary = "hermetic"
 
 // dirPermissions is owner-only, like everything limen creates — loosening a
 // checkout is the user's deliberate act, never the tool's.
@@ -372,7 +373,7 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 	if releaseVersion(version) == "" {
 		_, _ = fmt.Fprintln(
 			stderr,
-			"limen: dev build — the seeded .aqua/aqua.yaml keeps the embedded limen pin, which may predate the files seeded from this working tree",
+			"limen: dev build — the seeded .hermetic/hermetic.yaml keeps the embedded limen pin, which may predate the files seeded from this working tree",
 		)
 	}
 
@@ -390,14 +391,14 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		return code
 	}
 	// Install the pinned tooling: authorize the local registry, then link the
-	// tools (aqua downloads each lazily on first use). All output goes to stderr
+	// tools (each downloads lazily on first use). All output goes to stderr
 	// so -json keeps a clean machine-readable stdout.
 	if err := installTooling(ctx, root, stderr); err != nil {
 		_, _ = fmt.Fprintf(stderr, errFormat, err)
-		_, _ = fmt.Fprintf(stderr, "the repository is set up; once aqua is available run, from %s:\n", root)
+		_, _ = fmt.Fprintf(stderr, "the repository is set up; once hermetic is available run, from %s:\n", root)
 		_, _ = fmt.Fprint(
 			stderr,
-			"  aqua policy allow .aqua/aqua-policy.yaml && aqua update-checksum --prune && aqua install --only-link\n",
+			"  hermetic policy allow .hermetic/policy.yaml && hermetic update-checksum --prune && hermetic install -l\n",
 		)
 
 		return 1
@@ -517,19 +518,19 @@ func ensureUpdateApp(ctx context.Context, org, root string, stderr io.Writer) {
 	_, _ = fmt.Fprintf(stderr, "limen: warning: update-app: %s\n", finding.Message)
 }
 
-// installTooling runs aqua to make the repo's pinned tools available: it
+// installTooling runs hermetic to make the repo's pinned tools available: it
 // authorizes the committed local-registry policy, refreshes the checksums for
 // whatever the manifest pins (a no-op on the pristine seed), then installs
-// (links) every tool. It runs with the repo as the working directory so aqua
-// finds .aqua/aqua.yaml.
+// (links) every tool. It runs with the repo as the working directory so
+// hermetic's walk finds .hermetic/hermetic.yaml.
 func installTooling(ctx context.Context, root string, progress io.Writer) error {
 	steps := [][]string{
-		{"policy", "allow", ".aqua/aqua-policy.yaml"},
+		{"policy", "allow", ".hermetic/policy.yaml"},
 		{"update-checksum", "--prune"},
-		{"install", "--only-link"},
+		{"install", "-l"},
 	}
 	for _, step := range steps {
-		// --log-level warn: aqua's per-package INFO lines drown the bootstrap
+		// --log-level warn: the per-package INFO lines drown the bootstrap
 		// output; warnings and errors still come through.
 		args := append([]string{"--log-level", "warn"}, step...)
 		command := aquaBinary + " " + strings.Join(args, " ")
@@ -698,8 +699,8 @@ bootstrap flags:
                   a warning, when neither is available)
   -force          Proceed even if the target directory is not empty
 
-After writing files, bootstrap runs "aqua policy allow .aqua/aqua-policy.yaml",
-"aqua update-checksum --prune", and "aqua install --only-link" to install the
+After writing files, bootstrap runs "hermetic policy allow .hermetic/policy.yaml",
+"hermetic update-checksum --prune", and "hermetic install -l" to install the
 pinned tooling, then converges the org's update-App credential (idempotent;
 anything it cannot do or verify under the current gh token is a warning).
 

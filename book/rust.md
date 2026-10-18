@@ -15,7 +15,7 @@ brew, it has a pin story. The toolchain is pinned in two halves:
   published next to each installer. That is the sourcing ladder's rung 2 without the
   signature — rustup publishes no signature for the installer — so a bump is verified by
   hand like every other checksum-only pin, and the pin lives in the Rust repository's
-  `.aqua/aqua.yaml`, not the baseline: no other repository pays for it.
+  `.hermetic/hermetic.yaml`, not the baseline: no other repository pays for it.
 - **The toolchain through `rust-toolchain.toml`.** rustup reads it from the working tree,
   so the channel and components are a committed, reviewed file — the same shape as
   `go.mod`'s `go` line — and rustup verifies what it downloads against the release

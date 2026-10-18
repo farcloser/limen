@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 	case "go":
 		//revive:disable-next-line:redundant-test-main-exit
 		os.Exit(runGoStub())
-	case "aqua":
+	case "hermetic":
 		//revive:disable-next-line:redundant-test-main-exit
 		os.Exit(runAquaStub())
 	default:
@@ -103,7 +103,7 @@ func installStubs() (string, error) {
 		ext = ".exe"
 	}
 
-	for _, name := range []string{"go", "aqua"} {
+	for _, name := range []string{"go", "hermetic"} {
 		stub := filepath.Join(dir, name+ext)
 		if err := os.Symlink(self, stub); err == nil {
 			continue
@@ -129,7 +129,7 @@ func installStubs() (string, error) {
 func runAquaStub() int {
 	for _, arg := range os.Args[1:] {
 		if arg == "update-checksum" {
-			if err := os.WriteFile(".aqua/aqua-checksums.json", []byte(stubChecksums), 0o600); err != nil {
+			if err := os.WriteFile(".hermetic/aqua-checksums.json", []byte(stubChecksums), 0o600); err != nil {
 				fmt.Fprintf(os.Stderr, "aqua stub: %v\n", err)
 
 				return 1

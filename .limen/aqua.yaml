@@ -1,9 +1,9 @@
 # DO NOT EDIT MANUALLY.
 # The canonical tool set, identical in every repository and imported by
-# .aqua/aqua.yaml. Its pins move with limen releases: Renovate bumps them in
+# .hermetic/hermetic.yaml. Its pins move with limen releases: Renovate bumps them in
 # limen alone, and a repository receives them with the limen version it pins.
 # A repository's own tools — extras, or a canonical tool at another version —
-# go in .aqua/aqua.yaml above the import, never here.
+# go in .hermetic/hermetic.yaml above the import, never here.
 packages:
   # Every pin is the one-line name@version form and stays so (limen fix
   # collapses a two-line `version:` pin): `aqua update` rewrites only that form
@@ -22,7 +22,7 @@ packages:
     registry: local
   # --- binary-release tools (standard registry, aqua-verified) ---
   # Not here: golang/go. The Go toolchain is each repository's own pin, in its
-  # .aqua/aqua.yaml above the import (seeded once by `limen fix`, Renovate's
+  # .hermetic/hermetic.yaml above the import (seeded once by `limen fix`, Renovate's
   # afterwards): a standard-library fix must not wait for a limen release.
   - name: casey/just@1.59.0
   - name: koalaman/shellcheck@v0.11.0
