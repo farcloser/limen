@@ -14,7 +14,8 @@ human's request, and never commit on `main`.
 
 ```
 git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_COMMAND, which outranks the rig's core.sshCommand
-git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/main
+git -C <clone> c remote set-head origin --auto   # origin/HEAD is the remote's default branch, read from it, never assumed by name
+git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/HEAD
 test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
 cd <clone>/.claude/worktrees/<date>-<topic> && aqua policy allow .aqua/aqua-policy.yaml && env ${LIMEN_AGENT_HOME:+HOME="$LIMEN_AGENT_HOME"} aqua install
 ```
@@ -43,8 +44,8 @@ Inside a worktree the harness isolates the session there, and it refuses any
 git command aimed at the clone, `git -C <clone> status` included. A session
 already in a worktree, because it started in one or entered one, cannot run
 the block above. It cuts the next branch in its own worktree instead, once
-the previous branch is pushed: `git c fetch origin`, then `git checkout
---no-track -b claudio/<date>-<topic> origin/main`.
+the previous branch is pushed: `git c fetch origin && git c remote set-head origin
+--auto`, then `git checkout --no-track -b claudio/<date>-<topic> origin/HEAD`.
 
 ## 2. Commit
 
@@ -90,7 +91,7 @@ are what prevents it.
    your own commit — is squashed into the commit it amends and the message
    rewritten to tell the whole story once, before the pull request is opened:
    ```
-   git -C <path> reset --soft origin/main && git -C <path> commit -s -F -   # one commit, whole message
+   git -C <path> reset --soft origin/HEAD && git -C <path> commit -s -F -   # one commit, whole message
    git -C <path> c push --force-with-lease=<branch>:<old sha> origin <branch>
    ```
    Your own branch only; a shared branch is never rewritten. A stack of
@@ -121,7 +122,7 @@ Message the reviewing session three things and end the turn:
 
 ```
 <absolute worktree path>
-base: $(git -C <path> rev-parse origin/main)
+base: $(git -C <path> rev-parse origin/HEAD)
 head: $(git -C <path> rev-parse HEAD)
 ```
 
@@ -219,7 +220,7 @@ the worktree are left for the human to prune.
 
 ```
 git -C <clone> c fetch --prune origin
-git -C <clone> merge --ff-only origin/main   # the clone has main checked out, so a main:main refspec is refused there; on any other branch, `c fetch origin main:main`
+git -C <clone> merge --ff-only origin/HEAD   # the clone has the default branch checked out, so a refspec into it is refused there; on any other branch, `c fetch origin main:main` with the default branch's name
 git -C <clone> worktree remove .claude/worktrees/<date>-<topic> && git -C <clone> branch -d claudio/<date>-<topic>
 ```
 
