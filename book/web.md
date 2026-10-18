@@ -39,6 +39,21 @@ carries no site lane: the book states each rule, and the site keeps its own reci
   website-godolint by its `hero` recipe, which re-lints the sample Dockerfile with the
   pinned godolint and diffs the committed output the landing page was written from, and
   its `pin` recipe, which fails unless the install commands name the pinned version.
+- **A site is documentation, and licensed as documentation.** A project site is prose
+  about a project, with a stylesheet and a few lines of script to carry it, and the book's
+  licence for documentation is CC BY-SA 4.0 ([mandatory files](./mandatory-files.md),
+  "Content"): the pages are meant to be copied, corrected and kept current by anyone, and
+  share-alike keeps the corrections coming back. The project the site describes keeps its
+  own licence, and the footer states both when they differ, since a reader who copies the
+  page and a reader who installs the tool are bound by different terms. The trap is the
+  bootstrap: a site repository created like a code repository takes the code default, and
+  `limen check` accepts MIT or Apache-2.0 there as readily as CC BY-SA 4.0, since it
+  classifies the licence and not the repository, so nothing turns red; the licence is
+  chosen when the repository is created, and checked by reading. The shared identity files
+  (`forkcloser.css`, `forkcloser.js`) ride under the site's licence until they are split
+  into a repository of their own, which is code and takes MIT. Enforced by the `LICENSE`
+  each site repository carries; the identifiers `limen` accepts are the mandatory files
+  chapter's.
 
 ## UX
 
