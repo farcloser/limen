@@ -1,6 +1,9 @@
 # Logging — Go
 
-The Go form of [logging](./logging.md): `log/slog`, set up once in `main`.
+The Go form of [logging](./logging.md): `log/slog`, set up once in `main`. It is the only
+facility: klog, logr, logrus, zap, zerolog and the slog wrappers are not taken, in a fork
+as in a new program
+([dependencies Go](./dependencies-go.md#command-lines-and-loggers-the-standard-library-first)).
 
 ## A library writes nothing; a command speaks once, in main
 
@@ -19,11 +22,13 @@ importing any logger; that is the state to keep.
 (a linter, a server, anything a `--log-level` flag makes sense for) uses `log/slog`, and
 nothing else: the handler and the level are set once in `main`, from the flags, the way
 godolint's `cmd/godolint` does it; no third-party logger, no logger set up by a library
-on import. A tool whose output to the user is messages (a compressor, a renderer: "file
-exists", "format not recognized") has nothing to log. It prints each message to standard
-error as `<cmd>: <message>` and sets the exit status, with the quiet levels the tool it
-mirrors defines (xz: `-q` hides warnings, `-qq` errors too). No timestamps, no levels, no
-logging package for three `Fprintf` calls.
+on import. A command whose console output is for people takes its handler from
+primordium's `app/logger`, tint on a terminal and slog's JSON handler when standard error
+is redirected, which is still slog, set once. A tool whose output to the user is messages
+(a compressor, a renderer: "file exists", "format not recognized") has nothing to log. It
+prints each message to standard error as `<cmd>: <message>` and sets the exit status, with
+the quiet levels the tool it mirrors defines (xz: `-q` hides warnings, `-qq` errors too).
+No timestamps, no levels, no logging package for three `Fprintf` calls.
 
 **No logger ends the process.** `Fatal` and `Panic` entry points are what a home-grown
 logger grows, and they turn every helper that reports into one that exits. A function

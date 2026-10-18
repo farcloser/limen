@@ -1,7 +1,7 @@
 # Dependencies — Go
 
-The Go form of [dependencies](./dependencies.md): the `go` directive, `replace`, and ports
-from the standard library.
+The Go form of [dependencies](./dependencies.md): the `go` directive, `replace`, the
+command-line and logging libraries a program may take, and ports from the standard library.
 
 ## The baseline version
 
@@ -55,6 +55,26 @@ any other consumer, or becomes part of the parent module.
 
 The baseline refuses `replace` by default (gomoddirectives), and `exclude` with it, being a
 replace by other means.
+
+## Command lines and loggers: the standard library first
+
+Two dependencies every program is tempted into are a command-line parser and a logger, and
+both are decided once, for the fleet.
+
+- **The command line.** The standard `flag` package is acceptable, and is the right size for
+  a fork and for a lightweight tool: one program, a handful of flags, no subcommand tree.
+  [kong](https://github.com/alecthomas/kong) where a command tree makes sense. A full-blown
+  application, one with a process to set up (locations, logger, crash reporter, shutdown
+  handlers), goes through [primordium](https://github.com/mycophonic/primordium)'s `app`
+  package, which runs it through `Main`. No cobra, no urfave/cli, no other command-line
+  library: the baseline's `depguard` denies them, and the overlay cannot allow a baseline
+  deny.
+- **The logger.** `log/slog` is the only facility ([logging Go](./logging-go.md)), with
+  [tint](https://github.com/lmittmann/tint) through primordium's `app/logger` for a command
+  whose console output is for people. klog, logr, logrus, zap, zerolog, a wrapper around
+  slog, and a logger built on `log` or `fmt` go, in a fork as in a new program; the one
+  exception is a structural constraint, an upstream whose public API takes a logr sink,
+  and that is named in the fork's overlay with the reason.
 
 ## A port from the standard library is read beside the toolchain's source when revisited
 
