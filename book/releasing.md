@@ -26,7 +26,12 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   signed tag — a human signs the intent — and pushes it; the tag push triggers the release
   workflow, which runs `just do release --ci`: goreleaser plus **keyless** cosign, the
   artifacts signed by the workflow's short-lived Fulcio identity (no key exists anywhere) and
-  logged in Rekor. The **local lane** (private repos, where nothing touches the public
+  logged in Rekor, then GitHub's build provenance attestation over every archive and
+  `checksums.txt`, which `gh attestation verify <asset> --repo <owner>/<repo>`
+  checks wherever `gh` is, no cosign needed: what a bootstrap verifies a binary with before
+  any tool exists (a public repository; GitHub stores attestations for a private one on
+  Enterprise Cloud only, and the lane skips the step there). The **local lane** (private
+  repos, where nothing touches the public
   transparency log, and the escape hatch when CI is down): `just do release --local
   <cosign-key> vX.Y.Z` does the same tag work, then runs goreleaser with key-based cosign; the
   key path is a mandatory argument, and the passphrase is prompted (or piped in with

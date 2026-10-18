@@ -124,6 +124,9 @@ checksum:
 #       --certificate-identity-regexp \
 #         'https://github.com/<owner>/<repo>/\.github/workflows/release\.yaml@refs/tags/v.*' \
 #       checksums.txt
+#   The release workflow then attests every archive and checksums.txt
+#   (GitHub build provenance), checked without cosign:
+#     gh attestation verify <asset> --repo <owner>/<repo>
 #
 # goreleaser only substitutes ${signature}/${artifact} in args; ${COSIGN_KEY:-}
 # survives for the shell to branch on. One line, not a block scalar: yamlfmt
