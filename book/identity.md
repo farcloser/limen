@@ -206,6 +206,37 @@ limen). The harness manages `.claude/worktrees` and keeps its hand on the regist
 depends on. Prune from a session that holds no worktree in the repository, or leave the
 stale entries to the human; do not retry from the one that does.
 
+**A fixed list of paths beneath the working directory is never writable.** The sandbox
+runtime appends a mandatory deny to every write profile it builds: the files `.gitconfig`,
+`.gitmodules`, `.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`, `.ripgreprc`
+and `.mcp.json`, the directories `.vscode`, `.idea`, `.claude/commands` and
+`.claude/agents`, and `.git/hooks`, each as a literal under the working directory and as a
+glob at any depth beneath it; `.git/config` is on the list too unless the harness's
+`allowGitConfig` setting is on (sandbox-runtime `src/sandbox/sandbox-utils.ts`,
+`DANGEROUS_FILES` and `getDangerousDirectories`, applied by `macGetMandatoryDenyEntries` in
+`macos-sandbox-utils.ts`). No entry in the write configuration lifts them; only a session
+with no write configuration at all is without them. For a bot that runs git, `.git/config`
+is the one that bites first: `git push -u`, `git remote add` and `git config` in a
+repository under the working directory fail with "could not write config file …: Operation
+not permitted" while the push or the commit itself succeeds, so a branch is pushed and
+never tracked, and nothing else is wrong. `git worktree add` of a repository
+that tracks one of those paths fails at checkout, "unable to create file … Operation not
+permitted" then "Could not reset index file" (farcloser/onboarding, which tracks
+`home/.zshrc` and three siblings, 2026-10-18); a repository with submodules fails the same
+way on `.gitmodules`; a build that unpacks an archive carrying `.vscode/settings.json` fails
+at that file (forkcloser/openssh). A sparse worktree that leaves those paths out is the
+workaround for a checkout; the rule itself is upstream's, and not a setting.
+
+**The sandbox's `.` is wherever the session's shell last ended up.** The write list's `.`
+entry is the session's primary working directory, and where the harness lets a `cd` persist
+across calls (a setting, not a constant: another harness resets the shell to the primary
+directory after every call), the `cd` moves it: what the session may write changes with it,
+a command that ran from one worktree
+is refused from another, and a relative path lands in whichever tree the shell is in (an
+amend meant for one fork's worktree rewrote the branch of another, 2026-10-16). Every git
+command and every write names its tree by absolute path, under the session's root or an
+explicit write entry; a persisted `cd` is state, not an address.
+
 **A sandbox exclusion matches the bare command.** A command the human took out of the
 sandbox — `just kernel`, which boots a VM the sandbox cannot — is excluded only as written,
 alone on its line. Wrapped in a pipe, a `$(…)`, an `&&` chain or an environment prefix, it
