@@ -187,7 +187,7 @@ func compliantRepo(t *testing.T) string {
 		"renovate.json":                                   rules.CanonicalRenovateFor(""),
 		// The Go-built tools every repository declares (the gotools rule).
 		".limen/tools/go.mod": "module tools\n\ngo 1.26\n\ntool (\n" +
-			"\tgithub.com/vbatts/git-validation\n" +
+			"\tgithub.com/forkcloser/git-validation/cmd/git-validation\n" +
 			"\tgithub.com/forkcloser/godolint/cmd/godolint\n" +
 			"\tgithub.com/forkcloser/dot/cmd/dot\n)\n",
 	}

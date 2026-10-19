@@ -66,7 +66,7 @@ const (
 //
 //nolint:gochecknoglobals // immutable baseline data.
 var goToolsEverywhere = []string{
-	"github.com/vbatts/git-validation",
+	"github.com/forkcloser/git-validation/cmd/git-validation",
 	"github.com/forkcloser/godolint/cmd/godolint",
 	"github.com/forkcloser/dot/cmd/dot",
 }
@@ -85,6 +85,10 @@ var retiredGoTools = map[string]string{
 	// The repository moved to forkcloser; the old module path is never tagged
 	// again.
 	"github.com/farcloser/godolint/cmd/godolint": "github.com/forkcloser/godolint/cmd/godolint",
+	// Forked: the recipes run forkcloser's, whose main packages live under
+	// cmd/; upstream's directive beside them builds nothing the recipes run.
+	"github.com/vbatts/git-validation": "github.com/forkcloser/git-validation/cmd/git-validation",
+	"github.com/google/go-licenses/v2": "github.com/forkcloser/go-licenses/cmd/go-licenses",
 }
 
 // goSourceAnalyzers are the tool packages a Go module must declare on top:
@@ -94,7 +98,7 @@ var retiredGoTools = map[string]string{
 var goSourceAnalyzers = []string{
 	"golang.org/x/tools/cmd/deadcode",
 	"golang.org/x/vuln/cmd/govulncheck",
-	"github.com/google/go-licenses/v2",
+	"github.com/forkcloser/go-licenses/cmd/go-licenses",
 }
 
 // isolatedGoTools are the tools a Go module declares each in a module of its
