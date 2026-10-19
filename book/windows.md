@@ -231,6 +231,20 @@ zips, a Dev Drive (ReFS) at the cache paths.
 - Line endings: windows machines default git to `core.autocrlf=true`. The canonical
   `.gitattributes` ([mandatory files](./mandatory-files.md#canonical-gitattributes))
   disables the conversion, and the format linters fail on CRLF that sneaks through.
+- **A native Windows program writes CRLF to a text-mode stdout; jq does.** jq's own words:
+  "jq does not change newlines to CRLFs. The Windows C run-time or kernel do"
+  (https://github.com/jqlang/jq/issues/1854), and its Windows-only `-b` reopens stdout in
+  binary mode. So in a recipe, a value captured from `jq -r` carries a `\r` at the end of
+  every line on the two Windows legs, while the MSYS side of the same pipeline (`grep`,
+  `sed`, `sort`) emits none, and a comparison of the two fails with every line reported
+  changed and no visible difference between the sides: the trap is a diff that looks
+  identical, which sends the reader to the data instead of the bytes. Strip after jq,
+  `| tr -d '\r'`, on any jq output a recipe compares, splits or stores; the shared
+  shellcheck pass over shebang recipes does so and says why ("The tr is load-bearing:
+  native windows jq writes CRLF", `.limen/just/lint.just`). The same holds for any other
+  native tool in a pipeline (`gh --jq` included) and for a file a native tool writes. Seen on
+  https://github.com/forkcloser/website/pull/3, whose `repos` recipe diffed a jq list
+  against a grep list: both Windows legs red, fifteen identical-looking lines.
 - Sessions: a process started by a service, a scheduled task with a service principal, or
   UTM's guest agent runs as `SYSTEM` in session 0, with no interactive user's `PATH`, no
   per-user applications, and a smaller desktop heap. A scheduled task with an interactive
