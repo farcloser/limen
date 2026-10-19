@@ -1119,12 +1119,11 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 	// The status-check contexts are project-owned — their names follow the
 	// project's CI shape — so a reconcile preserves them, exactly like the
 	// standard-registry ref inside the otherwise-pinned aqua sections. An
-	// empty set falls back to the canonical defaults inside the builder.
-	// One exception, the migration: contexts that are canonical by name
-	// follow what the workflows on the default branch report — see
-	// requiredContexts.
+	// empty set falls back to the canonical defaults inside the builder. One
+	// exception: contexts that are canonical by name follow what the
+	// workflows on the default branch report — see requiredContexts.
 	current := detail.statusCheckContexts()
-	contexts, migrate := a.requiredContexts(target, current)
+	contexts, moved := a.requiredContexts(target, current)
 
 	payload := target.build(contexts)
 	reconcile := &Change{
@@ -1147,11 +1146,11 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 		return
 	}
 
-	if migrate {
+	if moved {
 		a.flag(target.check, StatusFail,
 			"required checks: "+strings.Join(current, listSeparator),
 			strings.Join(contexts, listSeparator),
-			"ruleset "+target.name+" "+migrationReason(current, contexts),
+			"ruleset "+target.name+" "+contextsReason(contexts),
 			reconcile)
 
 		return
@@ -1168,10 +1167,9 @@ func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSu
 
 // requiredContexts is the contexts a reconcile of target writes, and whether
 // that moves them. A project's own names are preserved. Canonical names — the
-// matrix legs, or the gate with or without the security check — follow what
-// the workflows on the default branch report (see canonicalContexts), and only
-// where ci.yaml carries the gate job: nothing is ever required that no
-// workflow reports, which is the failure the gate was introduced to end.
+// gate with or without the security check — follow what the workflows on the
+// default branch report (see canonicalContexts), and only where ci.yaml
+// carries the gate job: nothing is ever required that no workflow reports.
 func (a *auditor) requiredContexts(target rulesetTarget, current []string) ([]string, bool) {
 	if target.check != checkRulesetDefaultBranch || !canonicalShaped(current) || !a.workflowHasGate() {
 		return current, false
@@ -1185,12 +1183,9 @@ func (a *auditor) requiredContexts(target rulesetTarget, current []string) ([]st
 	return desired, true
 }
 
-// migrationReason phrases the move from current to desired for the finding.
-func migrationReason(current, desired []string) string {
+// contextsReason phrases the move onto desired for the finding.
+func contextsReason(desired []string) string {
 	switch {
-	case legacyMatrixContexts(current):
-		return "requires the matrix legs by name while ci.yaml carries the gate job — " +
-			"a leg the matrix no longer runs is a check nothing reports, and the pull request waits on it forever"
 	case slices.Contains(desired, contextSecurity):
 		return "does not require the " + contextSecurity + " check while security.yaml on the default branch " +
 			"carries the lane — a vulnerability reachable from a pull request must block its merge"
@@ -1201,14 +1196,10 @@ func migrationReason(current, desired []string) string {
 }
 
 // canonicalShaped reports whether every required context is canonical by
-// name: the matrix legs (the shape before the gate job existed), or the gate
-// and the security check. Only those shapes are migrated: a project's own
-// check names, or a mix, are the project's and stay preserved.
+// name: the gate and the security check. Only that shape follows the
+// workflows: a project's own check names, or a mix, are the project's and
+// stay preserved.
 func canonicalShaped(contexts []string) bool {
-	if legacyMatrixContexts(contexts) {
-		return true
-	}
-
 	if len(contexts) == 0 {
 		return false
 	}
@@ -1231,23 +1222,6 @@ func sameContexts(left, right []string) bool {
 	return slices.Equal(a, b)
 }
 
-// legacyMatrixContexts reports whether every required context is a canonical
-// matrix leg by name — "verify (<runner>)", the shape the ruleset carried
-// before the gate job existed.
-func legacyMatrixContexts(contexts []string) bool {
-	if len(contexts) == 0 {
-		return false
-	}
-
-	for _, name := range contexts {
-		if !strings.HasPrefix(name, "verify (") {
-			return false
-		}
-	}
-
-	return true
-}
-
 // canonicalContexts is the set of checks the canonical workflows on the
 // default branch report: the gate, and the security check where the security
 // lane exists. Read from the default branch, never assumed from the seed: a
@@ -1264,9 +1238,8 @@ func (a *auditor) canonicalContexts() []string {
 
 // workflowHasGate reports whether the repository's ci.yaml on the default
 // branch defines the gate job — the aggregate context the canonical ruleset
-// requires. Anything unreadable counts as no gate, which keeps the legacy
-// contexts preserved rather than moving a ruleset onto a job that may not
-// exist.
+// requires. Anything unreadable counts as no gate, which keeps the current
+// contexts rather than moving a ruleset onto a job that may not exist.
 func (a *auditor) workflowHasGate() bool {
 	return a.workflowDefinesJob(pathWorkflowCI, gateJobRE)
 }
@@ -1632,14 +1605,6 @@ func ruleOf(kind string) map[string]any {
 // Waiting for status to be reported", with nothing red to fix. One stable
 // name decouples the two: a repository can change its matrix freely and no
 // ruleset has to move.
-//
-// Migration note: ci.yaml is seeded once and is the project's own thereafter,
-// so a repository created before the gate job existed does not have it. The
-// reconcile path preserves a ruleset's existing contexts, so those repositories
-// keep working. Once their ci.yaml carries the gate job, a ruleset still naming
-// the matrix legs is drift: auditRuleset moves it onto this name (see
-// legacyMatrixContexts) — otherwise a leg the matrix drops or never had waits
-// forever as "Expected", exactly the failure the gate was introduced to end.
 func defaultRequiredChecks() []string {
 	return []string{contextGate}
 }

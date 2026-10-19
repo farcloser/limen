@@ -684,28 +684,9 @@ build has no version to stamp and moves nothing). Whenever the manifest changed 
 checksums file is missing, `fix` regenerates the checksums with the real tool (`hermetic policy
 allow .hermetic/policy.yaml`, then `hermetic update-checksum --prune`); if hermetic is
 unavailable it says so and leaves the commands. Duplicate package entries are reported, not
-resolved: only a human knows which version was meant. A repository still carrying the pin
-files where limen kept them before `.hermetic/`, at its root or under `.aqua/` with aqua's
-names, fails the rule naming them; `fix` moves them into `.hermetic/` under hermetic's names,
-removes an emptied `.aqua/`, and regenerates the checksums, which also allows the policy at
-its new path for the rest of the run. A project's own workflow still naming `.aqua/…` or the
-action's old home, `actions/setup-aqua`, is a stale reference the `workflows` rule reports,
-and the old action directory, which nothing canonical calls, is removed by `fix`. A project's
-own `.justfile` reading the shared module's `aqua_bin`, which is `hermetic_bin` now, is one
-the `justfile` rule reports by line: just refuses the whole file until it is renamed, so no
-recipe could. The
+resolved: only a human knows which version was meant. The
 canonical tool set and registry carry hermetic's names too, `.limen/hermetic.yaml` and
-`.limen/hermetic-registry.yaml`. A manifest still importing `.limen/aqua.yaml`, or naming
-`.limen/aqua-registry.yaml` as its local registry, passes for one release while the two files
-stand under their old names at the canonical content: `fix` on a Renovate branch, which
-leaves the manifest alone, keeps them so, and writes the policy with the registry under the
-path the manifest names, since the library admits a local registry only under the path the
-policy names, one per registry name; so the bump's lanes stay green; `fix` on `main`,
-the next time any pull request's `just fix` runs there, moves the import and resets the
-registry path, the import being limen's line in the manifest, and removes the old files once
-nothing names them. An old file nothing names, or one a manifest names that is missing or
-drifted, fails. The release after this one retires the old names: a manifest still on them
-fails then, naming the move.
+`.limen/hermetic-registry.yaml`.
 
 Beyond that baseline, *which* extra tools and versions a project pins is engineering
 judgment: the tool enforces the invariants, the book carries the reasoning. The same command

@@ -3,7 +3,6 @@ package rules
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -39,10 +38,6 @@ const (
 	// dotted so `./...` skips it and a project's own tools/ is its own, and a
 	// module path element may not begin with a dot, so the two differ.
 	goToolsModulePath = "tools"
-
-	// legacyGoToolsDir is where the modules lived before the move; fix moves
-	// the directory once.
-	legacyGoToolsDir = "tools"
 
 	// go.mod directive keywords, as they open a line.
 	toolDirective   = "tool "
@@ -80,13 +75,9 @@ var goToolsEverywhere = []string{
 //
 //nolint:gochecknoglobals // immutable baseline data.
 var retiredGoTools = map[string]string{
-	// Upstream's cmd/dot lost its tags and its library moved on without it.
-	"github.com/goccy/go-graphviz/cmd/dot": "github.com/forkcloser/dot/cmd/dot",
-	// The repository moved to forkcloser; the old module path is never tagged
-	// again.
-	"github.com/farcloser/godolint/cmd/godolint": "github.com/forkcloser/godolint/cmd/godolint",
 	// Forked: the recipes run forkcloser's, whose main packages live under
 	// cmd/; upstream's directive beside them builds nothing the recipes run.
+	// An entry leaves once no repository carries the directive it names.
 	"github.com/vbatts/git-validation": "github.com/forkcloser/git-validation/cmd/git-validation",
 	"github.com/google/go-licenses/v2": "github.com/forkcloser/go-licenses/cmd/go-licenses",
 }
@@ -248,10 +239,6 @@ func checkGoTools(root string) Finding {
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
 	if err != nil {
-		if _, legacyErr := readRepoFile(root, legacyGoToolsDir+slash+goModFile); legacyErr == nil {
-			return fail(ruleGoTools, legacyGoToolsDir+slash+goModFile, legacyGoToolsMessage)
-		}
-
 		return fail(
 			ruleGoTools,
 			goToolsModFile,
@@ -281,10 +268,6 @@ func checkGoTools(root string) Finding {
 		Message: goToolsPassMessage,
 	}
 }
-
-// legacyGoToolsMessage is the check wording for a tools/ from before the move.
-const legacyGoToolsMessage = legacyGoToolsDir + "/: the tools modules live in " + goToolsDir +
-	"/ now, so a project's own " + legacyGoToolsDir + "/ is its own again (limen fix moves the directory)"
 
 // isolatedGoModFile is the go.mod of an isolated tool's module.
 func isolatedGoModFile(name string) string {
@@ -489,9 +472,12 @@ func stripGoModToolDirectives(gomod string) string {
 func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 	rootMod := rootGoMod(root)
 
-	done, stopped := moveGoTools(ctx, root, rootMod)
-	if stopped != nil {
-		return *stopped
+	var done []string
+
+	if step, advisory := moveStrayGoTools(ctx, root, rootMod); advisory != nil {
+		return *advisory
+	} else if step != "" {
+		done = append(done, step)
 	}
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
@@ -607,67 +593,6 @@ func moveStrayGoTools(ctx context.Context, root string, rootMod []byte) (string,
 	}
 
 	return "moved tool directive(s) for " + strings.Join(stray, ", ") + " out of " + goModFile, nil
-}
-
-// moveGoTools runs the two moves that precede seeding: stray directives out of
-// the root go.mod, and a tools/ from before the directory's move. The steps
-// done, or the advisory that stopped it.
-func moveGoTools(ctx context.Context, root string, rootMod []byte) ([]string, *Outcome) {
-	var done []string
-
-	if step, advisory := moveStrayGoTools(ctx, root, rootMod); advisory != nil {
-		return nil, advisory
-	} else if step != "" {
-		done = append(done, step)
-	}
-
-	if step, advisory := moveLegacyGoTools(root); advisory != nil {
-		return nil, advisory
-	} else if step != "" {
-		done = append(done, step)
-	}
-
-	return done, nil
-}
-
-// moveLegacyGoTools renames a tools/ from before the move to .limen/tools/,
-// the whole directory (go.sum and the isolated modules with it), when the new
-// path carries no module yet: the step done ("" when there is nothing to
-// move), or the advisory when both carry a go.mod, which is the human's to
-// merge, or the rename failed.
-func moveLegacyGoTools(root string) (string, *Outcome) {
-	if _, err := readRepoFile(root, legacyGoToolsDir+slash+goModFile); err != nil {
-		return "", nil
-	}
-
-	if _, err := readRepoFile(root, goToolsModFile); err == nil {
-		advisory := Outcome{
-			Rule: ruleGoTools, Action: ActionAdvisory, Path: legacyGoToolsDir + slash + goModFile,
-			Message: legacyGoToolsDir + "/ and " + goToolsDir + "/ both carry a go.mod: merge " +
-				legacyGoToolsDir + "/ into " + goToolsDir + "/ by hand and delete it",
-		}
-
-		return "", &advisory
-	}
-
-	oldDir, newDir := filepath.Join(root, legacyGoToolsDir), filepath.Join(root, filepath.FromSlash(goToolsDir))
-	if err := os.MkdirAll(filepath.Dir(newDir), dirPermissions); err != nil {
-		advisory := goToolsAdvisory(goToolsModFile, "could not create "+filepath.Dir(goToolsDir)+": "+err.Error(), nil)
-
-		return "", &advisory
-	}
-
-	if err := os.Rename(oldDir, newDir); err != nil {
-		advisory := goToolsAdvisory(
-			goToolsModFile,
-			"could not move "+legacyGoToolsDir+"/ to "+goToolsDir+"/: "+err.Error(),
-			nil,
-		)
-
-		return "", &advisory
-	}
-
-	return "moved " + legacyGoToolsDir + "/ to " + goToolsDir + "/", nil
 }
 
 // goToolsGet moves the tool directives in the tools module to specs

@@ -299,9 +299,8 @@ func TestGoToolsRetiredDirective(t *testing.T) {
 	t.Parallel()
 
 	for retired, replacement := range map[string]string{
-		"github.com/goccy/go-graphviz/cmd/dot": "github.com/forkcloser/dot/cmd/dot",
-		"github.com/vbatts/git-validation":     "github.com/forkcloser/git-validation/cmd/git-validation",
-		"github.com/google/go-licenses/v2":     "github.com/forkcloser/go-licenses/cmd/go-licenses",
+		"github.com/vbatts/git-validation": "github.com/forkcloser/git-validation/cmd/git-validation",
+		"github.com/google/go-licenses/v2": "github.com/forkcloser/go-licenses/cmd/go-licenses",
 	} {
 		t.Run(retired, func(t *testing.T) {
 			t.Parallel()
@@ -713,69 +712,4 @@ func canonicalGoVersion(t *testing.T) string {
 	_, version := canonicalPin(t, "golang/go")
 
 	return strings.TrimPrefix(version, "go")
-}
-
-// TestGoToolsLegacyDir: a tools/ from before the move fails the check naming
-// the new path, and fix moves the whole directory there — go.sum and the
-// isolated modules with it, the project's own directives untouched — then
-// passes; a repository that carries both is the human's to merge.
-func TestGoToolsLegacyDir(t *testing.T) {
-	t.Parallel()
-
-	files := compliantFiles()
-	legacy := files[".limen/tools/go.mod"] + "\ntool example.com/the/projects/own\n"
-	delete(files, ".limen/tools/go.mod")
-	files["tools/go.mod"] = legacy
-	files["tools/go.sum"] = "example.com/the/projects/own v1.0.0 h1:x=\n"
-	files["tools/golangci-lint/go.mod"] = "module tools/golangci-lint\n\ngo 1.26\n"
-	dir := writeRepo(t, files)
-
-	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools")
-	if f.OK() || f.Path != "tools/go.mod" || !strings.Contains(f.Message, ".limen/tools/") {
-		t.Fatalf("a legacy tools/ should fail naming the new path, got %+v", f)
-	}
-
-	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
-		"gotools",
-	)
-	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "moved tools/ to .limen/tools/") {
-		t.Fatalf("fix should move the directory, got %s (%s)", outcome.Action, outcome.Message)
-	}
-
-	for _, rel := range []string{".limen/tools/go.mod", ".limen/tools/go.sum", ".limen/tools/golangci-lint/go.mod"} {
-		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {
-			t.Errorf("%s should exist after the move: %v", rel, err)
-		}
-	}
-
-	if _, err := os.Stat(filepath.Join(dir, "tools")); !os.IsNotExist(err) {
-		t.Errorf("tools/ should be gone after the move, got %v", err)
-	}
-
-	moved, _ := os.ReadFile(filepath.Join(dir, ".limen", "tools", "go.mod"))
-	if string(moved) != legacy {
-		t.Errorf("the moved go.mod should be the project's own, byte for byte:\n%s", moved)
-	}
-
-	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {
-		t.Errorf("the moved module should pass, got %+v", f)
-	}
-
-	// Both present: nothing is moved or merged by the tool.
-	files = compliantFiles()
-	files["tools/go.mod"] = legacy
-	dir = writeRepo(t, files)
-
-	outcome = outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
-		"gotools",
-	)
-	if outcome.Action != rules.ActionAdvisory || !strings.Contains(outcome.Message, "both carry a go.mod") {
-		t.Fatalf("both directories present should end advisory, got %s (%s)", outcome.Action, outcome.Message)
-	}
-
-	if _, err := os.Stat(filepath.Join(dir, "tools", "go.mod")); err != nil {
-		t.Errorf("a tools/ beside .limen/tools/ should be left alone: %v", err)
-	}
 }
