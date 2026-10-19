@@ -76,28 +76,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/compress/v0.2.0/compress_0.2.0_darwin_arm64.tar.gz",
-      "checksum": "525F74A73C6D8B17AD88284D272A867849D621417A6F1347F3322C23D5CE951B",
+      "id": "github_release/github.com/forkcloser/compress/v0.3.0/compress_0.3.0_darwin_arm64.tar.gz",
+      "checksum": "77FBC3476C7DE1B19089E0CB575250909639E0BB78B15A3349D7F0F58FAB1DD2",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/compress/v0.2.0/compress_0.2.0_linux_amd64.tar.gz",
-      "checksum": "448E9AEE220B8A1C19468D588E7C5FFFAF4510013AE7F8097364E5D8F412A0C4",
+      "id": "github_release/github.com/forkcloser/compress/v0.3.0/compress_0.3.0_linux_amd64.tar.gz",
+      "checksum": "3B327B918DE0D27BD33D92032A948FBEED37ABD85CEF056723883B7034D5804B",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/compress/v0.2.0/compress_0.2.0_linux_arm64.tar.gz",
-      "checksum": "E76FEF2721CC96CE83B469C72D022E8D9B77C2DFEEAE074D965C8FD57D0B08EC",
+      "id": "github_release/github.com/forkcloser/compress/v0.3.0/compress_0.3.0_linux_arm64.tar.gz",
+      "checksum": "E2AC67733FF07CC2EFB06191CC6F8E42A521AAB725253D3A5398122ABCD4C2C4",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/compress/v0.2.0/compress_0.2.0_windows_amd64.tar.gz",
-      "checksum": "D3F7369828E4AE470FBC2439129BFA48A03EA5047AFCDBA673BE16D991D7373A",
+      "id": "github_release/github.com/forkcloser/compress/v0.3.0/compress_0.3.0_windows_amd64.tar.gz",
+      "checksum": "9B50319BFB0BF51FA0A54F4763074173CF0CAEE6D0CCD64F03DC0F65A0865BC6",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/compress/v0.2.0/compress_0.2.0_windows_arm64.tar.gz",
-      "checksum": "1C2FAECCFBBCAF8FD00EC8B56AAF901BD158259C06C2CB2FE00584A8EF060E07",
+      "id": "github_release/github.com/forkcloser/compress/v0.3.0/compress_0.3.0_windows_arm64.tar.gz",
+      "checksum": "61453B7C272ECD834C9C01A26479224BD08D4B8AB3C65C327D99087D3EA50974",
       "algorithm": "sha256"
     },
     {

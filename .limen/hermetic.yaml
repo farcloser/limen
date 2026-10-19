@@ -42,7 +42,7 @@ packages:
   # tar, gtar, xz, gzip, zstd, zip and unzip, one pure-Go build on every
   # platform, so a build script unpacks and packs with the same program
   # everywhere instead of the host's (the registry entry says more).
-  - name: forkcloser/compress@v0.2.0
+  - name: forkcloser/compress@v0.3.0
     registry: local
   # darwin/arm64 only. Its `docker` link shadows the machine's Docker on the
   # hermetic PATH there; aqua skips the package everywhere else.
