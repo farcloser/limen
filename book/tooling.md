@@ -367,7 +367,6 @@ Bootstrap, from the repo root:
 hermetic policy allow .hermetic/policy.yaml   # explicit trust gate (one-time per machine)
 
 hermetic update-checksum   # generate .hermetic/aqua-checksums.json for the binary tools
-hermetic install -l        # link every pinned tool (each downloads lazily on first use)
 
 git add .hermetic renovate.json .github/workflows/update-aqua-checksum.yaml .limen/hermetic-registry.yaml
 git commit --message "tooling: pin project CLIs through hermetic"
@@ -384,11 +383,8 @@ cd <repo>
 # Authorize the project's local registry (one-time per machine):
 hermetic policy allow .hermetic/policy.yaml
 
-# Link the pinned tools (each downloads lazily on first use, verified against
-# the committed checksums at that moment):
-hermetic install -l
-
-# Tools now resolve to the project's pinned versions:
+# Tools now resolve to the project's pinned versions (each downloads lazily on
+# first use, verified against the committed checksums at that moment):
 just --version
 go version
 ```
@@ -400,7 +396,14 @@ manifest and admits it only while its record under the root's store matches, the
 library keeps for a policy found beside a config (the one policy trusted on sight is the
 toolset's own, in the root). What then just works: byte-identical tool versions for every
 developer and CI, since `.hermetic/hermetic.yaml` and `.hermetic/aqua-checksums.json` are
-committed; lazy install means `hermetic install -l` is warm-up, not a prerequisite.
+committed. The links are nobody's step: a tool's link in the root's `bin` is how the shell
+finds it at all, and a fresh root, or a tool a merged pull request added, has none until an
+install plants one, so every recipe run plants the missing links first (`main.just`, the
+link-only install CI's setup action also runs: no download, no policy, milliseconds, and no
+network once the root has fetched the registries; a root that never has needs it once, and
+offline plants nothing until the first tool fails loudly). A tool outside the recipes,
+`just --version` above from a bare shell, finds
+its link once any recipe has run in the checkout, or after a `hermetic install -l` by hand.
 
 ---
 
@@ -465,7 +468,7 @@ unattended bumps.
 # 2. Refresh the checksum for the new version:
 hermetic update-checksum
 # 3. Install and verify:
-hermetic install -l
+hermetic install
 golangci-lint version
 # 4. Commit BOTH files together:
 git add .hermetic/hermetic.yaml .hermetic/aqua-checksums.json
