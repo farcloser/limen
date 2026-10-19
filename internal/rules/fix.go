@@ -984,14 +984,17 @@ func seededAquaManifest(selfVersion string) (seed, message string) {
 }
 
 // regenerateAquaChecksums authorizes the (content-pinned) policy, then has
-// hermetic rebuild aqua-checksums.json for whatever the manifest now pins;
-// hermetic's own walk finds the manifest from the repository root.
+// hermetic rebuild aqua-checksums.json for whatever the manifest now pins.
+// The manifest is named with -c rather than left to hermetic's walk: on a
+// runner the setup action exports HERMETIC_CONFIG for the checkout, which
+// outranks the walk, and a fix run on another tree there (a test's fixture)
+// would otherwise regenerate the checkout's file.
 func regenerateAquaChecksums(ctx context.Context, root string) error {
 	// --log-level warn: on failure the output lands in the advisory message, and
 	// the per-package INFO lines would drown the actual error there.
 	for _, args := range [][]string{
 		{"--log-level", "warn", "policy", "allow", aquaPolicyFile},
-		{"--log-level", "warn", "update-checksum", "--prune"},
+		{"--log-level", "warn", "-c", aquaManifestFile, "update-checksum", "--prune"},
 	} {
 		// hermetic on the PATH; args come from the fixed lists above.
 		cmd := exec.CommandContext(ctx, hermeticBinary, args...) // #nosec G204 -- see above.

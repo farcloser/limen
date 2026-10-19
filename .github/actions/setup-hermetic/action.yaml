@@ -133,7 +133,12 @@ runs:
       # tool is pulled when first run, verified against the committed
       # checksums, so the steps after this one run the repository's pins by
       # name, `go` included, which the cache action's restore resolves the
-      # Go caches' paths with.
+      # Go caches' paths with. HERMETIC_CONFIG names the manifest outright
+      # for every later step: a link resolves its name by walking up from
+      # the working directory, so a step that builds in RUNNER_TEMP, or
+      # anywhere outside the checkout, would find no pins there; with the
+      # variable, the job's one checkout decides the pins wherever a step
+      # runs. A command's own -c still wins over it.
       shell: bash
       run: |
         if [ ! -f "${HERMETIC_ROOT_DIR}/policy.yaml" ]; then
@@ -141,3 +146,4 @@ runs:
         fi
         hermetic policy allow .hermetic/policy.yaml
         hermetic install -l
+        echo "HERMETIC_CONFIG=${PWD}/.hermetic/hermetic.yaml" >>"$GITHUB_ENV"

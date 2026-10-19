@@ -127,9 +127,14 @@ func installStubs() (string, error) {
 // (silent success) and `update-checksum`, which writes the stub checksums
 // into the working directory (remediation sets cmd.Dir to the repo root).
 func runAquaStub() int {
-	for _, arg := range os.Args[1:] {
+	args := os.Args[1:]
+	for _, arg := range args {
 		if arg == "update-checksum" {
-			if err := os.WriteFile(".hermetic/aqua-checksums.json", []byte(stubChecksums), 0o600); err != nil {
+			if err := os.WriteFile(
+				filepath.Join(stubManifestDir(args), "aqua-checksums.json"),
+				[]byte(stubChecksums),
+				0o600,
+			); err != nil {
 				fmt.Fprintf(os.Stderr, "aqua stub: %v\n", err)
 
 				return 1
@@ -138,6 +143,26 @@ func runAquaStub() int {
 	}
 
 	return 0
+}
+
+// stubManifestDir is the directory of the manifest the fake serves, by the
+// binary's precedence (measured): the file -c names, else HERMETIC_CONFIG's
+// when set, else the working directory's .hermetic/hermetic.yaml. The real
+// update-checksum writes the checksums beside the manifest it read, so the
+// fake does too: that is what tells a run on the right tree from a run
+// redirected by a job-wide HERMETIC_CONFIG.
+func stubManifestDir(args []string) string {
+	for index, arg := range args {
+		if arg == "-c" && index+1 < len(args) {
+			return filepath.Dir(args[index+1])
+		}
+	}
+
+	if config := os.Getenv("HERMETIC_CONFIG"); config != "" {
+		return filepath.Dir(config)
+	}
+
+	return ".hermetic"
 }
 
 // resolved reports whether an outcome's action counts as the rule resolved,
