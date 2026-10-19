@@ -5,18 +5,21 @@ facility: klog, logr, logrus, zap, zerolog and the slog wrappers are not taken, 
 as in a new program
 ([dependencies Go](./dependencies-go.md#command-lines-and-loggers-the-standard-library-first)).
 
-## A library writes nothing; a command speaks once, in main
+## A library logs through slog, never through an output of its own; a command sets it up once, in main
 
-**A library package imports no logger and writes nothing to standard error.** Not behind
-a verbosity flag, not through a package-global logger a command configures: what a
-library has to say is a returned error or a returned value, and a consumer that wants a
-trace adds it at the call site, where it knows the context. A debug dump in a decoder is
-the upstream smell to remove on fork: xz's `reader.go` and `lzma/reader2.go` printed
-headers and chunk headers through upstream's own `internal/xlog` under `-vv`, with the
-format's `String` methods existing only to feed it
-(https://github.com/forkcloser/xz/pull/96 deleted the package, the dumps and the
-methods). The survey that preceded it found no other library package of the forks
-importing any logger; that is the state to keep.
+**A library package logs through `log/slog`, and through nothing else.** Through the
+default logger, or through a `*slog.Logger` the caller injects, at the levels its records
+deserve, debug for the trace a maintainer wants and nothing louder for what is not the
+operator's business; the application installs the handler, the level and the destination,
+once, and a library never does. What a library never does is choose an output of its own:
+`fmt.Printf` to standard output or error, the standard `log` package, a package of its own
+with its own writer and format. That is the upstream smell to remove on fork: xz's
+`reader.go` and `lzma/reader2.go` printed headers and chunk headers through upstream's own
+`internal/xlog` under `-vv`, with the format's `String` methods existing only to feed it
+(https://github.com/forkcloser/xz/pull/96 deleted the package, the dumps and the methods);
+a trace of that kind, worth keeping, is a `slog.Debug` record the application's handler
+shows or drops. What a library has to say to its caller is still a returned error or a
+returned value: a log record is for the operator, never a substitute for either.
 
 **A command either logs or prints, and knows which.** A tool with diagnostics at levels
 (a linter, a server, anything a `--log-level` flag makes sense for) uses `log/slog`, and
