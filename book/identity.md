@@ -149,7 +149,9 @@ links into took git down in every session
 **The sessions' tool root.** Everything a session installs or caches lives under one
 directory of its own, `~/.local/share/limen-agent`, created by `limen-install-agent`: a
 hermetic root of their own (`HERMETIC_ROOT_DIR`, holding the toolset's pins copied from the
-machine's root and a store of its own), a home for the verifiers (`LIMEN_AGENT_HOME`:
+machine's root, a `bin/hermetic` that is a symlink to the machine's binary, which every tool
+link hermetic plants in that `bin` points at and which follows the machine's nightly bump
+where a copy would not, and a store of its own), a home for the verifiers (`LIMEN_AGENT_HOME`:
 slsa-verifier keeps its TUF cache under `$HOME/.sigstore` and reads no other variable,
 [known upstream bugs](./upstream.md)), the Go module and build caches, cargo and the XDG
 cache. The sandbox's write list is the directories the installer was given plus that root;
