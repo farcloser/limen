@@ -684,7 +684,10 @@ names, fails the rule naming them; `fix` moves them into `.hermetic/` under herm
 removes an emptied `.aqua/`, and regenerates the checksums, which also allows the policy at
 its new path for the rest of the run. A project's own workflow still naming `.aqua/…` or the
 action's old home, `actions/setup-aqua`, is a stale reference the `workflows` rule reports,
-and the old action directory, which nothing canonical calls, is removed by `fix`. The
+and the old action directory, which nothing canonical calls, is removed by `fix`. A project's
+own `.justfile` reading the shared module's `aqua_bin`, which is `hermetic_bin` now, is one
+the `justfile` rule reports by line: just refuses the whole file until it is renamed, so no
+recipe could. The
 canonical tool set and registry carry hermetic's names too, `.limen/hermetic.yaml` and
 `.limen/hermetic-registry.yaml`. A manifest still importing `.limen/aqua.yaml`, or naming
 `.limen/aqua-registry.yaml` as its local registry, passes for one release while the two files

@@ -502,12 +502,58 @@ func checkJustfile(root string) Finding {
 		return fail(rule, stray[0], strayJustModulesMessage(stray))
 	}
 
+	if renamed := renamedJustVariables(name, string(data)); len(renamed) > 0 {
+		return fail(rule, name, renamedJustVariablesMessage(renamed))
+	}
+
 	return Finding{
 		Rule:    rule,
 		Status:  StatusOK,
 		Path:    name,
 		Message: ".justfile carries the shared-baseline import; the shared just modules match the canonical baseline",
 	}
+}
+
+// renamedJustVariables lists, as "file:line: old → new", the shared module's
+// variables the project's .justfile reads under a name limen renamed. The
+// import is flat, so a root recipe or re-export may read main.just's
+// variables; a rename there is a reference the project has to follow, and
+// just refuses the whole file until it does ("variable not defined"), which
+// no recipe can report since none runs. Comments are not references.
+func renamedJustVariables(name, data string) []string {
+	var renamed []string
+
+	for index, line := range strings.Split(data, "\n") {
+		// Once per line and name: a PATH expression reads the variable in
+		// both branches of its conditional.
+		seen := map[string]bool{}
+
+		for _, match := range renamedJustVarRE.FindAllStringSubmatch(stripYAMLComment(line), -1) {
+			if seen[match[1]] {
+				continue
+			}
+
+			seen[match[1]] = true
+			renamed = append(renamed, fmt.Sprintf("%s:%d: %s → %s", name, index+1, match[1], renamedJustVars[match[1]]))
+		}
+	}
+
+	return renamed
+}
+
+// renamedJustVarRE finds, as whole words, the main.just variables limen
+// renamed with the move to hermetic; renamedJustVars names what each is now.
+var renamedJustVarRE = regexp.MustCompile(`\b(aqua_bin)\b`)
+
+var renamedJustVars = map[string]string{ //nolint:gochecknoglobals // immutable rename table.
+	"aqua_bin": "hermetic_bin",
+}
+
+// renamedJustVariablesMessage names them; the file is the project's, so the
+// edit is its own.
+func renamedJustVariablesMessage(renamed []string) string {
+	return "references to shared just variables limen renamed (" + strings.Join(renamed, "; ") +
+		"): update them by hand, the file is the project's own; just refuses it as it is (variable not defined)"
 }
 
 // legacyJustfileName is the root justfile's former name, matched
