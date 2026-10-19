@@ -54,7 +54,7 @@ nothing under `$HOME`. One that writes to `$HOME` dies at its first write, `brew
 warning and moves on, and nothing looks wrong: limen's formula carried one for months that
 never ran once, and the machine's global pin never moved past the first install. A step that
 writes the user's home is the user's to run, from a shell, and a formula whose whole job was
-that step has no reason to exist: limen's was removed, and the machine toolset is aqua's.
+that step has no reason to exist: limen's was removed, and the machine toolset is hermetic's.
 
 **Forks of upstream formulas** are refreshed from a **pinned commit** of the upstream tap
 (homebrew-core), never from its default branch: the refresh script carries the commit, a

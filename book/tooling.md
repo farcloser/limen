@@ -1,10 +1,12 @@
 # Project tooling
 
 Every Farcloser repository pins its build and CI tooling — `just`, `shellcheck`, `go`, the
-Go-built analyzers, and the rest — through [aqua](https://aquaproj.github.io/) and the
+Go-built analyzers, and the rest — through [aqua](https://aquaproj.github.io/), run as
+[hermetic](https://github.com/forkcloser/hermetic), the toolset's own build of it, and the
 `.limen/tools/go.mod` directives. Mandatory, with no exception, like the
 [mandatory files](./mandatory-files.md): a repository declares its tools in a committed
-`.aqua/aqua.yaml`, and every human and agent who touches it gets the same verified versions.
+`.hermetic/hermetic.yaml`, and every human and agent who touches it gets the same verified
+versions.
 
 ## The requirements
 
@@ -28,7 +30,7 @@ requirements:
 | Axis | Nix | aqua |
 |---|---|---|
 | Exact **per-tool** version pin | Clunky: one `nixpkgs` commit pins *everything*; independent versions need separate inputs | **Native**: `owner/repo@version` |
-| Per-project | Yes (flake) | Yes (`.aqua/aqua.yaml`) |
+| Per-project | Yes (flake) | Yes (`.hermetic/hermetic.yaml`) |
 | Unifies Go + non-Go tools | Yes, through a heavy apparatus | Yes, one manifest |
 | Security model | Hermetic, source-hash-pinned builds (strongest for *source*) | Checksum + cosign/SLSA for binaries; GOSUMDB for the `go.mod` tools |
 | Update automation | Manual, multi-input juggling | **Renovate-native**, per-tool PRs |
@@ -44,13 +46,40 @@ suffix.
 ## Decision: aqua
 
 aqua matches every requirement directly: exact per-tool pinning is native; per-project
-through a committed `.aqua/aqua.yaml`; binary-release tools are checksum-verified and, where
-the vendor publishes them, cosign/SLSA/attestation-verified, and the Go-built tools fall back
-to **GOSUMDB**, the trust root the old `Makefile` already relied on, now pinned and
+through a committed `.hermetic/hermetic.yaml`; binary-release tools are checksum-verified and,
+where the vendor publishes them, cosign/SLSA/attestation-verified, and the Go-built tools fall
+back to **GOSUMDB**, the trust root the old `Makefile` already relied on, now pinned and
 declarative; Renovate opens per-tool bump PRs and a checksum-refresh workflow keeps
-`.aqua/aqua-checksums.json` in sync. The one tradeoff accepted: Go-only tools are not
+`.hermetic/aqua-checksums.json` in sync. The one tradeoff accepted: Go-only tools are not
 aqua-checksum-verified (GOSUMDB instead of a pinned binary checksum). If hermetic rebuild
 verification of those tools ever becomes the paramount axis, revisit Nix for that subset.
+
+### aqua as hermetic
+
+The toolset runs aqua as a library behind a binary of its own,
+[hermetic](https://github.com/forkcloser/hermetic) (its
+[design](https://github.com/forkcloser/hermetic/blob/main/docs/design.md)): the library's
+controllers, pinned by `go.mod` and moved by Renovate, behind a command line that exposes
+what the toolset calls (`install`, `update`, `update-checksum`, `generate`, `which`,
+`policy allow|deny`, `root-dir`, `version`) and nothing else. Three things of ours around it.
+**A root of its own**: `HERMETIC_ROOT_DIR`, or the platform's data directory for the name
+(`~/Library/Application Support/hermetic`, `${XDG_DATA_HOME:-~/.local/share}/hermetic`,
+`%LOCALAPPDATA%\hermetic`), holding the binary in `bin/`, the machine toolset's pins
+(`hermetic.yaml`, `registry.yaml`, `policy.yaml`) beside it, and the library's own root in
+`store/`; the library's three paths and every knob it has are derived from that root and
+pinned, its settings file never read, every `AQUA_*` variable scrubbed, so a shell's own aqua,
+if it has one, shares nothing with the toolset. **One link per tool**: after every install
+the root's `bin` mirrors the names the library exposed, each a link to `hermetic` itself,
+which, invoked under a tool's name, resolves it (the repository's `.hermetic/hermetic.yaml`
+found by its own walk upward from the working directory, then the root's pins), installs it
+on first use, and runs it with the shell's environment. That `bin` is the one `PATH` entry a
+shell or a recipe needs. **Five variables**, the only `HERMETIC_*` it reads, any other
+refused by name: `HERMETIC_ROOT_DIR`, `HERMETIC_CONFIG` (a config outright, like `-c`),
+`HERMETIC_NO_GLOBAL_CONFIG=true` (the root's pins left out, which the `tools` recipes use to
+run on a project's own pins alone), `HERMETIC_GITHUB_TOKEN` (the one token it hands the
+library and the verifiers; the shell's `GITHUB_TOKEN` never reaches them) and
+`HERMETIC_LOG_LEVEL`. aqua's own finder names (`aqua.yaml`, `.aqua/aqua.yaml`) are not
+looked for: a stock aqua finds no pins in our repositories, and only hermetic resolves them.
 
 <a id="go-source-analyzers-are-gomod-tools"></a>
 ### Go-built tools are `go.mod` tools
@@ -71,7 +100,7 @@ its source fixed by module hash and verified against the Go checksum database. S
 tool is a tool directive: the analyzers, whose correctness also depends on the compiler
 matching the toolchain; the tools whose upstream ships no binary (`git-validation`,
 `godolint`, `dot`); and `golangci-lint`, which embeds Go's type checker and, built with the
-toolchain it analyzes, can no longer skew from it. What stays in `.aqua/aqua.yaml` is what
+toolchain it analyzes, can no longer skew from it. What stays in `.hermetic/hermetic.yaml` is what
 nothing here compiles: tools in other languages; limen's own binaries, `limen` and
 `limen-lint-go`, one release whose checksums and signature every repository pins (built by
 the release workflow with the pinned toolchain, and neither loads Go source); and the Go
@@ -135,7 +164,7 @@ tool, aqua packages included), and the recipes tell a Go package from an aqua sl
 first path element — a module root is a host and carries a dot, a GitHub owner cannot.
 Underneath they run `go -C .limen/tools get -tool <pkg>@<version>` (`@latest`, `@none`) and `go -C
 tools mod tidy`, then build the tool into `.build/tools/`, the Go counterpart of the full
-`aqua install` the aqua recipes end with: a bad pin fails in the recipe, not at first use.
+`hermetic install` the aqua recipes end with: a bad pin fails in the recipe, not at first use.
 
 ## Tools without upstream binaries: the sourcing ladder
 
@@ -221,16 +250,17 @@ against the attestations API.
 Works the same on **macOS** and **Linux**. Machine setup is one bootstrap, the
 [`limen-install`](https://github.com/farcloser/limen-install) script:
 
-1. Installs **aqua** via the pinned, checksum-verified official installer, into aqua's own
-   root (`${AQUA_ROOT_DIR:-~/.local/share/aquaproj-aqua}/bin`). That directory is the one
-   every repo's hermetic `PATH` points at, so `aqua` — and every tool it proxies — resolves
-   inside recipes by construction. **Never `brew install aqua`**: Homebrew's bin directory is
-   not on the hermetic `PATH`, so a brew-installed aqua works in your shell and breaks every
-   recipe.
-2. Adds that directory to your shell rc and exports `AQUA_GLOBAL_CONFIG`.
-3. Writes the **global aqua config** (`~/.config/aqua/aqua.yaml`), which pins exactly one
-   tool: `limen` itself.
-4. Runs `aqua i -a`, after which **both `aqua` and `limen` are available globally**.
+1. Installs **hermetic** from its release, verified against the release's `checksums.txt`
+   (whose sha256 the script pins) and GitHub's build provenance, into its root's `bin`
+   (`HERMETIC_ROOT_DIR`, or the platform default above). That directory is the one every
+   repo's hermetic `PATH` points at, so `hermetic` — and every tool it links — resolves inside
+   recipes by construction. **Never a `brew install aqua`** for the toolset: Homebrew's bin
+   directory is not on the hermetic `PATH`, and a shell's own aqua shares nothing with it.
+2. Adds that directory to your shell rc, one `PATH` line and nothing else.
+3. Writes the **toolset's pins** into the root (`hermetic.yaml`, `registry.yaml`,
+   `policy.yaml`): `limen` itself, and on macOS/arm64 the OpenSSH fork and taciturn.
+4. Runs `hermetic install -a`, after which **`hermetic` and `limen` are available globally**,
+   `limen` as a link in the root's `bin`.
 
 Run it from a clone:
 
@@ -258,25 +288,27 @@ up so a coding agent can commit and push as its own identity
 
 ## Scaffolding a new project
 
-aqua's own three files live in `.aqua/`, one of the directories aqua searches (a local
-registry path inside them is relative to `.aqua/`, hence `../.limen/…`). This repository's
-own files ([`.aqua/aqua.yaml`](../.aqua/aqua.yaml), [`.limen/aqua.yaml`](../.limen/aqua.yaml),
+The project's three pin files live in `.hermetic/`, where hermetic's own walk finds them (a
+local registry path inside them is relative to `.hermetic/`, hence `../.limen/…`). The
+manifest and the policy carry hermetic's names; the checksums keep aqua's, the library
+writing that file beside the config under a fixed name. This repository's own files
+([`.hermetic/hermetic.yaml`](../.hermetic/hermetic.yaml), [`.limen/aqua.yaml`](../.limen/aqua.yaml),
 [`.limen/aqua-registry.yaml`](../.limen/aqua-registry.yaml),
-[`.aqua/aqua-policy.yaml`](../.aqua/aqua-policy.yaml)) are the canonical reference.
+[`.hermetic/policy.yaml`](../.hermetic/policy.yaml)) are the canonical reference.
 
 ```
 repo/
-├── .aqua/
-│   ├── aqua.yaml                          # the manifest: the limen pin, the import, the project's own tools
+├── .hermetic/
+│   ├── hermetic.yaml                      # the manifest: the limen pin, the import, the project's own tools
 │   ├── aqua-checksums.json                # GENERATED — commit it
-│   └── aqua-policy.yaml                   # authorizes the local registry
+│   └── policy.yaml                        # authorizes the local registry
 ├── .limen/aqua.yaml                              # the canonical tool set, imported by the manifest
 ├── .limen/aqua-registry.yaml                     # local registry: farcloser/limen and the coreutils names
 ├── renovate.json                          # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
 
-What `.aqua/aqua.yaml` must carry; the manifest is **subset-pinned** ([enforcement](#enforcement)):
+What `.hermetic/hermetic.yaml` must carry; the manifest is **subset-pinned** ([enforcement](#enforcement)):
 
 - The **canonical `checksum:` section, byte for byte**: `enabled: true` and
   `require_checksum: true` mean a missing or mismatched checksum **fails** the install, and
@@ -290,7 +322,7 @@ What `.aqua/aqua.yaml` must carry; the manifest is **subset-pinned** ([enforceme
   the versions the pinned limen release carries: by default the canonical tools move with
   limen. Above the import, the project's own packages: extras, and **overrides**, a
   canonical tool at a version of the project's choosing, which Renovate then bumps in the
-  project. aqua takes a package's first declaration, so an entry above the import wins and
+  project. The library takes a package's first declaration, so an entry above the import wins and
   the same entry below it would be silently shadowed: the import closes the list (`limen
   fix` moves it there). A package is never listed twice, and never a **retired** one (the
   Go-built tools, now in `.limen/tools/go.mod`); `limen fix` never edits the project's entries, so a
@@ -301,7 +333,7 @@ What `.aqua/aqua.yaml` must carry; the manifest is **subset-pinned** ([enforceme
   `limen fix` seeds the pin once, from limen's own manifest (the version the running release
   was built and tested with), and Renovate bumps it per repository from then on, in the aqua
   group. The seed is made on `main`, by the owner (`just do tools add golang/go <version>`,
-  or `limen fix` there), never on a Renovate branch: Renovate renders `.aqua/aqua.yaml` on
+  or `limen fix` there), never on a Renovate branch: Renovate renders `.hermetic/hermetic.yaml` on
   every run, so a line the converge added there was removed, added and removed again, the
   branch force-pushed every minute (forkcloser/curl#50, seventeen times); on a Renovate
   branch `limen fix` leaves that file alone and `limen check` names what `main` needs. A
@@ -312,18 +344,18 @@ What `.aqua/aqua.yaml` must carry; the manifest is **subset-pinned** ([enforceme
 
 Why the import: Renovate rebuilds a branch from scratch whenever the package list of the
 file it updates differs from the base branch's. If a limen bump rewrote that list in
-`.aqua/aqua.yaml`, the checksum workflow's `limen fix` and Renovate would undo each other on
+`.hermetic/hermetic.yaml`, the checksum workflow's `limen fix` and Renovate would undo each other on
 every push. With the canonical tools in the imported file, a limen bump changes one line of
 the manifest, the limen pin, and fix never moves its list. When limen retires a tool a
 repository still pins, the bump's checksum workflow fails on the retired entry, and deleting
 it is the owner's edit on that pull request.
 
-> **Content-pinned files.** `.limen/aqua.yaml`, `.aqua/aqua-policy.yaml` and
+> **Content-pinned files.** `.limen/aqua.yaml`, `.hermetic/policy.yaml` and
 > `.limen/aqua-registry.yaml` are canonical everywhere: `limen` requires them to match its
 > embedded copies byte for byte, and `limen fix` overwrites drift. Renovate leaves them alone
 > outside limen; in limen it bumps the canonical tools, which every repository receives with
-> its next limen version unless it overrides one. `.aqua/aqua-checksums.json` is
-> **generated, never hand-edited**: `limen fix` regenerates it (`aqua update-checksum`,
+> its next limen version unless it overrides one. `.hermetic/aqua-checksums.json` is
+> **generated, never hand-edited**: `limen fix` regenerates it (`hermetic update-checksum`,
 > which follows the import) whenever it changes the manifest or the tool set, or the file is
 > missing. The catalog of local-registry packages is shared: to add one, it goes into limen's
 > canonical registry, not a single repo's. A Go-built tool never qualifies: it is a
@@ -332,53 +364,53 @@ it is the owner's edit on that pull request.
 Bootstrap, from the repo root:
 
 ```bash
-aqua policy allow .aqua/aqua-policy.yaml   # explicit trust gate (one-time per machine)
+hermetic policy allow .hermetic/policy.yaml   # explicit trust gate (one-time per machine)
 
-aqua update-checksum      # generate .aqua/aqua-checksums.json for the binary tools
-aqua install --only-link  # link every pinned tool (each downloads lazily on first use)
+hermetic update-checksum   # generate .hermetic/aqua-checksums.json for the binary tools
+hermetic install -l        # link every pinned tool (each downloads lazily on first use)
 
-git add .aqua renovate.json .github/workflows/update-aqua-checksum.yaml .limen/aqua-registry.yaml
-git commit --message "tooling: pin project CLIs via aqua"
+git add .hermetic renovate.json .github/workflows/update-aqua-checksum.yaml .limen/aqua-registry.yaml
+git commit --message "tooling: pin project CLIs through hermetic"
 ```
 
 ---
 
-## Cloning an existing aqua project
+## Cloning an existing project
 
 ```bash
 git clone <repo-url>
 cd <repo>
 
 # Authorize the project's local registry (one-time per machine):
-aqua policy allow .aqua/aqua-policy.yaml
+hermetic policy allow .hermetic/policy.yaml
 
 # Link the pinned tools (each downloads lazily on first use, verified against
 # the committed checksums at that moment):
-aqua install --only-link
+hermetic install -l
 
 # Tools now resolve to the project's pinned versions:
 just --version
 go version
 ```
 
-Two conditions: aqua installed (above), and `aqua policy allow` once per machine, because the
-project ships a local registry that aqua does not trust until authorized. No environment
-variable is needed: aqua discovers an allowed `.aqua/aqua-policy.yaml` at the git repository
-root (`AQUA_POLICY_CONFIG` is for policies with no git root to be found from — the
-machine-global one carrying `limen`, which `limen-install` wires into the rc). What then just
-works: byte-identical tool versions for every developer and CI, since `.aqua/aqua.yaml` and
-`.aqua/aqua-checksums.json` are committed; lazy install means `aqua install --only-link` is
-warm-up, not a prerequisite.
+Two conditions: hermetic installed (above), and `hermetic policy allow` once per machine,
+because the project ships a local registry that is not trusted until authorized. No
+environment variable is needed: hermetic's walk finds `.hermetic/policy.yaml` beside the
+manifest and admits it only while its record under the root's store matches, the gate the
+library keeps for a policy found beside a config (the one policy trusted on sight is the
+toolset's own, in the root). What then just works: byte-identical tool versions for every
+developer and CI, since `.hermetic/hermetic.yaml` and `.hermetic/aqua-checksums.json` are
+committed; lazy install means `hermetic install -l` is warm-up, not a prerequisite.
 
 ---
 
 ## Day-to-day changes — the `just do tools` recipes
 
 The everyday operations — add, pin to a version, bump, remove — are recipes in the `tools`
-module, so nobody remembers the aqua incantation or forgets the checksum step. `add`, `set`
-and `remove` take the **`owner/repo`** as it appears in `.aqua/aqua.yaml`; `update` takes the
-**command name** (the executable, since it delegates to `aqua update`, which resolves
-commands). Each leaves `.aqua/aqua.yaml` **and** `.aqua/aqua-checksums.json` updated
+module, so nobody remembers the incantation or forgets the checksum step. `add`, `set`
+and `remove` take the **`owner/repo`** as it appears in `.hermetic/hermetic.yaml`; `update` takes the
+**command name** (the executable, since it delegates to `hermetic update`, which resolves
+commands). Each leaves `.hermetic/hermetic.yaml` **and** `.hermetic/aqua-checksums.json` updated
 together, ready to commit. They are project commands: they edit the project's own pins and
 never the imported `.limen/aqua.yaml`. Adding a canonical tool pins it at the project's
 version, above the import; removing that pin falls back to limen's version; `update` refuses
@@ -393,28 +425,29 @@ just do tools remove junegunn/fzf                    # remove a tool entirely
 ```
 
 The mutating recipes (`add`, `set`, `update`) end by refreshing the checksum and performing
-a **full** `aqua install`, deliberately not link-only: links verify nothing, so only a real
-install proves the new pin downloads and verifies, and a bad pin fails inside the recipe
+a **full** `hermetic install`, deliberately not link-only: links verify nothing, so only a
+real install proves the new pin downloads and verifies, and a bad pin fails inside the recipe
 instead of at first tool use (`remove` ends at the checksum refresh). Commit both files
-afterward. Each recipe does work aqua's own CLI will not, which is why they are recipes and
-not aliases:
+afterward. Each recipe does work the library's own commands will not, which is why they are
+recipes and not aliases:
 
-- **`tools add` and `tools update` hide the import from aqua.** aqua follows an import: `aqua
-  update` rewrites the imported file's pins, and `aqua generate -i` skips a tool the import
-  already declares and appends anything else below the import, which must stay last. So aqua
-  runs on a copy of the manifest with the import commented out, from outside the repository
-  (inside it, a command the copy lacks is still resolved through the real manifest), and
-  `add` places the new entry above the import itself.
-- **`tools set` edits the manifest in place.** `aqua generate -i owner/repo@version` would
+- **`tools add` and `tools update` hide the import from the library.** It follows an import:
+  `update` rewrites the imported file's pins, and `generate -i` skips a tool the import
+  already declares and appends anything else below the import, which must stay last. So
+  hermetic runs on a copy of the manifest with the import commented out, from outside the
+  repository (inside it, a command the copy lacks is still resolved through the real
+  manifest) and with `HERMETIC_NO_GLOBAL_CONFIG=true`, so the root's own pins stay out too,
+  and `add` places the new entry above the import itself.
+- **`tools set` edits the manifest in place.** `generate -i owner/repo@version` would
   *append* a second entry for an already-present package, not update the existing one.
-- **`tools remove` edits the manifest, and only the manifest.** `aqua remove` only uninstalls
-  the binary and does not touch `.aqua/aqua.yaml`. The recipe removes the entry, then `aqua
-  update-checksum --prune`s the orphaned checksum, and never runs `aqua remove`: that
-  uninstalls from aqua's root, which every checkout on the machine shares, so removing a tool
-  in one repository took it away from every other one still pinning that version, mid-run.
-- **Every aqua call names the repository's manifest** (`aqua -c .aqua/aqua.yaml …`). Without
-  it aqua also reads any aqua.yaml in the directories above, and a stray one there decides
-  what a recipe installs or prunes.
+- **`tools remove` edits the manifest, and only the manifest.** The recipe removes the entry,
+  then `update-checksum --prune`s the orphaned checksum, and never uninstalls (hermetic
+  exposes no `remove`): that would take the binary out of the root's store, which every
+  checkout on the machine shares, as removing a tool in one repository once took it away from
+  every other one still pinning that version, mid-run.
+- **Every call names the repository's manifest** (`hermetic -c .hermetic/hermetic.yaml …`).
+  Without it hermetic walks upward from the working directory for one, and a stray manifest
+  there decides what a recipe installs or prunes.
 
 These recipes are the interface for any hand-made change. Renovate owns the routine,
 unattended bumps.
@@ -427,30 +460,31 @@ unattended bumps.
 (exact), as above. Spelled out:
 
 ```bash
-# 1. Edit .aqua/aqua.yaml — bump the version, e.g.
+# 1. Edit .hermetic/hermetic.yaml — bump the version, e.g.
 #      goreleaser/goreleaser@<old>  ->  @<new>
 # 2. Refresh the checksum for the new version:
-aqua update-checksum
+hermetic update-checksum
 # 3. Install and verify:
-aqua install --only-link
+hermetic install -l
 golangci-lint version
 # 4. Commit BOTH files together:
-git add .aqua/aqua.yaml .aqua/aqua-checksums.json
+git add .hermetic/hermetic.yaml .hermetic/aqua-checksums.json
 git commit --message "tooling: bump golangci-lint"
 ```
 
 ### Automated (Renovate — the intended workflow)
 
 1. Renovate detects the new release and opens a **per-tool** PR bumping the version in
-   `.aqua/aqua.yaml`.
+   `.hermetic/hermetic.yaml` (the canonical `.limen/renovate.json` carries the managers that
+   read that file: aqua's own preset knows only aqua's file names).
 2. The `update-aqua-checksum` workflow does the repo-specific follow-up **in the same PR**:
-   it regenerates `.aqua/aqua-checksums.json`, and, when the bumped tool is `limen` itself,
+   it regenerates `.hermetic/aqua-checksums.json`, and, when the bumped tool is `limen` itself,
    runs the newly pinned `limen fix` so the canonical files move with the pin (a repo is
    coherent only when the limen that wrote its files is the limen it pins; either half alone
    leaves the repo red).
 3. You review the changelog and merge, or don't. Each tool is bumped independently.
 
-> **Critical:** Renovate can update versions but **cannot** update `.aqua/aqua-checksums.json`
+> **Critical:** Renovate can update versions but **cannot** update `.hermetic/aqua-checksums.json`
 > on its own. Without the checksum-refresh workflow, a version bump would merge a stale
 > checksum and **every install would fail**. The workflow is load-bearing.
 
@@ -540,8 +574,8 @@ generated tag archive:
 A reference that is none of these — a typo, a group the version does not match — is refused
 when the file is read, never sent to a host. The arguments are split on whitespace, so an
 identity regexp carries none and a fingerprint is forty hex digits unbroken. The tool a
-method shells out to, `gh` or `cosign`, must be pinned in `.aqua/aqua.yaml`, and the `pins`
-rule says so when it is not: unpinned, aqua's proxy falls through to whatever binary the
+method shells out to, `gh` or `cosign`, must be pinned in `.hermetic/hermetic.yaml`, and the `pins`
+rule says so when it is not: unpinned, the name falls through to whatever binary the
 machine has. The PGP method shells out to nothing: the fingerprint is the whole trust
 decision, the key URL only fetches the block that must hash to it, and limen reads exactly
 what a clearsigned checksum file takes and refuses the rest by name (another key version, a
@@ -553,7 +587,7 @@ every `curl` in the rig does; a verifier's refusal ends the run with the file as
 pin has moved, the checksum has not. CI fires on it and `lint aqua` fails, truthfully, and
 every tool that needs the new pin refuses to install. Minutes later the checksum workflow's
 fix-up commit lands and its run is the green one. A red run on a Renovate commit that touches
-`.aqua/aqua.yaml`, followed by a green run on the bot's fix-up, is the expected shape of such
+`.hermetic/hermetic.yaml`, followed by a green run on the bot's fix-up, is the expected shape of such
 a pull request, and the red says what it is. It is not made to look otherwise: a job that
 skipped the run as "neutral" would add a checkout to every run of every repository and a run
 that ends without linting, worse than a true red; and hosted Renovate cannot refresh the
@@ -569,8 +603,8 @@ commit. The checksum workflow has one, since it commits the whole dirty tree, wh
 on the next run; that whole-tree guard is safe only while it is the one writer on
 `renovate/**`, and the day a second one shares the branch, each guards on its own file. A
 workflow that owns one file and guards on the whole tree has no fixed point when a sibling
-step dirties anything else: limen-install's installer-checksum workflow ran `setup-aqua` and
-the link step, which rewrote `.aqua/aqua-checksums.json` on a registry bump, saw a dirty
+step dirties anything else: limen-install's installer-checksum workflow ran the setup action and
+the link step, which rewrote the checksums file on a registry bump, saw a dirty
 tree, committed its own file unchanged, and the empty commit's push fired it again every
 thirty seconds (https://github.com/farcloser/limen-install/pull/66). The guard is `git diff
 --quiet -- <the file>`, never `git status --porcelain`.
@@ -622,15 +656,15 @@ without required checks, blocking with them.
 ## Enforcement
 
 `limen check [path]` verifies the aqua rule alongside the
-[mandatory files](./mandatory-files.md). It fails a repository that has no `.aqua/aqua.yaml`;
+[mandatory files](./mandatory-files.md). It fails a repository that has no `.hermetic/hermetic.yaml`;
 whose `checksum:` section differs from the canonical; whose `registries:` section differs
 (beyond the project-owned standard `ref`, itself an exact pin); that lacks any canonical
 package (by name); that lists a package twice; or that is missing the committed
-`.aqua/aqua-checksums.json`. A manifest `limen` cannot confidently parse (flow-style sections
+`.hermetic/aqua-checksums.json`. A manifest `limen` cannot confidently parse (flow-style sections
 and the like) also fails: what cannot be verified does not pass.
 
 `limen fix` remediates all of that: a missing manifest is seeded from limen's own (and only
-then may the matching canonical `.aqua/aqua-checksums.json` be seeded with it, so a fresh
+then may the matching canonical `.hermetic/aqua-checksums.json` be seeded with it, so a fresh
 `bootstrap` is compliant offline); an existing manifest is **merged** — the canonical
 sections reset (keeping a valid project `ref`), missing canonical packages appended by name
 without duplicating one the project already pins, the project's own packages and versions
@@ -638,13 +672,16 @@ untouched. The one version `fix` does move is an existing `farcloser/limen` pin:
 **released** limen sets it to its own version, because that version is baseline-owned — the
 enforcer that wrote the repo's canonical files must be the enforcer the repo pins (a dev
 build has no version to stamp and moves nothing). Whenever the manifest changed or the
-checksums file is missing, `fix` regenerates the checksums with the real tool (`aqua policy
-allow .aqua/aqua-policy.yaml`, then `aqua update-checksum --prune`); if aqua is unavailable it
-says so and leaves the commands. Duplicate package entries are reported, not resolved: only a
-human knows which version was meant. A repository still carrying aqua's files at its root,
-where limen kept them before `.aqua/`, fails the rule naming them; `fix` moves them into
-`.aqua/` and regenerates the checksums, which also allows the policy at its new path for the
-rest of the run.
+checksums file is missing, `fix` regenerates the checksums with the real tool (`hermetic policy
+allow .hermetic/policy.yaml`, then `hermetic update-checksum --prune`); if hermetic is
+unavailable it says so and leaves the commands. Duplicate package entries are reported, not
+resolved: only a human knows which version was meant. A repository still carrying the pin
+files where limen kept them before `.hermetic/`, at its root or under `.aqua/` with aqua's
+names, fails the rule naming them; `fix` moves them into `.hermetic/` under hermetic's names,
+removes an emptied `.aqua/`, and regenerates the checksums, which also allows the policy at
+its new path for the rest of the run. A project's own workflow still naming `.aqua/…` or the
+action's old home, `actions/setup-aqua`, is a stale reference the `workflows` rule reports,
+and the old action directory, which nothing canonical calls, is removed by `fix`.
 
 Beyond that baseline, *which* extra tools and versions a project pins is engineering
 judgment: the tool enforces the invariants, the book carries the reasoning. The same command

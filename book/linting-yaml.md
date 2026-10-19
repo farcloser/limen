@@ -18,7 +18,7 @@ the formatter; `.yamlfmt` is how its configuration travels with the code. A repo
 **What counts as YAML.** A `*.yaml` or `*.yml` file. The scan skips `.git` and vendored
 dependency directories (`node_modules`, `vendor`), so a dependency's manifests never trigger
 the rule; `.yamlfmt` itself is not matched (its extension is neither). In practice the
-trigger always fires, since every compliant repository carries `.aqua/aqua.yaml`; the rule
+trigger always fires, since every compliant repository carries `.hermetic/hermetic.yaml`; the rule
 stays conditional because the mechanism is what limen checks.
 
 **What it must be.** Content-pinned, like `.limen/.shellcheckrc`: the yamlfmt settings that

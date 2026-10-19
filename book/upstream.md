@@ -33,9 +33,9 @@ finds itself.
 **Cause.** When aqua falls back to a `PATH` search, it skips its own bin directory only when
 the `PATH` element equals `filepath.Join(rootDir, "bin")` as a string
 ([pkg/controller/which/lookpath_windows.go](https://github.com/aquaproj/aqua/blob/3587e767ce7134b69d68434962d10d60b77fb3d8/pkg/controller/which/lookpath_windows.go#L33)).
-setup-aqua writes the root with forward slashes (`cygpath -m`), `filepath.Join` produces
-backslashes, and the two never match: the first `bash.EXE` on the search is the proxy
-itself.
+setup-hermetic writes the root with forward slashes (`cygpath -m`), `filepath.Join` produces
+backslashes, and the two never match: the first `bash.EXE` on the search is the toolset's
+own link.
 
 **Workaround.** The one above. Together the two bugs are the recursion; either fix alone
 would stop it.

@@ -30,19 +30,19 @@ that *can* be verified gets a `limen` check and becomes policy.
 ## Requirements
 
 `limen` and its shared `just` recipes shell out to a small set of external binaries that are
-**not** managed by aqua — they must already be on the system:
+**not** among the pins — they must already be on the system:
 
 | Binary | Used for |
 |--------|----------|
 | **git** | `git init` on bootstrap, and the `git ls-files` / `git diff` / `info` recipes. |
-| **aqua** | installs the pinned toolchain; bootstrap runs `aqua policy allow` + `aqua install`. aqua **cannot install itself** — [`limen-install`](https://github.com/farcloser/limen-install) sets it up once per machine, into the directory the hermetic `PATH` expects (see [`book/tooling.md`](./book/tooling.md)). |
+| **hermetic** | the toolset's own aqua ([forkcloser/hermetic](https://github.com/forkcloser/hermetic)): installs the pinned toolchain; bootstrap runs `hermetic policy allow` + `hermetic install -l`. hermetic **cannot install itself** — [`limen-install`](https://github.com/farcloser/limen-install) sets it up once per machine, in the root whose `bin` the hermetic `PATH` expects (see [`book/tooling.md`](./book/tooling.md)). |
 | **bash** (≥ 3.2) + **env** | every multi-line recipe runs under `#!/usr/bin/env bash`. |
 | POSIX userland: **grep, sed, awk, head, tr, mv, mktemp, xargs** | used by the shared `tools` / `lint` / `fix` recipes. Present by default on any Unix; the hermetic PATH keeps `/usr/bin:/bin:/usr/sbin:/sbin` so they resolve. |
 
 Everything else the recipes use — `go`, `just`, and the whole lint/test/release toolbelt
 (`shellcheck`, `golangci-lint`, `yamlfmt`, `lychee`, `jq`, `gotestsum`, `goreleaser`,
-`cosign`, and `limen` itself) — is pinned and installed **by aqua**, so it is not a manual
-prerequisite; [`.aqua/aqua.yaml`](./.aqua/aqua.yaml) is the authoritative list. Every Go-built tool
+`cosign`, and `limen` itself) — is pinned and installed **by hermetic**, so it is not a manual
+prerequisite; [`.hermetic/hermetic.yaml`](./.hermetic/hermetic.yaml) is the authoritative list. Every Go-built tool
 (`git-validation`, `godolint`, `dot`, and the source analyzers `deadcode`, `govulncheck`,
 `go-licenses`) is a `tool` directive in [`.limen/tools/go.mod`](./.limen/tools/go.mod), built by the pinned
 `go` itself (see [`book/tooling.md`](./book/tooling.md#go-built-tools-are-gomod-tools)).
@@ -50,7 +50,7 @@ prerequisite; [`.aqua/aqua.yaml`](./.aqua/aqua.yaml) is the authoritative list. 
 ## Using `limen`
 
 Machine setup is one bootstrap: [`limen-install`](https://github.com/farcloser/limen-install)
-installs aqua and, through a global aqua config, `limen` itself — both globally available
+installs hermetic and, through the pins in its root, `limen` itself — both globally available
 afterward (see [`book/tooling.md`](./book/tooling.md)):
 
 ```bash
@@ -70,10 +70,11 @@ limen github fix              # repair the fixable settings, plan-then-apply
 ```
 
 `check` reports; `fix` repairs what it safely can and flags the rest as advisories — for the
-aqua rule that includes regenerating `.aqua/aqua-checksums.json` with aqua itself (`aqua policy
-allow` + `aqua update-checksum --prune`) whenever it changed the manifest or the file is
-missing. `bootstrap` is `fix` on an empty directory, and finishes by installing the pinned
-tooling (`aqua policy allow` + `aqua update-checksum --prune` + `aqua install --only-link`).
+aqua rule that includes regenerating `.hermetic/aqua-checksums.json` with hermetic itself
+(`hermetic policy allow` + `hermetic update-checksum --prune`) whenever it changed the
+manifest or the file is missing. `bootstrap` is `fix` on an empty directory, and finishes by
+installing the pinned tooling (`hermetic policy allow` + `hermetic update-checksum --prune` +
+`hermetic install -l`).
 Add `-json` to any of them. `bootstrap` writes a `Closed-source`
 `LICENSE` by default (`-license <id>`, `-holder <name>`).
 
@@ -99,8 +100,8 @@ Early. We are bootstrapping from the ground floor:
       [`book/mandatory-files.md`](./book/mandatory-files.md) and [`cmd/limen/`](./cmd/limen).
 - [x] **Per-language rules** — conditional checks that fire only when a language is present:
       shell → `.limen/.shellcheckrc`, and YAML → `.limen/.yamlfmt`. See [linting](./book/linting.md).
-- [x] **Project tooling** — every repo pins its build/CI tooling through aqua: a committed
-      `.aqua/aqua.yaml` with checksum enforcement on, plus a committed `.aqua/aqua-checksums.json`. See
+- [x] **Project tooling** — every repo pins its build/CI tooling through hermetic: a committed
+      `.hermetic/hermetic.yaml` with checksum enforcement on, plus a committed `.hermetic/aqua-checksums.json`. See
       [`book/tooling.md`](./book/tooling.md) and [`cmd/limen/`](./cmd/limen).
 - [x] **GitHub settings** — repository configuration audited and repaired like any other
       rule: merge doctrine, rulesets, Actions hardening, security features. See

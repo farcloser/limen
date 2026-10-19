@@ -17,8 +17,8 @@ branches in its own worktrees. The human's branches are the human's.
   a branch named after the bot
   (`claudio/<YYYYMMDD>-<topic>`: the day it was cut, so a listing reads in date order), one
   topic per branch and per pull request. The worktree keeps the human's checkout untouched
-  and lets tasks run side by side. In a new worktree: `aqua policy allow
-  .aqua/aqua-policy.yaml`, then `aqua install --only-link` — aqua's policy is keyed by path.
+  and lets tasks run side by side. In a new worktree: `hermetic policy allow
+  .hermetic/policy.yaml`, then `hermetic install -l` — the policy's record is keyed by path.
 - **Never on `work`.** The human's `work` branch is the human's, or the human's with the
   agent pairing interactively at their request. The agent never commits there on its own,
   and never on `main`.

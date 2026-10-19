@@ -7,7 +7,7 @@ shares:
 
 - **Never put specific version numbers in the book (`book/`).** Use generic placeholders in
   prose and examples. The real, pinned versions live in `.limen/aqua.yaml` and
-  `.aqua/aqua.yaml` and are managed by aqua and Renovate: the book explains *how*, not
+  `.hermetic/hermetic.yaml` and are managed by hermetic and Renovate: the book explains *how*, not
   *which*.
 - **Never reconverge the sibling repositories (mumbrew, limen-install, godolint,
   homebrew-brews, …) after changing limen's canonical baseline.** They catch up through

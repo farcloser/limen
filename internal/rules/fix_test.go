@@ -634,7 +634,7 @@ func TestFixMergesAquaManifest(t *testing.T) {
 	t.Parallel()
 
 	dir := writeRepo(t, map[string]string{
-		".aqua/aqua.yaml": "checksum:\n  enabled: false\npackages:\n  - name: junegunn/fzf@v0.60.0\n  - name: casey/just@v99.99.99\n",
+		".hermetic/hermetic.yaml": "checksum:\n  enabled: false\npackages:\n  - name: junegunn/fzf@v0.60.0\n  - name: casey/just@v99.99.99\n",
 	})
 
 	outcomes := rules.Fix(t.Context(), dir, bootstrapOpts())
@@ -646,7 +646,7 @@ func TestFixMergesAquaManifest(t *testing.T) {
 		}
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 
 	manifest := string(data)
 	if !strings.Contains(manifest, "require_checksum: true") {
@@ -677,7 +677,7 @@ func TestFixMergesAquaManifest(t *testing.T) {
 		t.Error("the canonical tool set was not written")
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua-checksums.json"))
+	sums, err := os.ReadFile(filepath.Join(dir, ".hermetic", "aqua-checksums.json"))
 	if err != nil {
 		t.Fatalf("aqua-checksums.json not written: %v", err)
 	}
@@ -717,7 +717,7 @@ func TestBootstrapSelfPinRelease(t *testing.T) {
 		}
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -735,7 +735,7 @@ func TestBootstrapSelfPinRelease(t *testing.T) {
 		t.Errorf("farcloser/limen appears %d times, want exactly 1", n)
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua-checksums.json"))
+	sums, err := os.ReadFile(filepath.Join(dir, ".hermetic", "aqua-checksums.json"))
 	if err != nil {
 		t.Fatalf("aqua-checksums.json not generated: %v", err)
 	}
@@ -755,7 +755,7 @@ func TestBootstrapSelfPinDev(t *testing.T) {
 
 	rules.Fix(t.Context(), dir, bootstrapOpts())
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -764,7 +764,7 @@ func TestBootstrapSelfPinDev(t *testing.T) {
 		t.Error("a dev build must seed the embedded aqua.yaml verbatim")
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua-checksums.json"))
+	sums, err := os.ReadFile(filepath.Join(dir, ".hermetic", "aqua-checksums.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -785,12 +785,12 @@ func TestFixInsertsSelfPinAtRunningVersion(t *testing.T) {
 	opts.SelfVersion = "v9.9.9"
 
 	dir := writeRepo(t, map[string]string{
-		".aqua/aqua.yaml": "packages:\n  - name: junegunn/fzf@v99.99.99\n",
+		".hermetic/hermetic.yaml": "packages:\n  - name: junegunn/fzf@v99.99.99\n",
 	})
 
 	rules.Fix(t.Context(), dir, opts)
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -820,7 +820,7 @@ func TestFixMovesExistingSelfPin(t *testing.T) {
 	// The canonical manifest with the limen pin at an older release — the only
 	// drift is the pin itself, exercising the standalone one-line rewrite.
 	dir := writeRepo(t, map[string]string{
-		".aqua/aqua.yaml": withSelfPin(t, "v0.0.1"),
+		".hermetic/hermetic.yaml": withSelfPin(t, "v0.0.1"),
 	})
 
 	outcomes := rules.Fix(t.Context(), dir, opts)
@@ -828,7 +828,7 @@ func TestFixMovesExistingSelfPin(t *testing.T) {
 		t.Error("fix should resolve a manifest whose only drift is the limen pin")
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -846,7 +846,7 @@ func TestFixMovesExistingSelfPin(t *testing.T) {
 		t.Errorf("farcloser/limen appears %d times, want exactly 1", n)
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua-checksums.json"))
+	sums, err := os.ReadFile(filepath.Join(dir, ".hermetic", "aqua-checksums.json"))
 	if err != nil {
 		t.Fatalf("aqua-checksums.json not generated: %v", err)
 	}
@@ -872,14 +872,14 @@ func TestFixMovesExistingSelfPinInReplacedPackages(t *testing.T) {
 	opts.SelfVersion = "v9.9.9"
 
 	dir := writeRepo(t, map[string]string{
-		".aqua/aqua.yaml": "packages:\n" +
+		".hermetic/hermetic.yaml": "packages:\n" +
 			"  - name: farcloser/limen@v0.0.1 # renovate: depName=farcloser/limen\n" +
 			"  - name: junegunn/fzf@v99.99.99\n",
 	})
 
 	rules.Fix(t.Context(), dir, opts)
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -904,12 +904,12 @@ func TestFixKeepsExistingSelfPinDev(t *testing.T) {
 	t.Parallel()
 
 	dir := writeRepo(t, map[string]string{
-		".aqua/aqua.yaml": withSelfPin(t, "v0.0.1"),
+		".hermetic/hermetic.yaml": withSelfPin(t, "v0.0.1"),
 	})
 
 	rules.Fix(t.Context(), dir, bootstrapOpts())
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -925,14 +925,14 @@ func TestFixKeepsExistingSelfPinDev(t *testing.T) {
 func TestFixGeneratesChecksumsForExistingManifest(t *testing.T) {
 	t.Parallel()
 
-	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": limen.CanonicalAquaYAML})
+	dir := writeRepo(t, map[string]string{".hermetic/hermetic.yaml": limen.CanonicalAquaYAML})
 
 	outcomes := rules.Fix(t.Context(), dir, bootstrapOpts())
 	if !rules.AllResolved(outcomes) {
 		t.Error("fix should resolve a canonical manifest with missing checksums")
 	}
 
-	sums, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua-checksums.json"))
+	sums, err := os.ReadFile(filepath.Join(dir, ".hermetic", "aqua-checksums.json"))
 	if err != nil {
 		t.Fatalf("aqua-checksums.json not generated: %v", err)
 	}
@@ -947,7 +947,7 @@ func TestFixGeneratesChecksumsForExistingManifest(t *testing.T) {
 func TestFixAquaUnavailableIsAdvisory(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
 	t.Setenv("PATH", t.TempDir()) // nothing on it: no aqua
 
-	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": limen.CanonicalAquaYAML})
+	dir := writeRepo(t, map[string]string{".hermetic/hermetic.yaml": limen.CanonicalAquaYAML})
 
 	outcomes := rules.Fix(t.Context(), dir, bootstrapOpts())
 	if rules.AllResolved(outcomes) {
@@ -966,7 +966,7 @@ func TestFixAquaUnavailableIsAdvisory(t *testing.T) { // Serial by design: t.Set
 		t.Error("expected an advisory telling the user to run aqua themselves")
 	}
 
-	if fileExists(filepath.Join(dir, ".aqua", "aqua-checksums.json")) {
+	if fileExists(filepath.Join(dir, ".hermetic", "aqua-checksums.json")) {
 		t.Error("no checksums file should have been written")
 	}
 }
@@ -978,7 +978,7 @@ func TestFixLeavesUnparseableAquaAlone(t *testing.T) {
 
 	const flow = "checksum: {enabled: true, require_checksum: true}\npackages: []\n"
 
-	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": flow, ".aqua/aqua-checksums.json": "{}\n"})
+	dir := writeRepo(t, map[string]string{".hermetic/hermetic.yaml": flow, ".hermetic/aqua-checksums.json": "{}\n"})
 	outcomes := rules.Fix(t.Context(), dir, bootstrapOpts())
 
 	var advisory bool
@@ -993,7 +993,7 @@ func TestFixLeavesUnparseableAquaAlone(t *testing.T) {
 		t.Error("an unparseable manifest should yield an advisory")
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if string(data) != flow {
 		t.Error("an unparseable manifest must not be modified")
 	}
@@ -1009,7 +1009,7 @@ func TestFixLeavesQuotedKeyAquaAlone(t *testing.T) {
 
 	manifest := strings.Replace(limen.CanonicalAquaYAML, canonicalImportLine(t)+"\n", "", 1) +
 		"\"my-user-key\":\n  - my precious user data\n"
-	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": manifest, ".aqua/aqua-checksums.json": "{}\n"})
+	dir := writeRepo(t, map[string]string{".hermetic/hermetic.yaml": manifest, ".hermetic/aqua-checksums.json": "{}\n"})
 
 	var advisory bool
 
@@ -1023,7 +1023,7 @@ func TestFixLeavesQuotedKeyAquaAlone(t *testing.T) {
 		t.Error("a manifest with an unbounded top-level key should yield an advisory")
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if string(data) != manifest {
 		t.Error("a manifest with an unbounded top-level key must not be modified")
 	}
@@ -1039,11 +1039,14 @@ func TestAquaMergeMovesQuotedSelfPin(t *testing.T) {
 	opts := bootstrapOpts()
 	opts.SelfVersion = "v9.9.9"
 
-	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": "packages:\n  - name: \"farcloser/limen@v0.0.1\"\n"})
+	dir := writeRepo(
+		t,
+		map[string]string{".hermetic/hermetic.yaml": "packages:\n  - name: \"farcloser/limen@v0.0.1\"\n"},
+	)
 
 	rules.Fix(t.Context(), dir, opts)
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+	data, _ := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 	if !strings.Contains(string(data), `- name: "farcloser/limen@v9.9.9"`) {
 		t.Errorf("the quoted self-pin was not moved:\n%s", data)
 	}
@@ -1055,7 +1058,7 @@ func TestFixAquaDuplicatesAdvisory(t *testing.T) {
 	t.Parallel()
 
 	manifest := withProjectEntries(t, "  - name: junegunn/fzf@v0.60.0\n  - name: junegunn/fzf@v0.61.0\n")
-	dir := writeRepo(t, map[string]string{".aqua/aqua.yaml": manifest, ".aqua/aqua-checksums.json": "{}\n"})
+	dir := writeRepo(t, map[string]string{".hermetic/hermetic.yaml": manifest, ".hermetic/aqua-checksums.json": "{}\n"})
 
 	var advisory bool
 
@@ -1103,7 +1106,7 @@ func TestFixWorkflows(t *testing.T) {
 			if o.Action != rules.ActionNone {
 				t.Errorf("existing ci workflow: %s, want none (left untouched)", o.Action)
 			}
-		case ".github/actions/setup-aqua/action.yaml", ".github/actions/windows-cache-image/action.yaml",
+		case ".github/actions/setup-hermetic/action.yaml", ".github/actions/windows-cache-image/action.yaml",
 			".github/actions/cache/action.yaml",
 			".github/workflows/limen-verify.yaml",
 			".github/workflows/security.yaml", ".github/workflows/caches.yaml", ".github/release.yml", "renovate.json":

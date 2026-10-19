@@ -324,7 +324,7 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
+	files[".hermetic/hermetic.yaml"] = canonicalAquaWith(t, "packages:\n",
 		"packages:\n  - name: github.com/vbatts/git-validation@v1.2.2\n    registry: local\n")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
@@ -338,7 +338,7 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 
 	// The prebuilt golangci-lint is retired the same way: an isolated module
 	// builds it now, and a manifest still pinning the binary fails.
-	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
+	files[".hermetic/hermetic.yaml"] = canonicalAquaWith(t, "packages:\n",
 		"packages:\n  - name: golangci/golangci-lint@v2.0.0\n")
 
 	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
@@ -353,7 +353,7 @@ func TestFixLeavesRetiredPackages(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files[".aqua/aqua.yaml"] = canonicalAquaWith(t, "packages:\n",
+	files[".hermetic/hermetic.yaml"] = canonicalAquaWith(t, "packages:\n",
 		"packages:\n  - name: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n    registry: local\n")
 	dir := writeRepo(t, files)
 
@@ -370,8 +370,8 @@ func TestFixLeavesRetiredPackages(t *testing.T) {
 		t.Fatalf("fix should end advisory, naming the retired entry to delete by hand, got: %+v", advisory)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
-	if string(data) != files[".aqua/aqua.yaml"] {
+	data, _ := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
+	if string(data) != files[".hermetic/hermetic.yaml"] {
 		t.Errorf("fix edited the manifest:\n%s", data)
 	}
 }

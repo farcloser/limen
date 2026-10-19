@@ -89,14 +89,14 @@ func stubDir(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	aqua := filepath.Join(dir, "aqua")
+	aqua := filepath.Join(dir, "hermetic")
 	// update-checksum writes the file the aqua rule then expects, like the
 	// real one would (its content is not judged). Builtins only, never an
 	// external command: with aqua's bin on PATH every coreutils name is an
 	// aqua proxy, which execs `aqua` — this very stub — and recurses without
 	// end. `${0%/*}` is the shell's own dirname.
 	aquaScript := "#!/bin/sh\necho \"$@\" >> \"${0%/*}/log\"\n" +
-		"case \"$*\" in *update-checksum*) echo '{\"stub\":true}' > .aqua/aqua-checksums.json;; esac\n"
+		"case \"$*\" in *update-checksum*) echo '{\"stub\":true}' > .hermetic/aqua-checksums.json;; esac\n"
 	goStub := filepath.Join(dir, "go")
 	goScript := "#!/bin/sh\n" +
 		"[ \"$1\" = get ] && [ \"$2\" = -tool ] || exit 0\n" +
@@ -111,7 +111,7 @@ func stubDir(t *testing.T) string {
 			// tests run with, `find` is GNU find, which takes the word for a path
 			// and fails every call.
 			"set \"args=%*\"\r\n" +
-			"if not \"%args:update-checksum=%\"==\"%args%\" echo {\"stub\":true}> .aqua\\aqua-checksums.json\r\n" +
+			"if not \"%args:update-checksum=%\"==\"%args%\" echo {\"stub\":true}> .hermetic\\aqua-checksums.json\r\n" +
 			"exit /b 0\r\n"
 		goStub += ".bat"
 		goScript = "@echo off\r\n" +
@@ -158,24 +158,24 @@ func compliantRepo(t *testing.T) string {
 	}
 
 	files := map[string]string{
-		"README.md":                 "# Thing",
-		"LICENSE":                   "Permission is hereby granted, free of charge.\nTHE SOFTWARE IS PROVIDED \"AS IS\".",
-		".editorconfig":             rules.CanonicalEditorconfig,
-		".gitignore":                limen.CanonicalGitignore,
-		".gitattributes":            rules.CanonicalGitattributes,
-		"AGENTS.md":                 rules.CanonicalAgents,
-		"CLAUDE.md":                 limen.CanonicalClaudeSeed,
-		".justfile":                 rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
-		".aqua/aqua.yaml":           limen.CanonicalAquaYAML,
-		".aqua/aqua-checksums.json": "{}\n",
-		".aqua/aqua-policy.yaml":    rules.CanonicalAquaPolicy,
-		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
-		".limen/aqua.yaml":          rules.CanonicalAquaPackages,
-		".limen/lychee.toml":        rules.CanonicalLychee,
-		".limen/.yamlfmt":           rules.CanonicalYamlfmt,
-		".limen/.shellcheckrc":      rules.CanonicalShellcheckrc,
+		"README.md":                     "# Thing",
+		"LICENSE":                       "Permission is hereby granted, free of charge.\nTHE SOFTWARE IS PROVIDED \"AS IS\".",
+		".editorconfig":                 rules.CanonicalEditorconfig,
+		".gitignore":                    limen.CanonicalGitignore,
+		".gitattributes":                rules.CanonicalGitattributes,
+		"AGENTS.md":                     rules.CanonicalAgents,
+		"CLAUDE.md":                     limen.CanonicalClaudeSeed,
+		".justfile":                     rules.CanonicalJustfileImport + "\n\nsecurity: do::security::default\n",
+		".hermetic/hermetic.yaml":       limen.CanonicalAquaYAML,
+		".hermetic/aqua-checksums.json": "{}\n",
+		".hermetic/policy.yaml":         rules.CanonicalAquaPolicy,
+		".limen/aqua-registry.yaml":     rules.CanonicalAquaRegistry,
+		".limen/aqua.yaml":              rules.CanonicalAquaPackages,
+		".limen/lychee.toml":            rules.CanonicalLychee,
+		".limen/.yamlfmt":               rules.CanonicalYamlfmt,
+		".limen/.shellcheckrc":          rules.CanonicalShellcheckrc,
 		".github/workflows/update-aqua-checksum.yaml":     limen.CanonicalWorkflowUpdateAquaChecksum,
-		".github/actions/setup-aqua/action.yaml":          limen.CanonicalActionSetupAqua,
+		".github/actions/setup-hermetic/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
 		".github/actions/cache/action.yaml":               limen.CanonicalActionCache,
 		".github/workflows/limen-verify.yaml":             limen.CanonicalWorkflowVerify,
@@ -336,9 +336,9 @@ func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.S
 	}
 
 	want := []string{
-		"--log-level warn policy allow .aqua/aqua-policy.yaml",
+		"--log-level warn policy allow .hermetic/policy.yaml",
 		"--log-level warn update-checksum --prune",
-		"--log-level warn install --only-link",
+		"--log-level warn install -l",
 	}
 
 	var got []string
@@ -395,7 +395,7 @@ func TestReleaseStampPinsOnlyExactReleases(t *testing.T) { // Serial by design: 
 			t.Fatalf("stamp %q: bootstrap returned %d:\n%s%s", tc.stamp, code, stdout.String(), stderr.String())
 		}
 
-		manifest, err := os.ReadFile(filepath.Join(dir, ".aqua", "aqua.yaml"))
+		manifest, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
 		if err != nil {
 			t.Fatal(err)
 		}

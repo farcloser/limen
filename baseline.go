@@ -63,27 +63,28 @@ var CanonicalLycheeToml string
 //go:embed .limen/lint-go.yaml
 var CanonicalLintGo string
 
-// CanonicalAquaYAML is the aqua manifest limen seeds into a bootstrapped
-// repository. It and its aqua-checksums.json are a per-project starting point
-// (the repo evolves its own pinned set from there); aqua-policy.yaml and
-// .limen/aqua-registry.yaml are the canonical policy/registry, identical in
-// every repo. Embedding a matching aqua.yaml and aqua-checksums.json together
-// means a freshly bootstrapped repo passes the aqua check offline — `aqua i`
-// only installs the tools, it is not needed to make the files valid. See
+// CanonicalAquaYAML is the manifest limen seeds into a bootstrapped
+// repository, .hermetic/hermetic.yaml, which hermetic resolves. It and its
+// aqua-checksums.json are a per-project starting point (the repo evolves its
+// own pinned set from there); policy.yaml and .limen/aqua-registry.yaml are
+// the canonical policy/registry, identical in every repo. Embedding a
+// matching manifest and aqua-checksums.json together means a freshly
+// bootstrapped repo passes the aqua check offline — `hermetic i` only
+// installs the tools, it is not needed to make the files valid. See
 // book/tooling.md.
 //
-//go:embed .aqua/aqua.yaml
+//go:embed .hermetic/hermetic.yaml
 var CanonicalAquaYAML string
 
 // CanonicalAquaChecksums is the checksums file matching CanonicalAquaYAML —
 // seeded together so a fresh bootstrap is compliant offline (see above).
 //
-//go:embed .aqua/aqua-checksums.json
+//go:embed .hermetic/aqua-checksums.json
 var CanonicalAquaChecksums string
 
-// CanonicalAquaPolicy is the aqua policy, content-pinned in every repo (see above).
+// CanonicalAquaPolicy is the policy, content-pinned in every repo (see above).
 //
-//go:embed .aqua/aqua-policy.yaml
+//go:embed .hermetic/policy.yaml
 var CanonicalAquaPolicy string
 
 // CanonicalAquaRegistry is the local aqua registry, content-pinned in every repo (see above).
@@ -101,7 +102,7 @@ var CanonicalAquaPackages string
 // The .github pieces are embedded individually, not by glob, because the
 // directory deliberately mixes two regimes (see book/mandatory-files.md):
 // content-pinned limen machinery (the checksum-update workflow and the
-// setup-aqua action — a WRITE workflow's hardening must never drift) versus
+// setup-hermetic action — a WRITE workflow's hardening must never drift) versus
 // seeded-once project property (ci/release workflows, renovate config).
 // Adding a canonical workflow means adding it to the right list here — the
 // pin/seed decision stays explicit and reviewable.
@@ -113,9 +114,9 @@ var CanonicalAquaPackages string
 var CanonicalWorkflowUpdateAquaChecksum string
 
 // CanonicalActionSetupAqua is the composite action every canonical workflow
-// bootstraps aqua with — content-pinned.
+// bootstraps hermetic with — content-pinned.
 //
-//go:embed .github/actions/setup-aqua/action.yaml
+//go:embed .github/actions/setup-hermetic/action.yaml
 var CanonicalActionSetupAqua string
 
 // CanonicalActionWindowsCacheImage is the composite action the canonical CI

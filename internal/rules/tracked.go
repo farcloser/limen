@@ -19,7 +19,7 @@ const (
 //
 //nolint:gochecknoglobals // immutable table.
 var canonicalRoots = []string{
-	".limen", ".aqua", ".github", "AGENTS.md", "CLAUDE.md", ".editorconfig", ".gitattributes",
+	".limen", ".hermetic", ".github", "AGENTS.md", "CLAUDE.md", ".editorconfig", ".gitattributes",
 	".justfile", ".lint-go.yaml", ".release-go.yaml", "renovate.json", "pins.yaml",
 }
 
