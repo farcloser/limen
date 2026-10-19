@@ -24,12 +24,22 @@ Two deliberate exceptions, named because they cut against doctrine:
   PATH at startup, before the hermetic PATH locks down (`BREW_BIN`, overridable by
   exporting it) — the invoking shell knows where brew lives, whatever the prefix — and
   the recipes fail with guidance when the capture came up empty; the hermetic PATH
-  itself is untouched.
-- **`brew audit` needs a tap identity.** brew addresses formulas by tap name, never by
-  path, so the project declares which tap it is (`export LINT_HOMEBREW_TAP :=
-  'user/name'` in the root `.justfile`) and the audit recipe registers the working tree
-  under that name for the duration of the run — a symlink, so the audit judges the
-  working tree, not a stale clone. Audit flags that only make sense on CI (`--online`
+  itself is untouched. `style`, and its fixing twin, may run from a brew of the project's
+  own instead: `BREW_STYLE_BIN`, exported in the root `.justfile`, defaults to `BREW_BIN`
+  and redirects those two alone, so a tap that lints with a pinned Homebrew of its own
+  (a release extracted under `.build`, pinned in `pins.yaml`, never the machine's prefix)
+  still installs and audits with the machine's brew in `test` and `audit`.
+- **brew needs a tap identity, for `audit` and for `style` alike.** brew addresses
+  formulas by tap name, never by path, and reads a tap's own RuboCop configuration
+  (`tap_rubocop_style.yml`) only for files it can place in a tap: the same files by their
+  path in the tree get Homebrew's own `Library/.rubocop.yml` and a different verdict from
+  the one CI and `audit` get. So the project declares which tap it is (`export
+  LINT_HOMEBREW_TAP := 'user/name'` in the root `.justfile`) and the recipes register the
+  working tree under that name for the duration of the run — a symlink under the chosen
+  brew's own taps, so they judge the working tree, not a stale clone — and `style` names
+  each formula and cask through that link, never the tap itself: brew takes a tap
+  directory as a path and globs every shell script beneath it for shellcheck, which it
+  then installs into its own prefix. Audit flags that only make sense on CI (`--online`
   does network calls) go through `LINT_HOMEBREW_AUDIT_FLAGS`.
 
 **What a formula pins.** Every source a formula fetches is pinned by content, like
