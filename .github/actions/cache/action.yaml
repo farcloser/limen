@@ -37,7 +37,7 @@ runs:
       with:
         mode: attach
         prefix: win-image-${{ runner.os }}-${{ runner.arch }}-
-        hash: ${{ hashFiles('.hermetic/hermetic.yaml', '.hermetic/aqua-checksums.json', '.limen/aqua.yaml', '.limen/aqua-registry.yaml', '**/go.sum') }}
+        hash: ${{ hashFiles('.hermetic/hermetic.yaml', '.hermetic/aqua-checksums.json', '.limen/hermetic.yaml', '.limen/hermetic-registry.yaml', '**/go.sum') }}
 
     - if: inputs.mode == 'attach' && runner.os == 'Windows'
       shell: bash
@@ -67,7 +67,7 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ env.HERMETIC_ROOT_DIR }}/store/pkgs
-        key: aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.hermetic/hermetic.yaml', '.hermetic/aqua-checksums.json', '.limen/aqua-registry.yaml') }}
+        key: aqua-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.hermetic/hermetic.yaml', '.hermetic/aqua-checksums.json', '.limen/hermetic-registry.yaml') }}
         restore-keys: ${{ inputs.aqua-fallback == 'true' && format('aqua-pkgs-{0}-{1}-', runner.os, runner.arch) || '' }}
 
     - id: paths

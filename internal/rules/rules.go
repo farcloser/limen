@@ -38,8 +38,19 @@ const (
 	aquaChecksumsFile = aquaDir + "/" + legacyAquaChecksums
 	aquaPolicyFile    = aquaDir + "/policy.yaml"
 
-	// The canonical tool set, content-pinned, which the manifest imports.
-	aquaPackagesFile = ".limen/aqua.yaml"
+	// The canonical tool set, content-pinned, which the manifest imports, and
+	// the local registry beside it; hermetic's names, like the project's.
+	aquaPackagesFile = ".limen/hermetic.yaml"
+	aquaRegistryFile = ".limen/hermetic-registry.yaml"
+
+	// The same two under aqua's names, where limen kept them before. A
+	// manifest still importing the old tool set, or naming the old registry,
+	// passes while the old files stand at the canonical content: fix on a
+	// Renovate branch leaves the manifest alone and keeps them so, and fix on
+	// main moves the manifest and removes them. The release after this one
+	// retires the old names: a manifest still on them fails then.
+	legacyAquaPackagesFile = ".limen/aqua.yaml"
+	legacyAquaRegistryFile = ".limen/aqua-registry.yaml"
 
 	// The same files where limen kept them before: at the repository root,
 	// and then under .aqua/ with aqua's names.
@@ -134,7 +145,7 @@ const CanonicalJustfileImport = "import '.limen/just/main.just'"
 
 // CanonicalAquaPolicy, CanonicalAquaRegistry and CanonicalAquaPackages are the
 // canonical policy (.hermetic/policy.yaml), local registry
-// (.limen/aqua-registry.yaml) and tool set (.limen/aqua.yaml) every repository
+// (.limen/hermetic-registry.yaml) and tool set (.limen/hermetic.yaml) every repository
 // must carry verbatim. Unlike aqua.yaml (the project's manifest, which imports
 // the tool set) they are content-pinned. They are this repo's own files,
 // embedded.
@@ -565,7 +576,15 @@ func checkAqua(root string) Finding {
 		return fail(rule, "", "no "+name+" found (project tooling must be pinned in it, resolved by hermetic)")
 	}
 
-	manifest, parsed := parseAquaManifest(string(data))
+	// The canonical files under their old names, while the manifest still
+	// names them: judged as if it named the new ones, provided the old files
+	// stand at the canonical content, which is what keeps the pins resolving.
+	text, legacyNamed, f := acceptLegacyCanonical(root, name, string(data))
+	if f != nil {
+		return *f
+	}
+
+	manifest, parsed := parseAquaManifest(text)
 	if !parsed {
 		return fail(
 			rule,
@@ -578,15 +597,22 @@ func checkAqua(root string) Finding {
 		return *f
 	}
 
+	for _, old := range []string{legacyAquaPackagesFile, legacyAquaRegistryFile} {
+		if !slices.Contains(legacyNamed, old) && exists(filepath.Join(root, filepath.FromSlash(old))) {
+			return fail(rule, old, old+" is the old name of "+legacyCanonicalTarget(old)+
+				", which nothing names any more (limen fix removes it)")
+		}
+	}
+
 	if !exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile))) {
 		return fail(rule, name, aquaChecksumsFile+" is missing (run `hermetic update-checksum` and commit it)")
 	}
 
-	if f := checkPinned(root, rule, aquaPolicyFile, CanonicalAquaPolicy); f != nil {
+	if f := checkPinned(root, rule, aquaPolicyFile, policyFor(legacyNamed)); f != nil {
 		return *f
 	}
 
-	if f := checkPinned(root, rule, ".limen/aqua-registry.yaml", CanonicalAquaRegistry); f != nil {
+	if f := checkPinned(root, rule, aquaRegistryFile, CanonicalAquaRegistry); f != nil {
 		return *f
 	}
 
@@ -594,12 +620,86 @@ func checkAqua(root string) Finding {
 		return *f
 	}
 
-	return Finding{
-		Rule:    rule,
-		Status:  StatusOK,
-		Path:    name,
-		Message: name + " carries the canonical baseline with checksum enforcement; policy, registry, and checksums committed",
+	message := name + " carries the canonical baseline with checksum enforcement; policy, registry, and checksums committed"
+	if len(legacyNamed) > 0 {
+		message = name + " names the canonical files under their old names (" + strings.Join(legacyNamed, ", ") +
+			"), kept at the canonical content until limen fix on main moves it"
 	}
+
+	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: message}
+}
+
+// policyFor is the policy a manifest needs: the canonical one, or, while the
+// manifest names the local registry under its old name, the same with that
+// path. The library admits a local registry only under the path the policy
+// names, one path per registry name, so the policy follows the manifest for
+// the one release the old names are accepted; fix writes the manifest first
+// and the policy after it, from what the manifest then says.
+func policyFor(legacyNamed []string) string {
+	if slices.Contains(legacyNamed, legacyAquaRegistryFile) {
+		return strings.ReplaceAll(CanonicalAquaPolicy, "../"+aquaRegistryFile, "../"+legacyAquaRegistryFile)
+	}
+
+	return CanonicalAquaPolicy
+}
+
+// legacyNamedBy lists the canonical files the manifest on disk names under
+// their old names, in a fixed order; nothing when it names none or there is
+// no manifest.
+func legacyNamedBy(root string) []string {
+	data, err := readRepoFile(root, aquaManifestFile)
+	if err != nil {
+		return nil
+	}
+
+	var named []string
+
+	for _, old := range []string{legacyAquaRegistryFile, legacyAquaPackagesFile} {
+		if strings.Contains(string(data), "../"+old) {
+			named = append(named, old)
+		}
+	}
+
+	return named
+}
+
+// acceptLegacyCanonical rewrites, for the check alone, a manifest's import of
+// the canonical tool set and its local registry path from the old names to
+// the current ones, so the rest of the rule judges the shape and not the
+// spelling, and names which old files the manifest relies on. An old file
+// the manifest names and that is missing or drifted from the canonical is
+// a failure: the import or the registry would not resolve.
+func acceptLegacyCanonical(root, name, text string) (string, []string, *Finding) {
+	var named []string
+
+	for old, current := range map[string]string{
+		legacyAquaPackagesFile: aquaPackagesFile,
+		legacyAquaRegistryFile: aquaRegistryFile,
+	} {
+		if !strings.Contains(text, "../"+old) {
+			continue
+		}
+
+		canonical := CanonicalAquaPackages
+		if old == legacyAquaRegistryFile {
+			canonical = CanonicalAquaRegistry
+		}
+
+		data, err := readRepoFile(root, old)
+		if err != nil || string(data) != canonical {
+			f := fail(ruleAqua, name, name+" names "+old+", the old name of "+current+
+				", and that file is missing or not the canonical: limen fix moves the manifest (on main) or restores the file")
+
+			return text, nil, &f
+		}
+
+		named = append(named, old)
+		text = strings.ReplaceAll(text, "../"+old, "../"+current)
+	}
+
+	slices.Sort(named)
+
+	return text, named, nil
 }
 
 // readAquaManifest reads the project's manifest: .hermetic/hermetic.yaml, or a
@@ -643,6 +743,16 @@ func legacyAquaPaths() []string {
 	}
 
 	return append(paths, legacyAquaFiles...)
+}
+
+// legacyCanonicalTarget is the name a canonical file under its old name
+// carries now.
+func legacyCanonicalTarget(old string) string {
+	if old == legacyAquaRegistryFile {
+		return aquaRegistryFile
+	}
+
+	return aquaPackagesFile
 }
 
 // legacyAquaTarget is where a legacy pin file lives now.
@@ -824,6 +934,8 @@ var movedPaths = map[string]string{
 	".aqua/aqua.yaml":           aquaManifestFile,
 	".aqua/aqua-checksums.json": aquaChecksumsFile,
 	".aqua/aqua-policy.yaml":    aquaPolicyFile,
+	legacyAquaPackagesFile:      aquaPackagesFile,
+	legacyAquaRegistryFile:      aquaRegistryFile,
 	"actions/setup-aqua":        "actions/setup-hermetic",
 	"Justfile":                  justfileName,
 	".allowed_signers":          signersFile,
@@ -833,12 +945,13 @@ var movedPaths = map[string]string{
 }
 
 // movedPathRE finds a moved path as a whole name: what precedes it is no part
-// of a path, so `.limen/aqua.yaml` is where the canonical tool set lives, not
-// a reference to the old root manifest, while `.aqua/…` is matched with its
+// of a path, so `.limen/hermetic.yaml` is not a reference to the old root
+// manifest, while `.aqua/…` and `.limen/aqua…` are matched with their
 // directory, the whole of the old location. A name escaped inside a regular
 // expression (aqua\.yaml) is not recognized.
 var movedPathRE = regexp.MustCompile(
 	`(?:^|[^\w./-])(\.aqua/aqua\.yaml|\.aqua/aqua-checksums\.json|\.aqua/aqua-policy\.yaml` +
+		`|\.limen/aqua\.yaml|\.limen/aqua-registry\.yaml` +
 		`|aqua\.yaml|aqua-checksums\.json|aqua-policy\.yaml|Justfile|\.allowed_signers|\.goreleaser\.ya?ml|limen\.yaml)\b`,
 )
 

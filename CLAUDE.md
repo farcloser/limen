@@ -6,7 +6,7 @@ What holds in this repository on top of the working agreement every repository
 shares:
 
 - **Never put specific version numbers in the book (`book/`).** Use generic placeholders in
-  prose and examples. The real, pinned versions live in `.limen/aqua.yaml` and
+  prose and examples. The real, pinned versions live in `.limen/hermetic.yaml` and
   `.hermetic/hermetic.yaml` and are managed by hermetic and Renovate: the book explains *how*, not
   *which*.
 - **Never reconverge the sibling repositories (mumbrew, limen-install, godolint,
