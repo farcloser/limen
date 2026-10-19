@@ -23,14 +23,14 @@ const goModBare = "module example.com/proj\n\ngo 1.26\n"
 // carry and what a repository declares, the contract as seen from outside.
 var (
 	toolsEverywhere = []string{ //nolint:gochecknoglobals // immutable fixture data.
-		"github.com/vbatts/git-validation",
+		"github.com/forkcloser/git-validation/cmd/git-validation",
 		"github.com/forkcloser/godolint/cmd/godolint",
 		"github.com/forkcloser/dot/cmd/dot",
 	}
 	sourceAnalyzers = []string{ //nolint:gochecknoglobals // immutable fixture data.
 		"golang.org/x/tools/cmd/deadcode",
 		"golang.org/x/vuln/cmd/govulncheck",
-		"github.com/google/go-licenses/v2",
+		"github.com/forkcloser/go-licenses/cmd/go-licenses",
 	}
 )
 
@@ -42,7 +42,7 @@ const goModToolsEverywhere = `module tools
 go 1.26
 
 tool (
-	github.com/vbatts/git-validation
+	github.com/forkcloser/git-validation/cmd/git-validation
 	github.com/forkcloser/godolint/cmd/godolint
 	github.com/forkcloser/dot/cmd/dot
 )
@@ -55,10 +55,10 @@ const goModWithTools = `module example.com/proj
 go 1.26
 
 tool (
-	github.com/google/go-licenses/v2 // the license scanner
+	github.com/forkcloser/go-licenses/cmd/go-licenses // the license scanner
 	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
-	github.com/vbatts/git-validation
+	github.com/forkcloser/git-validation/cmd/git-validation
 	github.com/forkcloser/godolint/cmd/godolint
 	github.com/forkcloser/dot/cmd/dot
 	example.com/other/cmd/thing
@@ -163,7 +163,7 @@ func TestGoModToolDirectives(t *testing.T) {
 		{
 			name: "one-line form",
 			gomod: "module tools\n\ngo 1.26\n\n" +
-				"tool github.com/vbatts/git-validation // trailing\n" +
+				"tool github.com/forkcloser/git-validation/cmd/git-validation // trailing\n" +
 				"tool   github.com/forkcloser/godolint/cmd/godolint\n" +
 				"tool github.com/forkcloser/dot/cmd/dot\n",
 			ok: true,
@@ -290,33 +290,45 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 // TestGoToolsRetiredDirective: a .limen/tools/go.mod that still carries a retired
 // directive beside its replacement fails naming both, and fix removes it
 // through `go get -tool pkg@none` (the fake go) and then passes.
+// TestGoToolsRetiredDirective: each directive limen retired, beside the
+// everywhere set, fails the check naming it and its replacement; fix removes
+// it; the check then passes. The table is the retired set as seen from
+// outside: a directive missing here is one fix would leave in every
+// repository's tools module.
 func TestGoToolsRetiredDirective(t *testing.T) {
 	t.Parallel()
 
-	const retired = "github.com/goccy/go-graphviz/cmd/dot"
+	for retired, replacement := range map[string]string{
+		"github.com/goccy/go-graphviz/cmd/dot": "github.com/forkcloser/dot/cmd/dot",
+		"github.com/vbatts/git-validation":     "github.com/forkcloser/git-validation/cmd/git-validation",
+		"github.com/google/go-licenses/v2":     "github.com/forkcloser/go-licenses/cmd/go-licenses",
+	} {
+		t.Run(retired, func(t *testing.T) {
+			t.Parallel()
 
-	files := compliantFiles()
-	files[".limen/tools/go.mod"] = goModToolsEverywhere + "\ntool " + retired + "\n"
-	dir := writeRepo(t, files)
+			files := compliantFiles()
+			files[".limen/tools/go.mod"] = goModToolsEverywhere + "\ntool " + retired + "\n"
+			dir := writeRepo(t, files)
 
-	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools")
-	if f.OK() || !strings.Contains(f.Message, retired) ||
-		!strings.Contains(f.Message, "github.com/forkcloser/dot/cmd/dot") {
-		t.Fatalf("a retired directive should fail naming it and its replacement: ok=%v %s", f.OK(), f.Message)
-	}
+			f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools")
+			if f.OK() || !strings.Contains(f.Message, retired) || !strings.Contains(f.Message, replacement) {
+				t.Fatalf("a retired directive should fail naming it and its replacement: ok=%v %s", f.OK(), f.Message)
+			}
 
-	outcome := outcomeFor(
-		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
-		"gotools",
-	)
+			outcome := outcomeFor(
+				rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
+				"gotools",
+			)
 
-	removed := strings.Contains(outcome.Message, "removed retired tool directive(s) for "+retired)
-	if outcome.Action != rules.ActionMerged || !removed {
-		t.Fatalf("got %s (%s), want merged with the directive removed", outcome.Action, outcome.Message)
-	}
+			removed := strings.Contains(outcome.Message, "removed retired tool directive(s) for "+retired)
+			if outcome.Action != rules.ActionMerged || !removed {
+				t.Fatalf("got %s (%s), want merged with the directive removed", outcome.Action, outcome.Message)
+			}
 
-	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {
-		t.Fatalf("rule does not pass after fix: %s", f.Message)
+			if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {
+				t.Fatalf("rule does not pass after fix: %s", f.Message)
+			}
+		})
 	}
 }
 
@@ -529,10 +541,10 @@ func TestFixGoToolsSeedsAtLimenPins(t *testing.T) {
 	toolsMod, _ := os.ReadFile(filepath.Join(dir, ".limen", "tools", "go.mod"))
 
 	for pkg, module := range map[string]string{
-		"github.com/vbatts/git-validation":  "github.com/vbatts/git-validation",
-		"golang.org/x/tools/cmd/deadcode":   "golang.org/x/tools",
-		"golang.org/x/vuln/cmd/govulncheck": "golang.org/x/vuln",
-		"github.com/google/go-licenses/v2":  "github.com/google/go-licenses/v2",
+		"github.com/forkcloser/git-validation/cmd/git-validation": "github.com/forkcloser/git-validation",
+		"golang.org/x/tools/cmd/deadcode":                         "golang.org/x/tools",
+		"golang.org/x/vuln/cmd/govulncheck":                       "golang.org/x/vuln",
+		"github.com/forkcloser/go-licenses/cmd/go-licenses":       "github.com/forkcloser/go-licenses",
 	} {
 		want := "tool " + pkg + " // @" + limenRequire(t, ".limen/tools/go.mod", module)
 		if !strings.Contains(string(toolsMod), want) {
