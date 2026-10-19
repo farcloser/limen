@@ -49,6 +49,28 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Recompute hermetic's digest for the version Renovate moved
+        # Before setup-hermetic, which verifies the release's checksums.txt
+        # against the digest pinned beside the version: Renovate moves that
+        # version in this repository alone (the action is content-pinned
+        # everywhere else) and never a digest, so a bump arrives with the old
+        # one and the action would refuse its own download. Runner tools
+        # only, on the release's own file; what then guards the bump's run is
+        # the action's attestation check on the asset, and the digest written
+        # here guards every run after, as the pin the fleet receives.
+        if: github.repository == 'farcloser/limen'
+        run: |
+          action=.github/actions/setup-hermetic/action.yaml
+          version="$(sed -n 's/^ *HERMETIC_VERSION: \(v[0-9][^ ]*\)$/\1/p' "$action")"
+          [ -n "$version" ] || { echo "no HERMETIC_VERSION in $action" >&2; exit 1; }
+          tmp="$(mktemp -d)"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o "${tmp}/checksums.txt" \
+            "https://github.com/forkcloser/hermetic/releases/download/${version}/checksums.txt"
+          sha="$(sha256sum "${tmp}/checksums.txt" | cut -d' ' -f1)"
+          rm -rf "${tmp}"
+          sed -i "s/^\( *HERMETIC_CHECKSUMS_SHA256: \)[0-9a-f]*$/\1${sha}/" "$action"
+          echo "hermetic ${version}: checksums.txt digest ${sha}"
+
       - name: Install hermetic (pinned, verified)
         uses: ./.github/actions/setup-hermetic
         with:
