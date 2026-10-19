@@ -83,6 +83,20 @@ func githubAudit(ctx context.Context, scope githubScope, stderr io.Writer) (audi
 		return nil, "", false
 	}
 
+	if scope.allRepos && scope.org == "" {
+		_, _ = fmt.Fprintln(stderr, "limen: -all-repos sweeps an organization — name it with -org")
+
+		return nil, "", false
+	}
+
+	// Before the first API call, so a gh that does not run fails the run
+	// once, with its cause, rather than every check.
+	if err := github.Preflight(ctx); err != nil {
+		_, _ = fmt.Fprintf(stderr, errFormat, err)
+
+		return nil, "", false
+	}
+
 	if scope.allRepos {
 		return githubSweep(ctx, scope.org, stderr)
 	}
@@ -112,12 +126,6 @@ func githubAudit(ctx context.Context, scope githubScope, stderr io.Writer) (audi
 // captured by the runner — fix audits twice, and both passes must judge the
 // same set.
 func githubSweep(ctx context.Context, orgFlag string, stderr io.Writer) (auditRunner, string, bool) {
-	if orgFlag == "" {
-		_, _ = fmt.Fprintln(stderr, "limen: -all-repos sweeps an organization — name it with -org")
-
-		return nil, "", false
-	}
-
 	repos, err := github.OrgRepos(ctx, orgFlag)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, errFormat, err)
@@ -254,7 +262,14 @@ func runGithubFix(ctx context.Context, args []string, stdout, stderr io.Writer) 
 
 	findings, changes := audit(overrides)
 	if len(changes) == 0 {
-		_, _ = fmt.Fprintln(progress, "nothing to fix")
+		// A check the token could not answer is not a check that passed:
+		// "nothing to fix" is said only when nothing was left unverified.
+		if unverified := countUnverifiable(findings); unverified > 0 {
+			_, _ = fmt.Fprintf(progress, "nothing planned: %d of %d checks could not be verified\n",
+				unverified, len(findings))
+		} else {
+			_, _ = fmt.Fprintln(progress, "nothing to fix")
+		}
 
 		return reportGithubOutcome(stdout, stderr, label, findings, printer)
 	}
@@ -281,6 +296,19 @@ func runGithubFix(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	return reportGithubOutcome(stdout, stderr, label, final, printer)
+}
+
+// countUnverifiable is the number of findings the token could not answer.
+func countUnverifiable(findings []github.Finding) int {
+	count := 0
+
+	for _, finding := range findings {
+		if finding.Status == github.StatusUnverifiable {
+			count++
+		}
+	}
+
+	return count
 }
 
 // printGithubPlan lists the planned changes, grouped under their target
