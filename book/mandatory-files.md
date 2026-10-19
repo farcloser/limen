@@ -247,7 +247,7 @@ of its own:
 | `.limen/just/*.just` | The **shared recipe baseline**: `main.just` mounts the `do` tree, sets the hermetic environment and carries the orientation recipes (`default`, `info`); under `do` sit `build`, `tools`, `lint`, `security`, `test`, `perf`, `fix`, each a `mod`, plus `release` imported flat so it can take a tag argument. | Content-pinned: **every `*.just` under `.limen/just/`** matches the canonical exactly, and a `*.just` there that is no canonical module (one an earlier limen shipped and later renamed) fails and is removed by `limen fix`: the directory is limen's alone. |
 
 `.limen/` also parks the non-recipe canonical configs (`.limen/.shellcheckrc`,
-`.limen/.yamlfmt`, `.limen/lint-go.yaml`, `.limen/aqua-registry.yaml`, `.limen/aqua.yaml`,
+`.limen/.yamlfmt`, `.limen/lint-go.yaml`, `.limen/hermetic-registry.yaml`, `.limen/hermetic.yaml`,
 `.limen/lychee.toml`), each governed by its own rule ([linting](./linting.md),
 [tooling](./tooling.md), [link checking](#link-checking--limenlycheetoml)), not the
 `.justfile` content-pin.

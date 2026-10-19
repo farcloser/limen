@@ -654,7 +654,7 @@ func TestFixMergesAquaManifest(t *testing.T) {
 	}
 
 	if !strings.Contains(manifest, "type: standard") ||
-		!strings.Contains(manifest, "path: ../.limen/aqua-registry.yaml") {
+		!strings.Contains(manifest, "path: ../.limen/hermetic-registry.yaml") {
 		t.Error("registries section was not added")
 	}
 
@@ -663,7 +663,7 @@ func TestFixMergesAquaManifest(t *testing.T) {
 	}
 
 	override := strings.Index(manifest, "- name: casey/just@v99.99.99")
-	importAt := strings.Index(manifest, "- import: ../.limen/aqua.yaml")
+	importAt := strings.Index(manifest, "- import: ../.limen/hermetic.yaml")
 
 	if override < 0 {
 		t.Error("the project's override of a canonical package was dropped")
@@ -673,7 +673,11 @@ func TestFixMergesAquaManifest(t *testing.T) {
 		t.Errorf("the import must be added at the end of the list:\n%s", manifest)
 	}
 
-	if pkgs, _ := os.ReadFile(filepath.Join(dir, ".limen", "aqua.yaml")); string(pkgs) != rules.CanonicalAquaPackages {
+	if pkgs, _ := os.ReadFile(
+		filepath.Join(dir, ".limen", "hermetic.yaml"),
+	); string(
+		pkgs,
+	) != rules.CanonicalAquaPackages {
 		t.Error("the canonical tool set was not written")
 	}
 

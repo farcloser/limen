@@ -21,7 +21,7 @@ func TestCanonicalAquaHasNoTwoLinePins(t *testing.T) {
 	}
 
 	if strings.Contains(limen.CanonicalAquaPackages, "\n    version:") {
-		t.Error("the canonical .limen/aqua.yaml carries a version: line")
+		t.Error("the canonical .limen/hermetic.yaml carries a version: line")
 	}
 
 	if o := outcomesFor(

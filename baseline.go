@@ -66,7 +66,7 @@ var CanonicalLintGo string
 // CanonicalAquaYAML is the manifest limen seeds into a bootstrapped
 // repository, .hermetic/hermetic.yaml, which hermetic resolves. It and its
 // aqua-checksums.json are a per-project starting point (the repo evolves its
-// own pinned set from there); policy.yaml and .limen/aqua-registry.yaml are
+// own pinned set from there); policy.yaml and .limen/hermetic-registry.yaml are
 // the canonical policy/registry, identical in every repo. Embedding a
 // matching manifest and aqua-checksums.json together means a freshly
 // bootstrapped repo passes the aqua check offline — `hermetic i` only
@@ -89,14 +89,14 @@ var CanonicalAquaPolicy string
 
 // CanonicalAquaRegistry is the local aqua registry, content-pinned in every repo (see above).
 //
-//go:embed .limen/aqua-registry.yaml
+//go:embed .limen/hermetic-registry.yaml
 var CanonicalAquaRegistry string
 
 // CanonicalAquaPackages is the canonical tool set every repository's aqua.yaml
-// imports, content-pinned at .limen/aqua.yaml: its pins move with limen
+// imports, content-pinned at .limen/hermetic.yaml: its pins move with limen
 // releases, so a limen bump never changes the manifest's own package list.
 //
-//go:embed .limen/aqua.yaml
+//go:embed .limen/hermetic.yaml
 var CanonicalAquaPackages string
 
 // The .github pieces are embedded individually, not by glob, because the
@@ -196,7 +196,7 @@ const CanonicalClaudeSeed = "@AGENTS.md\n"
 // .limen/just/ are the shared, content-pinned modules (see JustModules); a
 // project's own recipes live in the root .justfile, which is neither embedded
 // nor pinned. The directory also holds non-module config that lives here to
-// declutter the repo root (.shellcheckrc, .yamlfmt, aqua-registry.yaml) —
+// declutter the repo root (.shellcheckrc, .yamlfmt, hermetic-registry.yaml) —
 // those are embedded by name above and are not just modules, so JustModules
 // ignores them.
 //

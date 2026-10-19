@@ -37,13 +37,13 @@ aqua_api := 'HERMETIC_GITHUB_TOKEN="${HERMETIC_GITHUB_TOKEN:-$(gh auth token 2>/
 # bad pin fails here, not at first use.
 #
 # The recipes edit the project's own pins in .hermetic/hermetic.yaml, never the
-# canonical set it imports (.limen/aqua.yaml, limen's): a project pin of a
+# canonical set it imports (.limen/hermetic.yaml, limen's): a project pin of a
 # canonical tool overrides limen's version, and removing it falls back to it.
 
 # hermetic on the project's own pins alone: a sibling copy of the manifest with
 # the import commented out, run from outside the repository — run inside it, a
 # command the copy lacks is resolved through the real manifest, and the
-# library rewrites .limen/aqua.yaml (and `generate` skips a canonical tool as
+# library rewrites .limen/hermetic.yaml (and `generate` skips a canonical tool as
 # already declared). HERMETIC_NO_GLOBAL_CONFIG keeps the toolset's own pins
 # out as well: the binary derives the global config from its root, so
 # unsetting the variable would not. The copy, import restored, then replaces
@@ -53,7 +53,7 @@ project_aqua := '''
         local copy scratch rc=0
         copy=$(mktemp .hermetic/hermetic.yaml.XXXXXX)
         scratch=$(mktemp -d "${TMPDIR:-/tmp}/limen-tools.XXXXXX")
-        sed 's|^\([[:space:]]*\)- import: \(\.\./\.limen/aqua\.yaml\)[[:space:]]*$|\1# limen-import: \2|' .hermetic/hermetic.yaml > "$copy"
+        sed 's|^\([[:space:]]*\)- import: \(\.\./\.limen/hermetic\.yaml\)[[:space:]]*$|\1# limen-import: \2|' .hermetic/hermetic.yaml > "$copy"
         (cd "$scratch" && HERMETIC_NO_GLOBAL_CONFIG=true HERMETIC_GITHUB_TOKEN="${HERMETIC_GITHUB_TOKEN:-$(gh auth token 2>/dev/null || true)}" hermetic -c "$OLDPWD/$copy" "$@") || rc=$?
         rmdir "$scratch"
         if [ "$rc" -eq 0 ]; then
@@ -99,7 +99,7 @@ add pkg version="": (_banner "tools" "add")
     tmp=$(mktemp .hermetic/hermetic.yaml.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
     if ! ENTRY=$entry awk '
-        /^[[:space:]]*- import: \.\.\/\.limen\/aqua\.yaml[[:space:]]*$/ && !done {
+        /^[[:space:]]*- import: \.\.\/\.limen\/hermetic\.yaml[[:space:]]*$/ && !done {
             indent = $0; sub(/-.*/, "", indent)
             n = split(ENVIRON["ENTRY"], lines, "\n")
             for (i = 1; i <= n; i++) if (lines[i] != "") print indent lines[i]
@@ -108,7 +108,7 @@ add pkg version="": (_banner "tools" "add")
         { print }
         END { if (!done) exit 1 }
     ' .hermetic/hermetic.yaml > "$tmp"; then
-        echo ".hermetic/hermetic.yaml does not import ../.limen/aqua.yaml — run 'limen fix' first." >&2
+        echo ".hermetic/hermetic.yaml does not import ../.limen/hermetic.yaml — run 'limen fix' first." >&2
         exit 1
     fi
     mv "$tmp" .hermetic/hermetic.yaml

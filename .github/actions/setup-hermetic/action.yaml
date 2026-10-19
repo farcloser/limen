@@ -13,13 +13,14 @@ runs:
     - name: Install hermetic (pinned, verified)
       shell: bash
       env:
-        # Bumped manually, as a pair: Renovate cannot recompute the sha256,
-        # the digest of the release's checksums.txt, that must change with
-        # the version. One digest covers every platform: the asset is
-        # verified against checksums.txt, and checksums.txt against this.
+        # A pair: Renovate moves the version, in limen alone, and the checksum
+        # workflow recomputes the sha256 beside it on Renovate's branch, the
+        # digest of the release's checksums.txt, which must change with the
+        # version. One digest covers every platform: the asset is verified
+        # against checksums.txt, and checksums.txt against this.
         # renovate: depName=forkcloser/hermetic
-        HERMETIC_VERSION: v0.2.0
-        HERMETIC_CHECKSUMS_SHA256: d5ed4550db1618267df50ef39f3d7dc4d82c5dd1f1060c72458d654a6c5f9f02
+        HERMETIC_VERSION: v0.2.1
+        HERMETIC_CHECKSUMS_SHA256: ccce092b673a33b287704a5ba949d5e75b5164dbbaf4ec75f391207a5f636166
         # The job's own token, for `gh attestation verify` only, here and not
         # exported: a read of GitHub's attestations API, before any
         # branch-declared binary runs.

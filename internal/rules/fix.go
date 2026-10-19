@@ -782,12 +782,16 @@ func remediateAqua(ctx context.Context, root, selfVersion string, renovateBranch
 
 	// Canonical everywhere: content-pinned exactly. The tool set is the one
 	// whose change moves pins, so its rewrite regenerates checksums too.
+	// The policy after the manifest: it names the local registry under the
+	// path the manifest names (policyFor), the old one while a Renovate
+	// branch's manifest keeps it.
 	packages := pinExact(root, ruleAqua, aquaPackagesFile, limen.CanonicalAquaPackages)
 	out = append(out,
-		pinExact(root, ruleAqua, aquaPolicyFile, limen.CanonicalAquaPolicy),
-		pinExact(root, ruleAqua, ".limen/aqua-registry.yaml", limen.CanonicalAquaRegistry),
+		pinExact(root, ruleAqua, aquaPolicyFile, policyFor(legacyNamedBy(root))),
+		pinExact(root, ruleAqua, aquaRegistryFile, limen.CanonicalAquaRegistry),
 		packages,
 	)
+	out = append(out, retireLegacyCanonical(root)...)
 
 	// A move always regenerates: it is what allows the policy at its new path,
 	// which every aqua command run after this one in the same job needs.
@@ -1010,6 +1014,52 @@ func regenerateAquaChecksums(ctx context.Context, root string) error {
 // hermeticBinary is the toolset's resolver, on the PATH wherever limen runs:
 // the installer's root bin on a laptop, the setup action's on a runner.
 const hermeticBinary = "hermetic"
+
+// retireLegacyCanonical retires the canonical tool set and registry under
+// their old names. A manifest that still names one (a Renovate branch's,
+// which fix leaves alone) keeps the old file, at the canonical content, so
+// the import and the registry resolve until fix on main moves the manifest;
+// once nothing names it, the old file goes.
+func retireLegacyCanonical(root string) []Outcome {
+	manifest, _ := readRepoFile(root, aquaManifestFile)
+
+	var out []Outcome
+
+	for old, canonical := range map[string]string{
+		legacyAquaPackagesFile: limen.CanonicalAquaPackages,
+		legacyAquaRegistryFile: limen.CanonicalAquaRegistry,
+	} {
+		if !exists(filepath.Join(root, filepath.FromSlash(old))) {
+			continue
+		}
+
+		if strings.Contains(string(manifest), "../"+old) {
+			outcome := pinExact(root, ruleAqua, old, canonical)
+			outcome.Action = ActionAdvisory
+			outcome.Message = old + " kept at the canonical content while " + aquaManifestFile +
+				" still names it: limen fix on main moves the manifest to " + legacyCanonicalTarget(old)
+
+			out = append(out, outcome)
+
+			continue
+		}
+
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(old))); err != nil {
+			out = append(out, failed(ruleAqua, old, err))
+
+			continue
+		}
+
+		out = append(out, Outcome{
+			Rule:    ruleAqua,
+			Action:  ActionOverwrote,
+			Path:    old,
+			Message: "removed " + old + ": the canonical file is " + legacyCanonicalTarget(old),
+		})
+	}
+
+	return out
+}
 
 // removeStaleDir removes a directory limen once seeded and has since moved,
 // the action's old home: nothing canonical calls it, and a project's own

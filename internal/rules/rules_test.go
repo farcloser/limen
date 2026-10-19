@@ -71,10 +71,10 @@ func compliantFiles() map[string]string {
 		// gotools rule); without a root go.mod, the everywhere set is enough.
 		".limen/tools/go.mod": goModToolsEverywhere,
 		// The aqua policy, local registry, and lychee config are content-pinned exactly.
-		".hermetic/policy.yaml":     rules.CanonicalAquaPolicy,
-		".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
-		".limen/aqua.yaml":          rules.CanonicalAquaPackages,
-		".limen/lychee.toml":        rules.CanonicalLychee,
+		".hermetic/policy.yaml":         rules.CanonicalAquaPolicy,
+		".limen/hermetic-registry.yaml": rules.CanonicalAquaRegistry,
+		".limen/hermetic.yaml":          rules.CanonicalAquaPackages,
+		".limen/lychee.toml":            rules.CanonicalLychee,
 		// aqua.yaml is YAML, so the conditional yamlfmt rule fires; satisfy it
 		// with the canonical baseline. The shellcheck config is unconditional.
 		".limen/.yamlfmt":      rules.CanonicalYamlfmt,
@@ -698,7 +698,11 @@ func legacyAquaLayout(dir, manifestName string) map[string]string {
 		}
 
 		if dir == "" {
-			files[old] = strings.ReplaceAll(content, "../.limen/aqua-registry.yaml", ".limen/aqua-registry.yaml")
+			files[old] = strings.ReplaceAll(
+				content,
+				"../.limen/hermetic-registry.yaml",
+				".limen/hermetic-registry.yaml",
+			)
 		} else {
 			files[dir+"/"+old] = content
 		}
@@ -741,8 +745,8 @@ func TestAquaLegacyLayouts(t *testing.T) {
 		}
 
 		data, err := os.ReadFile(filepath.Join(dir, ".hermetic", "hermetic.yaml"))
-		if err != nil || !strings.Contains(string(data), "path: ../.limen/aqua-registry.yaml") {
-			t.Fatalf("moved manifest must point at ../.limen/aqua-registry.yaml: %v\n%s", err, data)
+		if err != nil || !strings.Contains(string(data), "path: ../.limen/hermetic-registry.yaml") {
+			t.Fatalf("moved manifest must point at ../.limen/hermetic-registry.yaml: %v\n%s", err, data)
 		}
 
 		if _, err := os.Stat(filepath.Join(dir, ".hermetic", "policy.yaml")); err != nil {
@@ -787,7 +791,7 @@ func canonicalImportLine(t *testing.T) string {
 }
 
 // canonicalPin returns a canonical tool's one-line pin exactly as the embedded
-// tool set (.limen/aqua.yaml) spells it, and its version. Fixtures are built
+// tool set (.limen/hermetic.yaml) spells it, and its version. Fixtures are built
 // from these rather than from copied literals: a copied version is a second
 // pin of the same tool that Renovate does not know about.
 func canonicalPin(t *testing.T, name string) (line, version string) {
@@ -880,7 +884,7 @@ func TestAquaGoPinSeeded(t *testing.T) {
 
 	got := string(data)
 	pinAt := strings.Index(got, "  - name: golang/go@"+goVersion+"\n")
-	importAt := strings.Index(got, "  - import: ../.limen/aqua.yaml\n")
+	importAt := strings.Index(got, "  - import: ../.limen/hermetic.yaml\n")
 
 	if pinAt < 0 || importAt < 0 || pinAt > importAt {
 		t.Errorf("fix must add the Go pin above the import:\n%s", got)
@@ -991,7 +995,7 @@ func TestAquaOverrideBelowImport(t *testing.T) {
 	got := string(data)
 
 	override := strings.Index(got, "  - name: casey/just@99.0.0\n")
-	importAt := strings.Index(got, "  - import: ../.limen/aqua.yaml\n")
+	importAt := strings.Index(got, "  - import: ../.limen/hermetic.yaml\n")
 
 	if override < 0 || importAt < 0 || override > importAt {
 		t.Errorf("fix must keep the override and move the import below it:\n%s", got)
@@ -1066,7 +1070,7 @@ func TestAquaRequiresCanonicalPackages(t *testing.T) {
 		t.Fatal("a missing import should fail")
 	}
 
-	if !strings.Contains(f.Message, "import ../.limen/aqua.yaml") {
+	if !strings.Contains(f.Message, "import ../.limen/hermetic.yaml") {
 		t.Errorf("message did not name the missing import: %s", f.Message)
 	}
 }
@@ -1177,35 +1181,35 @@ func TestAquaPinsPolicyAndRegistry(t *testing.T) {
 		t.Error("a drifted aqua-policy.yaml should fail (content-pinned)")
 	}
 
-	// Missing .limen/aqua-registry.yaml fails.
+	// Missing .limen/hermetic-registry.yaml fails.
 	noReg := compliantFiles()
-	delete(noReg, ".limen/aqua-registry.yaml")
+	delete(noReg, ".limen/hermetic-registry.yaml")
 
 	if f := findingByRule(rules.Check(writeRepo(t, noReg), rules.DefaultPolicy()), "aqua"); f.OK() {
-		t.Error("a missing .limen/aqua-registry.yaml should fail the aqua rule")
+		t.Error("a missing .limen/hermetic-registry.yaml should fail the aqua rule")
 	}
 
 	// A drifted registry fails.
 	badReg := compliantFiles()
 
-	badReg[".limen/aqua-registry.yaml"] = rules.CanonicalAquaRegistry + "\n# local edit\n"
+	badReg[".limen/hermetic-registry.yaml"] = rules.CanonicalAquaRegistry + "\n# local edit\n"
 	if f := findingByRule(rules.Check(writeRepo(t, badReg), rules.DefaultPolicy()), "aqua"); f.OK() {
-		t.Error("a drifted .limen/aqua-registry.yaml should fail (content-pinned)")
+		t.Error("a drifted .limen/hermetic-registry.yaml should fail (content-pinned)")
 	}
 
 	// The canonical tool set: missing or drifted fails (content-pinned).
 	noPkgs := compliantFiles()
-	delete(noPkgs, ".limen/aqua.yaml")
+	delete(noPkgs, ".limen/hermetic.yaml")
 
 	if f := findingByRule(rules.Check(writeRepo(t, noPkgs), rules.DefaultPolicy()), "aqua"); f.OK() {
-		t.Error("a missing .limen/aqua.yaml should fail the aqua rule")
+		t.Error("a missing .limen/hermetic.yaml should fail the aqua rule")
 	}
 
 	badPkgs := compliantFiles()
 
-	badPkgs[".limen/aqua.yaml"] = rules.CanonicalAquaPackages + "  - name: junegunn/fzf@v0.60.0\n"
+	badPkgs[".limen/hermetic.yaml"] = rules.CanonicalAquaPackages + "  - name: junegunn/fzf@v0.60.0\n"
 	if f := findingByRule(rules.Check(writeRepo(t, badPkgs), rules.DefaultPolicy()), "aqua"); f.OK() {
-		t.Error("a drifted .limen/aqua.yaml should fail (content-pinned)")
+		t.Error("a drifted .limen/hermetic.yaml should fail (content-pinned)")
 	}
 }
 
@@ -1215,7 +1219,7 @@ func TestYamlfmtConditional(t *testing.T) {
 	// No YAML anywhere: the yamlfmt rule produces no finding.
 	noYAML := compliantFiles()
 	for _, y := range []string{
-		".hermetic/hermetic.yaml", ".hermetic/policy.yaml", ".limen/aqua-registry.yaml", ".limen/aqua.yaml",
+		".hermetic/hermetic.yaml", ".hermetic/policy.yaml", ".limen/hermetic-registry.yaml", ".limen/hermetic.yaml",
 		".github/workflows/update-aqua-checksum.yaml", ".github/actions/setup-hermetic/action.yaml", ".github/workflows/ci.yaml",
 		".github/actions/windows-cache-image/action.yaml",
 		".github/actions/cache/action.yaml",
@@ -1407,7 +1411,7 @@ func TestPinsRule(t *testing.T) {
 		t.Errorf("a pinned verifier must pass: %s", f.Message)
 	}
 
-	files[".limen/aqua.yaml"] = withoutLineContaining(t, rules.CanonicalAquaPackages, "sigstore/cosign@")
+	files[".limen/hermetic.yaml"] = withoutLineContaining(t, rules.CanonicalAquaPackages, "sigstore/cosign@")
 
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); f.OK() ||
 		!strings.Contains(f.Message, "sigstore/cosign") {
@@ -1423,12 +1427,13 @@ func TestStaleReferences(t *testing.T) {
 
 	files := compliantFiles()
 	files[".github/workflows/ci.yaml"] = "name: ci\n" +
-		"# keyed on .hermetic/hermetic.yaml and .limen/aqua.yaml, which are fine\n" +
+		"# keyed on .hermetic/hermetic.yaml and .limen/hermetic.yaml, which are fine\n" +
 		"key: ${{ hashFiles('aqua.yaml', 'aqua-checksums.json') }}\n" +
 		"# prose about the old Justfile and aqua.yaml is a comment, not a reference\n" +
 		"run: just lint # the Justfile recipes\n" +
-		"image: ${{ hashFiles('.aqua/aqua.yaml', '.hermetic/hermetic.yaml', '.limen/aqua.yaml') }}\n" +
-		"uses: ./.github/actions/setup-aqua\n"
+		"image: ${{ hashFiles('.aqua/aqua.yaml', '.hermetic/hermetic.yaml', '.limen/hermetic.yaml') }}\n" +
+		"uses: ./.github/actions/setup-aqua\n" +
+		"store: ${{ hashFiles('.limen/aqua.yaml', '.limen/aqua-registry.yaml') }}\n"
 	files["renovate.json"] = "{\n" +
 		`  "description": [` + "\n" +
 		`    "a description an earlier limen seeded, naming aqua.yaml and the Justfile"` + "\n" +
@@ -1444,6 +1449,8 @@ func TestStaleReferences(t *testing.T) {
 		".github/workflows/ci.yaml:3: aqua-checksums.json → .hermetic/aqua-checksums.json",
 		".github/workflows/ci.yaml:6: .aqua/aqua.yaml → .hermetic/hermetic.yaml",
 		".github/workflows/ci.yaml:7: actions/setup-aqua → actions/setup-hermetic",
+		".github/workflows/ci.yaml:8: .limen/aqua.yaml → .limen/hermetic.yaml",
+		".github/workflows/ci.yaml:8: .limen/aqua-registry.yaml → .limen/hermetic-registry.yaml",
 		"renovate.json:6: Justfile → .justfile",
 	} {
 		if f.OK() || !strings.Contains(f.Message, want) {
@@ -1452,7 +1459,7 @@ func TestStaleReferences(t *testing.T) {
 	}
 
 	// The new paths, YAML comments and renovate.json's description are not
-	// references; .limen/aqua.yaml and .hermetic/hermetic.yaml on line 6 are
+	// references; .limen/hermetic.yaml and .hermetic/hermetic.yaml on line 6 are
 	// where the files live.
 	for _, prose := range []string{
 		"ci.yaml:2:", "ci.yaml:4:", "ci.yaml:5:", "renovate.json:3:",
@@ -1471,6 +1478,178 @@ func TestStaleReferences(t *testing.T) {
 		data,
 	) != files[".github/workflows/ci.yaml"] {
 		t.Errorf("fix edited the project's workflow:\n%s", data)
+	}
+}
+
+// TestCanonicalLegacyNames: the canonical tool set and registry under aqua's
+// names. A manifest still importing .limen/aqua.yaml, with the registry's old
+// path and the two old files at the canonical content, passes, saying so;
+// fix moves the import to .limen/hermetic.yaml, resets the registry path,
+// and removes the old files, after which the rule passes plainly. On a
+// Renovate branch the manifest is left alone and the old files are kept at
+// the canonical content, so the pins resolve there. An old file the manifest
+// names that is missing or drifted fails, and so does one nothing names,
+// which fix removes.
+func TestCanonicalLegacyNames(t *testing.T) {
+	t.Parallel()
+
+	legacy := func() map[string]string {
+		files := compliantFiles()
+		manifest := strings.ReplaceAll(
+			files[".hermetic/hermetic.yaml"],
+			"../.limen/hermetic.yaml",
+			"../.limen/aqua.yaml",
+		)
+		manifest = strings.ReplaceAll(manifest, "../.limen/hermetic-registry.yaml", "../.limen/aqua-registry.yaml")
+		files[".hermetic/hermetic.yaml"] = manifest
+		files[".limen/aqua.yaml"] = rules.CanonicalAquaPackages
+		files[".limen/aqua-registry.yaml"] = rules.CanonicalAquaRegistry
+		// The policy the previous limen wrote: the registry under its old path.
+		files[".hermetic/policy.yaml"] = strings.ReplaceAll(
+			rules.CanonicalAquaPolicy, "../.limen/hermetic-registry.yaml", "../.limen/aqua-registry.yaml",
+		)
+
+		return files
+	}
+
+	root := writeRepo(t, legacy())
+
+	f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "aqua")
+	if !f.OK() || !strings.Contains(f.Message, "old names (.limen/aqua-registry.yaml, .limen/aqua.yaml)") {
+		t.Fatalf("the old names, kept canonical, should pass saying so: %+v", f)
+	}
+
+	rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	data, err := os.ReadFile(filepath.Join(root, ".hermetic", "hermetic.yaml"))
+	if err != nil || !strings.Contains(string(data), "- import: ../.limen/hermetic.yaml") ||
+		strings.Contains(string(data), ".limen/aqua") {
+		t.Fatalf("fix should move the import and the registry path: %v\n%s", err, data)
+	}
+
+	for _, old := range []string{".limen/aqua.yaml", ".limen/aqua-registry.yaml"} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(old))); err == nil {
+			t.Errorf("fix left %s", old)
+		}
+	}
+
+	if f := findingByRule(
+		rules.Check(root, rules.DefaultPolicy()),
+		"aqua",
+	); !f.OK() ||
+		strings.Contains(f.Message, "old names") {
+		t.Errorf("after fix: %+v", f)
+	}
+
+	// The old import with the old file missing, or drifted: the import would
+	// not resolve, so it fails naming the file.
+	for name, content := range map[string]string{"missing": "", "drifted": rules.CanonicalAquaPackages + "# local\n"} {
+		broken := compliantFiles()
+		broken[".hermetic/hermetic.yaml"] = strings.ReplaceAll(
+			broken[".hermetic/hermetic.yaml"], "../.limen/hermetic.yaml", "../.limen/aqua.yaml",
+		)
+
+		if content != "" {
+			broken[".limen/aqua.yaml"] = content
+		}
+
+		if f := findingByRule(rules.Check(writeRepo(t, broken), rules.DefaultPolicy()), "aqua"); f.OK() ||
+			!strings.Contains(f.Message, "names .limen/aqua.yaml") {
+			t.Errorf("%s old file: the old import should fail naming it: %+v", name, f)
+		}
+	}
+
+	// A Renovate branch: the manifest stays, the old files stay at the
+	// canonical content, said as an advisory.
+	branch := writeRepo(t, legacy())
+	outcomes := outcomesFor(
+		rules.Fix(t.Context(), branch, rules.FixOptions{Policy: rules.DefaultPolicy(), RenovateBranch: true}),
+		"aqua",
+	)
+
+	var kept int
+
+	for _, o := range outcomes {
+		if o.Action == rules.ActionAdvisory && strings.Contains(o.Message, "kept at the canonical content") {
+			kept++
+		}
+	}
+
+	if kept != 2 {
+		t.Errorf("a Renovate branch should keep both old files with an advisory each, got %+v", outcomes)
+	}
+
+	for old, canonical := range map[string]string{
+		".limen/aqua.yaml": rules.CanonicalAquaPackages, ".limen/aqua-registry.yaml": rules.CanonicalAquaRegistry,
+	} {
+		data, err := os.ReadFile(filepath.Join(branch, filepath.FromSlash(old)))
+		if err != nil || string(data) != canonical {
+			t.Errorf("%s should be kept at the canonical content on a Renovate branch: %v", old, err)
+		}
+	}
+
+	if data, _ := os.ReadFile(
+		filepath.Join(branch, ".hermetic", "hermetic.yaml"),
+	); !strings.Contains(
+		string(data),
+		"../.limen/aqua.yaml",
+	) {
+		t.Error("a Renovate branch's manifest must be left alone")
+	}
+
+	// The pair the library holds the install to: the policy names the local
+	// registry under the path the manifest names, on the branch the old one,
+	// after the move on main the new one, and the check passes both.
+	policy, _ := os.ReadFile(filepath.Join(branch, ".hermetic", "policy.yaml"))
+	if !strings.Contains(string(policy), "path: ../.limen/aqua-registry.yaml") ||
+		strings.Contains(string(policy), "hermetic-registry") {
+		t.Errorf("on a Renovate branch the policy must name the registry under the manifest's old path:\n%s", policy)
+	}
+
+	if f := findingByRule(rules.Check(branch, rules.DefaultPolicy()), "aqua"); !f.OK() {
+		t.Errorf("the branch shape should pass: %s", f.Message)
+	}
+
+	if policy, _ := os.ReadFile(
+		filepath.Join(root, ".hermetic", "policy.yaml"),
+	); string(
+		policy,
+	) != rules.CanonicalAquaPolicy {
+		t.Errorf("after the move on main the policy is the canonical:\n%s", policy)
+	}
+
+	// The stray check is per file: an unreferenced old registry beside a
+	// manifest that still imports only the old tool set fails on its own.
+	oneOld := compliantFiles()
+	oneOld[".hermetic/hermetic.yaml"] = strings.ReplaceAll(
+		oneOld[".hermetic/hermetic.yaml"], "../.limen/hermetic.yaml", "../.limen/aqua.yaml",
+	)
+	oneOld[".limen/aqua.yaml"] = rules.CanonicalAquaPackages
+	oneOld[".limen/aqua-registry.yaml"] = rules.CanonicalAquaRegistry
+
+	if f := findingByRule(rules.Check(writeRepo(t, oneOld), rules.DefaultPolicy()), "aqua"); f.OK() ||
+		f.Path != ".limen/aqua-registry.yaml" {
+		t.Errorf("an unreferenced old registry beside an old import should fail on its own: %+v", f)
+	}
+
+	// Old files nothing names: the check fails them, fix removes them.
+	stray := compliantFiles()
+	stray[".limen/aqua.yaml"] = rules.CanonicalAquaPackages
+	strayRoot := writeRepo(t, stray)
+
+	if f := findingByRule(rules.Check(strayRoot, rules.DefaultPolicy()), "aqua"); f.OK() ||
+		f.Path != ".limen/aqua.yaml" || !strings.Contains(f.Message, "old name") {
+		t.Errorf("an unreferenced old file should fail naming it: %+v", f)
+	}
+
+	rules.Fix(t.Context(), strayRoot, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+	if _, err := os.Stat(filepath.Join(strayRoot, ".limen", "aqua.yaml")); err == nil {
+		t.Error("fix left the unreferenced old file")
+	}
+
+	if f := findingByRule(rules.Check(strayRoot, rules.DefaultPolicy()), "aqua"); !f.OK() {
+		t.Errorf("after removing the stray: %s", f.Message)
 	}
 }
 

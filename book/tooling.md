@@ -292,8 +292,8 @@ The project's three pin files live in `.hermetic/`, where hermetic's own walk fi
 local registry path inside them is relative to `.hermetic/`, hence `../.limen/…`). The
 manifest and the policy carry hermetic's names; the checksums keep aqua's, the library
 writing that file beside the config under a fixed name. This repository's own files
-([`.hermetic/hermetic.yaml`](../.hermetic/hermetic.yaml), [`.limen/aqua.yaml`](../.limen/aqua.yaml),
-[`.limen/aqua-registry.yaml`](../.limen/aqua-registry.yaml),
+([`.hermetic/hermetic.yaml`](../.hermetic/hermetic.yaml), [`.limen/hermetic.yaml`](../.limen/hermetic.yaml),
+[`.limen/hermetic-registry.yaml`](../.limen/hermetic-registry.yaml),
 [`.hermetic/policy.yaml`](../.hermetic/policy.yaml)) are the canonical reference.
 
 ```
@@ -302,8 +302,8 @@ repo/
 │   ├── hermetic.yaml                      # the manifest: the limen pin, the import, the project's own tools
 │   ├── aqua-checksums.json                # GENERATED — commit it
 │   └── policy.yaml                        # authorizes the local registry
-├── .limen/aqua.yaml                              # the canonical tool set, imported by the manifest
-├── .limen/aqua-registry.yaml                     # local registry: farcloser/limen and the coreutils names
+├── .limen/hermetic.yaml                          # the canonical tool set, imported by the manifest
+├── .limen/hermetic-registry.yaml                 # local registry: farcloser/limen and the coreutils names
 ├── renovate.json                          # automated version bumps
 └── .github/workflows/update-aqua-checksum.yaml   # refreshes checksums in Renovate PRs
 ```
@@ -318,7 +318,7 @@ What `.hermetic/hermetic.yaml` must carry; the manifest is **subset-pinned** ([e
   One field is the project's: the standard registry's `ref`, which Renovate bumps per repo,
   and which is always an **exact pin** (a `vX.Y.Z` tag or a full commit SHA, never a branch).
 - **The `farcloser/limen` pin and, last in the list, the import of the canonical tool set**
-  (`- import: ../.limen/aqua.yaml`). Every other tool limen requires lives in that file, at
+  (`- import: ../.limen/hermetic.yaml`). Every other tool limen requires lives in that file, at
   the versions the pinned limen release carries: by default the canonical tools move with
   limen. Above the import, the project's own packages: extras, and **overrides**, a
   canonical tool at a version of the project's choosing, which Renovate then bumps in the
@@ -350,8 +350,8 @@ the manifest, the limen pin, and fix never moves its list. When limen retires a 
 repository still pins, the bump's checksum workflow fails on the retired entry, and deleting
 it is the owner's edit on that pull request.
 
-> **Content-pinned files.** `.limen/aqua.yaml`, `.hermetic/policy.yaml` and
-> `.limen/aqua-registry.yaml` are canonical everywhere: `limen` requires them to match its
+> **Content-pinned files.** `.limen/hermetic.yaml`, `.hermetic/policy.yaml` and
+> `.limen/hermetic-registry.yaml` are canonical everywhere: `limen` requires them to match its
 > embedded copies byte for byte, and `limen fix` overwrites drift. Renovate leaves them alone
 > outside limen; in limen it bumps the canonical tools, which every repository receives with
 > its next limen version unless it overrides one. `.hermetic/aqua-checksums.json` is
@@ -369,7 +369,7 @@ hermetic policy allow .hermetic/policy.yaml   # explicit trust gate (one-time pe
 hermetic update-checksum   # generate .hermetic/aqua-checksums.json for the binary tools
 hermetic install -l        # link every pinned tool (each downloads lazily on first use)
 
-git add .hermetic renovate.json .github/workflows/update-aqua-checksum.yaml .limen/aqua-registry.yaml
+git add .hermetic renovate.json .github/workflows/update-aqua-checksum.yaml .limen/hermetic-registry.yaml
 git commit --message "tooling: pin project CLIs through hermetic"
 ```
 
@@ -412,7 +412,7 @@ and `remove` take the **`owner/repo`** as it appears in `.hermetic/hermetic.yaml
 **command name** (the executable, since it delegates to `hermetic update`, which resolves
 commands). Each leaves `.hermetic/hermetic.yaml` **and** `.hermetic/aqua-checksums.json` updated
 together, ready to commit. They are project commands: they edit the project's own pins and
-never the imported `.limen/aqua.yaml`. Adding a canonical tool pins it at the project's
+never the imported `.limen/hermetic.yaml`. Adding a canonical tool pins it at the project's
 version, above the import; removing that pin falls back to limen's version; `update` refuses
 a canonical tool the project does not pin, since that one moves with limen.
 
@@ -681,7 +681,19 @@ names, fails the rule naming them; `fix` moves them into `.hermetic/` under herm
 removes an emptied `.aqua/`, and regenerates the checksums, which also allows the policy at
 its new path for the rest of the run. A project's own workflow still naming `.aqua/…` or the
 action's old home, `actions/setup-aqua`, is a stale reference the `workflows` rule reports,
-and the old action directory, which nothing canonical calls, is removed by `fix`.
+and the old action directory, which nothing canonical calls, is removed by `fix`. The
+canonical tool set and registry carry hermetic's names too, `.limen/hermetic.yaml` and
+`.limen/hermetic-registry.yaml`. A manifest still importing `.limen/aqua.yaml`, or naming
+`.limen/aqua-registry.yaml` as its local registry, passes for one release while the two files
+stand under their old names at the canonical content: `fix` on a Renovate branch, which
+leaves the manifest alone, keeps them so, and writes the policy with the registry under the
+path the manifest names, since the library admits a local registry only under the path the
+policy names, one per registry name; so the bump's lanes stay green; `fix` on `main`,
+the next time any pull request's `just fix` runs there, moves the import and resets the
+registry path, the import being limen's line in the manifest, and removes the old files once
+nothing names them. An old file nothing names, or one a manifest names that is missing or
+drifted, fails. The release after this one retires the old names: a manifest still on them
+fails then, naming the move.
 
 Beyond that baseline, *which* extra tools and versions a project pins is engineering
 judgment: the tool enforces the invariants, the book carries the reasoning. The same command
