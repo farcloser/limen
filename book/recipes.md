@@ -119,6 +119,16 @@ recipes can work; the Rust one is in [rust](./rust.md).
   project's workflow writes `${{ env.LIMEN_BUILD }}/cache`, never a literal. In a recipe, a
   script or a workflow step, the name lives in `main.just` alone; a literal there is what a
   rename leaves behind.
+- **The tools' links are planted by the recipe run, never by hand.** A tool's link in the
+  root's `bin` is how the shell finds the tool at all, so a fresh root, or a tool a merged
+  pull request added, fails with "command not found" before hermetic is involved. `main.just`
+  runs the link-only install before every recipe (no download, no policy, milliseconds, and
+  no network once the root has fetched the registries, which a root that never has does once;
+  the same step CI's `setup-hermetic` action takes), by the binary's real path,
+  and only where the pins and the binary exist, so a repository not yet converged and a
+  machine without the toolset fail loudly on the first tool, as before. The trust gate stays
+  the human's: `hermetic policy allow` once per project and machine, which the first tool
+  from the local registry asks for by name when it is missing.
 - **A knob composes with the recipe; it does not replace it.** Linker flags cannot ride in
   on `BUILD_GO_FLAGS`: go honours the *last* occurrence of a repeated flag, and the project's
   flags come after the `-ldflags` the recipe computed, so a project passing its own would

@@ -37,6 +37,21 @@ hermetic_root := env_var_or_default('HERMETIC_ROOT_DIR', if os() == 'macos' { ho
 hermetic_bin := hermetic_root / 'bin'
 export PATH := if os() == 'windows' { hermetic_bin + ';' + env_var('PATH') } else { hermetic_bin + ":/usr/bin:/bin:/usr/sbin:/sbin" }
 
+# A tool's link is its entry point: the shell looks the name up in the root's
+# bin and fails before hermetic runs when none is there, and a fresh root, or
+# a tool a merged pull request added, has no link until an install plants one.
+# So every recipe run plants the missing links first (link-only: no download,
+# no policy, milliseconds, and no network once the root holds the registries),
+# the step CI's setup-hermetic action takes before the recipes. The binary by real path, since a top-level
+# expression does not see the PATH exported above. Skipped where the pins or
+# the binary are absent (a repository not yet converged, a machine without
+# limen-install), where the first tool fails loudly as before; not evaluated
+# for --list. A failure is printed and swallowed here, so the recipe fails on
+# the tool it needs rather than every recipe in a variable.
+hermetic_pins := replace(justfile_directory(), '\', '/') / '.hermetic/hermetic.yaml'
+hermetic_exe := if os() == 'windows' { hermetic_bin / 'hermetic.exe' } else { hermetic_bin / 'hermetic' }
+_hermetic_links := if path_exists(hermetic_pins) != 'true' { '' } else if path_exists(hermetic_exe) != 'true' { '' } else { shell('"$1" --log-level warn -c "$2" install -l >&2 || true', hermetic_exe, hermetic_pins) }
+
 # GO* variables tunnel through the pinned PATH, so each is emptied or pinned
 # (go treats '' as unset; `export` propagates into module recipes, `unexport`
 # does not). A project's root .justfile may override any of them, tracked.
