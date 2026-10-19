@@ -218,10 +218,10 @@ glob at any depth beneath it; `.git/config` is on the list too unless the harnes
 with no write configuration at all is without them. For a bot that runs git, `.git/config`
 is the one that bites first: `git push -u`, `git remote add` and `git config` in a
 repository under the working directory fail with "could not write config file …: Operation
-not permitted" while the push or the commit itself succeeds, so a branch is pushed and
-never tracked, and nothing else is wrong. `git worktree add` of a repository
-that tracks one of those paths fails at checkout, "unable to create file … Operation not
-permitted" then "Could not reset index file" (farcloser/onboarding, which tracks
+not permitted" while the push itself succeeds, so a branch is pushed and never tracked,
+and nothing else is wrong. `git worktree add` of a repository that tracks one of those
+paths fails at checkout, "unable to create file … Operation not permitted" then "Could not
+reset index file" (farcloser/onboarding, which tracks
 `home/.zshrc` and three siblings, 2026-10-18); a repository with submodules fails the same
 way on `.gitmodules`; a build that unpacks an archive carrying `.vscode/settings.json` fails
 at that file (forkcloser/openssh). A sparse worktree that leaves those paths out is the
@@ -231,11 +231,11 @@ workaround for a checkout; the rule itself is upstream's, and not a setting.
 entry is the session's primary working directory, and where the harness lets a `cd` persist
 across calls (a setting, not a constant: another harness resets the shell to the primary
 directory after every call), the `cd` moves it: what the session may write changes with it,
-a command that ran from one worktree
-is refused from another, and a relative path lands in whichever tree the shell is in (an
-amend meant for one fork's worktree rewrote the branch of another, 2026-10-16). Every git
-command and every write names its tree by absolute path, under the session's root or an
-explicit write entry; a persisted `cd` is state, not an address.
+a command that ran from one worktree is refused from another, and a relative path lands in
+whichever tree the shell is in (an amend meant for one fork's worktree rewrote the branch
+of another, 2026-10-16). Every git command and every write names its tree by absolute path,
+under the session's root or an explicit write entry; a persisted `cd` is state, not an
+address.
 
 **A sandbox exclusion matches the bare command.** A command the human took out of the
 sandbox — `just kernel`, which boots a VM the sandbox cannot — is excluded only as written,
@@ -273,11 +273,15 @@ runs there daily at 00:00, removing every file whose access, modification and ch
 are all more than three days old. A clone kept there loses its untouched files one night,
 and git then shows each as a deletion that `commit -a` or `add -A` would record: on
 2026-10-14 the limen clone this book is written from woke with 111 tracked files gone, all
-last touched 2026-10-09, while everything touched since survived. A clone cannot move into
-the session root, where the harness refuses to write `.git/config` ([known upstream
-bugs](./upstream.md)), so a clone in `$TMPDIR` is checked with `git status` before every
-commit, restored with `git checkout -- .` when tracked files are missing, and never staged
-with `-a` or `-A`.
+last touched 2026-10-09, while everything touched since survived. The sweep does not stop
+at the working tree: loose objects under `.git/objects` go the same night, and the clone is
+then corrupt, not merely bare: `git status` reports "error: invalid object 100644 … for
+'.lint-signers'", and `git checkout -- .` cannot restore what the object store no longer
+holds (2026-10-19, on a clone made 2026-10-12). A clone cannot move into the session root,
+where the harness refuses to write `.git/config` ([known upstream bugs](./upstream.md)), so
+a clone in `$TMPDIR` is good for the day it is made: anything older than three days is
+thrown away and cloned afresh, never repaired, and nothing in it is ever staged with `-a` or
+`-A`.
 
 **Bypass mode cannot be refused from the user's settings.** `disableBypassPermissionsMode:
 "disable"` is honoured in managed settings only; placed in `~/.claude/settings.json` it
