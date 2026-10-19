@@ -56,6 +56,13 @@ func TestMain(m *testing.M) {
 // scenario is on, and fails everything otherwise (an unauthenticated gh).
 func runGHStub() int {
 	args := os.Args[1:]
+	// The preflight asks the API nothing, so an unauthenticated gh passes it.
+	if len(args) == 1 && args[0] == "--version" {
+		_, _ = os.Stdout.WriteString("gh version 0.0.0 (stub)\n")
+
+		return 0
+	}
+
 	if os.Getenv(ghRenamedEnv) == "" || len(args) < 4 || args[0] != "api" {
 		fmt.Fprintln(os.Stderr, "gh: boom (HTTP 500)")
 
@@ -489,6 +496,63 @@ func TestGithubAllReposNeedsOrg(t *testing.T) {
 		if !strings.Contains(errOut.String(), "-org") {
 			t.Errorf("run(%v) stderr should point at -org, got: %s", args, errOut.String())
 		}
+	}
+}
+
+// TestGithubNeedsGH: with no gh on PATH the run fails once, naming gh and
+// PATH, before any target resolves. Left to the audit, the same run
+// once reported every check as "cannot verify" and its fix "nothing to fix".
+func TestGithubNeedsGH(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	for _, args := range [][]string{
+		{"github", "check", "-repo", "owner/name"},
+		{"github", "fix", "-repo", "owner/name", "-yes"},
+		{"github", "check", "-org", "owner", "-all-repos"},
+	} {
+		var out, errOut strings.Builder
+		if code := run(args, &out, &errOut); code != 2 {
+			t.Errorf("run(%v) = %d, want 2; stdout:\n%s", args, code, out.String())
+		}
+
+		for _, want := range []string{"gh", "PATH"} {
+			if !strings.Contains(errOut.String(), want) {
+				t.Errorf("run(%v) stderr should mention %q, got: %s", args, want, errOut.String())
+			}
+		}
+
+		if out.String() != "" {
+			t.Errorf("run(%v) wrote findings for a run that never audited:\n%s", args, out.String())
+		}
+	}
+}
+
+// TestGithubFixUnverifiedPlansNothing: a gh that runs but cannot answer (no
+// login) leaves every check unverifiable. The fix plans nothing and says
+// which, and exits non-zero: "nothing to fix" read that failure as compliance.
+func TestGithubFixUnverifiedPlansNothing(t *testing.T) {
+	t.Setenv("PATH", stubDir(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(ghStubEnv, "1")
+
+	args := []string{"github", "fix", "-repo", "owner/name", "-yes"}
+
+	var out, errOut strings.Builder
+	if code := run(args, &out, &errOut); code != 1 {
+		t.Fatalf("run(%v) = %d, want 1; stdout:\n%s\nstderr:\n%s", args, code, out.String(), errOut.String())
+	}
+
+	if strings.Contains(out.String(), "nothing to fix") {
+		t.Errorf("run(%v) reported nothing to fix with every check unverified:\n%s", args, out.String())
+	}
+
+	if !strings.Contains(out.String(), "could not be verified") {
+		t.Errorf("run(%v) should say the checks could not be verified, got:\n%s", args, out.String())
+	}
+
+	// An opt-in check the override file leaves off passes without a read;
+	// nothing else may, and nothing may fail: a failure is a judgment.
+	if strings.Contains(out.String(), "✗") || !strings.Contains(out.String(), "0 fail ·") {
+		t.Errorf("run(%v) judged a check it could not read:\n%s", args, out.String())
 	}
 }
 

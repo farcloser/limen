@@ -231,6 +231,13 @@ func installGHStub() (string, error) {
 // api --method METHOD PATH [--input -]. Mirroring the real gh: bodies go to
 // stdout with exit 0, errors to stderr with exit 1.
 func runGHStub(dir string) int {
+	// The preflight asks the API nothing, so it needs no responses.
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		_, _ = os.Stdout.WriteString("gh version 0.0.0 (stub)\n")
+
+		return 0
+	}
+
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "gh stub: no responses for this test (stubGH not called)")
 

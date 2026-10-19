@@ -421,7 +421,10 @@ All GitHub access goes through the aqua-pinned `gh` CLI: `gh auth` owns identity
 never sees a credential, and the same invocation works on a laptop and in CI (`GH_TOKEN`).
 Reading most of the security settings needs a token with repository administration read
 access; below that, findings degrade to `unverifiable`, which fails the check rather than
-faking compliance.
+faking compliance. A `fix` whose checks could not be verified plans nothing and says so;
+"nothing to fix" is said only when every check was answered. And `gh` is the one on PATH:
+where none answers, the run fails up front naming that, instead of reporting every check
+unverifiable.
 
 One call is the exception, on purpose: the lookup of the update-App's bot user id, which
 `limen check` needs to verify `gitIgnoredAuthors` in `renovate.json`. It reads the public

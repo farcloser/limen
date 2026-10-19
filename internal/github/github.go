@@ -244,6 +244,34 @@ func condenseStderr(raw string) string {
 	return message
 }
 
+// Preflight runs gh once, asking the API nothing. On a hermetic PATH the name
+// gh is a link answered by the nearest project's tool set or the root's pins,
+// and where neither pins it the link stands with no gh behind it; judged here
+// the run fails with the cause, judged by the audit every check reads "cannot
+// verify" and a fix plans nothing.
+func Preflight(ctx context.Context) error {
+	var stderr bytes.Buffer
+
+	// gh on the hermetic PATH; a fixed argument.
+	cmd := exec.CommandContext(ctx, "gh", "--version") // #nosec G204 -- see above.
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		detail := condenseStderr(stderr.String())
+		if detail != "" {
+			detail = ": " + detail
+		}
+
+		return fmt.Errorf(
+			"gh --version: %w%s — the github subcommands run the gh on PATH, and none answers here",
+			err,
+			detail,
+		)
+	}
+
+	return nil
+}
+
 // getJSONAllPages fetches every page of a list endpoint whose response is a
 // JSON array and decodes the merged array into out.
 func (c client) getJSONAllPages(ctx context.Context, path string, out any) apiOutcome {
