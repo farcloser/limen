@@ -73,7 +73,13 @@ the root's `bin` mirrors the names the library exposed, each a link to `hermetic
 which, invoked under a tool's name, resolves it (the repository's `.hermetic/hermetic.yaml`
 found by its own walk upward from the working directory, then the root's pins), installs it
 on first use, and runs it with the shell's environment. That `bin` is the one `PATH` entry a
-shell or a recipe needs. **Five variables**, the only `HERMETIC_*` it reads, any other
+shell or a recipe needs. The walk is from the working directory, so a script that leaves the
+checkout to build, in the runner's temporary directory or a scratch one of its own, finds no
+pins there: it exports `HERMETIC_CONFIG` as the repository's manifest before it leaves, and
+the pins follow it. In CI the `setup-hermetic` action exports it for the job, since a job's
+one checkout decides the pins wherever a step runs; aqua's links fell back to whatever the
+runner had on `PATH` in that case, which is how a build outside the tree ran unpinned for
+months without a sign. **Five variables**, the only `HERMETIC_*` it reads, any other
 refused by name: `HERMETIC_ROOT_DIR`, `HERMETIC_CONFIG` (a config outright, like `-c`),
 `HERMETIC_NO_GLOBAL_CONFIG=true` (the root's pins left out, which the `tools` recipes use to
 run on a project's own pins alone), `HERMETIC_GITHUB_TOKEN` (the one token it hands the

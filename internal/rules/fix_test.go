@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"bytes"
 	"maps"
 	"os"
 	"path/filepath"
@@ -14,6 +15,39 @@ import (
 
 // bootstrapOpts remediates like `limen bootstrap`: a Closed-source LICENSE is
 // generated for a missing one.
+// TestFixRegeneratesOwnChecksumsUnderHermeticConfig: on a runner the setup
+// action exports HERMETIC_CONFIG for the checkout, which outranks hermetic's
+// walk; fix names the manifest it regenerates with -c, so a fix run on
+// another tree there writes that tree's checksums, never the checkout's.
+// Not parallel: the variable is process-wide.
+func TestFixRegeneratesOwnChecksumsUnderHermeticConfig(t *testing.T) {
+	decoy := writeRepo(t, compliantFiles())
+	decoyChecksums := filepath.Join(decoy, ".hermetic", "aqua-checksums.json")
+
+	before, err := os.ReadFile(decoyChecksums)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files := compliantFiles()
+	delete(files, ".hermetic/aqua-checksums.json") // missing, so fix regenerates it
+	fixture := writeRepo(t, files)
+
+	t.Setenv("HERMETIC_CONFIG", filepath.Join(decoy, ".hermetic", "hermetic.yaml"))
+	rules.Fix(t.Context(), fixture, bootstrapOpts())
+
+	if data, err := os.ReadFile(
+		filepath.Join(fixture, ".hermetic", "aqua-checksums.json"),
+	); err != nil ||
+		string(data) != stubChecksums {
+		t.Errorf("the fixture's checksums were not regenerated: %v %q", err, data)
+	}
+
+	if after, _ := os.ReadFile(decoyChecksums); !bytes.Equal(after, before) {
+		t.Errorf("the decoy tree's checksums changed:\n%s", after)
+	}
+}
+
 func bootstrapOpts() rules.FixOptions {
 	return rules.FixOptions{
 		Policy: rules.DefaultPolicy(), License: license.Closed, Holder: "Farcloser", Year: 2026,
