@@ -36,32 +36,8 @@ const (
 	ignoredAuthorsKey = "gitIgnoredAuthors"
 	extendsKey        = "extends"
 	forkProcessingKey = "forkProcessing"
-	// descriptionKey is maintained in one case only: an entry that is still,
-	// word for word, a text an earlier limen seeded (retiredSeedDescriptions).
-	descriptionKey = "description"
+	descriptionKey    = "description"
 )
-
-// retiredSeedDescriptions are the first description entries earlier releases
-// seeded (v0.2.2 to v0.5.0, then v0.5.1 to v0.6.2), both describing the
-// retired default.json preset and its pinned ref. An entry still equal to one
-// of them was written by limen and never edited, so fix replaces it with the
-// current seed's; any other text is the project's own and left alone. The
-// exact match is the guard: an entry a project touched no longer matches.
-//
-//nolint:gochecknoglobals // immutable table.
-var retiredSeedDescriptions = []string{
-	"The canonical Renovate configuration is a shared preset — default.json in the limen repository — so every" +
-		" repository inherits it by reference and a fix there reaches all of them without a file being re-seeded." +
-		" The ref is pinned: the `renovate` rule keeps it at the repository's own limen version (the" +
-		" farcloser/limen pin in aqua.yaml), so the preset moves with the release like every other canonical file." +
-		" limen itself, the preset's author, reads it from its own default branch. Everything below is the" +
-		" project's own — overrides and additions go here, next to the ref.",
-	"The canonical Renovate configuration is a shared preset — default.json in the limen repository — so every" +
-		" repository inherits it by reference and a fix there reaches all of them without a file being re-seeded." +
-		" The ref is pinned: the `renovate` rule keeps it at the repository's own limen version (the" +
-		" farcloser/limen pin in aqua.yaml), so the preset moves with the release like every other canonical file." +
-		" Everything below is the project's own — overrides and additions go here, next to the ref.",
-}
 
 // forkProcessingValue is what forkProcessing must say. Renovate skips forked
 // repositories by default under an all-repositories App installation, and it
@@ -84,15 +60,9 @@ func selfPresetRef(repository string) string {
 	return "local>" + repository + "//" + strings.TrimSuffix(pathRenovatePreset, ".json")
 }
 
-// presetRefPattern matches any reference to the shared configuration: the
-// in-repository form under any name, and the retired farcloser/limen preset
-// (default.json at limen's root, gone from every later release).
-var presetRefPattern = regexp.MustCompile(
-	`^(?:(?:github|local)>farcloser/limen|local>[^/\s]+/[^/\s]+//\.limen/renovate)(?:#.*)?$`,
-)
-
-// retiredPresetPattern matches the retired farcloser/limen preset alone.
-var retiredPresetPattern = regexp.MustCompile(`^(?:github|local)>farcloser/limen(?:#.*)?$`)
+// presetRefPattern matches a reference to the shared configuration: the
+// in-repository form under any name.
+var presetRefPattern = regexp.MustCompile(`^local>[^/\s]+/[^/\s]+//\.limen/renovate(?:#.*)?$`)
 
 // config is a parsed renovate.json. Renovate's schema is open-ended and most
 // of the file is the project's own, so it is carried as a map and written
@@ -213,14 +183,6 @@ func CanonicalRenovateFor(repository string) string {
 	return pinned
 }
 
-// hasRetiredPreset reports whether extends still names the retired
-// farcloser/limen preset.
-func (cfg config) hasRetiredPreset() bool {
-	refs, _ := cfg.strings(extendsKey)
-
-	return slices.ContainsFunc(refs, retiredPresetPattern.MatchString)
-}
-
 // hasPresetRef reports whether extends carries exactly the given reference
 // and no other reference to the shared configuration.
 func (cfg config) hasPresetRef(ref string) bool {
@@ -307,53 +269,6 @@ func (cfg config) addIgnoredAuthor(email string) {
 	cfg[ignoredAuthorsKey] = out
 }
 
-// retiredSeedDescription is the index of a description entry still equal to
-// a text an earlier release seeded, or -1.
-func (cfg config) retiredSeedDescription() int {
-	entries, _ := cfg.strings(descriptionKey)
-
-	return slices.IndexFunc(entries, func(entry string) bool {
-		return slices.Contains(retiredSeedDescriptions, entry)
-	})
-}
-
-// replaceRetiredSeedDescription swaps the entry at index for the current
-// seed's first description entry, leaving every other entry as it is.
-func (cfg config) replaceRetiredSeedDescription(index int) {
-	entries, _ := cfg.strings(descriptionKey)
-
-	out := make([]any, 0, len(entries))
-	for i, entry := range entries {
-		if i == index {
-			entry = seedDescription()
-		}
-
-		out = append(out, entry)
-	}
-
-	cfg[descriptionKey] = out
-}
-
-// seedDescription is the current seed's first description entry: the one
-// that describes the shared configuration.
-func seedDescription() string {
-	cfg, err := parseConfig([]byte(renovateSeed))
-	if err != nil {
-		return ""
-	}
-
-	entries, _ := cfg.strings(descriptionKey)
-	if len(entries) == 0 {
-		return ""
-	}
-
-	return entries[0]
-}
-
-// retiredSeedDescriptionMessage names the stale prose and who replaces it.
-const retiredSeedDescriptionMessage = "description still carries the text an earlier limen seeded, describing" +
-	" the retired default.json preset rather than " + pathRenovatePreset + " (limen fix replaces it)"
-
 // hasForkProcessing reports whether forkProcessing is enabled.
 func (cfg config) hasForkProcessing() bool {
 	value, ok := cfg[forkProcessingKey].(string)
@@ -407,22 +322,11 @@ func deadConfigsMessage(dead []string) string {
 // repositoryUnknownMessage names why the reference cannot be enforced.
 const repositoryUnknownMessage = "repository unknown (no github.com origin remote)"
 
-// retiredPresetMessage names the retired preset and what replaces it.
-const retiredPresetMessage = "extends names the retired farcloser/limen preset; the shared configuration is " +
-	pathRenovatePreset + " now, read as " + "local>owner/name//.limen/renovate"
-
 // checkPresetRef verifies extends: exactly this repository's reference to the
-// shared configuration when the repository is known; otherwise only that the
-// retired preset is gone, since nothing else can be told apart offline.
+// shared configuration when the repository is known; nothing can be told
+// offline otherwise.
 func checkPresetRef(cfg config, repository string) *Finding {
 	if repository == "" {
-		if cfg.hasRetiredPreset() {
-			f := fail(ruleRenovate, pathRenovate, retiredPresetMessage+
-				" — "+repositoryUnknownMessage+", so limen fix cannot set it")
-
-			return &f
-		}
-
 		return nil
 	}
 
@@ -467,10 +371,6 @@ func checkRenovate(root string, policy Policy) Finding {
 
 	if f := checkPresetRef(cfg, policy.Repository); f != nil {
 		return *f
-	}
-
-	if cfg.retiredSeedDescription() >= 0 {
-		return fail(ruleRenovate, pathRenovate, retiredSeedDescriptionMessage)
 	}
 
 	if !cfg.hasForkProcessing() {
@@ -563,11 +463,6 @@ func remediateRenovateValues(root string, opts FixOptions) Outcome {
 	)
 
 	switch ref := selfPresetRef(opts.Policy.Repository); {
-	case opts.Policy.Repository == "" && cfg.hasRetiredPreset():
-		unresolved = true
-
-		done = append(done, retiredPresetMessage+" — "+repositoryUnknownMessage+
-			": set it by hand, or add the origin remote and run limen fix again")
 	case opts.Policy.Repository == "":
 		done = append(done, repositoryUnknownMessage+" — extends left as is")
 	case !cfg.hasPresetRef(ref):
@@ -576,14 +471,6 @@ func remediateRenovateValues(root string, opts FixOptions) Outcome {
 		changed = true
 
 		done = append(done, "set extends to the shared configuration "+ref)
-	}
-
-	if index := cfg.retiredSeedDescription(); index >= 0 {
-		cfg.replaceRetiredSeedDescription(index)
-
-		changed = true
-
-		done = append(done, "replaced the description an earlier limen seeded with the current one")
 	}
 
 	if !cfg.hasForkProcessing() {

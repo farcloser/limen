@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/farcloser/limen"
@@ -131,7 +130,7 @@ func AllResolved(outcomes []Outcome) bool {
 func remediateGit(ctx context.Context, root string) Outcome {
 	const rule = "git"
 	if _, err := os.Stat(filepath.Join(root, gitDirName)); err == nil {
-		return renameStraySigners(root, rule)
+		return Outcome{Rule: rule, Action: ActionNone, Path: gitDirName, Message: "already a git repository"}
 	}
 
 	// The rules API carries no context; Background is the honest choice.
@@ -147,35 +146,6 @@ func remediateGit(ctx context.Context, root string) Outcome {
 	}
 
 	return Outcome{Rule: rule, Action: ActionCreated, Path: gitDirName, Message: "git init"}
-}
-
-// renameStraySigners moves the signers file from its former name to the one
-// `lint commits` reads; with both present, the project merges them by hand.
-func renameStraySigners(root, rule string) Outcome {
-	stray := filepath.Join(root, straySignersFile)
-	if !exists(stray) {
-		return Outcome{Rule: rule, Action: ActionNone, Path: gitDirName, Message: "already a git repository"}
-	}
-
-	if exists(filepath.Join(root, signersFile)) {
-		return Outcome{
-			Rule:    rule,
-			Action:  ActionAdvisory,
-			Path:    straySignersFile,
-			Message: "both " + straySignersFile + " and " + signersFile + " exist: merge the first into the second and delete it",
-		}
-	}
-
-	if err := os.Rename(stray, filepath.Join(root, signersFile)); err != nil {
-		return failed(rule, straySignersFile, err)
-	}
-
-	return Outcome{
-		Rule:    rule,
-		Action:  ActionMerged,
-		Path:    signersFile,
-		Message: "renamed " + straySignersFile + " to " + signersFile + " (the name `lint commits` reads)",
-	}
 }
 
 func remediateReadme(root string) Outcome {
@@ -351,31 +321,15 @@ func remediateJustfile(root string) []Outcome {
 	return out
 }
 
-// remediateRootJustfile renames a root justfile from its former name to
-// .justfile, seeds a missing one, appends to one that lacks them the
-// canonical import and the `security` recipe the security workflow runs, and
-// otherwise leaves the file alone — it is the project's own.
+// remediateRootJustfile seeds a missing root .justfile, appends to one that
+// lacks them the canonical import and the `security` recipe the security
+// workflow runs, and otherwise leaves the file alone — it is the project's own.
 func remediateRootJustfile(root, rule string) Outcome {
 	name := justfileName
 
 	var done []string
 
-	if legacy, found := findFirstFold(root, legacyJustfileName); found {
-		if exists(filepath.Join(root, name)) {
-			return Outcome{
-				Rule:    rule,
-				Action:  ActionAdvisory,
-				Path:    legacy,
-				Message: "both " + legacy + " and " + name + " exist, which just refuses: merge the first into the second and delete it",
-			}
-		}
-
-		if err := os.Rename(filepath.Join(root, legacy), filepath.Join(root, name)); err != nil {
-			return failed(rule, legacy, err)
-		}
-
-		done = append(done, "renamed "+legacy+" to "+name)
-	} else if !exists(filepath.Join(root, name)) {
+	if !exists(filepath.Join(root, name)) {
 		if err := writeFile(root, name, justfileSeed); err != nil {
 			return failed(rule, name, err)
 		}
@@ -460,19 +414,6 @@ func seedIfMissing(root, rule, relPath, content, createdMessage string) Outcome 
 // the checksum workflow runs fix on every Renovate branch, and an
 // unresolved outcome would fail every bump until a hand edit.
 func remediateCI(root, rule string) Outcome {
-	if tag, unedited := staleCISeed(root); unedited {
-		if e := writeFile(root, pathWorkflowCI, limen.CanonicalWorkflowCI); e != nil {
-			return failed(rule, pathWorkflowCI, e)
-		}
-
-		return Outcome{
-			Rule:    rule,
-			Action:  ActionOverwrote,
-			Path:    pathWorkflowCI,
-			Message: "replaced limen " + tag + "'s unedited seed with the current one, which calls " + pathWorkflowVerify,
-		}
-	}
-
 	outcome := seedIfMissing(root, rule, pathWorkflowCI, limen.CanonicalWorkflowCI,
 		"seeded the canonical CI workflow (the content is the project's own from here)")
 	if outcome.Action != ActionNone {
@@ -502,7 +443,6 @@ func remediateWorkflows(root string) []Outcome {
 	out := []Outcome{
 		pinExact(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum),
 		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
-		removeStaleDir(root, rule, pathActionSetupAquaOld, pathActionSetupAqua),
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
 		pinExact(root, rule, pathActionCache, limen.CanonicalActionCache),
 		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
@@ -518,7 +458,6 @@ func remediateWorkflows(root string) []Outcome {
 		out,
 		remediateReleaseGo(root, rule),
 		remediateReleasedCommands(root, rule),
-		remediateLintGithub(root, rule),
 	)
 
 	if exists(filepath.Join(root, releaseGoFile)) {
@@ -536,87 +475,11 @@ func remediateWorkflows(root string) []Outcome {
 	return out
 }
 
-// formerSectionLine is the `github:` header of the former file, a trailing
-// comment allowed.
-var formerSectionLine = regexp.MustCompile(`^github:\s*(?:#.*)?$`)
-
-// remediateLintGithub moves the audit's exceptions from limen.yaml to
-// .lint-github.yaml: the `github:` header goes and its entries come out to
-// the top level, comments kept. Anything else unindented is not the former
-// format, and neither is two files at once: both are left to the project.
-func remediateLintGithub(root, rule string) Outcome {
-	data, err := readRepoFile(root, formerLintGithubFile)
-	if err != nil {
-		return Outcome{Rule: rule, Action: ActionNone, Path: lintGithubFile, Message: "no " + formerLintGithubFile}
-	}
-
-	if exists(filepath.Join(root, lintGithubFile)) {
-		return Outcome{
-			Rule:    rule,
-			Action:  ActionAdvisory,
-			Path:    formerLintGithubFile,
-			Message: "both " + formerLintGithubFile + " and " + lintGithubFile + " exist: merge the first into the second and delete it",
-		}
-	}
-
-	lines := strings.Split(string(data), "\n")
-	converted := make([]string, 0, len(lines))
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		switch {
-		case formerSectionLine.MatchString(trimmed) && line == strings.TrimLeft(line, " \t"):
-			continue
-		case trimmed != "" && !strings.HasPrefix(trimmed, "#") && line == strings.TrimLeft(line, " \t"):
-			return Outcome{
-				Rule:    rule,
-				Action:  ActionAdvisory,
-				Path:    formerLintGithubFile,
-				Message: formerLintGithubMessage + " — `" + trimmed + "` is not an entry under github:, so convert it by hand",
-			}
-		}
-
-		converted = append(converted, strings.TrimLeft(line, " \t"))
-	}
-
-	if err := writeFile(root, lintGithubFile, strings.Join(converted, "\n")); err != nil {
-		return failed(rule, lintGithubFile, err)
-	}
-
-	if err := os.Remove(filepath.Join(root, formerLintGithubFile)); err != nil {
-		return failed(rule, formerLintGithubFile, err)
-	}
-
-	return Outcome{
-		Rule:    rule,
-		Action:  ActionMerged,
-		Path:    lintGithubFile,
-		Message: "renamed " + formerLintGithubFile + " to " + lintGithubFile + " and brought its entries out of the github: section",
-	}
-}
-
-// remediateReleaseGo moves a goreleaser configuration from a default name to
-// .release-go.yaml and gives it its schema header and the canonical
-// `changelog:` section; the content is otherwise the project's, untouched.
-// With both names present, the project merges them by hand.
+// remediateReleaseGo gives .release-go.yaml its schema header and the
+// canonical `changelog:` section; the content is otherwise the project's,
+// untouched.
 func remediateReleaseGo(root, rule string) Outcome {
-	stray, found := findFirst(root, strayGoreleaserFiles...)
-	if found && exists(filepath.Join(root, releaseGoFile)) {
-		return Outcome{
-			Rule:    rule,
-			Action:  ActionAdvisory,
-			Path:    stray,
-			Message: "both " + stray + " and " + releaseGoFile + " exist: merge the first into the second and delete it",
-		}
-	}
-
-	source := releaseGoFile
-	if found {
-		source = stray
-	}
-
-	data, err := readRepoFile(root, source)
+	data, err := readRepoFile(root, releaseGoFile)
 	if err != nil {
 		return Outcome{
 			Rule:    rule,
@@ -630,7 +493,7 @@ func remediateReleaseGo(root, rule string) Outcome {
 	headed := strings.HasPrefix(content, releaseGoHeader+"\n") || strings.HasPrefix(content, releaseGoHeader+"\r\n")
 	_, drifted := changelogDrift(content)
 
-	if !found && headed && !drifted {
+	if headed && !drifted {
 		return Outcome{
 			Rule:    rule,
 			Action:  ActionNone,
@@ -657,25 +520,11 @@ func remediateReleaseGo(root, rule string) Outcome {
 		return failed(rule, releaseGoFile, err)
 	}
 
-	if !found {
-		return Outcome{
-			Rule:    rule,
-			Action:  ActionMerged,
-			Path:    releaseGoFile,
-			Message: releaseGoFile + ": " + strings.Join(done, "; "),
-		}
-	}
-
-	if err := os.Remove(filepath.Join(root, stray)); err != nil {
-		return failed(rule, stray, err)
-	}
-
 	return Outcome{
-		Rule:   rule,
-		Action: ActionMerged,
-		Path:   releaseGoFile,
-		Message: strings.Join(append([]string{"renamed " + stray + " to " + releaseGoFile +
-			" (the name the release lane reads)"}, done...), "; "),
+		Rule:    rule,
+		Action:  ActionMerged,
+		Path:    releaseGoFile,
+		Message: releaseGoFile + ": " + strings.Join(done, "; "),
 	}
 }
 
@@ -745,15 +594,6 @@ func remediateAqua(ctx context.Context, root, selfVersion string, renovateBranch
 		pristine      bool
 	)
 
-	moved, stop := moveLegacyAqua(root)
-	if stop != nil {
-		return []Outcome{*stop}
-	}
-
-	if moved != nil {
-		out = append(out, *moved)
-	}
-
 	name := aquaManifestFile
 
 	switch {
@@ -782,21 +622,15 @@ func remediateAqua(ctx context.Context, root, selfVersion string, renovateBranch
 
 	// Canonical everywhere: content-pinned exactly. The tool set is the one
 	// whose change moves pins, so its rewrite regenerates checksums too.
-	// The policy after the manifest: it names the local registry under the
-	// path the manifest names (policyFor), the old one while a Renovate
-	// branch's manifest keeps it.
 	packages := pinExact(root, ruleAqua, aquaPackagesFile, limen.CanonicalAquaPackages)
 	out = append(out,
-		pinExact(root, ruleAqua, aquaPolicyFile, policyFor(legacyNamedBy(root))),
+		pinExact(root, ruleAqua, aquaPolicyFile, limen.CanonicalAquaPolicy),
 		pinExact(root, ruleAqua, aquaRegistryFile, limen.CanonicalAquaRegistry),
 		packages,
 	)
-	out = append(out, retireLegacyCanonical(root)...)
 
-	// A move always regenerates: it is what allows the policy at its new path,
-	// which every aqua command run after this one in the same job needs.
 	if !advised && !pristine &&
-		(moved != nil || manifestWrote || packages.Action != ActionNone ||
+		(manifestWrote || packages.Action != ActionNone ||
 			!exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile)))) {
 		outcome := regenerateAquaChecksumsOutcome(ctx, root)
 		out = append(out, outcome)
@@ -815,66 +649,6 @@ func remediateAqua(ctx context.Context, root, selfVersion string, renovateBranch
 	}
 
 	return out
-}
-
-// moveLegacyAqua moves the pin files from where limen kept them before, the
-// repository root and then .aqua/ under aqua's names, into .hermetic/ under
-// hermetic's: the manifest, its checksums, and the policy (which pinExact
-// then resets to the canonical). The registries section, local path
-// included, is reset by the merge that follows; an emptied .aqua/ goes with
-// its files. Reports the move (nil when there was nothing to move), or the
-// outcome that stops the rule: both locations populated, which the project
-// merges by hand, or a failed move.
-func moveLegacyAqua(root string) (moved, stop *Outcome) {
-	legacy, found := findFirst(root, legacyAquaPaths()...)
-	if !found {
-		return nil, nil
-	}
-
-	if exists(filepath.Join(root, filepath.FromSlash(aquaManifestFile))) {
-		return nil, &Outcome{
-			Rule:    ruleAqua,
-			Action:  ActionAdvisory,
-			Path:    legacy,
-			Message: "pin files exist both at " + legacy + " and in " + aquaDir + "/: merge the first into " + aquaDir + "/ and delete it",
-		}
-	}
-
-	var names []string
-
-	for _, from := range legacyAquaPaths() {
-		if !exists(filepath.Join(root, filepath.FromSlash(from))) {
-			continue
-		}
-
-		destination := filepath.Join(root, filepath.FromSlash(legacyAquaTarget(from)))
-		if err := os.MkdirAll(filepath.Dir(destination), dirPermissions); err != nil {
-			f := failed(ruleAqua, from, err)
-
-			return nil, &f
-		}
-
-		if err := os.Rename(filepath.Join(root, filepath.FromSlash(from)), destination); err != nil {
-			f := failed(ruleAqua, from, err)
-
-			return nil, &f
-		}
-
-		names = append(names, from)
-	}
-
-	// The old directory, when the files were all it held.
-	_ = os.Remove(filepath.Join(root, legacyAquaDir))
-
-	return &Outcome{
-		Rule:   ruleAqua,
-		Action: ActionMerged,
-		Path:   aquaDir,
-		Message: "moved " + strings.Join(
-			names,
-			", ",
-		) + " into " + aquaDir + "/ (allow the policy at its new path: hermetic policy allow " + aquaPolicyFile + ")",
-	}, nil
 }
 
 // seedAqua writes the canonical manifest a repository without one starts
@@ -1018,78 +792,6 @@ func regenerateAquaChecksums(ctx context.Context, root string) error {
 // the installer's root bin on a laptop, the setup action's on a runner.
 const hermeticBinary = "hermetic"
 
-// retireLegacyCanonical retires the canonical tool set and registry under
-// their old names. A manifest that still names one (a Renovate branch's,
-// which fix leaves alone) keeps the old file, at the canonical content, so
-// the import and the registry resolve until fix on main moves the manifest;
-// once nothing names it, the old file goes.
-func retireLegacyCanonical(root string) []Outcome {
-	manifest, _ := readRepoFile(root, aquaManifestFile)
-
-	var out []Outcome
-
-	for old, canonical := range map[string]string{
-		legacyAquaPackagesFile: limen.CanonicalAquaPackages,
-		legacyAquaRegistryFile: limen.CanonicalAquaRegistry,
-	} {
-		if !exists(filepath.Join(root, filepath.FromSlash(old))) {
-			continue
-		}
-
-		if strings.Contains(string(manifest), "../"+old) {
-			outcome := pinExact(root, ruleAqua, old, canonical)
-			outcome.Action = ActionAdvisory
-			outcome.Message = old + " kept at the canonical content while " + aquaManifestFile +
-				" still names it: limen fix on main moves the manifest to " + legacyCanonicalTarget(old)
-
-			out = append(out, outcome)
-
-			continue
-		}
-
-		if err := os.Remove(filepath.Join(root, filepath.FromSlash(old))); err != nil {
-			out = append(out, failed(ruleAqua, old, err))
-
-			continue
-		}
-
-		out = append(out, Outcome{
-			Rule:    ruleAqua,
-			Action:  ActionOverwrote,
-			Path:    old,
-			Message: "removed " + old + ": the canonical file is " + legacyCanonicalTarget(old),
-		})
-	}
-
-	return out
-}
-
-// removeStaleDir removes a directory limen once seeded and has since moved,
-// the action's old home: nothing canonical calls it, and a project's own
-// workflow still naming it is a stale reference the check reports.
-func removeStaleDir(root, rule, old, current string) Outcome {
-	path := filepath.Join(root, filepath.FromSlash(old))
-	if _, err := os.Stat(path); err != nil { // a directory, which exists() does not answer for
-		return Outcome{
-			Rule:    rule,
-			Action:  ActionNone,
-			Path:    old,
-			Message: "no " + old + " (the action is " + current + ")",
-		}
-	}
-
-	if err := os.RemoveAll(path); err != nil {
-		return failed(rule, old, err)
-	}
-
-	return Outcome{
-		Rule:    rule,
-		Action:  ActionOverwrote,
-		Path:    old,
-		Message: "removed " + old + ": the action is " + current,
-	}
-}
-
 // remediateGitattributes content-pins .gitattributes exactly: created if
 // missing, overwritten if drifted (safe: the whole file is defined by limen —
 // see checkGitattributes for why no local additions are allowed).
@@ -1111,31 +813,11 @@ func remediateAgents(root string) []Outcome {
 	}
 }
 
-// The links overlay before it was named after the lane. Neither the recipe
-// nor limen reads it now: a project's own exclusions are its owner's to move,
-// so a stray is an advisory, never a rename by the fixer.
-const (
-	strayLycheeOverlay = ".lychee.toml"
-	strayLycheeMessage = " is a link-check overlay nothing here reads: the links recipe reads" +
-		" .lint-links.toml — rename it"
-)
-
 // remediateLychee content-pins .limen/lychee.toml exactly: created if missing,
 // overwritten if it drifted. A project's own exclusions belong in a root
 // .lint-links.toml, which is never touched.
 func remediateLychee(root string) []Outcome {
-	out := []Outcome{pinExact(root, "lychee", ".limen/lychee.toml", CanonicalLychee)}
-
-	if exists(filepath.Join(root, strayLycheeOverlay)) {
-		out = append(out, Outcome{
-			Rule:    "lychee",
-			Action:  ActionAdvisory,
-			Path:    strayLycheeOverlay,
-			Message: strayLycheeOverlay + strayLycheeMessage,
-		})
-	}
-
-	return out
+	return []Outcome{pinExact(root, "lychee", ".limen/lychee.toml", CanonicalLychee)}
 }
 
 // remediateShellcheck content-pins .limen/.shellcheckrc in every repository —

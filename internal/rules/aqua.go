@@ -114,25 +114,9 @@ const importPkgPrefix = "import "
 // build defect, caught the first time the package loads.
 var canonicalAqua = mustParseCanonicalAqua() //nolint:gochecknoglobals // parsed once from embedded canonical data.
 
-// canonicalImport is the package name of the canonical tool set's import,
-// and legacyImport the same import under the tool set's old name, which fix
-// moves: the import is limen's line, never the project's.
-const (
-	canonicalImport = importPkgPrefix + "../" + aquaPackagesFile
-	legacyImport    = importPkgPrefix + "../" + legacyAquaPackagesFile
-)
-
-// hasLegacyImport reports whether the manifest imports the canonical tool
-// set under its old name.
-func (m *aquaManifest) hasLegacyImport() bool {
-	for _, p := range m.pkgs {
-		if p.name == legacyImport {
-			return true
-		}
-	}
-
-	return false
-}
+// canonicalImport is the manifest's import of the canonical tool set: limen's
+// line in the manifest, never the project's.
+const canonicalImport = importPkgPrefix + "../" + aquaPackagesFile
 
 // missingBesidesImport reports whether a canonical package other than the
 // import is missing while the import is present: the case where appending
@@ -599,16 +583,6 @@ func mergeAquaManifest(manifest aquaManifest, selfVersion string) (string, []str
 			manifest = stripped
 
 			plan.summary = append(plan.summary, "moved the import of "+aquaPackagesFile+" to the end of the list")
-		}
-	}
-
-	// The import under the tool set's old name goes the same way: taken out
-	// here, and the package merge appends the canonical one, last.
-	if manifest.hasLegacyImport() {
-		if stripped, ok := manifest.withoutPkgs([]string{legacyImport}); ok {
-			manifest = stripped
-
-			plan.summary = append(plan.summary, "moved the import from "+legacyAquaPackagesFile+" to "+aquaPackagesFile)
 		}
 	}
 

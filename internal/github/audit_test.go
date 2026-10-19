@@ -908,25 +908,6 @@ func TestLoadOverrides(t *testing.T) {
 	if _, err := github.LoadOverrides(dir); err == nil {
 		t.Error("a comment-only reason must fail the file")
 	}
-
-	// The former sectioned format must fail loudly, not silently exempt
-	// nothing.
-	write("github:\n  wiki: hosts the runbook\n")
-
-	if _, err := github.LoadOverrides(dir); err == nil || !strings.Contains(err.Error(), "github:") {
-		t.Errorf("a github: section must fail the file naming it, got %v", err)
-	}
-
-	// The former file name, alone: its exceptions must not vanish silently.
-	former := t.TempDir()
-	if err := os.WriteFile(filepath.Join(former, github.FormerOverridePath),
-		[]byte("github:\n  wiki: hosts the runbook\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := github.LoadOverrides(former); err == nil || !strings.Contains(err.Error(), github.OverridePath) {
-		t.Errorf("the former file name must fail naming %s, got %v", github.OverridePath, err)
-	}
 }
 
 func TestInferRepo(t *testing.T) {
@@ -1190,58 +1171,6 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 
 	if strings.Contains(payload, `"context":"gate"`) {
 		t.Error("reconcile must not replace project contexts with the canonical default")
-	}
-}
-
-// A ruleset still naming the matrix legs, on a repository whose ci.yaml has
-// the gate job, is the limen-install case: a required "verify (windows-11-arm)"
-// its four-leg matrix never reports, and a pull request that waits forever.
-// The audit must fail it and the reconcile must move it onto the gate.
-//
-//nolint:paralleltest // serial: sets the process environment.
-func TestRulesetMigratesLegacyContextsToGate(t *testing.T) {
-	responses := compliantResponses()
-	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
-		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
-			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
-			`{"type":"required_status_checks","parameters":{"required_status_checks":` +
-			`[{"context":"verify (ubuntu-24.04)"},{"context":"verify (windows-11-arm)"}]}}]}`,
-	}
-	responses["GET repos/test/repo/contents/.github/workflows/ci.yaml"] = stubResponse{
-		Body: `{"content":"` + base64.StdEncoding.EncodeToString(
-			[]byte("jobs:\n  verify:\n    runs-on: x\n  gate:\n    needs: verify\n"),
-		) + `"}`,
-	}
-	logPath := stubGH(t, responses)
-
-	findings, changes := github.Audit(t.Context(), testRepo, nil)
-
-	finding, _ := findingByCheck(findings, "ruleset-default-branch")
-	if finding.Status != github.StatusFail {
-		t.Fatalf("legacy matrix contexts with a gate job: %v (%s), want fail", finding.Status, finding.Message)
-	}
-
-	if !strings.Contains(finding.Message, "gate job") {
-		t.Errorf("the finding must name the migration, got: %s", finding.Message)
-	}
-
-	for _, planned := range changes {
-		if planned.Check == "ruleset-default-branch" {
-			if err := planned.Apply(t.Context()); err != nil {
-				t.Fatalf("apply: %v", err)
-			}
-		}
-	}
-
-	log, _ := os.ReadFile(logPath)
-	payload := string(log)
-
-	if !strings.Contains(payload, `"context":"gate"`) {
-		t.Error("reconcile must move the required checks onto the gate")
-	}
-
-	if strings.Contains(payload, "verify (") {
-		t.Error("reconcile must drop the per-leg contexts")
 	}
 }
 

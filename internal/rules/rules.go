@@ -35,7 +35,7 @@ const (
 	// name.
 	aquaDir           = ".hermetic"
 	aquaManifestFile  = aquaDir + "/hermetic.yaml"
-	aquaChecksumsFile = aquaDir + "/" + legacyAquaChecksums
+	aquaChecksumsFile = aquaDir + "/aqua-checksums.json"
 	aquaPolicyFile    = aquaDir + "/policy.yaml"
 
 	// The canonical tool set, content-pinned, which the manifest imports, and
@@ -43,39 +43,19 @@ const (
 	aquaPackagesFile = ".limen/hermetic.yaml"
 	aquaRegistryFile = ".limen/hermetic-registry.yaml"
 
-	// The same two under aqua's names, where limen kept them before. A
-	// manifest still importing the old tool set, or naming the old registry,
-	// passes while the old files stand at the canonical content: fix on a
-	// Renovate branch leaves the manifest alone and keeps them so, and fix on
-	// main moves the manifest and removes them. The release after this one
-	// retires the old names: a manifest still on them fails then.
-	legacyAquaPackagesFile = ".limen/aqua.yaml"
-	legacyAquaRegistryFile = ".limen/aqua-registry.yaml"
-
-	// The same files where limen kept them before: at the repository root,
-	// and then under .aqua/ with aqua's names.
-	legacyAquaDir         = ".aqua"
-	legacyAquaManifest    = "aqua.yaml"
-	legacyAquaManifestYml = "aqua.yml"
-	legacyAquaChecksums   = "aqua-checksums.json"
-	legacyAquaPolicy      = "aqua-policy.yaml"
-
 	// The .github surface (see book/mandatory-files.md): the first two are
 	// content-pinned limen machinery, the rest are seeded once and then the
 	// project's own.
 	pathWorkflowChecksum = ".github/workflows/update-aqua-checksum.yaml"
 	pathActionSetupAqua  = ".github/actions/setup-hermetic/action.yaml"
-	// Where the action lived while it installed upstream aqua; a project's
-	// own workflow naming it is a stale reference, and the directory a stray.
-	pathActionSetupAquaOld = ".github/actions/setup-aqua"
-	pathActionWinCache     = ".github/actions/windows-cache-image/action.yaml"
-	pathActionCache        = ".github/actions/cache/action.yaml"
-	pathWorkflowCI         = ".github/workflows/ci.yaml"
-	pathWorkflowVerify     = ".github/workflows/limen-verify.yaml"
-	pathWorkflowSecurity   = ".github/workflows/security.yaml"
-	pathWorkflowCaches     = ".github/workflows/caches.yaml"
-	pathWorkflowRelease    = ".github/workflows/release.yaml"
-	pathRenovate           = "renovate.json"
+	pathActionWinCache   = ".github/actions/windows-cache-image/action.yaml"
+	pathActionCache      = ".github/actions/cache/action.yaml"
+	pathWorkflowCI       = ".github/workflows/ci.yaml"
+	pathWorkflowVerify   = ".github/workflows/limen-verify.yaml"
+	pathWorkflowSecurity = ".github/workflows/security.yaml"
+	pathWorkflowCaches   = ".github/workflows/caches.yaml"
+	pathWorkflowRelease  = ".github/workflows/release.yaml"
+	pathRenovate         = "renovate.json"
 )
 
 // matchesCanonicalMsg suffixes the OK message of every content-pinned rule.
@@ -272,22 +252,8 @@ func checkGit(root string) Finding {
 		return fail(rule, "", "not a git repository (no .git in project root)")
 	}
 
-	if exists(filepath.Join(root, straySignersFile)) {
-		return fail(rule, straySignersFile, straySignersFile+straySignersMessage)
-	}
-
 	return Finding{Rule: rule, Status: StatusOK, Path: ".git", Message: "git repository"}
 }
-
-// signersFile lists everyone who authors commits here, email and key, in
-// git's allowed-signers format; `lint commits` reads it. straySignersFile
-// is its former name, which nothing reads anymore.
-const (
-	signersFile         = ".lint-signers"
-	straySignersFile    = ".allowed_signers"
-	straySignersMessage = " is the former name of " + signersFile + ", which `lint commits` reads" +
-		" — rename it (limen fix does)"
-)
 
 func checkReadme(root string) Finding {
 	const rule = "readme"
@@ -459,10 +425,6 @@ func strayJustModulesMessage(stray []string) string {
 func checkJustfile(root string) Finding {
 	const rule = "justfile"
 
-	if legacy, found := findFirstFold(root, legacyJustfileName); found {
-		return fail(rule, legacy, legacy+legacyJustfileMessage)
-	}
-
 	name := justfileName
 
 	data, err := readRepoFile(root, name)
@@ -502,10 +464,6 @@ func checkJustfile(root string) Finding {
 		return fail(rule, stray[0], strayJustModulesMessage(stray))
 	}
 
-	if renamed := renamedJustVariables(name, string(data)); len(renamed) > 0 {
-		return fail(rule, name, renamedJustVariablesMessage(renamed))
-	}
-
 	return Finding{
 		Rule:    rule,
 		Status:  StatusOK,
@@ -513,57 +471,6 @@ func checkJustfile(root string) Finding {
 		Message: ".justfile carries the shared-baseline import; the shared just modules match the canonical baseline",
 	}
 }
-
-// renamedJustVariables lists, as "file:line: old → new", the shared module's
-// variables the project's .justfile reads under a name limen renamed. The
-// import is flat, so a root recipe or re-export may read main.just's
-// variables; a rename there is a reference the project has to follow, and
-// just refuses the whole file until it does ("variable not defined"), which
-// no recipe can report since none runs. Comments are not references.
-func renamedJustVariables(name, data string) []string {
-	var renamed []string
-
-	for index, line := range strings.Split(data, "\n") {
-		// Once per line and name: a PATH expression reads the variable in
-		// both branches of its conditional.
-		seen := map[string]bool{}
-
-		for _, match := range renamedJustVarRE.FindAllStringSubmatch(stripYAMLComment(line), -1) {
-			if seen[match[1]] {
-				continue
-			}
-
-			seen[match[1]] = true
-			renamed = append(renamed, fmt.Sprintf("%s:%d: %s → %s", name, index+1, match[1], renamedJustVars[match[1]]))
-		}
-	}
-
-	return renamed
-}
-
-// renamedJustVarRE finds, as whole words, the main.just variables limen
-// renamed with the move to hermetic; renamedJustVars names what each is now.
-var renamedJustVarRE = regexp.MustCompile(`\b(aqua_bin)\b`)
-
-var renamedJustVars = map[string]string{ //nolint:gochecknoglobals // immutable rename table.
-	"aqua_bin": "hermetic_bin",
-}
-
-// renamedJustVariablesMessage names them; the file is the project's, so the
-// edit is its own.
-func renamedJustVariablesMessage(renamed []string) string {
-	return "references to shared just variables limen renamed (" + strings.Join(renamed, "; ") +
-		"): update them by hand, the file is the project's own; just refuses it as it is (variable not defined)"
-}
-
-// legacyJustfileName is the root justfile's former name, matched
-// case-insensitively as just matches it (Justfile, justfile, JUSTFILE): just
-// refuses a directory holding it beside .justfile.
-const (
-	legacyJustfileName    = "justfile"
-	legacyJustfileMessage = " is the root justfile's former name: it is " + justfileName +
-		" now, beside the other dot-named tooling — rename it (limen fix does)"
-)
 
 // securityRecipeLine is the root .justfile's `security` recipe as the seed
 // writes it: the shared scans, which a project extends with its own.
@@ -607,14 +514,6 @@ func containsLine(text, want string) bool {
 func checkAqua(root string) Finding {
 	const rule = "aqua"
 
-	if stray, found := findFirst(root, legacyAquaPaths()...); found {
-		return fail(
-			rule,
-			stray,
-			stray+" belongs in "+aquaDir+"/, where limen keeps the pins hermetic resolves (limen fix moves them)",
-		)
-	}
-
 	name := aquaManifestFile
 
 	data, err := readRepoFile(root, name)
@@ -622,15 +521,7 @@ func checkAqua(root string) Finding {
 		return fail(rule, "", "no "+name+" found (project tooling must be pinned in it, resolved by hermetic)")
 	}
 
-	// The canonical files under their old names, while the manifest still
-	// names them: judged as if it named the new ones, provided the old files
-	// stand at the canonical content, which is what keeps the pins resolving.
-	text, legacyNamed, f := acceptLegacyCanonical(root, name, string(data))
-	if f != nil {
-		return *f
-	}
-
-	manifest, parsed := parseAquaManifest(text)
+	manifest, parsed := parseAquaManifest(string(data))
 	if !parsed {
 		return fail(
 			rule,
@@ -643,18 +534,11 @@ func checkAqua(root string) Finding {
 		return *f
 	}
 
-	for _, old := range []string{legacyAquaPackagesFile, legacyAquaRegistryFile} {
-		if !slices.Contains(legacyNamed, old) && exists(filepath.Join(root, filepath.FromSlash(old))) {
-			return fail(rule, old, old+" is the old name of "+legacyCanonicalTarget(old)+
-				", which nothing names any more (limen fix removes it)")
-		}
-	}
-
 	if !exists(filepath.Join(root, filepath.FromSlash(aquaChecksumsFile))) {
 		return fail(rule, name, aquaChecksumsFile+" is missing (run `hermetic update-checksum` and commit it)")
 	}
 
-	if f := checkPinned(root, rule, aquaPolicyFile, policyFor(legacyNamed)); f != nil {
+	if f := checkPinned(root, rule, aquaPolicyFile, CanonicalAquaPolicy); f != nil {
 		return *f
 	}
 
@@ -666,101 +550,17 @@ func checkAqua(root string) Finding {
 		return *f
 	}
 
-	message := name + " carries the canonical baseline with checksum enforcement; policy, registry, and checksums committed"
-	if len(legacyNamed) > 0 {
-		message = name + " names the canonical files under their old names (" + strings.Join(legacyNamed, ", ") +
-			"), kept at the canonical content until limen fix on main moves it"
+	return Finding{
+		Rule:    rule,
+		Status:  StatusOK,
+		Path:    name,
+		Message: name + " carries the canonical baseline with checksum enforcement; policy, registry, and checksums committed",
 	}
-
-	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: message}
 }
 
-// policyFor is the policy a manifest needs: the canonical one, or, while the
-// manifest names the local registry under its old name, the same with that
-// path. The library admits a local registry only under the path the policy
-// names, one path per registry name, so the policy follows the manifest for
-// the one release the old names are accepted; fix writes the manifest first
-// and the policy after it, from what the manifest then says.
-func policyFor(legacyNamed []string) string {
-	if slices.Contains(legacyNamed, legacyAquaRegistryFile) {
-		return strings.ReplaceAll(CanonicalAquaPolicy, "../"+aquaRegistryFile, "../"+legacyAquaRegistryFile)
-	}
-
-	return CanonicalAquaPolicy
-}
-
-// legacyNamedBy lists the canonical files the manifest on disk names under
-// their old names, in a fixed order; nothing when it names none or there is
-// no manifest.
-func legacyNamedBy(root string) []string {
-	data, err := readRepoFile(root, aquaManifestFile)
-	if err != nil {
-		return nil
-	}
-
-	var named []string
-
-	for _, old := range []string{legacyAquaRegistryFile, legacyAquaPackagesFile} {
-		if strings.Contains(string(data), "../"+old) {
-			named = append(named, old)
-		}
-	}
-
-	return named
-}
-
-// acceptLegacyCanonical rewrites, for the check alone, a manifest's import of
-// the canonical tool set and its local registry path from the old names to
-// the current ones, so the rest of the rule judges the shape and not the
-// spelling, and names which old files the manifest relies on. An old file
-// the manifest names and that is missing or drifted from the canonical is
-// a failure: the import or the registry would not resolve.
-func acceptLegacyCanonical(root, name, text string) (string, []string, *Finding) {
-	var named []string
-
-	for old, current := range map[string]string{
-		legacyAquaPackagesFile: aquaPackagesFile,
-		legacyAquaRegistryFile: aquaRegistryFile,
-	} {
-		if !strings.Contains(text, "../"+old) {
-			continue
-		}
-
-		canonical := CanonicalAquaPackages
-		if old == legacyAquaRegistryFile {
-			canonical = CanonicalAquaRegistry
-		}
-
-		data, err := readRepoFile(root, old)
-		if err != nil || string(data) != canonical {
-			f := fail(ruleAqua, name, name+" names "+old+", the old name of "+current+
-				", and that file is missing or not the canonical: limen fix moves the manifest (on main) or restores the file")
-
-			return text, nil, &f
-		}
-
-		named = append(named, old)
-		text = strings.ReplaceAll(text, "../"+old, "../"+current)
-	}
-
-	slices.Sort(named)
-
-	return text, named, nil
-}
-
-// readAquaManifest reads the project's manifest: .hermetic/hermetic.yaml, or a
-// root one a repository not yet migrated still carries, so the rules that only
-// read it do not fail twice for a move the aqua rule already reports. The
-// .aqua/ layout is not a candidate: fix moves it before any reader runs, and
-// no check reads the manifest for anything the import does not carry.
-func readAquaManifest(root string) (data []byte, err error) {
-	for _, candidate := range []string{aquaManifestFile, legacyAquaManifest, legacyAquaManifestYml} {
-		if data, err = readRepoFile(root, candidate); err == nil {
-			return data, nil
-		}
-	}
-
-	return nil, err
+// readAquaManifest reads the project's manifest, .hermetic/hermetic.yaml.
+func readAquaManifest(root string) ([]byte, error) {
+	return readRepoFile(root, aquaManifestFile)
 }
 
 // readAquaPins reads every pin the repository's aqua setup declares: its
@@ -772,45 +572,6 @@ func readAquaPins(root string) []byte {
 	imported, _ := readRepoFile(root, aquaPackagesFile)
 
 	return append(append(manifest, '\n'), imported...)
-}
-
-// legacyAquaFiles are aqua's files at the repository root, where limen kept
-// them first.
-var legacyAquaFiles = []string{ //nolint:gochecknoglobals // read-only list.
-	legacyAquaManifest, legacyAquaManifestYml, legacyAquaChecksums, legacyAquaPolicy,
-}
-
-// legacyAquaPaths are every place limen kept the pins before .hermetic/: the
-// root, and .aqua/ under aqua's names.
-func legacyAquaPaths() []string {
-	paths := make([]string, 0, 2*len(legacyAquaFiles))
-	for _, name := range legacyAquaFiles {
-		paths = append(paths, legacyAquaDir+"/"+name)
-	}
-
-	return append(paths, legacyAquaFiles...)
-}
-
-// legacyCanonicalTarget is the name a canonical file under its old name
-// carries now.
-func legacyCanonicalTarget(old string) string {
-	if old == legacyAquaRegistryFile {
-		return aquaRegistryFile
-	}
-
-	return aquaPackagesFile
-}
-
-// legacyAquaTarget is where a legacy pin file lives now.
-func legacyAquaTarget(from string) string {
-	switch strings.TrimPrefix(from, legacyAquaDir+"/") {
-	case legacyAquaManifest, legacyAquaManifestYml:
-		return aquaManifestFile
-	case legacyAquaChecksums:
-		return aquaChecksumsFile
-	default:
-		return aquaPolicyFile
-	}
 }
 
 // checkGitattributes content-pins .gitattributes (see CanonicalGitattributes:
@@ -863,12 +624,9 @@ func checkAgents(root string) Finding {
 	}
 }
 
-// checkLychee content-pins .limen/lychee.toml, the canonical configuration of
-// the lychee link checker behind `just do security links`. It is unconditional: every
-// repository carries a README, so every repository has markdown whose links can
-// be checked. A project's own exclusions live in a root .lint-links.toml (merged
-// by the recipe), which limen does not check; the name the overlay had before,
-// .lychee.toml, is a stray the recipe no longer reads.
+// checkLychee content-pins .limen/lychee.toml: the shared link-checker
+// configuration is identical everywhere; a project's own exclusions live in
+// its root .lint-links.toml, which is never judged.
 func checkLychee(root string) Finding {
 	const (
 		rule = "lychee"
@@ -876,10 +634,6 @@ func checkLychee(root string) Finding {
 	)
 	if f := checkPinned(root, rule, name, CanonicalLychee); f != nil {
 		return *f
-	}
-
-	if exists(filepath.Join(root, strayLycheeOverlay)) {
-		return fail(rule, strayLycheeOverlay, strayLycheeOverlay+strayLycheeMessage)
 	}
 
 	return Finding{Rule: rule, Status: StatusOK, Path: name, Message: name + matchesCanonicalMsg}
@@ -911,12 +665,6 @@ func checkWorkflows(root string) Finding {
 		}
 	}
 
-	// A directory, which exists() does not answer for.
-	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(pathActionSetupAquaOld))); err == nil {
-		return fail(rule, pathActionSetupAquaOld, pathActionSetupAquaOld+" is the action's old home, which nothing"+
-			" canonical calls any more: the action is "+pathActionSetupAqua+" (limen fix removes the old directory)")
-	}
-
 	for _, seeded := range []string{pathWorkflowCI, pathRenovate} {
 		if !exists(filepath.Join(root, filepath.FromSlash(seeded))) {
 			return fail(
@@ -927,25 +675,12 @@ func checkWorkflows(root string) Finding {
 		}
 	}
 
-	if tag, unedited := staleCISeed(root); unedited {
-		return fail(rule, pathWorkflowCI, pathWorkflowCI+" is limen "+tag+"'s seed, never edited: "+
-			"limen fix replaces it with the current one, which calls "+pathWorkflowVerify)
-	}
-
 	if f := checkReleaseGo(root, rule); f != nil {
 		return *f
 	}
 
 	if f := checkReleasedCommands(root, rule); f != nil {
 		return *f
-	}
-
-	if exists(filepath.Join(root, formerLintGithubFile)) {
-		return fail(rule, formerLintGithubFile, formerLintGithubMessage)
-	}
-
-	if stale := staleReferences(root); len(stale) > 0 {
-		return fail(rule, "", staleReferencesMessage(stale))
 	}
 
 	if exists(filepath.Join(root, releaseGoFile)) &&
@@ -965,134 +700,6 @@ func checkWorkflows(root string) Finding {
 	}
 }
 
-// movedPaths maps each path limen has moved to where it lives now. fix moves
-// the file; a reference to the old path in a file the project owns (a
-// Renovate manager matching ^Justfile$, a CI cache key hashing the old
-// manifest, a job calling the action under its old name) then matches
-// nothing, silently: the manager stops proposing, the key never changes, the
-// job fails on a missing action.
-//
-//nolint:gochecknoglobals // immutable table.
-var movedPaths = map[string]string{
-	"aqua.yaml":                 aquaManifestFile,
-	"aqua-checksums.json":       aquaChecksumsFile,
-	"aqua-policy.yaml":          aquaPolicyFile,
-	".aqua/aqua.yaml":           aquaManifestFile,
-	".aqua/aqua-checksums.json": aquaChecksumsFile,
-	".aqua/aqua-policy.yaml":    aquaPolicyFile,
-	legacyAquaPackagesFile:      aquaPackagesFile,
-	legacyAquaRegistryFile:      aquaRegistryFile,
-	"actions/setup-aqua":        "actions/setup-hermetic",
-	"Justfile":                  justfileName,
-	".allowed_signers":          signersFile,
-	".goreleaser.yaml":          releaseGoFile,
-	".goreleaser.yml":           releaseGoFile,
-	formerLintGithubFile:        lintGithubFile,
-}
-
-// movedPathRE finds a moved path as a whole name: what precedes it is no part
-// of a path, so `.limen/hermetic.yaml` is not a reference to the old root
-// manifest, while `.aqua/…` and `.limen/aqua…` are matched with their
-// directory, the whole of the old location. A name escaped inside a regular
-// expression (aqua\.yaml) is not recognized.
-var movedPathRE = regexp.MustCompile(
-	`(?:^|[^\w./-])(\.aqua/aqua\.yaml|\.aqua/aqua-checksums\.json|\.aqua/aqua-policy\.yaml` +
-		`|\.limen/aqua\.yaml|\.limen/aqua-registry\.yaml` +
-		`|aqua\.yaml|aqua-checksums\.json|aqua-policy\.yaml|Justfile|\.allowed_signers|\.goreleaser\.ya?ml|limen\.yaml)\b`,
-)
-
-// movedActionRE finds the setup action under its old name, which a workflow
-// always names inside a path (`./.github/actions/setup-aqua`), so the
-// whole-name guard above cannot carry it.
-var movedActionRE = regexp.MustCompile(`\b(actions/setup-aqua)\b`)
-
-// staleReferences lists, as "file:line: old → new", the references to moved
-// paths in the files a project owns that name paths: renovate.json and its
-// workflows, the content-pinned checksum workflow excepted.
-func staleReferences(root string) []string {
-	files := []string{pathRenovate}
-
-	workflows, _ := filepath.Glob(filepath.Join(root, ".github", "workflows", "*.y*ml"))
-	for _, workflow := range workflows {
-		rel := filepath.ToSlash(strings.TrimPrefix(workflow, root+string(filepath.Separator)))
-		if rel != pathWorkflowChecksum {
-			files = append(files, rel)
-		}
-	}
-
-	var stale []string
-
-	for _, name := range files {
-		data, err := readRepoFile(root, name)
-		if err != nil {
-			continue
-		}
-
-		for index, line := range referenceLines(name, string(data)) {
-			for _, re := range []*regexp.Regexp{movedPathRE, movedActionRE} {
-				for _, match := range re.FindAllStringSubmatch(line, -1) {
-					stale = append(stale, fmt.Sprintf("%s:%d: %s → %s", name, index+1, match[1], movedPaths[match[1]]))
-				}
-			}
-		}
-	}
-
-	return stale
-}
-
-// referenceLines is the file's lines with prose blanked, one per line so
-// numbers stay true: a workflow's YAML comments, and renovate.json's
-// description array. Prose naming an old path (a seeded comment, the
-// description an earlier limen wrote) misleads nobody's tooling; a manager
-// pattern or a cache key does.
-func referenceLines(name, data string) []string {
-	lines := strings.Split(data, "\n")
-	inDescription := false
-
-	for index, line := range lines {
-		switch {
-		case name != pathRenovate:
-			lines[index] = stripYAMLComment(line)
-		case inDescription:
-			inDescription = !strings.Contains(line, "]")
-			lines[index] = ""
-		case strings.Contains(line, `"`+descriptionKey+`"`):
-			inDescription = strings.Contains(line, "[") && !strings.Contains(line, "]")
-			lines[index] = ""
-		}
-	}
-
-	return lines
-}
-
-// stripYAMLComment cuts a YAML comment off a line: a # at the start or after
-// whitespace, outside quotes.
-func stripYAMLComment(line string) string {
-	var quote rune
-
-	for index, char := range line {
-		switch {
-		case quote != 0:
-			if char == quote {
-				quote = 0
-			}
-		case char == '\'' || char == '"':
-			quote = char
-		case char == '#' && (index == 0 || line[index-1] == ' ' || line[index-1] == '\t'):
-			return line[:index]
-		}
-	}
-
-	return line
-}
-
-// staleReferencesMessage names them; the files are the project's, so the
-// edit is its own.
-func staleReferencesMessage(stale []string) string {
-	return "references to paths limen moved (" + strings.Join(stale, "; ") +
-		"): update them by hand, these files are the project's own"
-}
-
 // releaseGoFile is the project's goreleaser configuration, named for its
 // lane like .lint-go.yaml; the release recipes pass it with --config. Away
 // from goreleaser's default name, an editor finds the schema only through the
@@ -1102,33 +709,9 @@ const (
 	releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/static/schema.json"
 )
 
-// lintGithubFile is the project's exceptions to `limen github check`, one
-// `check: reason` per line. formerLintGithubFile is its former name, whose
-// entries sat indented under a `github:` line; the audit refuses to run while
-// it is there rather than read no exceptions.
-const (
-	lintGithubFile          = ".lint-github.yaml"
-	formerLintGithubFile    = "limen.yaml"
-	formerLintGithubMessage = formerLintGithubFile + " is the former name of " + lintGithubFile +
-		", which `limen github check` reads — rename it and drop its github: line (limen fix does)"
-)
-
-// strayGoreleaserFiles are goreleaser's default names, which nothing reads
-// anymore.
-var strayGoreleaserFiles = []string{".goreleaser.yaml", ".goreleaser.yml"} //nolint:gochecknoglobals // read-only list.
-
-// checkReleaseGo fails a goreleaser configuration under a default name, or a
-// .release-go.yaml without its schema header or the canonical `changelog:`
-// section; nil when none applies
-// (releasing is opt-in).
+// checkReleaseGo fails a .release-go.yaml without its schema header or the
+// canonical `changelog:` section; nil when none applies (releasing is opt-in).
 func checkReleaseGo(root, rule string) *Finding {
-	if stray, found := findFirst(root, strayGoreleaserFiles...); found {
-		f := fail(rule, stray, stray+" is goreleaser's default name, which nothing reads: the release lane reads "+
-			releaseGoFile+" — rename it and add the schema line (limen fix does)")
-
-		return &f
-	}
-
 	data, err := readRepoFile(root, releaseGoFile)
 	if err != nil {
 		return nil

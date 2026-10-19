@@ -286,10 +286,10 @@ The `.github` surface mixes two regimes, and the split is the point:
 | File | Regime | Why |
 |------|--------|-----|
 | `.github/workflows/update-aqua-checksum.yaml` | **Content-pinned** | Limen machinery, and a *write-capable* workflow: its hardening (no `pull_request_target`, no secrets near branch-controlled code, env-only branch names) must never drift. Drift here is a vulnerability, not customization. |
-| `.github/actions/setup-hermetic/action.yaml` | **Content-pinned** | The composite action every canonical workflow bootstraps hermetic with, verified against its release's `checksums.txt` (whose sha256 is pinned beside the version) and GitHub's build provenance, then authorizes the committed policy, links the pins and exports `HERMETIC_CONFIG` as the checkout's manifest, so a later step resolves the repository's pins from any working directory; its pins and verification are the supply-chain floor. Its old home, `setup-aqua/`, is removed by `fix`, and a project's own workflow still calling it is a stale reference the `workflows` rule reports. |
+| `.github/actions/setup-hermetic/action.yaml` | **Content-pinned** | The composite action every canonical workflow bootstraps hermetic with, verified against its release's `checksums.txt` (whose sha256 is pinned beside the version) and GitHub's build provenance, then authorizes the committed policy, links the pins and exports `HERMETIC_CONFIG` as the checkout's manifest, so a later step resolves the repository's pins from any working directory; its pins and verification are the supply-chain floor. |
 | `.github/actions/cache/action.yaml` | **Content-pinned** | The composite action every canonical job keeps its caches with, in three calls (`attach` before setup-hermetic, `restore` right after setup-hermetic, `save` at the end): hermetic's store and the Go caches as files on Linux and macOS, the Windows cache image on Windows; one key scheme and one save rule (on `main`, on a miss) for every job ([github](./github.md#cache-budget)). |
 | `.github/actions/windows-cache-image/action.yaml` | **Content-pinned** | The Windows half of the cache action, called by it: one NTFS disk image holding the Go caches, hermetic's root and the linter cache, cached as one file and attached at `C:\vcache` with a Defender exclusion ([windows](./windows.md#caches-on-the-windows-runners)). |
-| `.github/workflows/ci.yaml` | **Seeded once** | Projects add to CI (jobs, runners, services), so the file is theirs; the shared lanes are not in it. The seed carries two jobs: `limen`, which calls `limen-verify.yaml` (optionally with its own runner list as the `os` input), and `gate`, the one required check, which needs `limen` and every project job. A `ci.yaml` still byte for byte an earlier release's seed was never edited: the check fails naming that release, and fix replaces it with the current seed; an edited one stays the project's, and fix notes when it does not call `limen-verify.yaml` yet. The check also fails a reference to a path limen moved (a cache key hashing the root `aqua.yaml`), naming the file, the line and the new path, in every workflow and `renovate.json`. |
+| `.github/workflows/ci.yaml` | **Seeded once** | Projects add to CI (jobs, runners, services), so the file is theirs; the shared lanes are not in it. The seed carries two jobs: `limen`, which calls `limen-verify.yaml` (optionally with its own runner list as the `os` input), and `gate`, the one required check, which needs `limen` and every project job. The file is the project's; fix notes when it does not call `limen-verify.yaml` yet. |
 | `.github/workflows/limen-verify.yaml` | **Content-pinned** | The shared CI lanes as a reusable workflow every `ci.yaml` calls: `verify` (lint and test on each runner of the `os` input, with the Windows cache image), `fuzz` (one linux leg) and `tools` (a real install of every pin) ([github](./github.md#mainline-doctrine-pull-requests-always)). Pinned so a change to the lanes reaches every repository with its limen bump. |
 | `.github/workflows/security.yaml` | **Content-pinned** | The scans' lane, apart from `ci.yaml`: one linux leg running the project's `just security` on every push and pull request and once a day, since the database a scan judges against moves without a push. Its own check, so a new advisory reddens `security`, never `gate`. What a project adds is a scan, in its `security` recipe; the workflow around it is the same everywhere. |
 | `.github/workflows/caches.yaml` | **Content-pinned** | The cache budget's keeper: after each `ci` run on the default branch, and once a day, it keeps one generation per cache key there and deletes the superseded ones ([github](./github.md#cache-budget)). The one workflow with `actions: write`, on that one job. |
@@ -377,8 +377,8 @@ requires in the running release, never `@latest`, which would make what a reposi
 depend on the day `fix` ran; Renovate bumps it from there. A release carries those `go.mod`
 files because its build copies them in first; a development build carries none and refuses to
 seed. The modules sit under `.limen/`, beside the canonical files, and are the project's own all
-the same: `fix` seeds a missing one and moves a `tools/` from before the directory's move, once,
-and never overwrites what is there. The directory is dotted so that `./...`, ripgrep and the
+the same: `fix` seeds a missing one and never overwrites what is there. The directory is
+dotted so that `./...`, ripgrep and the
 editors skip it, and so that `tools` is a project's to name.
 
 ### The `tracked` rule — no canonical file ignored by git
@@ -423,9 +423,9 @@ a dead or blipping link reddens `security` on one leg instead of every verify le
 **Per-project exclusions go in a root `.lint-links.toml`.** The recipe passes both files to
 lychee, which merges them (the exclude lists concatenate), so a project extends the baseline
 without touching it; the root file is the project's own, neither checked nor overwritten.
-It keeps its `.lint-links.toml` name from the lane's lint days, in the tool's own format; its
-former name, `.lychee.toml`, is reported as a stray, since nothing reads it. Both configs
-are passed explicitly: any `--config` disables lychee's discovery of `./lychee.toml`.
+It keeps its `.lint-links.toml` name from the lane's lint days, in the tool's own format.
+Both configs are passed explicitly: any `--config` disables lychee's discovery of
+`./lychee.toml`.
 
 **A link resolves at lint time, not at release time.** The checker fetches every URL in the
 tree as it is, so a link to something the change itself is preparing is a 404 until that

@@ -20,9 +20,8 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   every guard. It is goreleaser's configuration under the lane's name, like `.lint-go.yaml`
   (the recipes pass it with `--config`), and its first line is
   `# yaml-language-server: $schema=https://goreleaser.com/static/schema.json`, how an editor
-  finds the schema away from goreleaser's default name; `limen check` requires it and fails a
-  leftover `.goreleaser.yaml`, which nothing reads, and `limen fix` renames one and adds the
-  header. The **CI lane** (public repos, the default): `just do release vX.Y.Z` creates the
+  finds the schema away from goreleaser's default name; `limen check` requires it and
+  `limen fix` adds it. The **CI lane** (public repos, the default): `just do release vX.Y.Z` creates the
   signed tag — a human signs the intent — and pushes it; the tag push triggers the release
   workflow, which runs `just do release --ci`: goreleaser plus **keyless** cosign, the
   artifacts signed by the workflow's short-lived Fulcio identity (no key exists anywhere) and

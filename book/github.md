@@ -47,9 +47,7 @@ The file is a **delta**: exceptions only, never a full settings copy. Each entry
 `check-identifier: reason`. An exempted check reports ok, visibly carrying the reason; an
 unknown identifier or a missing reason fails the file itself. It is named for its lane like
 the other project-owned carve-outs (`.lint-go.yaml`, `.lint-links.toml`, `.lint-signers`):
-one file per check, read by that check alone. Its former name, `limen.yaml`, is refused: the
-audit does not run while it is present, rather than read no exceptions, and `limen fix`
-converts it.
+one file per check, read by that check alone.
 
 Every declarable identifier, grouped (a test pins this list to the live check catalog):
 
@@ -354,13 +352,9 @@ The decided merge model, enforced by the repository settings and the `limen:main
   the Go caches alone and 194 s with both (608, 635, 393 and 444 s on macOS, where the runs
   are noisier). Restoring the Go caches costs 13 to 23 s on Linux and 28 to 53 s on macOS.
 
-  **Migration.** `ci.yaml` is seeded once and the project's own afterwards, so repositories
-  created before the gate, fuzz and tools jobs existed do not have them. Their rulesets keep
-  working (reconciliation preserves existing contexts), but the gate job is added to
-  `ci.yaml` *before* the ruleset is moved onto `gate`: the wrong order reproduces the very
-  failure this design removes. The fuzz job is adopted the same way, by hand, from the
-  canonical workflow: a repository with `Fuzz*` targets and no fuzz job is running its
-  fuzzers nowhere.
+- **A repository with `Fuzz*` targets runs them in CI.** `ci.yaml` is the project's own, so
+  the fuzz job is adopted by hand from the canonical workflow: a repository with `Fuzz*`
+  targets and no fuzz job is running its fuzzers nowhere.
 - **Every commit is signed.** The `limen:main` ruleset requires signatures, so an unsigned
   commit cannot land on the default branch. Not the same guarantee as the DCO:
   `git-validation` checks that a `Signed-off-by` trailer is present, and a trailer is a line

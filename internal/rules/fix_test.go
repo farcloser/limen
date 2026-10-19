@@ -2,7 +2,6 @@ package rules_test
 
 import (
 	"bytes"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -294,36 +293,6 @@ func TestFixJustfileRegimes(t *testing.T) {
 	data, _ = os.ReadFile(filepath.Join(untouched, ".justfile"))
 	if string(data) != own {
 		t.Error("a compliant Justfile must never be modified")
-	}
-}
-
-// TestJustfileFormerName: a root Justfile under its former name fails the
-// rule naming it, and fix renames it to .justfile, content kept; with both
-// present (which just refuses), fix leaves them for a hand merge.
-func TestJustfileFormerName(t *testing.T) {
-	t.Parallel()
-
-	own := rules.CanonicalJustfileImport + "\n\ngreet:\n\t@echo mine\n\nsecurity: do::security::default\n"
-
-	files := map[string]string{"Justfile": own}
-	dir := writeRepo(t, files)
-
-	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "justfile"); f.OK() || f.Path != "Justfile" {
-		t.Fatalf("a root Justfile should fail naming it: %v %q %s", f.OK(), f.Path, f.Message)
-	}
-
-	if o := justfileOutcome(rules.Fix(t.Context(), dir, bootstrapOpts())); o.Action != rules.ActionMerged ||
-		!strings.Contains(o.Message, "renamed Justfile to .justfile") {
-		t.Fatalf("fix: %s (%s), want merged with the rename", o.Action, o.Message)
-	}
-
-	if data, err := os.ReadFile(filepath.Join(dir, ".justfile")); err != nil || string(data) != own {
-		t.Fatalf(".justfile after the rename: %q, %v", data, err)
-	}
-
-	both := writeRepo(t, map[string]string{"Justfile": own, ".justfile": own})
-	if o := justfileOutcome(rules.Fix(t.Context(), both, bootstrapOpts())); o.Action != rules.ActionAdvisory {
-		t.Errorf("both names present: %s (%s), want advisory", o.Action, o.Message)
 	}
 }
 
@@ -626,20 +595,6 @@ func TestFixLychee(t *testing.T) {
 	data, _ = os.ReadFile(filepath.Join(withOwn, ".lint-links.toml"))
 	if string(data) != own {
 		t.Error("fix modified the project's own root .lint-links.toml")
-	}
-
-	// The overlay's former name is reported as an advisory and left alone: the
-	// exclusions in it are the project's to move.
-	withStray := writeRepo(t, map[string]string{".lychee.toml": own})
-	outcomes := outcomesFor(rules.Fix(t.Context(), withStray, bootstrapOpts()), "lychee")
-
-	if len(outcomes) != 2 || outcomes[1].Action != rules.ActionAdvisory || outcomes[1].Path != ".lychee.toml" {
-		t.Errorf("a stray root .lychee.toml should be an advisory, got %+v", outcomes)
-	}
-
-	data, _ = os.ReadFile(filepath.Join(withStray, ".lychee.toml"))
-	if string(data) != own {
-		t.Error("fix modified the stray root .lychee.toml")
 	}
 }
 
@@ -1176,102 +1131,6 @@ func TestFixWorkflows(t *testing.T) {
 		if o.Rule == "workflows" && o.Path == ".github/workflows/release.yaml" && o.Action != rules.ActionCreated {
 			t.Errorf("release workflow with goreleaser: %s, want created", o.Action)
 		}
-	}
-}
-
-// TestLintGithubFormerName: limen.yaml is the audit's exceptions file under
-// its former name, entries indented under `github:`. check fails naming it;
-// fix renames it and brings the entries out of the section, comments kept;
-// with both files, or with content that is not the former format, fix leaves
-// it to the project.
-func TestLintGithubFormerName(t *testing.T) {
-	t.Parallel()
-
-	const (
-		former    = "# why we deviate\ngithub:\n  wiki: hosts the runbook  # kept\n  # a comment\n  pages: docs site\n"
-		converted = "# why we deviate\nwiki: hosts the runbook  # kept\n# a comment\npages: docs site\n"
-	)
-
-	files := compliantFiles()
-	files["limen.yaml"] = former
-	root := writeRepo(t, files)
-
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); f.OK() || f.Path != "limen.yaml" {
-		t.Errorf("check must fail naming limen.yaml, got: %+v", f)
-	}
-
-	rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()})
-
-	data, err := os.ReadFile(filepath.Join(root, ".lint-github.yaml"))
-	if err != nil || string(data) != converted {
-		t.Errorf("fix must convert the file (err %v), got:\n%s", err, data)
-	}
-
-	if _, err := os.Stat(filepath.Join(root, "limen.yaml")); err == nil {
-		t.Error("fix must remove limen.yaml once converted")
-	}
-
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); !f.OK() {
-		t.Errorf("after fix: %s", f.Message)
-	}
-
-	for name, extra := range map[string]map[string]string{
-		"both files":   {"limen.yaml": former, ".lint-github.yaml": converted},
-		"other format": {"limen.yaml": "rules:\n  something: else\n"},
-	} {
-		files := compliantFiles()
-		maps.Copy(files, extra)
-		root := writeRepo(t, files)
-
-		var outcome rules.Outcome
-
-		for _, o := range rules.Fix(t.Context(), root, rules.FixOptions{Policy: rules.DefaultPolicy()}) {
-			if o.Rule == "workflows" && o.Path == "limen.yaml" {
-				outcome = o
-			}
-		}
-
-		if outcome.Action != rules.ActionAdvisory {
-			t.Errorf("%s: fix: %s (%s), want advisory", name, outcome.Action, outcome.Message)
-		}
-
-		if data, _ := os.ReadFile(filepath.Join(root, "limen.yaml")); string(data) != extra["limen.yaml"] {
-			t.Errorf("%s: fix must leave limen.yaml untouched", name)
-		}
-	}
-}
-
-// An unedited seed of an earlier release fails the check and is replaced by
-// fix with the current seed, which calls the shared lanes.
-func TestCIUneditedSeedMigrates(t *testing.T) {
-	t.Parallel()
-
-	old, err := os.ReadFile(filepath.Join("testdata", "ci-v0.8.0.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	files := compliantFiles()
-	files[".github/workflows/ci.yaml"] = string(old)
-	root := writeRepo(t, files)
-
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); f.OK() ||
-		!strings.Contains(f.Message, "v0.8.0") {
-		t.Fatalf("an unedited v0.8.0 seed should fail naming its release, got: %s", f.Message)
-	}
-
-	outcomes := rules.Fix(t.Context(), root, bootstrapOpts())
-	if !rules.AllResolved(outcomes) {
-		t.Fatalf("fix left the migration unresolved: %+v", outcomesFor(outcomes, "workflows"))
-	}
-
-	got, _ := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yaml"))
-	if string(got) != limen.CanonicalWorkflowCI {
-		t.Error("fix should replace an unedited seed with the current one")
-	}
-
-	if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "workflows"); !f.OK() {
-		t.Errorf("after fix the workflows rule should pass, got: %s", f.Message)
 	}
 }
 
