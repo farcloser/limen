@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1478,6 +1479,50 @@ func TestStaleReferences(t *testing.T) {
 		data,
 	) != files[".github/workflows/ci.yaml"] {
 		t.Errorf("fix edited the project's workflow:\n%s", data)
+	}
+}
+
+// TestJustfileRenamedVariable: a project .justfile that re-exports PATH from
+// main.just's aqua_bin, a variable limen renamed to hermetic_bin, fails the
+// justfile rule by file and line, a comment naming it does not, and fix does
+// not edit the project's file.
+func TestJustfileRenamedVariable(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files[".justfile"] += "\n# aqua_bin in a comment is prose, not a reference\n" +
+		"aqua_binary := 'x'\n" + // a longer name, not the variable
+		"my_aqua_bin := 'x'\n" + // a name ending in it, not the variable
+		"export PATH := if os() == 'windows' { aqua_bin + ';' + env_var('PATH') } else { aqua_bin + ':/usr/bin' }\n"
+	root := writeRepo(t, files)
+
+	// The re-export's line, 1-based, as the finding must number it.
+	lines := strings.Split(files[".justfile"], "\n")
+	line := 0
+
+	for index, l := range lines {
+		if strings.HasPrefix(l, "export PATH := if") {
+			line = index + 1
+		}
+	}
+
+	want := fmt.Sprintf(".justfile:%d: aqua_bin → hermetic_bin", line)
+
+	f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "justfile")
+	if f.OK() || !strings.Contains(f.Message, want) {
+		t.Fatalf("want %q in the finding, got: %+v", want, f)
+	}
+
+	// Once, for the line that reads it twice; the comment, aqua_binary and
+	// my_aqua_bin are not references.
+	if strings.Count(f.Message, "aqua_bin →") != 1 {
+		t.Errorf("want one report, got: %s", f.Message)
+	}
+
+	rules.Fix(t.Context(), root, bootstrapOpts())
+
+	if data, _ := os.ReadFile(filepath.Join(root, ".justfile")); string(data) != files[".justfile"] {
+		t.Errorf("fix edited the project's .justfile:\n%s", data)
 	}
 }
 
