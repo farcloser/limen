@@ -369,9 +369,14 @@ repository whose root carries a `go.mod` adds the Go-source analyzers `deadcode`
 in [tooling](./tooling.md#go-built-tools-are-gomod-tools). `limen fix` creates
 `.limen/tools/go.mod` (module path `<module>/tools` and the root's `go` directive in a Go
 repository; `tools` and the aqua-pinned `go` elsewhere), adds a missing directive with `go -C
-.limen/tools get -tool <pkg>@<version>` followed by `go -C .limen/tools mod tidy`, and strips
-any directive out of the root `go.mod`, tidying it; when the pinned `go` or the network is
-unavailable, the rule ends as an advisory carrying the exact command. The version is the one
+.limen/tools get -tool <pkg>@<version>` followed by `go -C .limen/tools mod tidy`, and moves
+the directives out of the root `go.mod`, tidying it: the project's own go into `.limen/tools/go.mod`
+first, each at the version the root requires for its module, and leave the root only once they
+are there; the baseline's and the retired are removed, since the tools module declares the
+baseline and never the retired. A directive whose
+package no `require` provides (the root module's own) cannot be built from another module: the
+rule ends as an advisory naming it and the root keeps every directive. When the pinned `go` or
+the network is unavailable, the rule ends as an advisory carrying the exact command. The version is the one
 limen's own `.limen/tools/go.mod` (or `.limen/tools/<name>/go.mod`, for an isolated tool)
 requires in the running release, never `@latest`, which would make what a repository receives
 depend on the day `fix` ran; Renovate bumps it from there. A release carries those `go.mod`

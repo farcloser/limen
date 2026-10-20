@@ -620,22 +620,44 @@ func TestFixGoToolsSeedsIsolatedBesideCompleteTools(t *testing.T) {
 	}
 }
 
-// TestFixGoToolsMovesDirectivesOutOfRoot: directives in the project's go.mod
-// are stripped (go mod tidy is the fake go's no-op) and .limen/tools/go.mod ends
-// complete.
+// TestFixGoToolsMovesDirectivesOutOfRoot: the project's own directive in
+// its go.mod lands in .limen/tools/go.mod at the version the root requires
+// for its module, the baseline's are removed (the tools module declares
+// them), the root keeps everything else, and the rule passes after. A fix
+// once stripped the root and wrote the project's directive nowhere, under a
+// message that said "moved".
 func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
-	files["go.mod"] = goModWithTools
+	files["go.mod"] = strings.Replace(goModWithTools,
+		"require golang.org/x/tools v0.49.0 // indirect\n",
+		"require (\n\tgolang.org/x/tools v0.49.0 // indirect\n\texample.com/other v1.2.3\n)\n", 1)
 	dir := writeRepo(t, files)
 
 	outcome := outcomeFor(
 		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
 		"gotools",
 	)
-	if outcome.Action != rules.ActionMerged || !strings.Contains(outcome.Message, "moved tool directive(s)") {
-		t.Fatalf("got %s (%s), want merged with the move reported", outcome.Action, outcome.Message)
+	if outcome.Action != rules.ActionMerged {
+		t.Fatalf("got %s (%s), want merged", outcome.Action, outcome.Message)
+	}
+
+	baseline := slices.Concat(sourceAnalyzers, toolsEverywhere)
+	slices.Sort(baseline)
+
+	for _, want := range []string{
+		"moved tool directive(s) for example.com/other/cmd/thing@v1.2.3 from go.mod into .limen/tools/go.mod",
+		"removed tool directive(s) for " + strings.Join(baseline, ", ") + " from go.mod",
+	} {
+		if !strings.Contains(outcome.Message, want) {
+			t.Errorf("message lacks %q:\n%s", want, outcome.Message)
+		}
+	}
+
+	toolsMod, _ := os.ReadFile(filepath.Join(dir, ".limen", "tools", "go.mod"))
+	if !strings.Contains(string(toolsMod), "tool example.com/other/cmd/thing // @v1.2.3") {
+		t.Errorf(".limen/tools/go.mod lacks the project's directive at the root's version:\n%s", toolsMod)
 	}
 
 	rootMod, _ := os.ReadFile(filepath.Join(dir, "go.mod"))
@@ -645,7 +667,7 @@ func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
 		}
 	}
 
-	for _, keep := range []string{"module example.com/proj", "go 1.26", "require golang.org/x/tools v0.49.0 // indirect"} {
+	for _, keep := range []string{"module example.com/proj", "go 1.26", "golang.org/x/tools v0.49.0 // indirect", "example.com/other v1.2.3"} {
 		if !strings.Contains(string(rootMod), keep) {
 			t.Errorf("stripping lost %q:\n%s", keep, rootMod)
 		}
@@ -653,6 +675,69 @@ func TestFixGoToolsMovesDirectivesOutOfRoot(t *testing.T) {
 
 	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {
 		t.Fatalf("rule does not pass after fix: %s", f.Message)
+	}
+}
+
+// TestFixGoToolsRefusesToMoveAnUnprovidedDirective: a directive naming a
+// package no require provides (the root module's own) cannot be built from
+// the tools module; the fix says so and the root keeps the directive rather
+// than losing it.
+func TestFixGoToolsRefusesToMoveAnUnprovidedDirective(t *testing.T) {
+	t.Parallel()
+
+	const gomod = "module example.com/proj\n\ngo 1.26\n\ntool example.com/proj/cmd/gen\n"
+
+	files := compliantFiles()
+	files["go.mod"] = gomod
+	dir := writeRepo(t, files)
+
+	outcome := outcomeFor(
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
+		"gotools",
+	)
+	if outcome.Action != rules.ActionAdvisory {
+		t.Fatalf("got %s (%s), want advisory", outcome.Action, outcome.Message)
+	}
+
+	for _, want := range []string{"example.com/proj/cmd/gen", "no require provides", "by hand"} {
+		if !strings.Contains(outcome.Message, want) {
+			t.Errorf("advisory lacks %q: %s", want, outcome.Message)
+		}
+	}
+
+	rootMod, _ := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if string(rootMod) != gomod {
+		t.Errorf("go.mod changed under an advisory:\n%s", rootMod)
+	}
+}
+
+// TestFixGoToolsMoveWithoutGoKeepsTheRoot: with no go, the move of a
+// project's own directive stops at the get, and the root go.mod is
+// byte-identical afterwards: the root is stripped only once the tools module
+// holds the directive. A fix once stripped first, and a directive it then
+// failed to add existed nowhere.
+func TestFixGoToolsMoveWithoutGoKeepsTheRoot(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
+	t.Setenv("PATH", t.TempDir()) // nothing on it: no go
+
+	gomod := strings.Replace(goModWithTools,
+		"require golang.org/x/tools v0.49.0 // indirect\n",
+		"require (\n\tgolang.org/x/tools v0.49.0 // indirect\n\texample.com/other v1.2.3\n)\n", 1)
+
+	files := compliantFiles()
+	files["go.mod"] = gomod
+	dir := writeRepo(t, files)
+
+	outcome := outcomeFor(
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
+		"gotools",
+	)
+	if outcome.Action != rules.ActionAdvisory {
+		t.Fatalf("got %s (%s), want advisory", outcome.Action, outcome.Message)
+	}
+
+	rootMod, _ := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if string(rootMod) != gomod {
+		t.Errorf("go.mod changed although the move did not complete:\n%s", rootMod)
 	}
 }
 
