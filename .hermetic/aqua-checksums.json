@@ -126,28 +126,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.0/yamlfmt_0.2.0_darwin_arm64.tar.gz",
-      "checksum": "05B9C928E76D365C2D98E597FCB3367B0C5F94519515E19D00E1124834EA144A",
+      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.1/yamlfmt_0.2.1_darwin_arm64.tar.gz",
+      "checksum": "76414678AC18FE16264BB4EBF1C5EBB06570D90C0ECD0814E239E41DFF1026E7",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.0/yamlfmt_0.2.0_linux_amd64.tar.gz",
-      "checksum": "9D3260A43AE5B919A4B9D80E1AA410B683BAD4256CBA40A68E628B28185E096E",
+      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.1/yamlfmt_0.2.1_linux_amd64.tar.gz",
+      "checksum": "692A4B72DFF363DCDC3CD8F41C55042EAC993EFDCC08D55DF90BA5E5FD691431",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.0/yamlfmt_0.2.0_linux_arm64.tar.gz",
-      "checksum": "FBD9C827B4FA7F3C1D57B610CDF7B4D58247755CB4D4F1890C619522CC96AA57",
+      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.1/yamlfmt_0.2.1_linux_arm64.tar.gz",
+      "checksum": "D72B86DA88BDB3DDF3B4971048AF39599C75930B7FDE532C24C598734D74385B",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.0/yamlfmt_0.2.0_windows_amd64.tar.gz",
-      "checksum": "1F58A6A46FBF39CECC749C12B77332963E9A4B8E667C419E3EE967B11B9E4DEC",
+      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.1/yamlfmt_0.2.1_windows_amd64.tar.gz",
+      "checksum": "4EA9AC7051EA25631FA58C9546D272F318D47A584AFD87757EE6CA7C0B52B919",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.0/yamlfmt_0.2.0_windows_arm64.tar.gz",
-      "checksum": "BABCF7C603C684293A2D9914D2DC5FFED5505DE4491A7F4B0961ABB7C8A1F987",
+      "id": "github_release/github.com/forkcloser/yamlfmt/v0.2.1/yamlfmt_0.2.1_windows_arm64.tar.gz",
+      "checksum": "DF122697A27F8A1F888B9037D65173A9D21BBCD2B5866E706D979C926533D8BB",
       "algorithm": "sha256"
     },
     {
