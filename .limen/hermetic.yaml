@@ -37,7 +37,7 @@ packages:
   # --- spec tooling (local registry; see .limen/hermetic-registry.yaml) ---
   - name: quint-co/quint@v0.33.0
     registry: local
-  - name: forkcloser/curl@v8.22.0
+  - name: forkcloser/curl@v8.23.0
     registry: local
   # tar, gtar, xz, gzip, zstd, zip and unzip, one pure-Go build on every
   # platform, so a build script unpacks and packs with the same program
