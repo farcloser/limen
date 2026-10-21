@@ -159,7 +159,8 @@ WASM) run everywhere, and every repository pins `golang/go` in its own aqua mani
 them. A Go repository adds the three source analyzers. The doctrine is enforced from both
 sides: the `gotools` rule requires `.limen/tools/go.mod` with the directives and rejects a `tool`
 directive in the project's `go.mod` (`limen fix` creates the module, adds the directives,
-moves any directive out of the root), and the `aqua` rule retires the old `go_install` pins
+moves the project's own directives into it at the root's versions and removes the baseline's
+from the root), and the `aqua` rule retires the old `go_install` pins
 (`limen fix` removes them). The local registry carries no `go_install` entry, and never will
 again.
 
