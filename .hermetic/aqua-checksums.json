@@ -101,28 +101,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.22.0/curl_8.22.0_darwin_arm64.tar.gz",
-      "checksum": "E733869CF4FED3F5CB0F67E0AA37DD21216690D27C56525749E3F3A211227DD3",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_darwin_arm64.tar.gz",
+      "checksum": "4BC0577E21BD937DD0E6D3BE1075C86025FD4DF63BB61F12B5FEF9BC841C6ED9",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.22.0/curl_8.22.0_linux_amd64.tar.gz",
-      "checksum": "0DEE3074F44F56ADBCBB94C3DF506EC60BBFDA31DAA98FA537827C2A290A4666",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_linux_amd64.tar.gz",
+      "checksum": "70A243D9895B84C95410B61867A115CA9A6132704A1B376FA1F0565EB7A6B328",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.22.0/curl_8.22.0_linux_arm64.tar.gz",
-      "checksum": "C78C61656EC58AB22EA5107B686772811478B91BB97BAD1EADD259C990058EE0",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_linux_arm64.tar.gz",
+      "checksum": "C68ACE1458E6BF11F8E63E963E4753A76970E8A60FFF3D5CEE368A59186DE449",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.22.0/curl_8.22.0_windows_amd64.tar.gz",
-      "checksum": "9057B8D7890C58B7254F7207938ECA51C0A43D66B88B1FFD713DD84248941CD9",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_windows_amd64.tar.gz",
+      "checksum": "9C391B70E577D0C4AC8B2B9B90958432AE72F96400043D720ACED2C5811216FA",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.22.0/curl_8.22.0_windows_arm64.tar.gz",
-      "checksum": "4CEBEC6D937A154AE2DC16815E144831CA8F90B85C5E22BA93C6A128518C11DC",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_windows_arm64.tar.gz",
+      "checksum": "1098AA1A16D737FD7075583013A75B8BAB52C0530A79B6127254C4AE0DFE4220",
       "algorithm": "sha256"
     },
     {
