@@ -714,9 +714,8 @@ func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) { // Serial by design:
 
 // TestPinsCommands: `limen pins get` serves a value from the working
 // directory's pins.yaml; `limen pins refresh` brings a stale digest to the
-// bytes at the url; both name their misuse.
-//
-//nolint:paralleltest // serial by design: t.Chdir forbids t.Parallel, and the linter does not see it.
+// bytes at the url; both name their misuse. Serial by design: t.Chdir forbids
+// t.Parallel.
 func TestPinsCommands(t *testing.T) {
 	const tarball = "release bytes"
 
