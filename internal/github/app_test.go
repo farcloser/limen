@@ -128,7 +128,18 @@ func (a *approver) approve(url string) {
 		return
 	}
 
+	answer, err := io.ReadAll(redirect.Body)
 	_ = redirect.Body.Close()
+
+	if err != nil {
+		a.t.Errorf("reading the redirect's answer: %v", err)
+
+		return
+	}
+
+	if !strings.Contains(string(answer), "App approved") {
+		a.t.Errorf("the redirect's answer is not the approval page:\n%s", answer)
+	}
 }
 
 //nolint:paralleltest // serial by design: sets the process environment.

@@ -61,11 +61,13 @@ var (
 
 // callbackWait bounds the browser round-trip; installWait and installPoll
 // bound the post-registration installation check. The caller's context cuts
-// either short (Ctrl-C, a deadline).
+// either short (Ctrl-C, a deadline). shutdownWait bounds the callback
+// server's drain once the code is in hand.
 const (
 	callbackWait = 3 * time.Minute
 	installWait  = 3 * time.Minute
 	installPoll  = 5 * time.Second
+	shutdownWait = 5 * time.Second
 )
 
 // openBrowser opens url in the user's browser: the command BROWSER names when
@@ -403,7 +405,16 @@ func manifestApproval(ctx context.Context, org string, progress io.Writer) (stri
 
 	go func() { _ = server.Serve(listener) }()
 
-	defer func() { _ = server.Close() }()
+	// The code is handed over before the callback handler returns and its
+	// page is flushed; Close here would cut that response mid-flight, so the
+	// browser shows a reset instead of the approval and a client that retries
+	// dials a port already closed. Shutdown drains the in-flight response.
+	defer func() {
+		drain, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownWait)
+		defer cancel()
+
+		_ = server.Shutdown(drain)
+	}()
 
 	formURL := "http://" + listener.Addr().String() + "/"
 
