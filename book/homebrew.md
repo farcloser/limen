@@ -24,11 +24,14 @@ Two deliberate exceptions, named because they cut against doctrine:
   PATH at startup, before the hermetic PATH locks down (`BREW_BIN`, overridable by
   exporting it) — the invoking shell knows where brew lives, whatever the prefix — and
   the recipes fail with guidance when the capture came up empty; the hermetic PATH
-  itself is untouched. `style`, and its fixing twin, may run from a brew of the project's
-  own instead: `BREW_STYLE_BIN`, exported in the root `.justfile`, defaults to `BREW_BIN`
-  and redirects those two alone, so a tap that lints with a pinned Homebrew of its own
-  (a release extracted under `.build`, pinned in `pins.yaml`, never the machine's prefix)
-  still installs and audits with the machine's brew in `test` and `audit`.
+  itself is untouched. `style` (with its fixing twin) and `audit` may each run from a brew
+  of the project's own instead: `BREW_STYLE_BIN` and `BREW_AUDIT_BIN`, exported in the
+  root `.justfile`, default to `BREW_BIN`, so a tap that lints with a pinned Homebrew of
+  its own (a release extracted under `.build`, pinned in `pins.yaml`, never the machine's
+  prefix) points both at it and still installs with the machine's brew in `test`, the one
+  lane that installs for real. The machine's brew cannot run under a session sandbox (it
+  writes under its own prefix and its caches) and refuses a tap it already has installed,
+  so without the knobs `just lint` in a tap repository is CI-only.
 - **brew needs a tap identity, for `audit` and for `style` alike.** brew addresses
   formulas by tap name, never by path, and reads a tap's own RuboCop configuration
   (`tap_rubocop_style.yml`) only for files it can place in a tap: the same files by their
