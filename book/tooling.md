@@ -219,6 +219,33 @@ trustworthy upstream channel covers them all, so curl is packaged first-party by
   linux (static musl) and macOS (arm64) legs, the same lineage as the imported windows
   binaries, every archive GitHub-attested.
 
+### Not a rung: the runner's package manager
+
+No CI job installs from the runner's distribution: no `apt-get install`, no `brew install`,
+no `choco` or `winget`, nothing of the kind. A toolchain a build needs — a cross compiler, a
+library's headers, autotools — is a pinned, verified artifact like any other tool: through
+hermetic when a usable package exists, through `pins.yaml` and `limen pins get` when it is
+an archive the build fetches itself, through the ladder above when nothing trustworthy is
+published. Two reasons, each enough on its own:
+
+- **It is the one unpinned, unverified input.** The runner image's mirror serves whatever
+  the distribution carries that day: no digest in the repository, nothing for Renovate to
+  move, nothing for the checksum workflow to refresh, nothing a reader of the pins can
+  audit. "Pinned means by digest" ([dependencies](./dependencies.md)) has no exception for
+  it.
+- **It fails in the dark.** The mirror is Azure's, shared with every GitHub-hosted runner,
+  and its failures are silent waits: erofs's cross-build job stalled on `apt-get install mingw-w64`
+  three times in a day, twenty minutes each with nothing in the log, during an Azure mirror
+  failover ([actions/runner-images#15040](https://github.com/actions/runner-images/issues/15040)).
+  Bounding and logging the step ([forkcloser/erofs#196](https://github.com/forkcloser/erofs/pull/196))
+  makes the stall visible; dropping apt is the fix.
+
+Two things are not CI runner steps and stay as they are: a container image a repository
+builds, where the base is pinned by digest and apt reads a dated snapshot of the archive
+(ossein-kernel's build image: a `repo@sha256:…` base, `snapshot.debian.org` at one
+timestamp), so the install is as reproducible as the image; and a script a developer runs
+by hand on their own machine ([VM testing](./vm_testing.md) installs UTM with Homebrew).
+
 ---
 
 ## Signatures: verify whenever published
