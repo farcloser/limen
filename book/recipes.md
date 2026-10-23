@@ -170,7 +170,9 @@ What each shared module is *for*; mechanics live in the module files:
   `git describe`. The release shape is the **twin** of the goreleaser configuration where a
   project ships one: the flag sets are kept aligned, and a change to either lands in both
   (each file's comment names the other). Pure Go by default; CGO is an explicit opt-in that
-  adds the hardening flags.
+  adds the hardening flags. On Linux the builds carry `netgo,osusergo`, so a cgo build keeps
+  DNS and user lookups out of glibc; on macOS they stay off, since libc is the one road to
+  Open Directory users and to scoped DNS.
 - **`tools`**: the manifest operations (`add`, `set`, `update`, `remove`) that keep
   `.hermetic/hermetic.yaml` and `.hermetic/aqua-checksums.json` changing together
   ([tooling](./tooling.md#day-to-day-changes--the-just-do-tools-recipes)).
