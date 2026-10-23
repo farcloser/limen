@@ -5,7 +5,9 @@ What a project depends on and how it names the version, in every language; the G
 
 - **Pinned means by digest.** Every image, action and tool is pinned to content, in code, in
   examples and in documentation alike, because examples are what gets copied. The tooling
-  that enforces it is [project tooling](./tooling.md).
+  that enforces it is [project tooling](./tooling.md). A runner's package manager pins
+  nothing, so no CI job installs from one
+  ([the runner's package manager](./tooling.md#not-a-rung-the-runners-package-manager)).
 - **The language baseline is the earliest release still supported upstream**, not the
   newest: a module says the minimum a builder and every consumer must run, and patch fixes
   reach a build through the toolchain the repository pins, not through the directive.
