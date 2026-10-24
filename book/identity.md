@@ -88,20 +88,25 @@ its private key is a file on disk, the thing to avoid).
 ## The bot's key
 
 **Hardware-bound, non-exportable, no touch.** The bot's key lives in the Secure Enclave,
-served by [Secretive](https://github.com/maxgoedjen/secretive)'s agent. It cannot leak; it
-can only be used by a process that reaches the agent's socket on that one machine. Touch ID
+served by [taciturn](https://github.com/forkcloser/taciturn)'s agent (a machine still on
+[Secretive](https://github.com/maxgoedjen/secretive) names that agent's socket to the
+installer). It cannot leak; it can only be used by a process that reaches the agent's
+socket on that one machine. Touch ID
 is deliberately **off**: a gate the human taps reflexively, dozens of times a day, is
 theater — worse than no gate, because it feels like control. The human's own YubiKey keeps
 its touch, where a touch is rare and means something.
 
-**The key only works while the human's session is unlocked.** Secretive creates every key
-as `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, so once the screen locks the agent
-refuses every request: no signed commit, no push, until the human is back. That is the
-enclave's guarantee working, not a fault: a signing or push failure that follows earlier
-successes means a locked screen, so the agent finishes the work in its worktree — green,
-its commit message written — and leaves it ready, instead of reporting a broken rig. A
-per-key opt-in to stay usable while locked is proposed upstream
-([maxgoedjen/secretive#819](https://github.com/maxgoedjen/secretive/pull/819)).
+**The key answers while the screen is locked, until the next boot.** taciturn creates the
+bot's key as `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (`taciturn key create …
+--use locked`): from the human's first unlock after boot it signs with the screen locked,
+which is exactly when an agent works unattended. So a signing or push failure that follows
+earlier successes in a session is a defect — the agent gone, its socket closed, the key's
+policy refusing the peer — and is reported as broken tooling, never waited out. Only a key
+still in Secretive, which creates every key `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`,
+stops once the screen locks; there the agent finishes the work in its worktree — green, its
+commit message written — and leaves it ready for the human's return (a per-key opt-in to
+stay usable while locked is proposed upstream,
+[maxgoedjen/secretive#819](https://github.com/maxgoedjen/secretive/pull/819)).
 
 **The veto is the rulesets.** `limen:main` requires a pull request with signed commits *and
 one approving review*: the bot can push branches and open pull requests, and cannot land
@@ -118,8 +123,9 @@ acceptable trade for a bot whose damage is bounded by rulesets and revocable in 
 ## The bot's sandbox
 
 The agent runs in a sandbox that denies `~/.ssh` and every unix socket it was not told
-about. The setup opens exactly one thing: the Secretive socket. The agent can ask the
-enclave to sign; it can never read a key. Three consequences the script handles:
+about. The setup opens exactly one thing: the signing agent's socket (taciturn's, or
+Secretive's on a machine still there). The agent can ask the enclave to sign; it can never
+read a key. Three consequences the script handles:
 
 - **Host keys.** `~/.ssh/known_hosts` is unreadable, so GitHub's host keys are pinned into
   a file the sandbox can read, from GitHub's published list, and ssh runs with strict
@@ -366,7 +372,8 @@ Three things, all one-time, all deliberately human:
 
 1. Creating the bot's GitHub account, inviting it to the organization, adding it to the
    `agents` team.
-2. Creating its key in Secretive and registering the public key on the account as both an
+2. Creating its key in taciturn (`taciturn key create … --use locked`, the fork's `ssh`
+   and `ssh-keygen` as its peers) and registering the public key on the account as both an
    authentication key and a signing key.
 3. Running `limen-install-agent`, which does everything else and verifies.
 

@@ -97,13 +97,14 @@ chapter; the procedure is limen's `skills/contribute`.
   place — another transport, a variable set by hand per command, a manual step for a
   recipe — carried on as if the rig worked: that hides the defect. A workaround is used
   only after the breakage is reported and the human agrees, and is named as one every time.
-- **A locked laptop is not broken tooling.** The bot's key answers only while the human's
-  session is unlocked: once the screen locks, the agent refuses to sign or authenticate. So
-  when signing or pushing fails after it worked earlier in the session, the human is away,
-  not the rig broken. No retry loop, no workaround: finish the work in the worktree — done,
-  `just lint` and `just test` green, the commit message written — ready to commit and push
-  when the human is back, and say so once. Signing that never worked in the session is
-  broken tooling (above).
+- **A locked screen does not stop the key.** The bot's key is created to sign while the
+  screen is locked, from the human's first unlock after boot until the next boot (taciturn,
+  `--use locked`). So a signing or push failure that follows earlier successes in the session
+  is a defect and is reported as broken tooling (above), never waited out. Only a machine
+  still on Secretive refuses once the screen locks; there the human is away, not the rig
+  broken: no retry loop, no workaround, finish the work in the worktree — done, `just lint`
+  and `just test` green, the commit message written — ready to commit and push when the
+  human is back, and say so once.
 - **Read what the work needs, never the whole disk.** A targeted read outside the
   repositories is fine when the work calls for it; a filesystem-wide walk is not: no
   `find /`, `find ~`, disk-wide `mdfind`, or recursive grep over `/` or `~`.
