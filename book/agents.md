@@ -20,6 +20,13 @@ branches in its own worktrees. The human's branches are the human's.
   and lets tasks run side by side. In a new worktree: `hermetic policy allow
   .hermetic/policy.yaml` — the policy's record is keyed by path; the tools' links come with
   the first recipe run.
+- **Every git command is `git c …`.** Local commands included, `git -C <clone> c …`
+  where the tree is named: the harness sets `GIT_SSH_COMMAND`, which sends a raw `git
+  fetch` or `push` to the system ssh and the machine's own keys, and the `c` alias drops it
+  ([the bot's sandbox](./identity.md#the-bots-sandbox)). The habit is the rule: a session
+  that types raw `git` for `log` and `status` types it for `push`, once, when it matters. A
+  network command names the rig's transport as well: `git c -c
+  core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch`.
 - **Never on `work`.** The human's `work` branch is the human's, or the human's with the
   agent pairing interactively at their request. The agent never commits there on its own,
   and never on `main`.

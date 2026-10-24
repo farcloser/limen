@@ -14,6 +14,13 @@ is the [engineering book](https://github.com/farcloser/limen/tree/main/book).
   recipe covers the need — say so when you do it. `just --list` shows every task.
 - Always name the recipe; module defaults are curated subsets, not "run everything".
 - Never bump a tool version by hand: `just do tools set` / `just do tools update`.
+- **Every git command is `git c …`, never raw `git`**, local commands included: the
+  harness sets `GIT_SSH_COMMAND`, which sends raw git's ssh to the system ssh and the
+  machine's own keys; the sessions' `c` alias (`env -u GIT_SSH_COMMAND git`) drops it so
+  the rig's ssh and the bot's key are used. A network command also takes the rig's
+  transport explicitly,
+  `git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch`,
+  and the same for `push` and `pull`. The alias composes with `-C`: `git -C <clone> c …`.
 
 ## Contributing
 
