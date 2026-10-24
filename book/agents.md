@@ -20,6 +20,13 @@ branches in its own worktrees. The human's branches are the human's.
   and lets tasks run side by side. In a new worktree: `hermetic policy allow
   .hermetic/policy.yaml` — the policy's record is keyed by path; the tools' links come with
   the first recipe run.
+- **Every git command is `git c …`.** Local commands included, `git -C <clone> c …`
+  where the tree is named: the harness sets `GIT_SSH_COMMAND`, which sends a raw `git
+  fetch` or `push` to the system ssh and the machine's own keys, and the `c` alias drops it
+  ([the bot's sandbox](./identity.md#the-bots-sandbox)). The habit is the rule: a session
+  that types raw `git` for `log` and `status` types it for `push`, once, when it matters. A
+  network command names the rig's transport as well: `git c -c
+  core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch`.
 - **Never on `work`.** The human's `work` branch is the human's, or the human's with the
   agent pairing interactively at their request. The agent never commits there on its own,
   and never on `main`.
@@ -180,7 +187,10 @@ The human sets the priorities; the agent measures scope before it moves.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged; what survives
   becomes code, tests or book prose. They live under `_scratch/` at the repository root,
   which every `.gitignore` ignores (`/_scratch` is a required pattern), nowhere else, and
-  are never committed.
+  are never committed. A follow-up is not scratch: what a change leaves for later is a
+  GitHub issue in the repository it belongs to, one per real item
+  ([communicating](./communicating.md)), since a note in a scratch file is found by nobody
+  and dies with the session.
 - **Exact values are researched, never recalled.** A version, a git ref, a checksum, license
   text: fetched live, resolved by the pinning tool, or copied from the repository; a
   placeholder only when it truly cannot be had, said as such. A model's memory is months

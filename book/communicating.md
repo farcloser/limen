@@ -13,13 +13,15 @@ and what goes where.
   or when the agent next checks its open pull requests. What reaches GitHub is the change
   and its technical reasons, written for a reader who was not in the session; the exchange
   that produced it stays here.
-- **No GitHub issues unless the human asks for one.** The issue tracker is the human's: an
-  issue is a lookup for them and a ticket nobody owns for the sessions. A defect or a
-  request in a repository another session owns goes to that session as a message — what,
-  why, where, the run or pull request URL — and the owning session confirms, fixes and
-  opens the pull request, which is how the human hears of it. A limen defect goes to the
-  limen session the same way. An issue a session opened on its own is closed once the
-  owning session has the work, with the handoff recorded on it.
+- **A follow-up is a GitHub issue; a defect in another repository is a message.** What a
+  change leaves for later, a follow-up or parked work, is filed as an issue in the
+  repository it belongs to: one per real item, written so its owner can act on it without
+  the session that filed it, never a scratch, `TODO` or notes file, where it is found by
+  nobody and dies with the session; and never an issue for a passing note, which is noise
+  in the human's tracker. A defect or a request in a repository another session owns goes
+  to that session as a message — what, why, where, the run or pull request URL — and the
+  owning session confirms, fixes and opens the pull request, which is how the human hears of
+  it. A limen defect goes to the limen session the same way.
 - **A consumer session gets the contract, and only the contract.** A session that reports
   a bug, or a contract violation, to the session that owns a library gets back the
   guarantee and the version that carries it; it has no say in how the owner tests its
