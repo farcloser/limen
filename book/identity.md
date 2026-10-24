@@ -210,7 +210,13 @@ whatever the session's working directory, while the session has a worktree of it
 there; the same prune from a session without one succeeds (2026-10-13, saprobe-dsd and
 limen). The harness manages `.claude/worktrees` and keeps its hand on the registry it
 depends on. Prune from a session that holds no worktree in the repository, or leave the
-stale entries to the human; do not retry from the one that does.
+stale entries to the human; do not retry from the one that does. The refusal comes after
+the damage: `git worktree remove` deletes the working tree first and the registry entry
+second, so a removal the sandbox refuses leaves a registered worktree with every tracked
+file gone, which `git status` there shows as a hundred ` D` lines and which looks like the
+`$TMPDIR` sweep below. It is not; the branch and its commits are intact, and `git worktree
+remove --force` from a session holding no worktree in that repository finishes the removal
+(2026-10-19, limen, two merged worktrees).
 
 **A fixed list of paths beneath the working directory is never writable.** The sandbox
 runtime appends a mandatory deny to every write profile it builds: the files `.gitconfig`,
