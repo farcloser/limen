@@ -237,7 +237,17 @@ reset index file" (farcloser/onboarding, which tracks
 `home/.zshrc` and three siblings, 2026-10-18); a repository with submodules fails the same
 way on `.gitmodules`; a build that unpacks an archive carrying `.vscode/settings.json` fails
 at that file (forkcloser/openssh). A sparse worktree that leaves those paths out is the
-workaround for a checkout; the rule itself is upstream's, and not a setting.
+workaround for a checkout; the rule itself is upstream's, and not a setting. A submodule's
+content is out of reach altogether: `git submodule update` and a `git clone` into the
+submodule's path both write a `.git/config`, and the clone copies template hooks, all
+denied, and a sparse worktree does not help. A fixture that lives in a submodule is fetched
+as GitHub's codeload tarball of the pinned commit, read with `git ls-tree HEAD <path>`,
+which gives the gitlink's sha without touching `.gitmodules`, and the folder the tests need
+is extracted by naming it as a member, `<repository>-<sha>/<folder>` under the tarball's
+top directory: the toolset's tar, compress's, takes a member path and extracts the
+directory with its contents, and takes no wildcard and no `--include` (mycophonic/flac,
+the FLAC conformance corpus, 2026-10-23). CI checks submodules out itself, outside any
+sandbox.
 
 **The sandbox's `.` is wherever the session's shell last ended up.** The write list's `.`
 entry is the session's primary working directory, and where the harness lets a `cd` persist
