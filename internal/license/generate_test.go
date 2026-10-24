@@ -111,6 +111,21 @@ func TestBSD3IsAcceptanceOnly(t *testing.T) {
 	}
 }
 
+// TestUnlicenseIsAcceptanceOnly pins the same asymmetry for the Unlicense:
+// recognized for a fork that inherited a public-domain dedication, never
+// written for a new project.
+func TestUnlicenseIsAcceptanceOnly(t *testing.T) {
+	t.Parallel()
+
+	if license.CanGenerate(license.Unlicense) {
+		t.Error("CanGenerate(Unlicense) = true; it is recognized for inherited code, never offered for new projects")
+	}
+
+	if _, ok := license.Notice(license.Unlicense, 2026, "x"); ok {
+		t.Error("Notice(Unlicense) should not generate")
+	}
+}
+
 func TestClosedSourceNoticeRoundTrips(t *testing.T) {
 	t.Parallel()
 

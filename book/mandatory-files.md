@@ -84,6 +84,7 @@ library from a large platform.
 | `GPL-2.0` | **Kernel-derivative works**: Linux modules, patches, tooling that must be GPL-2.0-compatible with the kernel. | Declares *"GNU General Public License"* and *"Version 2, June 1991"*. |
 | `AGPL-3.0` | **SaaS / network services**, when the copyleft should reach hosted use. | Declares *"Affero General Public License"* and *"Version 3"*. |
 | `BSD-3-Clause` | **Inherited only**: forks of BSD-licensed upstreams. **Never a choice for new code**; `limen bootstrap` will not generate it. | *"Redistribution and use in source and binary forms"* plus the non-endorsement clause, without BSD-4's advertising clause. Tolerant of the personalized clause-3 subjects older projects carry. |
+| `Unlicense` | **Inherited only**: forks of upstreams that dedicated their work to the public domain. **Never a choice for new code**; `limen bootstrap` will not generate it. | *"free and unencumbered software released into the public domain"* plus the dedication of *"any and all copyright interest in the software to the public domain"*. CC0 is worded otherwise and stays a failure. |
 | `Closed-source` | **Proprietary**: anything not released publicly. | Explicit reservation of rights, no open grant. The canonical text below. |
 
 - **MIT for small libraries.** Permissive and friction-free for code whose value is in being
@@ -106,6 +107,9 @@ library from a large platform.
   cannot shed the upstream's terms, so `limen check` accepts it. MIT already owns the
   permissive slot for code we author, so `bootstrap` never offers it: acceptance of the
   inherited, not endorsement for the new.
+- **The Unlicense for inherited code, on the same terms.** A fork of an upstream that
+  dedicated its work to the public domain carries the dedication; `limen check` accepts it
+  and `bootstrap` never offers it. Code we author that wants to be permissive takes MIT.
 - **Closed-source for proprietary.** The default without a license is already "no rights
   granted"; an explicit notice removes the ambiguity for collaborators and tooling.
 
@@ -129,7 +133,8 @@ library from a large platform.
 
 GPL-3.0, LGPL, BSD-2-Clause, BSD-4-Clause, MPL, an unrecognized or hand-edited license, a CC
 variant not listed (`BY-NC`), or any `LICENSE` `limen` cannot classify is a **failure**
-(`GPL-2.0-only` is allowed and no other GPL/LGPL; `BSD-3-Clause` only as inherited). If we
+(`GPL-2.0-only` is allowed and no other GPL/LGPL; `BSD-3-Clause` and the `Unlicense` only as
+inherited; CC0 is not the Unlicense). If we
 genuinely need another license, it is added to this list and to `limen`'s policy first: the
 tool is the enforcement, the book the decision.
 
