@@ -13,9 +13,9 @@ human's request, and never commit on `main`.
 ## 1. Start from a fresh main, in a worktree
 
 ```
-git -C <clone> c fetch --prune origin   # `git c` drops the sandbox's GIT_SSH_COMMAND, which outranks the rig's core.sshCommand
+git -C <clone> c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch --prune origin   # every git command runs as `git c` (below); a network command also takes the rig's ssh command
 git -C <clone> c remote set-head origin --auto   # origin/HEAD is the remote's default branch, read from it, never assumed by name
-git -C <clone> worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/HEAD
+git -C <clone> c worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/HEAD
 test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
 cd <clone>/.claude/worktrees/<date>-<topic> && hermetic policy allow .hermetic/policy.yaml && env ${LIMEN_AGENT_HOME:+HOME="$LIMEN_AGENT_HOME"} hermetic install
 ```
@@ -41,11 +41,11 @@ human's clone, where the next command rebased `main`. The `test -d` is what
 stops the chain when the add did not land.
 
 Inside a worktree the harness isolates the session there, and it refuses any
-git command aimed at the clone, `git -C <clone> status` included. A session
+git command aimed at the clone, `git -C <clone> c status` included. A session
 already in a worktree, because it started in one or entered one, cannot run
 the block above. It cuts the next branch in its own worktree instead, once
-the previous branch is pushed: `git c fetch origin && git c remote set-head origin
---auto`, then `git checkout --no-track -b claudio/<date>-<topic> origin/HEAD`.
+the previous branch is pushed: `git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch origin && git c remote set-head origin
+--auto`, then `git c checkout --no-track -b claudio/<date>-<topic> origin/HEAD`.
 
 ## 2. Commit
 
@@ -53,11 +53,17 @@ The commit message is the record; the pull request description is derived
 from it. Sloppy trailers have been caught by the human before; the steps below
 are what prevents it.
 
-1. **Name the tree on every git command**: `git -C <absolute worktree path> …`,
-   or `cd <absolute path> && …` in the same command. Never rely on the shell's
-   current directory — it resets between commands, and a worktree cut from the
-   wrong clone once pushed a branch with no shared history to another
-   repository.
+1. **Every git command is `git c`, and names the tree**: `git -C <absolute
+   worktree path> c …`, or `cd <absolute path> && git c …` in the same command.
+   `c` is the sessions' alias for `env -u GIT_SSH_COMMAND git`: the harness
+   injects `GIT_SSH_COMMAND`, which outranks the rig's `core.sshCommand`, so a
+   raw `git` reaches the system ssh and the machine's own keys; local commands
+   included, since the rule is the habit (AGENTS.md). A network command
+   (`fetch`, `push`, `pull`, `ls-remote`) also takes the rig's ssh command from
+   the sessions' gitconfig: `git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" …`. Never
+   rely on the shell's current directory — it resets between commands, and a
+   worktree cut from the wrong clone once pushed a branch with no shared
+   history to another repository.
 2. **Write the subject, the body and the co-author trailer; let `-s` add the
    sign-off.** Subject line, blank line, the reasoning in prose (the defect, the
    mechanism, the trade-off, in the code's terms, for a reader who has the
@@ -66,7 +72,7 @@ are what prevents it.
    ```
    Co-Authored-By: <Model> <noreply@vendor.example>
    ```
-   Commit with `git -C <path> commit -s -F -` and a heredoc. `-s` appends
+   Commit with `git -C <path> c commit -s -F -` and a heredoc. `-s` appends
    `Signed-off-by:` last, from the configured identity, so it cannot be
    mistyped; never write `Signed-off-by:` by hand — `-s` on top of a
    hand-written one that is not the last line produces two. When the change is
@@ -74,12 +80,12 @@ are what prevents it.
    the sign-off is still the bot's.
 3. **Verify in the same command as the commit, before anything is pushed:**
    ```
-   git -C <path> log -1 --format=%B | grep -c '^Signed-off-by:'   # 1
-   git -C <path> log -1 --format=%B | grep -ciE 'https?://[^[:space:]]*(anthropic|claude)|generated with|-Session:'   # 0 (AGENTS.md, "No links to your tooling"): a link, a banner, a session footer. Every domain the tooling links to is listed — the vendor's and its products' differ — and never the bare domain alone, which the mandated trailer's address carries
-   git -C <path> -c gpg.ssh.allowedSignersFile=.lint-signers log -1 --format='%G?'  # G — signed; anything else means the identity or key is wrong: stop and say so
+   git -C <path> c log -1 --format=%B | grep -c '^Signed-off-by:'   # 1
+   git -C <path> c log -1 --format=%B | grep -ciE 'https?://[^[:space:]]*(anthropic|claude)|generated with|-Session:'   # 0 (AGENTS.md, "No links to your tooling"): a link, a banner, a session footer. Every domain the tooling links to is listed — the vendor's and its products' differ — and never the bare domain alone, which the mandated trailer's address carries
+   git -C <path> c -c gpg.ssh.allowedSignersFile=.lint-signers log -1 --format='%G?'  # G — signed; anything else means the identity or key is wrong: stop and say so
    just do lint commits                                            # passes
    ```
-   A wrong answer is fixed with `git -C <path> commit --amend -F -` before the
+   A wrong answer is fixed with `git -C <path> c commit --amend -F -` before the
    push. Amending after a push means `--force-with-lease=<branch>:<old sha>` to
    the bot's own branch, then the checks again.
 4. **Never commit scratchpads** (`AUDIT.md` and the like) or generated files
@@ -91,8 +97,8 @@ are what prevents it.
    your own commit — is squashed into the commit it amends and the message
    rewritten to tell the whole story once, before the pull request is opened:
    ```
-   git -C <path> reset --soft origin/HEAD && git -C <path> commit -s -F -   # one commit, whole message
-   git -C <path> c push --force-with-lease=<branch>:<old sha> origin <branch>
+   git -C <path> c reset --soft origin/HEAD && git -C <path> c commit -s -F -   # one commit, whole message
+   git -C <path> c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" push --force-with-lease=<branch>:<old sha> origin <branch>
    ```
    Your own branch only; a shared branch is never rewritten. A stack of
    fix-ups leaves a message a later commit contradicts.
@@ -122,11 +128,11 @@ Message the reviewing session three things and end the turn:
 
 ```
 <absolute worktree path>
-base: $(git -C <path> rev-parse origin/HEAD)
-head: $(git -C <path> rev-parse HEAD)
+base: $(git -C <path> c rev-parse origin/HEAD)
+head: $(git -C <path> c rev-parse HEAD)
 ```
 
-The reviewing session reads `git diff <base>..<head>` there and answers by
+The reviewing session reads `git c diff <base>..<head>` there and answers by
 message, in the shape of a review (`book/review.md`): ✅ with the head it
 read, or 🛑 and ⚠️ to settle. Answer each finding by message — fix it and
 amend (one commit per thing, step 2.5), or argue it with the evidence; a
@@ -137,7 +143,7 @@ the head is the one to open; any other head is refused downstream.
 ## 5. Push, open the pull request at the reviewed head, own it
 
 ```
-git c push origin claudio/<date>-<topic>             # `git c` drops the sandbox's GIT_SSH_COMMAND
+git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" push origin claudio/<date>-<topic>   # `git c` plus the rig's ssh command, as every network command (step 2.1)
 gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
 ```
 
@@ -219,9 +225,9 @@ rebases its open branches, and says the clone's `main`, the merged branch and
 the worktree are left for the human to prune.
 
 ```
-git -C <clone> c fetch --prune origin
-git -C <clone> merge --ff-only origin/HEAD   # the clone has the default branch checked out, so a refspec into it is refused there; on any other branch, `c fetch origin main:main` with the default branch's name
-git -C <clone> worktree remove .claude/worktrees/<date>-<topic> && git -C <clone> branch -d claudio/<date>-<topic>
+git -C <clone> c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch --prune origin
+git -C <clone> c merge --ff-only origin/HEAD   # the clone has the default branch checked out, so a refspec into it is refused there; on any other branch, `c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch origin main:main` with the default branch's name
+git -C <clone> c worktree remove .claude/worktrees/<date>-<topic> && git -C <clone> c branch -d claudio/<date>-<topic>
 ```
 
 Rebase every open branch of yours onto the fresh `main`, so the human and you
