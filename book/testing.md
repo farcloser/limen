@@ -15,7 +15,13 @@ usefulness, its design and its correctness first; its tests prove what those dec
   sources that define it: the specification, the man page, the platform's documentation,
   the package's own docs, the consumers' needs. It is written down before the code is read;
   a table read off the code enshrines the code's bugs and passes by construction. Writing
-  the contract down is where the bugs are found.
+  the contract down is where the bugs are found. A tester who has read the implementation
+  writes it down again as tests, bugs included, however the prompt is worded; so the
+  contract's author, human or agent, works from the documented intent and the public
+  surface alone, `go doc -all`, every `--help`, the design notes, and for an agent that is a
+  worktree holding nothing else, started under a sandbox profile that denies reading the
+  rest. The profile is the enforcement, and a session without one has only discipline:
+  independence is structural or it is not there.
 - **A test is black-box, and never bought with indirection.** It reaches what a consumer
   reaches: no private state, and no interface, function field or other seam in production
   code whose only purpose is a test's fake. An interface is defined by a real client. When
@@ -33,7 +39,14 @@ usefulness, its design and its correctness first; its tests prove what those dec
   neighbour of a power loss is a process killed inside the window the test is about, and the
   test owns that process. Only what no process boundary reaches, a torn sector, the kernel
   refusing a call, goes untested; correctness there is by construction and by reading, and
-  fault injection is a separate, larger rig.
+  fault injection is a separate, larger rig. On Linux that rig sits at the syscall boundary
+  or below it: a Go binary built without cgo makes raw syscalls and reads the clock from
+  the vDSO, so `LD_PRELOAD`, libfaketime and libfiu touch nothing in it. What works is
+  syscall interposition (`strace --inject`, a seccomp user notification) for filesystem
+  faults, and the kernel's own fault-injection framework, `dm-flakey` and `tc netem` inside
+  a VM the project boots, for the rest. Time is the hard case: a time namespace offsets
+  only the monotonic clocks, in the vDSO as in the syscall, and the wall clock it cannot
+  touch, so a wall-clock fault needs the VM.
 
 ## What a package's tests establish
 
@@ -47,7 +60,19 @@ with an unnamed gap is not done.
    past it and a member between; every option combination; sizes around every buffer and
    block boundary, zero, one, the largest; every platform branch; for a stateful package,
    every sequence of calls up to a small length, held to a model after each. The bound makes
-   the check exhaustive; the contract keeps it small.
+   the check exhaustive; the contract keeps it small. The model is plain Go for a small
+   stateful package. A subsystem with concurrency, partial failure or time in its state may
+   hold its model as an executable specification (the toolchain pins one specification
+   language): then the specification's simulator generates the sequences, its state is the
+   oracle, and a driver maps each action to a call on the public surface and compares,
+   nothing more; the cases come from the simulator, not from taste. A specification is kept
+   per subsystem, where a bug would cost a day to diagnose; a package without one is a
+   recorded choice, not a gap. Every variable such a model holds is a projection of what an
+   operator can read, a `status` or `inspect` output: a variable with no projection is the
+   model over-specifying internals or a command the product lacks, both findings, and never
+   a test-only hook. A pure function is not a state machine: it gets properties over its
+   input and a differential corpus against
+   the reference it follows, and a specification there is ceremony.
 3. **Past the bound, fuzzed**, wherever there is an input space: bytes, names, text. The
    oracle is the contract: refused or accepted, never a panic, and what is accepted
    round-trips. A crasher is kept as a regression case.
