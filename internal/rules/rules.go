@@ -173,12 +173,12 @@ type Policy struct {
 
 // DefaultPolicy returns the policy described in book/mandatory-files.md: the
 // allowed software licenses (MIT, Apache-2.0, GPL-2.0, AGPL-3.0, BSD-3-Clause
-// for inherited code, Closed-source) and content licenses (CC-BY-SA-4.0,
-// CC-BY-ND-4.0). limen enforces membership in this set; which license to
-// choose for a given repository is guidance in the book, not a
-// machine-checkable rule. BSD-3-Clause is acceptance-only: forks of
-// BSD-licensed upstreams cannot relicense, so the check passes them, but
-// bootstrap never offers it for new code (see license.CanGenerate).
+// and the Unlicense for inherited code, Closed-source) and content licenses
+// (CC-BY-SA-4.0, CC-BY-ND-4.0). limen enforces membership in this set; which
+// license to choose for a given repository is guidance in the book, not a
+// machine-checkable rule. BSD-3-Clause and the Unlicense are acceptance-only:
+// forks of such upstreams cannot relicense, so the check passes them, but
+// bootstrap never offers them for new code (see license.CanGenerate).
 func DefaultPolicy() Policy {
 	return Policy{
 		AllowedLicenses: []license.ID{
@@ -187,6 +187,7 @@ func DefaultPolicy() Policy {
 			license.GPL20,
 			license.AGPL30,
 			license.BSD3,
+			license.Unlicense,
 			license.Closed,
 			license.CCBYSA40,
 			license.CCBYND40,

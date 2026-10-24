@@ -120,8 +120,13 @@ const (
 	// cannot change. It is never a choice for new code (MIT owns the
 	// permissive slot), which is why it has no embedded text and bootstrap
 	// does not offer it: CanGenerate(BSD3) is false by construction.
-	BSD3   ID = "BSD-3-Clause"
-	Closed ID = "Closed-source"
+	BSD3 ID = "BSD-3-Clause"
+	// Unlicense is accepted for inherited code only, as BSD3 is: a fork of an
+	// upstream that dedicated its work to the public domain keeps the
+	// dedication. Never a choice for new code (MIT owns the permissive slot),
+	// so no embedded text and bootstrap does not offer it.
+	Unlicense ID = "Unlicense"
+	Closed    ID = "Closed-source"
 
 	// Content.
 
@@ -151,6 +156,8 @@ func Identify(text string) ID {
 		return GPL20
 	case isBSD3(normalized):
 		return BSD3
+	case isUnlicense(normalized):
+		return Unlicense
 	case isCC(normalized, "sharealike", "by-sa"):
 		return CCBYSA40
 	case isCC(normalized, "noderivatives", "by-nd") || isCC(normalized, "noderivs", "by-nd"):
@@ -219,6 +226,15 @@ func isBSD3(n string) bool {
 	return strings.Contains(n, "redistribution and use in source and binary forms") &&
 		strings.Contains(n, "endorse or promote products derived from this software") &&
 		!strings.Contains(n, "all advertising materials")
+}
+
+// isUnlicense recognizes the Unlicense by two sentences no other text carries:
+// its opening dedication and its relinquishment of copyright interest. CC0
+// dedicates in other words (a waiver by an "Affirmer") and stays Unknown,
+// which TestIdentifyRejectsFullTexts pins.
+func isUnlicense(n string) bool {
+	return strings.Contains(n, "free and unencumbered software released into the public domain") &&
+		strings.Contains(n, "dedicate any and all copyright interest in the software to the public domain")
 }
 
 // isCC recognizes a Creative Commons 4.0 license. It accepts either the prose

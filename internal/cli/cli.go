@@ -553,9 +553,9 @@ func installTooling(ctx context.Context, root string, progress io.Writer) error 
 
 // allowedLicenses is the comma-separated list of license ids bootstrap accepts,
 // for use in error messages. It is the generatable subset of the check policy,
-// not the whole of it: acceptance-only licenses (BSD-3-Clause, recognized so
-// that inherited forks pass the check) are deliberately absent — a new project
-// does not get to choose them.
+// not the whole of it: acceptance-only licenses (BSD-3-Clause and the
+// Unlicense, recognized so that inherited forks pass the check) are
+// deliberately absent — a new project does not get to choose them.
 func allowedLicenses() string {
 	var ids []string
 

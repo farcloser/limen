@@ -203,6 +203,39 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS".`,
 	}
 }
 
+// TestCheckInheritedUnlicense: a fork of an upstream that dedicated its work
+// to the public domain keeps the Unlicense, and the check must pass it; the
+// policy, not only the recognizer, has to list it. Bootstrap still refuses to
+// create one, pinned in the license package's tests.
+func TestCheckInheritedUnlicense(t *testing.T) {
+	t.Parallel()
+
+	dir := writeRepo(t, map[string]string{
+		"README.md": "# Thing",
+		"LICENSE": `This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+For more information, please refer to <https://unlicense.org/>`,
+		".editorconfig": rules.CanonicalEditorconfig,
+		".gitignore":    "*.log",
+	})
+
+	f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "license")
+	if !f.OK() {
+		t.Fatalf("inherited Unlicense LICENSE failed: %s", f.Message)
+	}
+}
+
 func TestCheckReadmeVariantAccepted(t *testing.T) {
 	t.Parallel()
 
