@@ -187,7 +187,10 @@ The human sets the priorities; the agent measures scope before it moves.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged; what survives
   becomes code, tests or book prose. They live under `_scratch/` at the repository root,
   which every `.gitignore` ignores (`/_scratch` is a required pattern), nowhere else, and
-  are never committed.
+  are never committed. A follow-up is not scratch: what a change leaves for later is a
+  GitHub issue in the repository it belongs to, one per real item
+  ([communicating](./communicating.md)), since a note in a scratch file is found by nobody
+  and dies with the session.
 - **Exact values are researched, never recalled.** A version, a git ref, a checksum, license
   text: fetched live, resolved by the pinning tool, or copied from the repository; a
   placeholder only when it truly cannot be had, said as such. A model's memory is months
