@@ -138,6 +138,18 @@ inherited; CC0 is not the Unlicense). If we
 genuinely need another license, it is added to this list and to `limen`'s policy first: the
 tool is the enforcement, the book the decision.
 
+### Dependencies' licenses
+
+The list above is for a repository's own `LICENSE`. What a repository may *depend on* is a
+separate list, the go-licenses lane's (`just do lint go licenses`), carried by the baseline
+`.limen/lint-go.yaml` as `licenses.allowed`: Apache-2.0, BSD-2-Clause, BSD-3-Clause, MIT and
+the Unlicense. A permissive license is fine on a dependency where it is no choice for code we
+author: BSD-2-Clause and the Unlicense are allowed there generally, while neither is a choice
+for a repository's own `LICENSE`, BSD-2-Clause never and the Unlicense only as inherited. A
+project narrows or widens the list in its overlay's `licenses.allowed`, which replaces it
+([Go linting](./linting-go.md)); copyleft stays out of the dependency graph unless a
+repository decides otherwise there, in review.
+
 ### Canonical closed-source notice
 
 So that `Closed-source` is detected deterministically, proprietary repositories use this
