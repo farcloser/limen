@@ -151,13 +151,13 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/git-for-windows/git/v2.56.0.windows.3/Git-2.56.0.3-64-bit.tar.bz2",
-      "checksum": "2460CDC329F9061E0682672EB9995DA9DA1DA0FFB9761494C7ABB3559ECBC40E",
+      "id": "github_release/github.com/git-for-windows/git/v2.56.0.windows.4/Git-2.56.0.4-64-bit.tar.bz2",
+      "checksum": "0DAE059764BA7C447C9604EB6CB0F4AFAF2D90B003ECF1C8CF2DBE5A13E4442C",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/git-for-windows/git/v2.56.0.windows.3/Git-2.56.0.3-arm64.tar.bz2",
-      "checksum": "4E065C301A08B04CEB17E88BA2479ACD5D46E214F799D2F915953A1D728CA33F",
+      "id": "github_release/github.com/git-for-windows/git/v2.56.0.windows.4/Git-2.56.0.4-arm64.tar.bz2",
+      "checksum": "E3903DB2FEA42263B4DF0D2F581CA8E07EC1C7C9F878156A8D01284F35011642",
       "algorithm": "sha256"
     },
     {
