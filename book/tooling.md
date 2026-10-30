@@ -143,7 +143,10 @@ They live in **`.limen/tools/go.mod`, a module of their own** (`<module>/tools` 
 `tools` elsewhere), not in the project's `go.mod`: a `tool` directive drags the tool's whole
 dependency graph into the declaring module as `// indirect` requirements, and everything a
 library's `go.mod` requires is inherited by every consumer's module graph, `go.sum` and
-dependency scanners. A zero-dependency library must stay one. The nested module keeps the pin
+dependency scanners, so limen's tools stay out of the project's graph. The project's own
+`go.mod` is the project's: what tool directives it carries, a code generator pinned to the
+runtime it generates for say, is the project's call, and limen never reads or rewrites them.
+The nested module keeps the pin
 next to the code, under the same toolchain and GOSUMDB, and Renovate's `gomod` manager finds
 nested `go.mod` files on its own (the shared preset re-enables these modules, which Go lists
 as `// indirect`). The recipes build each tool natively once (`go -C .limen/tools build`, into
@@ -157,10 +160,8 @@ Every repository carries the module, not only Go ones: `git-validation` (commit 
 `godolint` (Dockerfiles) and `dot` (profile graphs; `forkcloser/dot`, graphviz compiled to
 WASM) run everywhere, and every repository pins `golang/go` in its own aqua manifest to build
 them. A Go repository adds the three source analyzers. The doctrine is enforced from both
-sides: the `gotools` rule requires `.limen/tools/go.mod` with the directives and rejects a `tool`
-directive in the project's `go.mod` (`limen fix` creates the module, adds the directives,
-moves the project's own directives into it at the root's versions and removes the baseline's
-from the root), and the `aqua` rule retires the old `go_install` pins
+sides: the `gotools` rule requires `.limen/tools/go.mod` with the directives (`limen fix`
+creates the module and adds them), and the `aqua` rule retires the old `go_install` pins
 (`limen fix` removes them). The local registry carries no `go_install` entry, and never will
 again.
 

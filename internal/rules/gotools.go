@@ -21,13 +21,12 @@ import (
 // than the go that built it. The tool directive is the only pin that makes
 // that impossible.
 //
-// The directives live in .limen/tools/go.mod and never in the project's go.mod: a
-// tool directive drags the tool's dependency graph into the declaring module
-// as indirect requirements, and everything a module requires is inherited by
-// every consumer's module graph and go.sum. Three tools are required
+// The directives live in .limen/tools/go.mod, limen's module, so the tools'
+// dependency graphs never reach the project's. Three tools are required
 // everywhere (git-validation, godolint, dot: the lint and test recipes of
 // every repository run them); a repository whose root carries a go.mod adds
-// the Go-source analyzers.
+// the Go-source analyzers. The project's own go.mod is the project's: a tool
+// directive there is none of this rule's business.
 const (
 	ruleGoTools    = "gotools"
 	goModFile      = "go.mod"
@@ -230,11 +229,6 @@ func rootGoMod(root string) []byte {
 // checkGoTools evaluates the rule.
 func checkGoTools(root string) Finding {
 	rootMod := rootGoMod(root)
-
-	if stray := sortedKeys(goModToolDirectives(string(rootMod))); len(stray) > 0 {
-		return fail(ruleGoTools, goModFile, goModFile+": "+strayGoModToolsMessage(stray))
-	}
-
 	required := requiredGoTools(rootMod)
 
 	toolsMod, err := readRepoFile(root, goToolsModFile)
@@ -407,67 +401,13 @@ func missingGoModToolsMessage(missing []string) string {
 		" (see book/tooling.md, \"Go-built tools are go.mod tools\")"
 }
 
-// strayGoModToolsMessage names tool directives found in the project's go.mod,
-// where they pollute every consumer's module graph.
-func strayGoModToolsMessage(stray []string) string {
-	return "tool directive(s) for " + strings.Join(stray, ", ") +
-		" belong in " + goToolsModFile + ", not in the module consumers import" +
-		" (see book/tooling.md, \"Go-built tools are go.mod tools\")"
-}
-
-// sortedKeys returns a set's keys in order, for stable messages.
-func sortedKeys(set map[string]bool) []string {
-	keys := make([]string, 0, len(set))
-	for k := range set {
-		keys = append(keys, k)
-	}
-
-	slices.Sort(keys)
-
-	return keys
-}
-
-// stripGoModToolDirectives returns gomod without its tool directives (both
-// forms, comments and all), the inverse of goModToolDirectives.
-func stripGoModToolDirectives(gomod string) string {
-	var out []string
-
-	inBlock := false
-
-	for raw := range strings.SplitSeq(gomod, "\n") {
-		line := raw
-		if i := strings.Index(line, "//"); i >= 0 {
-			line = line[:i]
-		}
-
-		line = strings.TrimSpace(line)
-
-		switch {
-		case inBlock && line == ")":
-			inBlock = false
-		case inBlock:
-		case line == "tool (":
-			inBlock = true
-		case strings.HasPrefix(line, toolDirective):
-		default:
-			out = append(out, raw)
-		}
-	}
-
-	return strings.Join(out, "\n")
-}
-
-// remediateGoTools makes .limen/tools/go.mod carry the required tools and the
-// project's go.mod (when there is one) carry none: it writes a bare
+// remediateGoTools makes .limen/tools/go.mod carry the required tools: it writes a bare
 // .limen/tools/go.mod when there is none (module path <root>/tools and the root's
 // go directive in a Go repository; `tools` and the aqua-pinned go elsewhere),
 // adds the missing directives there with `go get -tool` at the versions this
 // limen's own tools modules pin (pins; never @latest, which would make the
-// seeded version depend on the day fix ran) followed by `go mod tidy`, and
-// moves the tool directives out of the root go.mod, tidying it too: the
-// project's own at the versions the root requires, into the tools module
-// first and out of the root only once they are there; the baseline's, which
-// the tools module declares at pins, are removed. Renovate
+// seeded version depend on the day fix ran) followed by `go mod tidy`. The
+// root go.mod is never read for directives, let alone rewritten. Renovate
 // bumps the seeded versions from there. A development build carries no pins
 // and ends as an advisory instead of seeding. The go steps need the pinned go
 // on PATH and the network — when either is unavailable the rule ends as an
@@ -488,17 +428,6 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 
 	toolsRoot := filepath.Join(root, goToolsDir)
 
-	// The tools module exists before the move, and the root loses a directive
-	// only after the tools module holds it: a move that stops halfway leaves
-	// the directive where it was, never nowhere.
-	moved, moveAdvisory := moveStrayGoTools(ctx, root, toolsRoot, rootMod)
-	if moveAdvisory != nil {
-		return *moveAdvisory
-	}
-
-	done = append(done, moved...)
-
-	// Read after the move, which may have added to it.
 	toolsMod, err := readRepoFile(root, goToolsModFile)
 	if err != nil {
 		return goToolsAdvisory(goToolsModFile, "could not read "+goToolsModFile+": "+err.Error(), nil)
@@ -596,92 +525,6 @@ func seedIsolatedGoTools(ctx context.Context, root string, rootMod []byte, pins 
 
 		done = append(done, "created "+isolatedGoModFile(name)+" with 'tool "+isolatedGoTools[name]+
 			"' (go get -tool, then go mod tidy, in that module)")
-	}
-
-	return done, nil
-}
-
-// moveStrayGoTools moves the tool directives out of the project's go.mod:
-// the project's own go into the tools module first, each at the version the
-// root requires for its module (`go get -tool pkg@version`, then tidy); the
-// baseline's and the retired are dropped, since the tools module declares
-// the baseline at pins and never the retired; then the root is stripped and
-// tidied. A directive whose package no required module provides (the root
-// module's own) cannot be built from another module: the
-// rule ends as an advisory naming it, and the root keeps every directive.
-// The steps done (none when there was nothing to move), or the advisory
-// that stopped the move before the root lost anything.
-func moveStrayGoTools(ctx context.Context, root, toolsRoot string, rootMod []byte) ([]string, *Outcome) {
-	stray := sortedKeys(goModToolDirectives(string(rootMod)))
-	if len(stray) == 0 {
-		return nil, nil
-	}
-
-	baseline := map[string]bool{}
-	for _, pkg := range requiredGoTools(rootMod) {
-		baseline[pkg] = true
-	}
-
-	requires := goModRequires(string(rootMod))
-
-	var carried, dropped []string
-
-	for _, pkg := range stray {
-		if _, retired := retiredGoTools[pkg]; baseline[pkg] || retired {
-			dropped = append(dropped, pkg)
-
-			continue
-		}
-
-		version := moduleVersion(requires, pkg)
-		if version == "" {
-			advisory := Outcome{
-				Rule: ruleGoTools, Action: ActionAdvisory, Path: goModFile,
-				Message: goModFile + ": " + strayGoModToolsMessage([]string{pkg}) +
-					"; no require provides the package (the module's own), so " +
-					goToolsModFile + " cannot build it: remove the directive by hand, or move the tool to a module of its own",
-			}
-
-			return nil, &advisory
-		}
-
-		carried = append(carried, pkg+"@"+version)
-	}
-
-	var done []string
-
-	if len(carried) > 0 {
-		step, advisory := goToolsGet(
-			ctx,
-			toolsRoot,
-			carried,
-			strayGoModToolsMessage(stray),
-			"moved tool directive(s) for ",
-			" from "+goModFile+" into "+goToolsModFile+" at the versions "+goModFile+" requires"+
-				" (go -C "+goToolsDir+" get -tool <pkg>@<version>, then go -C "+goToolsDir+" mod tidy)",
-		)
-		if advisory != nil {
-			return nil, advisory
-		}
-
-		done = append(done, step)
-	}
-
-	if len(dropped) > 0 {
-		done = append(done, "removed tool directive(s) for "+strings.Join(dropped, listSeparator)+
-			" from "+goModFile+" (the baseline declares them in "+goToolsModFile+")")
-	}
-
-	if err := writeFile(root, goModFile, stripGoModToolDirectives(string(rootMod))); err != nil {
-		advisory := goToolsAdvisory(goModFile, "could not rewrite go.mod: "+err.Error(), nil)
-
-		return nil, &advisory
-	}
-
-	if out := runGo(ctx, root, "mod", "tidy"); out != "" {
-		advisory := goToolsAdvisory(goModFile, out, nil)
-
-		return nil, &advisory
 	}
 
 	return done, nil
