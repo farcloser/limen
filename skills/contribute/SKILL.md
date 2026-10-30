@@ -13,7 +13,7 @@ human's request, and never commit on `main`.
 ## 1. Start from a fresh main, in a worktree
 
 ```
-git -C <clone> c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch --prune origin   # every git command runs as `git c` (below); a network command also takes the rig's ssh command
+git -C <clone> c fetch --prune origin   # every git command runs as `git c` (step 2.1); the rig's ssh comes from the sessions' gitconfig
 git -C <clone> c remote set-head origin --auto   # origin/HEAD is the remote's default branch, read from it, never assumed by name
 git -C <clone> c worktree add --no-track -b claudio/$(date +%Y%m%d)-<topic> .claude/worktrees/<date>-<topic> origin/HEAD
 test -d <clone>/.claude/worktrees/<date>-<topic>   # its own command, before anything else runs
@@ -44,7 +44,7 @@ Inside a worktree the harness isolates the session there, and it refuses any
 git command aimed at the clone, `git -C <clone> c status` included. A session
 already in a worktree, because it started in one or entered one, cannot run
 the block above. It cuts the next branch in its own worktree instead, once
-the previous branch is pushed: `git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch origin && git c remote set-head origin
+the previous branch is pushed: `git c fetch origin && git c remote set-head origin
 --auto`, then `git c checkout --no-track -b claudio/<date>-<topic> origin/HEAD`.
 
 ## 2. Commit
@@ -58,9 +58,11 @@ are what prevents it.
    `c` is the sessions' alias for `env -u GIT_SSH_COMMAND git`: the harness
    injects `GIT_SSH_COMMAND`, which outranks the rig's `core.sshCommand`, so a
    raw `git` reaches the system ssh and the machine's own keys; local commands
-   included, since the rule is the habit (AGENTS.md). A network command
-   (`fetch`, `push`, `pull`, `ls-remote`) also takes the rig's ssh command from
-   the sessions' gitconfig: `git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" …`. Never
+   included, since the rule is the habit (AGENTS.md). A network command is the
+   same plain `git c fetch|push|pull …`: the harness sets `GIT_CONFIG_GLOBAL` to
+   the sessions' gitconfig, whose `core.sshCommand` is the rig's ssh once the
+   injected variable is gone, and an extra `-c core.sshCommand=…` would only
+   take `git c push --force-with-lease` out of the sandbox's allow rule. Never
    rely on the shell's current directory — it resets between commands, and a
    worktree cut from the wrong clone once pushed a branch with no shared
    history to another repository.
@@ -98,8 +100,16 @@ are what prevents it.
    rewritten to tell the whole story once, before the pull request is opened:
    ```
    git -C <path> c reset --soft origin/HEAD && git -C <path> c commit -s -F -   # one commit, whole message
-   git -C <path> c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" push --force-with-lease=<branch>:<old sha> origin <branch>
+   git c push --force-with-lease=<branch>:<old sha> origin <branch>:refs/heads/<branch>
    ```
+   The force push is that line, as its own command. The source is the branch by name,
+   never `HEAD`: the shell's directory is not the worktree (step 2.1), and `HEAD:` from
+   the clone would force the clone's `main` onto the branch under a lease that only
+   checks the remote. The sandbox's allow rule matches the prefix
+   `git c push --force-with-lease=` at the start of a command: nothing between `git c`
+   and `push`, nothing between `push` and `--force-with-lease=` (no `-q`), and no `&&` or
+   `;` around it; a `-C <path>` or an extra `-c` leaves the prefix, and the push is
+   refused as destructive. The line is the form to use, not the only one the rule passes.
    Your own branch only; a shared branch is never rewritten. A stack of
    fix-ups leaves a message a later commit contradicts.
 
@@ -143,7 +153,7 @@ the head is the one to open; any other head is refused downstream.
 ## 5. Push, open the pull request at the reviewed head, own it
 
 ```
-git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" push origin claudio/<date>-<topic>   # `git c` plus the rig's ssh command, as every network command (step 2.1)
+git c push origin claudio/<date>-<topic>             # plain `git c`, as every network command (step 2.1)
 gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
 ```
 
@@ -225,8 +235,8 @@ rebases its open branches, and says the clone's `main`, the merged branch and
 the worktree are left for the human to prune.
 
 ```
-git -C <clone> c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch --prune origin
-git -C <clone> c merge --ff-only origin/HEAD   # the clone has the default branch checked out, so a refspec into it is refused there; on any other branch, `c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch origin main:main` with the default branch's name
+git -C <clone> c fetch --prune origin
+git -C <clone> c merge --ff-only origin/HEAD   # the clone has the default branch checked out, so a refspec into it is refused there; on any other branch, `c fetch origin main:main` with the default branch's name
 git -C <clone> c worktree remove .claude/worktrees/<date>-<topic> && git -C <clone> c branch -d claudio/<date>-<topic>
 ```
 
