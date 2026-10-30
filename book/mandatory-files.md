@@ -207,10 +207,16 @@ a `.gitignore` of its own miss what the rig writes.
 
 One rule: `* -text` — no git line-ending magic, for any file, in either direction. What is
 on disk is what is committed is what every checkout gets, byte for byte, on every platform.
-Plus one exemption that is not about line endings: `*.patch` and `*.diff` are excluded from
-git's whitespace check, the one the commit lint runs, since a unified diff's context lines
-carry space-before-tab by construction for any tab-indented source, and a repository that
-vendors patches could never rebase one and pass.
+Plus two exemptions that are not about line endings, from git's whitespace check, the one
+the commit lint runs: `*.patch` and `*.diff`, since a unified diff's context lines carry
+space-before-tab by construction for any tab-indented source, and a repository that vendors
+patches could never rebase one and pass; and `LICENSE-*`, the third-party licence texts a
+repository keeps beside its own `LICENSE` (a fork's upstream licence, a bundled library's),
+byte for byte as their projects publish them, trailing whitespace included, since a stripped
+copy is no longer the text the pinned archive carries. The name is `LICENSE-<project>` at the
+root, where licence tooling looks for `LICENSE*` files; the `license` rule reads the
+repository's own licence (`LICENSE`, `LICENSE.md`, `LICENSE.txt` or `COPYING`), never a
+`LICENSE-<project>`.
 
 The failure it prevents: Windows machines (GitHub's runners included) default git to
 `core.autocrlf=true`, which rewrites every text file to CRLF at checkout, and every format
