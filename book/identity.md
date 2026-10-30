@@ -150,11 +150,23 @@ GIT_SSH_COMMAND git`, and every git command a session runs goes through it, loca
 included: the harness sets `GIT_SSH_COMMAND` in the sessions' environment, which outranks
 `core.sshCommand`, so a raw `git fetch` reaches the system ssh and the machine's own keys
 instead of the rig's ssh and the bot's key, and a raw local command is the habit that
-produces the raw network one. A network command names the transport as well, `git c -c
-core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch`, so the
-rig's ssh is used whatever the environment carries. A session's git reads neither the
-human's `~/.gitconfig` nor `~/.config/git`, so neither needs to be readable, and a shell
-the human opens never sees the bot. It replaced a numbered `GIT_CONFIG_*` block in the
+produces the raw network one. A network command is plain `git c fetch`, `push` or `pull`:
+`GIT_CONFIG_GLOBAL` names this file, so its `core.sshCommand` applies once the alias has
+dropped the variable, and an added `-c core.sshCommand=…` buys nothing and costs the
+`git c push --force-with-lease` allow rule, which matches the prefix
+`git c push --force-with-lease=` at the start of its own Bash command and fixes the head
+of the command only: nothing between `git c` and `push`, nothing between `push` and
+`--force-with-lease=`, no `-q`, no `&&` or `;` around it. A force push of any other shape,
+an option between, a chained command, a bare `--force`, is refused as destructive and goes
+to the classifier, which is the rule working. The tail the rule leaves free is the
+session's to get right: the form is `git c push --force-with-lease=<branch>:<old sha>
+origin <branch>:refs/heads/<branch>`, the lease on the sha it last saw, so git refuses a
+push over a commit it did not see, and the branch by name as the source. Never `HEAD:`
+there: the command takes no `-C` without leaving the prefix, so it runs in the shell's
+directory, which is the clone as often as the worktree, and `HEAD:` would force the
+clone's checkout onto the branch. A session's git reads neither
+the human's `~/.gitconfig` nor `~/.config/git`, so neither needs to be readable, and a
+shell the human opens never sees the bot. It replaced a numbered `GIT_CONFIG_*` block in the
 environment on 2026-10-12, the day a read deny on the directory the human's `.gitconfig`
 links into took git down in every session
 ([farcloser/limen-install#97](https://github.com/farcloser/limen-install/pull/97)).
