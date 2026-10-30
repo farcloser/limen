@@ -259,14 +259,15 @@ at that file (forkcloser/openssh). A sparse worktree that leaves those paths out
 workaround for a checkout; the rule itself is upstream's, and not a setting. A submodule's
 content is out of reach altogether: `git submodule update` and a `git clone` into the
 submodule's path both write a `.git/config`, and the clone copies template hooks, all
-denied, and a sparse worktree does not help. A fixture that lives in a submodule is fetched
-as GitHub's codeload tarball of the pinned commit, read with `git ls-tree HEAD <path>`,
-which gives the gitlink's sha without touching `.gitmodules`, and the folder the tests need
-is extracted by naming it as a member, `<repository>-<sha>/<folder>` under the tarball's
-top directory: the toolset's tar, compress's, takes a member path and extracts the
-directory with its contents, and takes no wildcard and no `--include` (mycophonic/flac,
-the FLAC conformance corpus, 2026-10-23). CI checks submodules out itself, outside any
-sandbox.
+denied, and a sparse worktree does not help; none of which is a reason to keep a submodule
+out of a repository (below, "Breakage is reported"). A fixture that lives in a submodule is
+fetched as GitHub's codeload tarball of the pinned commit, read with `git ls-tree HEAD
+<path>`, which gives the gitlink's sha without touching `.gitmodules`, and the folder the
+tests need is extracted by naming it as a member, `<repository>-<sha>/<folder>` under the
+tarball's top directory: the toolset's tar, compress's, takes a member path and extracts
+the directory with its contents, and takes no wildcard and no `--include`
+(mycophonic/flac, the FLAC conformance corpus, 2026-10-23). CI checks submodules out
+itself, outside any sandbox.
 
 **The sandbox's `.` is wherever the session's shell last ended up.** The write list's `.`
 entry is the session's primary working directory, and where the harness lets a `cd` persist
@@ -399,7 +400,11 @@ and stops there: a private workaround that keeps the work moving hides the defec
 one person who can fix it, and once hid a broken installer for a whole session while pushes
 took another path. A workaround needs the human's agreement and is named as one each time.
 A key that stops answering after it worked is the exception: a locked screen, not a broken
-rig ([the bot's key](#the-bots-key)).
+rig ([the bot's key](#the-bots-key)). Nor is a limit of the rig an architectural input: a
+repository takes a submodule, a hook or a tool when that is the right design, judged on its
+merits alone; what the sandbox cannot do is worked around by the session, named as a
+workaround, and sent to the rig's owner to lift. A design bent around today's sandbox
+outlives the limit and carries the bend forever.
 
 ## What stays manual
 
