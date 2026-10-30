@@ -21,8 +21,15 @@ is the [engineering book](https://github.com/farcloser/limen/tree/main/book).
   `git c push`, `git c pull`: the harness names the sessions' gitconfig in
   `GIT_CONFIG_GLOBAL`, whose `core.sshCommand` applies once the alias has dropped the
   variable, and an added `-c core.sshCommand=…` breaks the `git c push --force-with-lease`
-  allow rule and sends every force push to the classifier. The alias composes with `-C`:
-  `git -C <clone> c …`.
+  allow rule and sends every force push to the classifier. That rule matches the prefix
+  `git c push --force-with-lease=` at the start of its own Bash command: nothing between
+  `git c` and `push`, nothing between `push` and `--force-with-lease=` (no `-q`), no `&&`
+  or `;` around it; a force push of any other shape is refused as destructive. The form a
+  session uses is `git c push --force-with-lease=<branch>:<old sha> origin
+  <branch>:refs/heads/<branch>`: the lease on the sha it last saw, and the branch by name
+  as the source, never `HEAD`, since the shell's directory is not the worktree and the
+  command takes no `-C`, so `HEAD:` would force the clone's checkout onto the branch. The
+  alias composes with `-C` everywhere else: `git -C <clone> c …`.
 
 ## Contributing
 
