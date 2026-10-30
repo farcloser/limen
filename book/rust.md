@@ -1,24 +1,63 @@
 # Rust
 
-The Rust lanes (`just do lint rust`, `just do fix rust`) exist ahead of the first Rust
-repository; this records the toolchain decision so it is made rather than discovered.
+The Rust lanes (`just do lint rust`, `just do fix rust`, `just do test rust`, `just do build
+rust`) run cargo from a toolchain the repository pins in two halves, and never from the
+machine's.
 
 ## cargo is pinned through rustup, never ambient
 
-cargo is not brew: brew is the subject under test and substitutes for
-nothing, which is why it alone is captured from the ambient PATH. A rustup-managed cargo in
-`~/.cargo/bin` is exactly the machine tool the hermetic PATH exists to hide — and, unlike
-brew, it has a pin story. The toolchain is pinned in two halves:
+cargo is not brew: brew is the subject under test and substitutes for nothing, which is why
+it alone is captured from the ambient PATH. A rustup-managed cargo in `~/.cargo/bin` is
+exactly the machine tool the hermetic PATH exists to hide, and, unlike brew, it has a pin
+story. The toolchain is pinned in two halves:
 
-- **rustup itself through aqua.** The standard registry carries `rust-lang/rustup` as an
-  `http` package from the project's own static host, checksum-verified against the `.sha256`
-  published next to each installer. That is the sourcing ladder's rung 2 without the
-  signature — rustup publishes no signature for the installer — so a bump is verified by
-  hand like every other checksum-only pin, and the pin lives in the Rust repository's
-  `.hermetic/hermetic.yaml`, not the baseline: no other repository pays for it.
-- **The toolchain through `rust-toolchain.toml`.** rustup reads it from the working tree,
-  so the channel and components are a committed, reviewed file — the same shape as
-  `go.mod`'s `go` line — and rustup verifies what it downloads against the release
-  manifest. The recipes reach cargo through the pinned rustup, never through the proxies in
-  `~/.cargo/bin`; that wiring lands in the Rust modules the day a repository needs it, and
-  until then the modules stay as they are: named, never in a default, and not runnable.
+- **rustup itself through the toolset.** `rust-lang/rustup` is an `http` package from the
+  project's own static host, checksum-verified against the `.sha256` published next to each
+  installer: the sourcing ladder's rung 2 without the signature, since rustup publishes none
+  for the installer, so a bump is verified by hand like every other checksum-only pin. The
+  entry is carried by the local registry for now: the standard registry's, with two changes
+  for two defects in the [known upstream bugs](./upstream.md), the checksum file read by
+  pattern (aqua records the posix checksums under one wrong environment otherwise) and the
+  Windows download URL ending in `.exe` (the standard entry's answers 404). The pin lives in
+  the Rust repository's `.hermetic/hermetic.yaml` as `rust-lang/rustup@<version>` with
+  `registry: local` (`just do tools add local,rust-lang/rustup`), not in the baseline: no
+  other repository pays for it. What it links is `rustup-init`.
+- **The toolchain through `rust-toolchain.toml`.** rustup reads it from the working tree, so
+  the channel and components are a committed, reviewed file, the same shape as `go.mod`'s
+  `go` line, and rustup verifies what it downloads against the release manifest. The
+  `channel` is an exact version, never a channel name (`stable` moves under the build);
+  `components` names `clippy` and `rustfmt`, which the lint lanes run; `targets` names every
+  target the repository cross-builds, so each `rust-std` is fetched and verified the same
+  way; `profile` is `minimal`. A lane refuses to run without the file.
+
+## What a lane does
+
+Every Rust lane starts the same way (`rust_env` in `.limen/just/lib.just`). rustup's and
+cargo's homes are `.build/rustup` and `.build/cargo`, under the checkout like the Go caches,
+so a checkout owns what it runs and nothing lands in `~/.cargo` or `~/.rustup`. The first
+lane installs rustup from the pinned `rustup-init` there with no toolchain, and the first
+cargo call installs the toolchain `rust-toolchain.toml` names. On Windows the two homes are
+given to rustup as native paths and hermetic's link resolves `rustup-init` to the `.exe`. A
+repository without a `Cargo.toml` passes every lane vacuously, so a lane can sit in a
+project's default.
+
+- `lint rust`: `cargo fmt --check` and `cargo clippy` with warnings denied, every target and
+  feature. `fix rust`: the same two, mutating.
+- `test rust`: `cargo test`, every feature.
+- `build rust`: the release binaries for this host, in cargo's own `target/release/`.
+  `build rust targets <triple>…`: a release build per target into
+  `target/<triple>/release/`, linked through the project's pinned zig (`ziglang/zig` in
+  `.hermetic/hermetic.yaml`) by the project's pinned cargo-zigbuild
+  (`rust-cross/cargo-zigbuild`, a standard-registry package): one C toolchain for the C and
+  the Rust builds, so a crate with a C dependency builds the same way, and a macOS or
+  Windows target links from any host (zig ships the libSystem stubs and the MinGW-w64 CRT).
+  cargo-zigbuild maps the triple to a zig target and keeps the list of linker arguments
+  rustc means for GNU ld that zig's lld refuses, a list that moves with rustc and zig; the
+  lane carries no wrapper of its own, which would be a copy of that list, behind. Both pins
+  are the Rust repository's, next to rustup's.
+
+Every cargo call carries `--locked`: `Cargo.lock` is the crate pin, committed, and a lane
+never rewrites it; a dependency moves by a pull request that changes the lock, from
+Renovate's `cargo` manager (on by default; the shared preset restricts no manager). A lock
+the tree does not have yet is made once, by hand, with `cargo generate-lockfile` from the
+lane's cargo (`.build/cargo/bin`).
