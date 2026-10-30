@@ -125,7 +125,14 @@ Every declarable identifier, grouped (a test pins this list to the live check ca
 A few checks are **opt-in**: listing them declares a *stricter* floor, never an exemption.
 Today that is `code-scanning`: the baseline does not require CodeQL (the SAST posture is
 golangci plus govulncheck), but a repo that parses untrusted input can require it of itself,
-and `limen github fix` then configures default setup.
+and `limen github fix` then configures default setup. What default setup analyses is CodeQL's
+own list of languages (C/C++, C#, Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Rust,
+Swift, and GitHub Actions workflows:
+[about code scanning with CodeQL](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning-with-codeql)).
+A repository whose code is in another language, Objective-C or shell, gets its workflows and
+whatever it carries in those languages analysed, a JavaScript test helper say, and nothing
+else, so a green `code-scanning` check there covers less than the code; the opt-in is worth
+declaring only where the code is on that list.
 
 ## What the baseline asserts
 
