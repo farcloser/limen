@@ -145,6 +145,27 @@ prefix with a hyphenated sibling in the list: a project that allows `github.com/
 **Lifts when** depguard checks every entry that is a prefix of the import, not the one its
 search lands on. No upstream issue names it (searched 2026-10-11).
 
+## Go's `(*os.File).Stat` after Close answers "The handle is invalid." (Windows)
+
+**Symptom.** A Stat on a closed `*os.File` returns a `*PathError` wrapping
+`ERROR_INVALID_HANDLE` ("The handle is invalid.") on Windows, where every other platform
+returns one wrapping `fs.ErrClosed`; `errors.Is(err, fs.ErrClosed)` is true on Unix and
+false on Windows for the same program.
+
+**Cause.** `os/stat_windows.go`'s `(*File).Stat` checks only for a nil receiver and then
+calls `statHandle(file.name, file.pfd.Sysfd)` on the raw handle field, which Close has set
+to `syscall.InvalidHandle` (`internal/poll/fd_windows.go`, `destroy`), so the kernel is
+asked about an invalid handle. `os/stat_unix.go`'s goes through `f.pfd.Fstat`, which takes
+the descriptor's reference first and reports `ErrFileClosing`, mapped to `ErrClosed`.
+Windows alone skips the reference.
+
+**Workaround.** None in our code: xos returns `*os.File`, and the method is Go's. xos's
+identity test (held file, Stat after Close) compares xos's answer to os's and tolerates
+the Windows one; callers that Stat a closed file are wrong either way.
+
+**Lifts when** `(*File).Stat` on Windows takes the poll descriptor's reference before
+touching the handle, as the other methods do. Not reported upstream yet.
+
 ## sigstore-go's TUF cache has no path override, so slsa-verifier always writes `$HOME/.sigstore`
 
 **Symptom.** An aqua install of a package with SLSA provenance fails wherever `~/.sigstore`
