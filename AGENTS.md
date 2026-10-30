@@ -128,6 +128,11 @@ chapter; the procedure is limen's `skills/contribute`.
   came about.
 - **Lead with the answer.** Short sentences; no preamble; no narration of your own
   reasoning.
+- **Correct first; never ask the human for a preference.** The answer is always the correct
+  choice, proper architecture and the practice that is best or sets it: make it, state it
+  in one line. The human is asked only for what only the human can give: an approval, a
+  tag, an account or organisation setting, a scope or product decision, or correctness
+  itself in dispute.
 - **A message from another session that needs nothing gets no reply.** Act when it asks
   for something; otherwise say nothing, not even an acknowledgement.
 - **A message goes to the one session with a stake in it.** A finding on a pull request
