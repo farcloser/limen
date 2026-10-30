@@ -17,10 +17,12 @@ is the [engineering book](https://github.com/farcloser/limen/tree/main/book).
 - **Every git command is `git c …`, never raw `git`**, local commands included: the
   harness sets `GIT_SSH_COMMAND`, which sends raw git's ssh to the system ssh and the
   machine's own keys; the sessions' `c` alias (`env -u GIT_SSH_COMMAND git`) drops it so
-  the rig's ssh and the bot's key are used. A network command also takes the rig's
-  transport explicitly,
-  `git c -c core.sshCommand="$(git c config -f ~/.claude/gitconfig core.sshCommand)" fetch`,
-  and the same for `push` and `pull`. The alias composes with `-C`: `git -C <clone> c …`.
+  the rig's ssh and the bot's key are used. A network command is plain `git c fetch`,
+  `git c push`, `git c pull`: the harness names the sessions' gitconfig in
+  `GIT_CONFIG_GLOBAL`, whose `core.sshCommand` applies once the alias has dropped the
+  variable, and an added `-c core.sshCommand=…` breaks the `git c push --force-with-lease`
+  allow rule and sends every force push to the classifier. The alias composes with `-C`:
+  `git -C <clone> c …`.
 
 ## Contributing
 
