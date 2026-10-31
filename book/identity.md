@@ -408,16 +408,23 @@ Apple's URL loading, which honours the system proxy only, and the sandbox reache
 egress through its own proxy only, so no sandboxed process reaches Apple's ticket service
 and no sandbox setting says otherwise; the command is read-only, and it names the binary
 rather than the `xcrun` launcher, which resolves through `xcode-select`. The third,
-`farclauder worktree remove *` by its absolute path under Claude Code's own directory
-(`~/.claude/bin`, 2026-10-31, https://github.com/farcloser/limen-install/pull/164), was
-weighed so: inside a session `git worktree remove` deletes the checkout and then fails on
-the record's `commondir` and the worktree's `.claude/settings*.json`, paths the sandbox
-protects against every write, which no `allowWrite` lifts and only switching the filesystem
-sandbox off would; the script is the installer's file in a directory sessions cannot write,
-runs no git, since an unsandboxed git would honour a `.git/config` or hooks a session can
-write in another clone, removes only `<clone>/.claude/worktrees/<name>` and
-`<clone>/.git/worktrees/<name>`, each checked physical from inside and removed by bare name,
-and refuses a live checkout.
+`farclauder worktree remove *` under Claude Code's own directory (`~/.claude/bin`, by that
+path and by its absolute one, 2026-10-31, https://github.com/farcloser/limen-install/pull/164
+and https://github.com/farcloser/limen-install/pull/167),
+was weighed so: inside a session `git worktree remove` fails on paths the sandbox protects
+against every write, which no `allowWrite` lifts and only switching the filesystem sandbox
+off would: the record's `commondir` in the session's repository, and `.claude/.cc-writes` in
+a worktree the session has been in; git deletes what it reaches before the first, fails
+there, and goes on to the record, where it fails again at `commondir`, leaving both
+partial. The script
+is the installer's file in a directory sessions cannot write, runs no git, since an
+unsandboxed git would honour a `.git/config` or hooks a session can write in another clone,
+and removes a worktree in one call, as `git worktree remove --force` would: only
+`<clone>/.claude/worktrees/<name>` and `<clone>/.git/worktrees/<name>`, each checked physical
+from inside and removed by bare name, a locked worktree refused. Whether the worktree holds
+work in progress is the session's to check first. What it adds to what a session can do is
+the deletion of the protected leftovers of the worktree being removed: its `.claude` entries
+and the record's `commondir`.
 
 **Breakage is reported, not routed around.** An agent that finds the rig not working — the
 installed ssh refused, signing unable to reach the agent, a recipe failing — says so first
