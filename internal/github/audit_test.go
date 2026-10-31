@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -100,36 +99,8 @@ type stubResponse struct {
 	Times int `json:"times"`
 }
 
-// render is the body the stub writes for the flags gh was invoked with.
-func (r stubResponse) render(paginate, slurp bool) string {
-	pages := r.Pages
-	if len(pages) == 0 {
-		pages = []string{r.Body}
-	}
-
-	switch {
-	case !paginate:
-		return pages[0]
-	case slurp:
-		return "[" + strings.Join(pages, ",") + "]"
-	default:
-		elements := make([]string, 0, len(pages))
-
-		for _, page := range pages {
-			inner := strings.TrimSpace(page)
-			inner = strings.TrimSuffix(strings.TrimPrefix(inner, "["), "]")
-
-			if strings.TrimSpace(inner) != "" {
-				elements = append(elements, inner)
-			}
-		}
-
-		return "[" + strings.Join(elements, ",") + "]"
-	}
-}
-
 // ghStubEnv carries the directory of one test's canned responses to the
-// fake gh (this binary, invoked under that name from PATH).
+// fake gh (internal/github/ghstub, built by TestMain and put on PATH).
 const ghStubEnv = "LIMEN_TEST_GH_STUB_DIR"
 
 // stubGH writes the test's canned responses where the fake gh finds them and
@@ -210,16 +181,9 @@ func isWriteKey(key string) bool {
 	return false
 }
 
-// TestMain lets the binary play both roles: the test suite, and — invoked
-// under the name gh by the code under test — the fake gh.
+// TestMain builds the fake gh and puts it first on PATH for the code under
+// test, which spawns `gh` by name.
 func TestMain(m *testing.M) {
-	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "gh" {
-		// The stub's exit status IS its contract (gh exits 1 on API errors);
-		// this branch never reaches the test runner's own exit handling.
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(runGHStub(os.Getenv(ghStubEnv)))
-	}
-
 	dir, err := installGHStub()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "installing the gh stub:", err)
@@ -240,17 +204,13 @@ func TestMain(m *testing.M) {
 	_ = os.RemoveAll(dir)
 }
 
-// installGHStub copies (or links) this binary into a fresh directory under
-// the name TestMain dispatches on — exactly gh, plus the extension Windows
-// needs to execute it. Not the test binary's own extension: `github.test`
-// would yield `gh.test`, which TestMain does not recognize, and every child
-// would then run the suite.
+// installGHStub builds internal/github/ghstub into a fresh directory under
+// the name the code under test spawns, gh plus the extension Windows needs.
+// Built, not this binary re-executed: under -race a process takes about a
+// second to start on macOS, and a package run makes some 1,600 gh calls.
+// `go` is the one on PATH, the toolchain running these tests; the build
+// inherits no -race, that is a flag of this binary's own build.
 func installGHStub() (string, error) {
-	self, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-
 	dir, err := os.MkdirTemp("", "limen-gh-stub")
 	if err != nil {
 		return "", err
@@ -261,191 +221,15 @@ func installGHStub() (string, error) {
 		ext = ".exe"
 	}
 
-	stub := filepath.Join(dir, "gh"+ext)
-	if err = os.Symlink(self, stub); err == nil {
-		return dir, nil
-	}
+	build := exec.Command("go", "build", "-o", filepath.Join(dir, "gh"+ext), "./ghstub")
 
-	data, err := os.ReadFile(self)
-	if err != nil {
-		return "", err
-	}
+	if out, err := build.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(dir)
 
-	// 0o700, not 0o600: the stub must be executable.
-	if err := os.WriteFile(stub, data, 0o700); err != nil {
-		return "", err
+		return "", fmt.Errorf("go build ./ghstub: %w: %s", err, out)
 	}
 
 	return dir, nil
-}
-
-// runGHStub is the fake gh. argv mirrors the production invocation:
-// api --method METHOD PATH [--input -]. Mirroring the real gh: bodies go to
-// stdout with exit 0, errors to stderr with exit 1.
-func runGHStub(dir string) int {
-	// The preflight asks the API nothing, so it needs no responses.
-	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		_, _ = os.Stdout.WriteString("gh version 0.0.0 (stub)\n")
-
-		return 0
-	}
-
-	if dir == "" {
-		fmt.Fprintln(os.Stderr, "gh stub: no responses for this test (stubGH not called)")
-
-		return 1
-	}
-
-	args := os.Args[1:]
-	if len(args) < 4 {
-		fmt.Fprintf(os.Stderr, "gh stub: unexpected argv %q\n", args)
-
-		return 1
-	}
-
-	// `gh secret set NAME --org ORG …`: keyed on those five words, and the
-	// secret's value (stdin) is logged like a write payload.
-	if args[0] == "secret" {
-		return runGHSecretStub(dir, args)
-	}
-
-	method, path := args[2], args[3]
-	key := method + " " + path
-
-	logFile, err := os.OpenFile(
-		filepath.Join(dir, "calls.log"),
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
-		0o600,
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-		return 1
-	}
-	defer func() { _ = logFile.Close() }()
-
-	// Log first, respond second — unlisted writes are logged too. The
-	// response lookup keys on method and path alone; --paginate and --slurp
-	// ride along in the log so a test can assert a listing asked for every
-	// page.
-	paginate := slices.Contains(args, "--paginate")
-	slurp := slices.Contains(args, "--slurp")
-
-	logged := key
-	if paginate {
-		logged += " --paginate"
-	}
-
-	if slurp {
-		logged += " --slurp"
-	}
-
-	_, _ = fmt.Fprintln(logFile, logged)
-
-	if len(args) >= 6 && args[4] == "--input" {
-		if _, err = io.Copy(logFile, os.Stdin); err != nil {
-			fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-			return 1
-		}
-
-		_, _ = fmt.Fprintln(logFile)
-	}
-
-	raw, err := os.ReadFile(filepath.Join(dir, "responses.json"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-		return 1
-	}
-
-	var responses map[string]stubResponse
-	if err := json.Unmarshal(raw, &responses); err != nil {
-		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-		return 1
-	}
-
-	response, listed := responses[key]
-
-	switch {
-	case !listed:
-		// A read the test did not list is the unverifiable path; a write it
-		// did not list is one the plan never showed, and it fails the same way.
-		fmt.Fprintln(os.Stderr, "gh: boom (HTTP 500)")
-
-		return 1
-	case response.NotFound:
-		fmt.Fprintln(os.Stderr, "gh: Not Found (HTTP 404)")
-
-		return 1
-	case response.Stderr != "":
-		fmt.Fprintln(os.Stderr, response.Stderr)
-
-		return 1
-	case response.Fail:
-		fmt.Fprintln(os.Stderr, "gh: boom (HTTP 500)")
-
-		return 1
-	default:
-		fmt.Fprint(os.Stdout, response.render(paginate, slurp))
-
-		return 0
-	}
-}
-
-// runGHSecretStub plays `gh secret set`: it logs the invocation and the
-// value it was fed, then fails when the test listed the key as failing.
-func runGHSecretStub(dir string, args []string) int {
-	const keyWords = 5 // secret set NAME --org ORG
-
-	if len(args) < keyWords {
-		fmt.Fprintf(os.Stderr, "gh stub: unexpected secret argv %q\n", args)
-
-		return 1
-	}
-
-	key := strings.Join(args[:keyWords], " ")
-
-	logFile, err := os.OpenFile(filepath.Join(dir, "calls.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-		return 1
-	}
-	defer func() { _ = logFile.Close() }()
-
-	_, _ = fmt.Fprintln(logFile, key)
-
-	if _, err = io.Copy(logFile, os.Stdin); err != nil {
-		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-		return 1
-	}
-
-	_, _ = fmt.Fprintln(logFile)
-
-	raw, err := os.ReadFile(filepath.Join(dir, "responses.json"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-		return 1
-	}
-
-	var responses map[string]stubResponse
-	if err := json.Unmarshal(raw, &responses); err != nil {
-		fmt.Fprintf(os.Stderr, "gh stub: %v\n", err)
-
-		return 1
-	}
-
-	if responses[key].Fail {
-		fmt.Fprintln(os.Stderr, "gh: secret set refused (HTTP 403)")
-
-		return 1
-	}
-
-	return 0
 }
 
 // compliantResponses answers every audited endpoint with baseline-satisfying
