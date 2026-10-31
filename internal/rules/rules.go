@@ -172,7 +172,7 @@ type Policy struct {
 }
 
 // DefaultPolicy returns the policy described in book/mandatory-files.md: the
-// allowed software licenses (MIT, Apache-2.0, GPL-2.0, AGPL-3.0, BSD-3-Clause
+// allowed software licenses (MIT, Apache-2.0, GPL-2.0-only, AGPL-3.0-only, BSD-3-Clause
 // and the Unlicense for inherited code, Closed-source) and content licenses
 // (CC-BY-SA-4.0, CC-BY-ND-4.0). limen enforces membership in this set; which
 // license to choose for a given repository is guidance in the book, not a
