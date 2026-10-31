@@ -1,6 +1,26 @@
 {
   "checksums": [
     {
+      "id": "github_release/github.com/anchore/syft/v1.55.0/syft_1.55.0_darwin_arm64.tar.gz",
+      "checksum": "1217C258BD5EB91EF3189CF22A82E02F9CAC07E4CE934350F428E93AFF674625",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/anchore/syft/v1.55.0/syft_1.55.0_linux_amd64.tar.gz",
+      "checksum": "BB65249542DB5FEDEEB4D3F9B018B75E7264DBFBBB10486F044581A92F90490D",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/anchore/syft/v1.55.0/syft_1.55.0_linux_arm64.tar.gz",
+      "checksum": "929BD163DB2D7CD2255D3BCB8967208079813D7B46B0C952F7B794D8E2C7D304",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/anchore/syft/v1.55.0/syft_1.55.0_windows_amd64.zip",
+      "checksum": "ADA4C9B93AF575F479CE80FCE6629897272A2D41F300A14BC49BACE020767CA2",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/casey/just/1.59.0/just-1.59.0-aarch64-apple-darwin.tar.gz",
       "checksum": "6574CEA774ED4CAE12E24B6AA11857DE33E80DAB4667CF628FD5840DF96A2A9D",
       "algorithm": "sha256"

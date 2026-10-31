@@ -228,8 +228,8 @@ Two roles close the enforcement loop:
   repository: the rules in this book, enforced from inside the baseline. The `LIMEN_BIN` knob
   has one consumer, the limen repository, which points it at `go run ./cmd/limen` so its
   working tree is judged by its own enforcer rather than the always-older released pin.
-- **`just do release`** is shared; artifacts are opt-in. The recipe, its two lanes and the
-  rules a release follows are [releasing](./releasing.md).
+- **`just do release`** is shared; artifacts are opt-in. The recipe, its lane, the signing
+  and provenance policy and the rules a release follows are [releasing](./releasing.md).
 
 ## Extending the baseline
 
