@@ -343,11 +343,12 @@ asks nothing of a repository; a change to what a caller does (a trigger, a permi
 one the fix-up cannot write: on a Renovate branch `fix` leaves the caller and says so,
 `check` names it, and the caller is pushed by hand, once per repository. The release that
 introduced the callers is the last to write workflow files through the fix-up, under the
-update App, which stays until every repository has merged that bump and goes then. For the
-shared lanes to be called from another organisation's repository, the allowed-actions floor
-names them there: `farcloser/limen/.github/workflows/*@*` beside GitHub-owned actions, at
-the repository and the organisation; farcloser's own need no pattern, and a private
-repository outside farcloser cannot call them, GitHub's rule ([github](./github.md)).
+update App, which limen no longer registers or uses; the human deletes it once every
+repository has merged that bump. For the shared lanes to be called from another
+organisation's repository, the allowed-actions floor names them there:
+`farcloser/limen/.github/workflows/*@*` beside GitHub-owned actions, at the repository and
+the organisation; farcloser's own need no pattern, and a private repository outside
+farcloser cannot call them, GitHub's rule ([github](./github.md)).
 
 ### The `renovate` rule — who may commit onto Renovate's branches
 
@@ -378,29 +379,10 @@ does not come back re-serialized in every branch the checksum workflow runs `lim
 
 `gitIgnoredAuthors` is the load-bearing one. Renovate treats a commit by an author it does
 not know as a human edit and stops rebasing that branch, and the `update-aqua-checksum`
-workflow commits onto every aqua-bump branch as the organization's update-App bot user
-([tooling](./tooling.md)); so that identity,
-`<user-id>+<app-slug>[bot]@users.noreply.github.com`, must be in the array or every aqua
-bump quietly goes stale after its first fix-up. The seed cannot know it: the App is
-per-organization and its user id exists only once the App is registered. So limen resolves
-it at run time, from the organization the `origin` remote names, and `check` and `fix`
-resolve it differently on purpose:
-
-- **`limen check` is deterministic.** It assumes the App is named as limen registers it,
-  `limen-ci-<org>`, and asks the public users endpoint for that bot's id: no token, nothing
-  that depends on who runs it. A laptop with an org-admin `gh` and a CI runner with no
-  credentials reach the same verdict on the same tree.
-- **`limen fix` discovers.** The human, mutating step may use privilege: with an org-admin
-  `gh` it reads the App back from the org (the `UPDATE_AQUA_CHECKSUM_APP_ID` variable names
-  it, the installation list gives its slug, so an App registered under any name is found);
-  without one it falls back to the convention. It adds the address as the first element of
-  the array, and the truth lives in the tree from there.
-
-`check` fails when the convention-named App exists and is missing from the file. Anything
-unresolvable — no remote, no network, no App under the convention name — passes without
-enforcing. The corollary: an App registered under a non-default name is invisible to `check`,
-and only `fix`, run with the org token, puts it in the file. `bootstrap` runs the discovering
-step right after registering the App, so a fresh repository is complete from its first commit.
+workflow commits onto every aqua-bump branch with the run's own token, as
+`41898282+github-actions[bot]@users.noreply.github.com` ([tooling](./tooling.md)). The
+seed carries that address, `check` fails a file without it, and `fix` adds it first in the
+array, keeping whatever else the project lists.
 
 ### The `gotools` rule — `.limen/tools/go.mod` tool directives
 

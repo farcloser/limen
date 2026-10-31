@@ -350,8 +350,8 @@ point 3, the workflow templates.
 | `fix --org` | org owner | rare, deliberate, never in CI |
 
 The scheduled audit (issue 507) cannot run on the default `GITHUB_TOKEN`, which reads
-little of R1/R2: it extends the update App of decision 8 with the admin-read permissions
-rather than minting a second identity.
+little of R1/R2; the identity it runs under is that issue's to decide (the update App of
+decision 8 no longer exists).
 
 ## Decisions
 
@@ -379,12 +379,12 @@ rather than minting a second identity.
    tree checks for the file-rule engine, not API checks.
 7. **The org `.github` repository**: a limen-managed repository like any other, carrying
    the community health fallback; its org-side checks are O7.
-8. **Bump-PR push credential**: a GitHub App over a fine-grained PAT for the
-   `update-aqua-checksum` push — per-run one-hour repo-scoped tokens, org-owned,
-   nothing expires on a calendar. Workflow token preference: App
-   (`UPDATE_AQUA_CHECKSUM_APP_ID` variable + `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`
-   secret) → PAT (`UPDATE_AQUA_CHECKSUM_TOKEN`) → default token. Each org registers its
-   own App, named `limen-ci-<org>`; `limen bootstrap` registers it through the
-   app-manifest flow (internal/github/app.go), and every state it cannot create or
-   verify degrades to a warning, never a failed bootstrap. The scheduled audit extends
-   this App rather than minting a second identity.
+8. **Bump-PR push credential**: none. The `update-aqua-checksum` workflow pushes its fix-up
+   with the run's own token, which starts no run, and then approves the pull request's runs
+   awaiting approval with the same token (`actions: write`); the checks report on the new
+   head. The first version was a per-org GitHub App (`limen-ci-<org>`, registered by `limen
+   bootstrap` through the app-manifest flow) whose private key was an organisation secret,
+   readable by any run on any branch of a covered repository; the approval route was
+   verified on a test pull request; limen no longer registers or uses the App, and the human
+   deletes it once every repository has merged its migration bump. A dispatch of the CI does
+   not do: GitHub does not count a dispatched run's checks for the pull request.

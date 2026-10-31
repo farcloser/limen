@@ -660,49 +660,24 @@ tree, committed its own file unchanged, and the empty commit's push fired it aga
 thirty seconds (https://github.com/farcloser/limen-install/pull/66). The guard is `git diff
 --quiet -- <the file>`, never `git status --porcelain`.
 
-### The push credential — one-time org setup
+### The pull request's checks after the push — no credential
 
-When the workflow pushes with the default `GITHUB_TOKEN`, GitHub suppresses workflow runs on
-that commit: the PR's CI never re-runs on its final state, and with required checks the PR
-head has zero check runs and is **unmergeable**. The cure is a credential whose pushes do
-trigger CI. The workflow accepts two, in order of preference:
+A push made with the run's own `GITHUB_TOKEN` starts no workflow run by itself: GitHub's
+rule against recursive workflows. For a pull request's head it does create the
+`pull_request` runs, awaiting approval, and a token with `actions: write` may give that
+approval. The checksum workflow's last step does: it lists the runs awaiting approval on
+the commit it pushed and approves each with its own token, and the pull request's `gate`
+and `security` checks report on the new head. No App, no personal token, no secret
+anywhere: nothing to register per organisation, nothing to set per repository, nothing to
+rotate or leak. The workflow's commits are github-actions[bot]'s, the one address the
+seeded `renovate.json` lists in `gitIgnoredAuthors` so Renovate keeps rebasing.
 
-1. **A GitHub App, the recommended route.** Not infrastructure: an App with its webhook
-   disabled is a registered identity with a private key. The workflow mints a fresh
-   installation token per run — one hour, scoped to that single repository — so no long-lived
-   broad credential sits in a secret, and nothing expires on a calendar.
-
-   `limen bootstrap` automates it (`-org <name>`, or inferred from the origin remote): it
-   registers the App through GitHub's app-manifest flow — one approval click in the browser,
-   one more to install it — and stores the id and key on the org. Idempotent (a configured
-   org is verified and left alone); anything it cannot do under the current gh token — no org
-   admin, no browser, a half-configured org — is a printed warning, never a failed
-   bootstrap. The browser is the command `BROWSER` names when set, the platform opener
-   otherwise; a Ctrl-C while it waits ends the step as a warning.
-
-   The manual equivalent, once per org:
-   - Register an App on the org (Settings → Developer settings → GitHub Apps): webhook
-     disabled, repository permissions **Contents: read and write** and **Workflows: read and
-     write**, nothing else. Workflows is not optional: a limen bump converges canonical
-     workflow files, and GitHub refuses a commit touching `.github/workflows/` from a token
-     without it; the bootstrap's audit reports an installation missing either permission,
-     and the lane requests both by name when it mints the token (naming any permission scopes
-     the token to exactly the named ones).
-   - Generate a private key, and install the App on the org, all repositories.
-   - Set the org **variable** `UPDATE_AQUA_CHECKSUM_APP_ID` and the org **secret**
-     `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`.
-
-   Every org registers **its own** App, named `limen-ci-<org>` (GitHub App names are globally
-   unique). Apps are not shareable for this: minting tokens requires the private key, which
-   never leaves the org that owns it, and installing someone else's App would grant *that
-   org* write access to your repositories while giving your workflows nothing to mint with.
-2. **A fine-grained PAT**, contents and workflows read and write, stored as the org secret
-   `UPDATE_AQUA_CHECKSUM_TOKEN`: the drop-in fallback. It is bound to a user account and
-   expires; when it lapses, the workflow silently degrades to the default token and bump PRs
-   go back to being blocked. Prefer the App.
-
-Without either, the workflow still runs and pushes; only the CI re-run is lost: tolerable
-without required checks, blocking with them.
+What does not work, tested: a `workflow_dispatch` of the CI on the branch after the push.
+GitHub creates the dispatched runs and does not count their checks for the pull request,
+which stays at "expected, waiting for status". A GitHub App or a personal access token
+does work, as GitHub's documentation suggests for runs without approval, and is a
+credential that every account with write access can read from a repository or organisation
+secret; the approval needs none.
 
 ## Enforcement
 

@@ -16,24 +16,23 @@ import (
 // The renovate rule content-pins the shared configuration at
 // .limen/renovate.json and maintains three things in renovate.json: the
 // `extends` reference to it (see selfPresetRef below), forkProcessing, and
-// the gitIgnoredAuthors array, kept in step with the
-// identities that commit onto Renovate's branches. Renovate treats a commit
-// by any other author as a human edit and stops rebasing the branch — so the
-// update-aqua-checksum fix-up commit, made as the org's update-App bot user
+// the gitIgnoredAuthors array, which names the identity that commits onto
+// Renovate's branches. Renovate treats a commit by any other author as a
+// human edit and stops rebasing the branch — so the update-aqua-checksum
+// fix-up commit, made with the run's own token as github-actions[bot]
 // (book/tooling.md), must be listed or every aqua bump PR quietly goes stale.
-//
-// The identity is not known to the rules package: it belongs to the org (its
-// App), and resolving it takes the network. The caller resolves it (see
-// cmd/limen) and passes the address through Policy/FixOptions; empty means
-// unknown, and the rule then passes without enforcing — never fails a repo
-// for what could not be looked up. renovate.json itself is seeded by the
-// workflows rule (seeded once, the project's own afterwards): this rule edits
-// exactly the keys below and leaves every other key untouched.
+// The address is the same everywhere, so the seed carries it and the rule
+// requires it. renovate.json itself is seeded by the workflows rule (seeded
+// once, the project's own afterwards): this rule edits exactly the keys below
+// and leaves every other key untouched.
 const ruleRenovate = "renovate"
 
 // The keys this rule maintains.
 const (
 	ignoredAuthorsKey = "gitIgnoredAuthors"
+	// actionsBotAddress is the author of the checksum workflow's commits: the
+	// run's own token, github-actions[bot], the same in every repository.
+	actionsBotAddress = "41898282+github-actions[bot]@users.noreply.github.com"
 	extendsKey        = "extends"
 	forkProcessingKey = "forkProcessing"
 	descriptionKey    = "description"
@@ -149,7 +148,7 @@ const renovateSeed = `{
   "description": [
     "The canonical Renovate configuration is .limen/renovate.json, content-pinned like the rest of .limen/, so a fix there reaches this repository with its next limen bump, in the bump's diff. extends reads it by this repository's own name (local>owner/name//.limen/renovate): Renovate refuses a relative reference in a repository's own config. The ` + "`renovate`" + ` rule writes that reference from the origin remote and rewrites it after a rename or a fork. Everything below is the project's own — overrides and additions go here, next to the reference.",
     "forkProcessing: Renovate skips forked repositories by default under an all-repositories App installation, and it skips them before reading any config beyond this file — so the setting cannot live in the shared preset, and cannot live in a renovate.json5 either: only the onboarding config file name, renovate.json, is read through the platform API at that point. Every repository that is a GitHub fork is silently never processed without it.",
-    "gitIgnoredAuthors: the update-aqua-checksum workflow pushes a fix-up commit onto Renovate's branches; without this, Renovate treats the branch as human-modified and stops rebasing it. The org's App identity is the org's, so the array stays here (the ` + "`renovate`" + ` rule maintains it) rather than in the preset."
+    "gitIgnoredAuthors: the update-aqua-checksum workflow pushes a fix-up commit onto Renovate's branches as github-actions[bot]; without this, Renovate treats the branch as human-modified and stops rebasing it. The ` + "`renovate`" + ` rule keeps the address here."
   ],
   "forkProcessing": "enabled",
   "gitIgnoredAuthors": [
@@ -342,8 +341,9 @@ func checkPresetRef(cfg config, repository string) *Finding {
 
 // checkRenovate verifies the shared configuration's content pin, and in
 // renovate.json the reference to it (when the repository is known),
-// forkProcessing, and the update-App identity among gitIgnoredAuthors (when
-// known); and that no superseded config file sits beside renovate.json.
+// forkProcessing, and the checksum workflow's commit identity among
+// gitIgnoredAuthors; and that no superseded config file sits beside
+// renovate.json.
 func checkRenovate(root string, policy Policy) Finding {
 	if f := checkPinned(root, ruleRenovate, pathRenovatePreset, limen.CanonicalRenovatePreset); f != nil {
 		return *f
@@ -388,37 +388,26 @@ func checkRenovate(root string, policy Policy) Finding {
 		extends = repositoryUnknownMessage + " — extends not enforced"
 	}
 
-	if policy.UpdateAppIdentity == "" {
+	if cfg.hasIgnoredAuthor(actionsBotAddress) {
 		return Finding{
-			Rule:   ruleRenovate,
-			Status: StatusOK,
-			Path:   pathRenovate,
-			Message: extends + "; forks are processed; update-App identity unknown " +
-				"(no org or App resolvable) — gitIgnoredAuthors not enforced",
-		}
-	}
-
-	if cfg.hasIgnoredAuthor(policy.UpdateAppIdentity) {
-		return Finding{
-			Rule:   ruleRenovate,
-			Status: StatusOK,
-			Path:   pathRenovate,
-			Message: extends + "; forks are processed; gitIgnoredAuthors carries the " +
-				"update-App identity " + policy.UpdateAppIdentity,
+			Rule:    ruleRenovate,
+			Status:  StatusOK,
+			Path:    pathRenovate,
+			Message: extends + "; forks are processed; gitIgnoredAuthors carries " + actionsBotAddress,
 		}
 	}
 
 	return fail(
 		ruleRenovate,
 		pathRenovate,
-		"gitIgnoredAuthors lacks the update-App identity "+policy.UpdateAppIdentity+
-			" — Renovate stops rebasing branches the App commits onto (limen fix adds it)",
+		"gitIgnoredAuthors lacks "+actionsBotAddress+
+			" — Renovate stops rebasing a branch the checksum workflow commits onto (limen fix adds it)",
 	)
 }
 
 // remediateRenovate content-pins the shared configuration, sets the reference
 // to it (when the repository is known) and forkProcessing, and adds the
-// update-App identity to gitIgnoredAuthors when it is known and missing. A
+// checksum workflow's commit identity to gitIgnoredAuthors when missing. A
 // superseded config file beside renovate.json is named, never removed: what
 // it carries is the project's to move over or drop.
 func remediateRenovate(root string, opts FixOptions) []Outcome {
@@ -481,17 +470,14 @@ func remediateRenovateValues(root string, opts FixOptions) Outcome {
 		done = append(done, "set "+forkProcessingKey+" to \""+forkProcessingValue+"\"")
 	}
 
-	switch {
-	case opts.Policy.UpdateAppIdentity == "":
-		done = append(done, "update-App identity unknown (no org or App resolvable) — gitIgnoredAuthors left as is")
-	case cfg.hasIgnoredAuthor(opts.Policy.UpdateAppIdentity):
-		done = append(done, "gitIgnoredAuthors already carries "+opts.Policy.UpdateAppIdentity)
-	default:
-		cfg.addIgnoredAuthor(opts.Policy.UpdateAppIdentity)
+	if cfg.hasIgnoredAuthor(actionsBotAddress) {
+		done = append(done, "gitIgnoredAuthors already carries "+actionsBotAddress)
+	} else {
+		cfg.addIgnoredAuthor(actionsBotAddress)
 
 		changed = true
 
-		done = append(done, "added the update-App identity "+opts.Policy.UpdateAppIdentity+" to "+ignoredAuthorsKey)
+		done = append(done, "added "+actionsBotAddress+" to "+ignoredAuthorsKey)
 	}
 
 	// Decided on values, never on bytes: render is limen's serialization
