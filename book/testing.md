@@ -126,6 +126,14 @@ with an unnamed gap is not done.
   runs on every leg ([the shared recipes](./recipes.md)). It names the unit, race and
   coverage lanes, every project alike: a race detector nobody runs finds nothing, and a
   coverage gate some repositories skip is not a gate.
+- **Coverage is measured, never managed.** The coverage lane prints the number, and a
+  project that wants a floor sets its own (`TEST_GO_COVER_MIN`, in its `.justfile`); there
+  is no fleet-wide minimum, no gate in the shared CI lane beyond what the project set, and
+  no coverage dashboard, hosted or published. A percentage is not a contract: a gate on it
+  pushes tests toward touching lines rather than establishing properties, which is the
+  opposite of what this chapter asks of a test, and a dashboard is an account and its
+  upkeep for a number nobody acts on. Decided once, after a fork's inherited coveralls step
+  that was never registered came out.
 - **Fuzzing is CI's own job**, on one leg, with the corpus cached between runs, feeding the
   gate like a failing test ([github](./github.md#fuzz)); it is not in the aggregate.
 - **Benchmarks and profiles are `perf`**: reports that judge nothing, run by hand, never in
