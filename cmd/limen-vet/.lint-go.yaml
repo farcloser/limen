@@ -1,0 +1,26 @@
+# limen-vet's own carve-outs, for the lint this repository runs on the module
+# (the root .justfile's lint-vet): the one dependency depguard must let
+# through, and the test tolerances the root module's overlay states.
+golangci:
+  linters:
+    exclusions:
+      rules:
+        # Tests are black-box consumers: the rules about API hygiene and
+        # production robustness do not apply to them, the rules about
+        # correctness do (errcheck stays on: a test that ignores an error can
+        # pass for the wrong reason).
+        - path: _test\.go
+          linters:
+            - dupl # test cases are meant to look alike
+            - dupword # test data
+            - err113 # dynamic errors are fine in fixtures
+            - dogsled # multiple-return helpers are exercised for one value at a time
+            - noctx # no cancellation to propagate
+            - perfsprint # readability over allocations
+            - mnd # fixture values
+    settings:
+      depguard:
+        rules:
+          main:
+            allow:
+              - golang.org/x/tools
