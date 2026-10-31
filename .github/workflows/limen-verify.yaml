@@ -146,6 +146,27 @@ jobs:
           path: '**/testdata/fuzz/'
           if-no-files-found: ignore
 
+  # The unit tests under the race detector. One leg: the detector finds the
+  # same races on any platform it runs on, and the verify legs run the suite
+  # without it. The recipe passes on a tree with no Go module, so this job is
+  # safe in every repository.
+  race:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: ${{ inputs.submodules }}
+
+      - name: Install hermetic (pinned, verified)
+        uses: ./.github/actions/setup-hermetic
+
+      - name: Race
+        run: just do test go race
+
   # Every pin resolves. The verify legs link only, and a link verifies
   # nothing: an asset that is missing from a release, or that fails its
   # checksum, would merge green and fail at first use. One linux leg pays for
