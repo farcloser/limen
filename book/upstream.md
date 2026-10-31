@@ -65,6 +65,48 @@ the minute still reddens the lane, and is rerun by the author, named as this fla
 **Lifts when** lychee retries server errors under its own retry settings. Whether upstream
 tracks it is unverified.
 
+## aqua records an http package's posix checksums under one wrong environment
+
+**Symptom.** `hermetic install` (or `just do tools add`) of `rust-lang/rustup` from the
+standard registry fails on macOS and Linux with `checksum is required` (aqua code 001),
+while `.hermetic/aqua-checksums.json` carries entries for the two Windows environments and
+one `x86_64-apple-darwin` that no supported environment asked for.
+
+**Cause.** The package's checksum file is one per environment, and the posix ones name the
+asset (`<sha> *./rustup-init`) where the Windows ones carry a bare digest. aqua's
+`update-checksum` records a bare digest under the fetching environment's own id, and a line
+that names an asset under the id of the first supported environment whose rendered asset
+name matches (`pkg/controller/updatechecksum/update.go`, `ChecksumIDFromAsset`): every
+posix environment renders `rustup-init`, so three fetches land under one id, and two
+environments have none.
+
+**Workaround.** The local registry carries the standard entry with the checksum read by
+pattern (`file_format: regexp`, `pattern.checksum: "^([0-9a-f]{64})"`), which takes the
+bare-digest path for every environment; the pin names `registry: local`. The same copy
+carries the Windows URL fix below; it retires when both are fixed upstream.
+
+**Lifts when** aqua records an http package's per-runtime checksum under the runtime it
+fetched it for, or the standard registry's entry reads the file by pattern. Reporting it
+upstream is pending a decision.
+
+## The standard registry's rustup entry cannot install on Windows
+
+**Symptom.** `hermetic install` of `rust-lang/rustup` from the standard registry fails on
+Windows with a 404 from `static.rust-lang.org`.
+
+**Cause.** The entry's download URL is `…/{{.Arch}}-{{.OS}}/rustup-init` for every
+platform, and its Windows override changes only the checksum URL (to
+`rustup-init.exe.sha256`). The host serves `rustup-init.exe` for the `pc-windows-msvc`
+targets and answers 404 for `rustup-init` there, so the checksum can be fetched and the
+installer cannot.
+
+**Workaround.** The local registry's copy of the entry (above) gives the Windows override
+the `.exe` URL and renames the file to `rustup-init` on the way (`files: src:
+rustup-init.exe`), so the link is the same name on every platform.
+
+**Lifts when** the standard registry's entry downloads `rustup-init.exe` on Windows.
+Reporting it upstream is pending a decision.
+
 ## aqua's downloads have no timeout
 
 **Symptom.** A step that runs a tool for the first time on a runner hangs with no output

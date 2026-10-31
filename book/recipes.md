@@ -79,9 +79,10 @@ never on the hermetic PATH.
 
 The consequence, and the point: a recipe behaves identically on every machine that ran
 [machine setup](./tooling.md#machine-setup-limen-install-one-time-per-machine), and
-anything *not* pinned is unusable from a recipe by construction. A toolchain that lives
-outside aqua — a rustup-managed cargo — needs an explicit, documented decision before its
-recipes can work; the Rust one is in [rust](./rust.md).
+anything *not* pinned is unusable from a recipe by construction. A toolchain the registry
+cannot carry whole, a rustup-managed cargo, is pinned by its installer and its toolchain
+file instead, and its recipes install it under `.build/`; the Rust one is in
+[rust](./rust.md).
 
 ## Conventions every shared recipe follows
 
@@ -172,7 +173,9 @@ What each shared module is *for*; mechanics live in the module files:
   (each file's comment names the other). Pure Go by default; CGO is an explicit opt-in that
   adds the hardening flags. On Linux the builds carry `netgo,osusergo`, so a cgo build keeps
   DNS and user lookups out of glibc; on macOS they stay off, since libc is the one road to
-  Open Directory users and to scoped DNS.
+  Open Directory users and to scoped DNS. `just do build rust`: the crate's release
+  binaries for this host, and `build rust targets <triple>…` the cross builds through the
+  pinned zig ([rust](./rust.md)).
 - **`tools`**: the manifest operations (`add`, `set`, `update`, `remove`) that keep
   `.hermetic/hermetic.yaml` and `.hermetic/aqua-checksums.json` changing together
   ([tooling](./tooling.md#day-to-day-changes--the-just-do-tools-recipes)).
@@ -200,7 +203,8 @@ What each shared module is *for*; mechanics live in the module files:
   toolchain whether the host has a race detector and, where it does not (windows/arm64), says
   so and passes rather than fail every push on a Go limitation; `fuzz`, a short smoke of
   every `Fuzz*` target, run by the canonical CI's own `fuzz` job on one leg, not from the
-  `test` aggregate; `cover`, with an optional minimum gate. No default: `just test` is the
+  `test` aggregate; `cover`, with an optional minimum gate. `just do test rust`: `unit`,
+  `cargo test` from the pinned toolchain ([rust](./rust.md)). No default: `just test` is the
   project's aggregate.
 - **`perf`**: the reports that judge nothing, per language. `just do perf go`: `bce` and
   `escape` by default (every bounds check the compiler could not eliminate, every value it

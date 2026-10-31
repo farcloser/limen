@@ -92,8 +92,14 @@ add pkg version="": (_banner "tools" "add")
     fi
     {{ project_aqua }}
     entry=$(project_aqua generate "$pkg")   # the entry at the latest version
+    # An http package with no version source (a local-registry entry that reads
+    # a static host, rustup say) generates with no version at all: the one
+    # given goes on, and none given is an error, not a pin with a hole.
     if [ -n "$version" ]; then
-        entry=$(printf '%s\n' "$entry" | sed "1s#@[^[:space:]]*#@${version}#")
+        entry=$(printf '%s\n' "$entry" | sed "1s#@[^[:space:]]*##; 1s#\$#@${version}#")
+    elif ! printf '%s\n' "$entry" | head -1 | grep -q '@'; then
+        echo "${pkg} lists no versions (an http package): give one, 'just do tools add ${pkg} <version>'." >&2
+        exit 1
     fi
     # The entry goes right above the import, at its indent: the resolver takes a
     # package's first declaration, so below it the entry would be shadowed.
