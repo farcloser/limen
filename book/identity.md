@@ -233,15 +233,13 @@ directory sessions write through the shell.
 '.git/worktrees/<name>': Operation not permitted" for every entry of that repository,
 whatever the session's working directory, while the session has a worktree of its own
 there; the same prune from a session without one succeeds (2026-10-13, saprobe-dsd and
-limen). Two precisions: the exception is the entry of the worktree the session itself
-holds, which it may remove, registry entry included; and the check is made per command, at
-its start, so a command that removes the session's own worktree first and three merged
-ones after it loses the three, since the profile was computed while the first was still
-held (2026-10-31, limen). The harness manages `.claude/worktrees` and keeps its hand on
-the registry it depends on. Prune from a session that holds no worktree in the repository,
-in a command of its own, or leave the stale entries to the human; do not retry from the
-one that does. The refusal comes after
-the damage: `git worktree remove` deletes the working tree first and the registry entry
+limen). The session may remove the worktree it holds, registry entry included. The
+sandbox's write profile is fixed when a command starts, so in a command that removes that
+worktree and then others, the others are refused (2026-10-31, limen). The harness manages
+`.claude/worktrees` and keeps its hand on the registry it depends on. Prune from a session
+that holds no worktree in the repository, in a command of its own, or leave the stale
+entries to the human; do not retry from the one that does. The refusal comes after the
+damage: `git worktree remove` deletes the working tree first and the registry entry
 second, so a removal the sandbox refuses leaves a registered worktree with every tracked
 file gone, which `git status` there shows as a hundred ` D` lines and which looks like the
 `$TMPDIR` sweep below. It is not; the branch and its commits are intact, and `git worktree
