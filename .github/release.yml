@@ -1,11 +1,9 @@
 # DO NOT EDIT MANUALLY: content-pinned by limen, reset on drift.
 #
-# How GitHub writes a release's notes, which are the titles of the pull
-# requests merged since the previous tag (goreleaser's `use: github-native`).
-# The notes say what changed for a consumer and nothing else: a dependency
-# bump and a pull request labelled `internal` (tooling, CI, maintainers'
-# documentation) are left out altogether; the commit log has them. A pull
-# request lands in the FIRST category it matches.
+# How GitHub writes a release's notes, the titles of the pull requests merged
+# since the previous tag (goreleaser's `use: github-native`). Excluded labels
+# and authors are left out of the notes; a pull request lands in the FIRST
+# category it matches.
 changelog:
   exclude:
     labels:
