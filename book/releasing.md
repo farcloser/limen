@@ -105,12 +105,15 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   so each merge forces a rebase on the others. The `changelog:` section of `.release-go.yaml`
   is limen's inside a file otherwise the project's, `use: github-native`, so goreleaser asks
   GitHub for the notes, every pull request merged since the previous tag; without goreleaser,
-  the recipe asks for the same. `.github/release.yml`,
-  content-pinned everywhere, groups them: **Breaking changes** (the `breaking` label),
-  **Changes**, then **Dependencies** (Renovate's pull requests, and any carrying the
-  `dependencies` label). So the title is the release note: it says what changed for a
+  the recipe asks for the same. `.github/release.yml`, content-pinned everywhere, keeps the
+  notes to what changed for a consumer: **Breaking changes** (the `breaking` label), then
+  **Changes**; a dependency bump (Renovate's pull requests, and any carrying the
+  `dependencies` label) and a pull request labelled `internal` are left out altogether, and
+  the commit log has them. So the title is the release note: it says what changed for a
   consumer, not how. A pull request that breaks a consumer (an API removed or changed, a
-  behaviour a caller relied on) carries the `breaking` label; `gh label create breaking` makes
-  it the first time a repository needs one. `limen check` fails a missing or different
+  behaviour a caller relied on) carries the `breaking` label; one that changes nothing for a
+  consumer, a tooling or CI change, a limen bump by hand, documentation for maintainers,
+  carries `internal`; `gh label create breaking` and `gh label create internal` make them
+  the first time a repository needs them. `limen check` fails a missing or different
   `changelog:` section and a drifted `release.yml`; `limen fix` sets the one and resets the
   other.

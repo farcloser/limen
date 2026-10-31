@@ -41,8 +41,10 @@ chapter; the procedure is limen's `skills/contribute`.
   nowhere else in the tree.
 - **The pull request's title is its release note.** A release's notes are the titles of
   the pull requests it merged, so a title says what changed for a consumer; no
-  `CHANGELOG.md` is kept by hand. One that breaks a consumer carries the `breaking` label
-  (`gh label create breaking` the first time a repository needs it).
+  `CHANGELOG.md` is kept by hand. One that breaks a consumer carries the `breaking` label;
+  one that changes nothing for a consumer (tooling, CI, maintainers' documentation) carries
+  `internal` and is left out of the notes (`gh label create breaking` and
+  `gh label create internal` the first time a repository needs them).
 - **A pull request is read by someone who was not in the session.** Its description says
   what changes and why in the terms of the code: the defect or the gap, the mechanism, the
   evidence it works. A decision appears as its technical reason; who asked, who decided and
