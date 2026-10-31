@@ -63,10 +63,27 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     for it, and a long-lived Apple certificate does not belong in lanes that are keyless
     otherwise. One exception by necessity: a binary that needs an Apple entitlement to run
     at all (ossein and Virtualization.framework) is signed ad hoc with that entitlement at
-    build, which grants the entitlement and claims no identity. The identity lives in the
-    repository's release workflow as the secrets Taciturn's documents (a `.p12` imported
-    into a keychain the job creates and deletes), never in the tree; notarization adds an
-    App Store Connect API key the same way.
+    build, which grants the entitlement and claims no identity.
+  - **A signing credential is an environment secret, held by one job that publishes
+    nothing.** The Developer ID `.p12` and its password, the App Store Connect API key, a
+    provisioning profile: each is a secret of a `release` environment, never of the
+    repository or the organisation. GitHub hands a repository secret to any workflow run in
+    the repository's own context that references it, so every account with write access
+    (a bot, an app, Renovate) could push a branch whose workflow prints the certificate, and
+    masking is defeated by re-encoding. The environment admits release tags only (`v*`) and
+    names the human as its required reviewer, so no run holds the credential without the
+    human's click on that run. The job that holds it (`environment: release`) runs the
+    pinned toolchain and the platform's own tools with a read-only token, imports the
+    certificate into a keychain it creates, signs, and notarizes and staples what
+    Gatekeeper evaluates, then removes the keychain and the key; no action from outside the
+    repository runs while the credential exists (checkout before the import, the artifact
+    upload after the removal, and the removal is the job's own step, `if: always()`, since
+    a composite action cannot clean up after itself). It hands the signed artifacts to a
+    second job as a run artifact. That second job holds no Apple
+    secret: it verifies what arrived (the signature's chain to Developer ID, the stapled
+    ticket, `stapler validate`) and runs goreleaser, cosign and the attestation. The
+    installer asserts the same chain and ticket again on the user's machine. Nothing about
+    the credential lives in the tree.
   - **What is deliberately not done**: no notarization of command-line binaries, no SBOM for
     a repository without artifacts (its release is the signed tag), no signature of the
     source archive GitHub generates (it is not a release asset of ours).
