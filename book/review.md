@@ -167,6 +167,17 @@ a red the author cannot fix is
 either a redesign, back in the worktree, or environmental, which the reviewing session says
 to the project manager as `bypass-safe: <org/repo> <branch> <sha> <run URL>`.
 
+A trivial documentation-only pull request does not go to the reviewing session: it goes to
+the project manager, which reviews it, logs it and arms it. Trivial is prose alone and
+nothing decided in it: a typo, a wrap, a stale link or name, a sentence restating a fact the
+book already holds. A change that touches code, configuration, a workflow or a test goes to
+the reviewing session, and so does a documentation change that is not trivial: a new rule, a
+changed meaning, a chapter rewritten, a claim a reader would act on. A line that states a
+fact about an artifact or a mechanism, a release, a signature, a command's behaviour, is a
+claim, and when the project manager cannot verify it itself, that is doubt. In doubt, the
+reviewing session; the cost of a needless review is a turn, the cost of a skipped one is a
+wrong rule in the book.
+
 Renovate's pull requests are the one review on GitHub: the project manager sweeps them to
 the reviewing session, which reviews each ([dependency bumps](#dependency-bumps)), approves
 it and arms auto-merge (`gh pr merge --auto --merge`); the preset rebases a bump on every
