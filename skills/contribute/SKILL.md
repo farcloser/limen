@@ -150,6 +150,7 @@ the head is the one to open; any other head is refused downstream.
 
 ```
 git push origin claudio/<date>-<topic>               # plain git, as every command (step 2.1)
+# the title is the release note; add --label internal when nothing changes for a consumer (AGENTS.md)
 gh pr create --base main --head claudio/<date>-<topic> --title "…" --body "…"
 ```
 

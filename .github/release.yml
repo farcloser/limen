@@ -1,22 +1,22 @@
 # DO NOT EDIT MANUALLY: content-pinned by limen, reset on drift.
 #
-# How GitHub groups a release's notes, which are the titles of the pull
+# How GitHub writes a release's notes, which are the titles of the pull
 # requests merged since the previous tag (goreleaser's `use: github-native`).
-# A pull request lands in the FIRST category it matches, so the catch-all
-# must exclude what a later category claims.
+# The notes say what changed for a consumer and nothing else: a dependency
+# bump and a pull request labelled `internal` (tooling, CI, maintainers'
+# documentation) are left out altogether; the commit log has them. A pull
+# request lands in the FIRST category it matches.
 changelog:
+  exclude:
+    labels:
+      - dependencies
+      - internal
+    authors:
+      - renovate[bot]
   categories:
     - title: Breaking changes
       labels:
         - breaking
     - title: Changes
-      labels:
-        - '*'
-      exclude:
-        labels:
-          - dependencies
-        authors:
-          - renovate[bot]
-    - title: Dependencies
       labels:
         - '*'
