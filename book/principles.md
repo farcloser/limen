@@ -18,6 +18,17 @@ chapter of its own holds it; the links say where.
   difference) grows no export outside it because a caller wanted a home for a platform
   split: the caller keeps its helper private, or the thing goes where its general meaning
   lives.
+- **Knowledge flows from a provider to its consumers, never back.** A provider — a
+  library, a tool, a shipped configuration — defines a contract and knows nothing of who
+  holds it: not their identity, their layout or their reasons. What a consumer needs from
+  the provider is a property of the contract, offered on the provider's own terms and
+  usable by any consumer; everything specific to one consumer lives in that consumer. The
+  test is not whether a name appears but whether the provider's correctness depends on
+  something that exists only on a consumer's side: a path convention, a default value, an
+  ordering assumption, a comment explaining one caller's needs, a test that passes only
+  because of how one consumer calls. If removing every consumer leaves the provider making
+  less sense, the dependency points the wrong way, however it is expressed and whoever
+  proposed it.
 - **Tests are black-box, never bought with indirection.** A test reaches only what a
   consumer reaches; production code grows no seam whose only purpose is a test's fake. A
   property no test can observe gets no test

@@ -187,7 +187,9 @@ chapter; the procedure is limen's `skills/contribute`.
   package A states A's guarantee, never what B does with it; a wrapper with a stated
   contract grows no export outside it because a caller wanted a home for a helper. A bug
   reported to the owning session earns the guarantee and the version that carries it, not
-  a say in the owner's tests.
+  a say in the owner's tests. The provider knows nothing of its consumers: what one needs
+  is offered as a property of the contract any consumer can use, never as that consumer's
+  name, path or variable in the provider.
 - **Tests are black-box, never bought with indirection.** External test package
   (`package foo_test`), no reach into private state, and no interface, function field, or
   other indirection in production code whose only purpose is a test's fake: that is bad
