@@ -6,6 +6,8 @@ tooling. One chapter per file, each readable on its own; a chapter holds what ap
 every language, and a sub-document holds one language's form.
 
 - **[Principles](./principles.md)**: what we value above all. Read first.
+- **[Writing](./writing.md)**: every line beside the code states what is true, plainly; who
+  reads it, and what is sent back.
 - **Working together**: how a change travels from a branch to `main`.
   - [Identity and keys](./identity.md): who a contributor is, human or bot, and the key that
     proves it; what to do when a token is lost.
