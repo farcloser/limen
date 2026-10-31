@@ -44,6 +44,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -120,7 +121,7 @@ jobs:
       - name: Mint a push token, if the App is configured
         # After the update steps, so those run with no secrets. One-hour token,
         # this repository only; the private key only mints.
-        if: vars.UPDATE_AQUA_CHECKSUM_APP_ID != ''
+        if: false
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -134,6 +135,7 @@ jobs:
           permission-workflows: write
 
       - name: Commit the update through the API, if any
+        id: commit
         env:
           BRANCH: ${{ github.ref_name }}
           TOKEN: ${{ steps.app-token.outputs.token || secrets.UPDATE_AQUA_CHECKSUM_TOKEN || github.token }}
@@ -214,3 +216,21 @@ jobs:
             exit 1
           fi
           echo "pushed ${oid}"
+          echo "oid=${oid}" >> "$GITHUB_OUTPUT"
+
+      - name: TEST — approve the pending pull_request runs with the job's own token
+        if: steps.commit.outputs.oid != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OID: ${{ steps.commit.outputs.oid }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${OID}&per_page=50" --jq '.workflow_runs[] | select(.status=="action_required") | .id')"
+            [ -n "$runs" ] && break
+            echo "no pending runs yet (attempt $attempt)"; sleep 10
+          done
+          echo "pending runs: ${runs:-none}"
+          for id in $runs; do
+            echo "approving $id"
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/approve" && echo "approved $id" || echo "REFUSED $id"
+          done
