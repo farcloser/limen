@@ -330,7 +330,8 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 		"POST app-manifests/test-code/conversions": {
 			Body: `{"id":7,"slug":"limen-test-org","pem":"PRIVATE-KEY-PEM","html_url":"https://github.com/apps/limen-test-org"}`,
 		},
-		"POST orgs/test-org/actions/variables": {Body: `{}`},
+		"POST orgs/test-org/actions/variables":                           {Body: `{}`},
+		"secret set UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY --org test-org": {},
 		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"installations":[{"app_id":7,"permissions":{"contents":"write","workflows":"write"}}]}`,
 		},
