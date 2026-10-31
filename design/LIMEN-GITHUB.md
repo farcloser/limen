@@ -1,17 +1,15 @@
 # LIMEN-GH — GitHub organization & repository configuration as a limen rule set
 
-Status: phases 1 + 2 (repo level, check + fix) implemented in full —
-`limen github check` / `limen github fix` cover R1, R2, R3, R4, R5, and R6's
-advisory surface, with the override file (exemptions *and* opt-ins), the four
-verdict classes, plan-then-apply consent, and the gh transport behind a test
-seam. The former v1 omissions were closed 2026-07-04 against the verified
-OpenAPI shapes: fork-PR approval (floor: all first-time contributors),
-Actions access level (private repositories; floor "none"), the outside-
-collaborators advisory (elevated access, first-100 stated), code scanning as
-a true opt-in (requiring, never exempting), and required status checks in
-`limen:main` — contexts are project-owned and preserved on reconcile, with
-the canonical CI matrix as the fresh-create default. Phases 3 (org) and 4
-(scheduled audit) remain unimplemented.
+Status: **built, through the organisation level.** `limen github check` and `limen github
+fix` audit a repository (R1–R7) and an organisation (O1–O7) against the embedded floor,
+with the override file, the four verdict classes and plan-then-apply consent; the
+human-facing statement is the book's [GitHub chapter](../book/github.md), which wins
+where the two differ. This document is kept for the catalog: the R and O numbering is
+the key the code's check identifiers and the open issues use. The issues: what the
+catalog names and the code does not have,
+https://github.com/farcloser/limen/issues/508; the scheduled drift audit and the org
+rulesets migration, https://github.com/farcloser/limen/issues/507; the exact fine-grained
+permission set, https://github.com/farcloser/limen/issues/509.
 
 ## Why
 
@@ -19,12 +17,12 @@ Repository and organization *settings* are the most ignored half of engineering 
 they live behind a web UI, drift when humans click, gate real security properties
 (who can push a `v*` tag; whether a workflow token can write; whether a leaked secret
 gets blocked), and are enforced today by tribal memory. That is exactly the gap the
-limen doctrine exists for: **every rule written, verifiable, enforceable** — currently
-true for files in the tree, false for the platform that hosts them.
+limen doctrine exists for: **every rule written, verifiable, enforceable** — true for
+files in the tree, and with this command for the platform that hosts them.
 
-The end state: `limen github check` and `limen github fix` do for GitHub state what
-`limen check`/`limen fix` do for files — judge live settings against a canonical,
-embedded baseline; repair what is safe to repair; report the rest as advisories.
+`limen github check` and `limen github fix` do for GitHub state what `limen check` and
+`limen fix` do for files — judge live settings against a canonical, embedded baseline;
+repair what is safe to repair; report the rest as advisories.
 
 ## Design
 
@@ -54,36 +52,28 @@ limen github fix   [--repo owner/name | --org name [--all-repos]] [-json] [--yes
 
 ### Transport: `gh`, not tokens
 
-limen shells out to the aqua-pinned `gh` (`gh api …`) exactly like it shells to `aqua`
-and `git` today. Rationale: `gh auth` owns identity (keychain, SSO, fine-grained
-tokens), limen never stores or even sees a credential, and the same invocation works on
-a laptop and in CI (`GH_TOKEN` env). The seam is one package-level `ghBin` variable —
-the `aquaBin` test-stub pattern — so the entire rule set is testable against recorded
-JSON fixtures without a network.
+limen shells out to the `gh` on the hermetic PATH (`gh api …`). `gh auth` owns identity
+(keychain, SSO, fine-grained tokens), limen never stores or even sees a credential, and
+the same invocation works on a laptop and in CI (`GH_TOKEN` env). The tests put a stub
+`gh` first on PATH, so the rule set is tested against canned responses without a network.
 
 ### The baseline: floor semantics, embedded, arguable
 
 Desired state is an embedded canonical baseline (Go data, like the embedded files — the
 source of truth reviewed in this repo), interpreted as a **floor**: a repository may be
-*stricter* than the baseline, never looser. Examples: baseline says "squash merges
-allowed, merge commits disallowed" — a repo that disallows squash too is compliant;
-baseline says "secret scanning on" — off fails, on-plus-push-protection passes even if
-the baseline is silent on push protection. Settings the baseline does not name are not
+*stricter* than the baseline, never looser. Example: baseline says "secret scanning on"
+— off fails, on-plus-push-protection passes even if the baseline is silent on push
+protection. Settings the baseline does not name are not
 judged (a repo's description is its own business; whether *some* description exists is
 checkable).
 
-Per-repo deviations that must be legal (a repo that genuinely needs wikis) get the same
-treatment as `LINT_GO_LICENSES_FLAGS`: an explicit, committed override file —
-`.lint-github.yaml` at the repository root (relocated from
-`.github/limen-github.yaml` to a sectioned root `limen.yaml` on 2026-07-06, then
-to its own file on 2026-09-29, named for its lane like `.lint-go.yaml`) — that is
-a **delta, exceptions only**, never a full
-settings copy. Each entry names the setting and carries a required reason:
+Per-repo deviations that must be legal (a repo that genuinely needs wikis) are an
+explicit, committed override file, `.lint-github.yaml` at the repository root, named
+for its lane like `.lint-go.yaml`: a **delta, exceptions only**, never a full settings
+copy. Each entry is a check identifier and its required reason, one line:
 
 ```yaml
-wiki:
-  enabled: true
-  reason: hosts the operations runbook
+wiki: hosts the operations runbook
 ```
 
 `limen github check` reports a listed deviation as compliant-with-exception (visible,
@@ -116,63 +106,8 @@ rule's phrasing, and silently skipping unqueryable settings would fake complianc
 - Fixes are minimal PATCHes (only the non-compliant fields), idempotent, and re-checked
   after application (same pattern as `remediateAqua`'s post-check).
 - Drift direction matters: settings drift *back* when humans click. The companion is a
-  scheduled audit workflow (weekly `limen github check` in CI, failing loudly) — phase 4.
-
-## Competition review
-
-Read for this plan (READMEs/docs fetched 2026-07-03): `github/safe-settings`,
-`ossf/allstar`, `ossf/scorecard` checks, the Terraform GitHub provider's resource list;
-peribolos from prior knowledge (its README no longer ships in-tree).
-
-**safe-settings** (GitHub app, org-hosted). Settings-as-code with org → suborg → repo
-inheritance; covers repo settings, default branch, topics, custom properties, teams,
-collaborators, labels, milestones, branch protections, autolinks, rulesets,
-environments, repo-name validation; can force-create repos from templates; syncs on
-schedule and on PR ("dry-run in PR" comparing proposed config to live state).
-*Take:* the coverage list itself (environments and autolinks were not on my radar);
-inheritance precedence ideas for org-vs-repo baselines; the PR-time dry-run as a future
-nicety. *Reject:* hosting a Probot app and handing it org-admin — limen's model is a
-binary a human (or CI) runs; and safe-settings *replaces* state ("the config is truth"),
-where limen wants floor semantics with explicit overrides.
-
-**Allstar** (OpenSSF app). Continuous policy enforcement with opt-in/opt-out strategy;
-policies: branch protection (with fix), binary artifacts, CODEOWNERS presence, outside
-collaborators with admin/push, SECURITY.md presence, dangerous workflow patterns,
-generic scorecard threshold, GitHub Actions allowlist, repository administrators; acts
-by filing issues (or fixing). *Take:* the policy set maps almost 1:1 onto our repo
-catalog; "action on violation = file an issue" is a good CI-adjacent alternative to
-failing a build; opt-out-with-reason mirrors our override file. *Reject:* app hosting;
-issue-spam as the primary UX.
-
-**Scorecard** (OpenSSF CLI). Heuristic *audit* (0–10 scores), not enforcement:
-branch protection, token permissions in workflows, dangerous workflows, pinned
-dependencies, binary artifacts, security policy, signed releases, packaging, SAST,
-fuzzing, maintained, code review, contributors, vulnerabilities, webhooks (secret set),
-SBOM, license, CI tests, dependency-update tool. *Take:* check ideas that read the
-*content* of workflows (token-permissions, dangerous-workflow, unpinned actions) — our
-workflow files are content-pinned so we get this for free where the baseline ships them,
-but the checks matter for repos with extra workflows; webhook-secret and signed-release
-checks. *Reject:* scoring — limen rules are booleans with reasons, not weighted grades.
-
-**peribolos** (Kubernetes). Org config-as-code: org metadata, member/admin rosters,
-teams (members, maintainers, privacy), team repo permissions; deliberately nothing at
-the repo-settings level. *Take:* the org-level catalog shape, and its hard-won lesson
-that people-management needs explicit "confirm before removing humans" semantics (it
-requires opting into destructive membership changes). *Reject:* rosters-in-YAML as v1
-scope — inventory/audit first, management maybe never (small org).
-
-**Terraform provider** (88 resources). The completeness map — its resource list is
-effectively GitHub's writable-settings API enumerated: actions permissions (org/repo),
-workflow permissions, runner groups, rulesets (org/repo), custom properties,
-dependabot/actions/codespaces secrets at all scopes, environments, deploy keys,
-webhooks, custom roles, security managers, organization settings, autolinks…
-*Take:* used as the checklist to make the catalogs below exhaustive. *Reject:* the tool
-itself — Terraform state + HCL + apply lifecycle is the heavyweight IaC posture limen
-exists to avoid; and it has no notion of "floor" (it owns what it manages).
-
-**Positioning:** limen-gh = Allstar's policy set + safe-settings' coverage, delivered as
-scorecard-style tooling (a CLI you run), with limen's floor semantics and check/fix
-UX, no hosted app, no state file, `gh` as the only credential surface.
+  scheduled audit workflow (`limen github check` on a cadence, failing loudly), not built:
+  https://github.com/farcloser/limen/issues/507.
 
 ---
 
@@ -183,7 +118,10 @@ Scope column = minimal token capability (classic scope names; fine-grained equiv
 exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read,
 `/actions/permissions` auth-gated, `security_and_analysis` on the repo object).
 
-### R1 — Security & analysis (highest value, v1)
+Each section ends with what the code has, by check identifier (`internal/github`), and
+what it does not, which https://github.com/farcloser/limen/issues/508 decides row by row.
+
+### R1 — Security & analysis
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
@@ -194,7 +132,10 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Private vulnerability reporting | enabled (public repos) | ✓ | `PUT /repos/{o}/{r}/private-vulnerability-reporting` |
 | Code scanning default setup | **not required** (decided: our SAST posture is gosec + staticcheck via golangci and govulncheck, per platform; CodeQL's marginal catch is taint-flow analysis, which matters for network/parser-heavy services — revisit if we ship one; repos may opt in via the override file) | ✓ when opted in | `PATCH /repos/{o}/{r}/code-scanning/default-setup` |
 
-### R2 — Actions hardening (v1)
+Built: `secret-scanning`, `secret-scanning-push-protection`, `dependabot-alerts`,
+`dependabot-security-updates`, `private-vulnerability-reporting`, `code-scanning`.
+
+### R2 — Actions hardening
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
@@ -206,11 +147,15 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Artifact/log retention | ≤ 90 days (org default usually fine) | ✓ | part of org/repo actions settings |
 | Workflow content sanity (extra, scorecard-inspired) | no `pull_request_target` + checkout-of-head, no unpinned third-party `uses:`, no `permissions:` absent at workflow level | — (**decided**: these are tree checks — they go into the existing file-rule engine, not limen github) | tree scan |
 
-### R3 — Merge & branch workflow (v1)
+Built: `actions-workflow-permissions`, `actions-approve-pull-requests`, `actions-allowed`,
+`actions-fork-pr-approval`, `actions-access-level`. Not built: retention; the
+workflow-content checks are tree checks for the file-rule engine, not this command.
+
+### R3 — Merge & branch workflow
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
-| Merge methods | **decided**: rebase + squash allowed, merge commits disallowed — linear history: every main commit bisectable and revertable as a unit, DCO survives rebase (goes in the book with implementation) | ✓ | `PATCH /repos/{o}/{r}` |
+| Merge methods | merge commits allowed, linear history not required (book/github.md: GitHub's rebase merge recreates commits unsigned, squash collapses a pull request, so the merge commit is the one method that keeps a reviewed history) | ✓ | `PATCH /repos/{o}/{r}` |
 | Squash commit message default | PR title + body | ✓ | same |
 | Delete branch on merge | true | ✓ | same |
 | Auto-merge allowed | true (pairs with Renovate) | ✓ | same |
@@ -219,16 +164,23 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Default branch name | `main` | adv (rename is disruptive) | `PATCH /repos/{o}/{r}` / rename endpoint |
 | Web commit sign-off required | true (DCO enforcement for UI edits — complements `lint commits`) | ✓ | `PATCH /repos/{o}/{r}` (`web_commit_signoff_required`) |
 
-### R4 — Rulesets (v2: the write model is richer)
+Built: every row (`merge-methods`, `squash-commit-defaults`, `delete-branch-on-merge`,
+`auto-merge`, `renovate-processing`, `update-branch-suggestions`, `default-branch`,
+`web-commit-signoff`).
+
+### R4 — Rulesets
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
-| Default-branch ruleset exists & active | **decided**: PRs required, always, no exceptions (0 required approvals is acceptable while solo — the PR is the audit trail and the CI gate); required status checks = the ci.yaml jobs; block force pushes & deletion; linear history (per the merge doctrine) | ✓ (create/reconcile a canonical ruleset by name, e.g. `limen:main`) | `POST/PUT /repos/{o}/{r}/rulesets` |
+| Default-branch ruleset exists & active | PRs required, always, no exceptions (0 required approvals is acceptable while solo — the PR is the audit trail and the CI gate); required status checks = `gate` (and `security` where the workflow exists); signatures required; block force pushes & deletion; no linear history (per the merge doctrine) | ✓ (`limen:main`, reconciled by name) | `POST/PUT /repos/{o}/{r}/rulesets` |
 | `v*` tag ruleset | creation/update/deletion restricted to maintainers + the release flow (the tag push is the release button — the once-manual ruleset chore, mechanized) | ✓ (`limen:tags`) | same |
 | Legacy branch-protection absent | rulesets are the one mechanism (no drift between two systems) | adv | `GET /repos/{o}/{r}/branches/{b}/protection` |
 | Bypass lists | empty or named-in-baseline only | ✓ | ruleset payload |
 
-### R5 — Features & metadata (v1, low stakes)
+Built: `ruleset-default-branch`, `ruleset-version-tags`, bypass actors included. Not
+built: legacy branch protection absent.
+
+### R5 — Features & metadata
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
@@ -240,7 +192,10 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 | Pages | off unless override | adv | `GET /repos/{o}/{r}/pages` |
 | Forking allowed (private repos) | false | ✓ | `PATCH /repos/{o}/{r}` (`allow_forking`) |
 
-### R6 — Access & credential surface (audit-only, v2)
+Built: `description`, `topics`, `issues`, `wiki`, `projects`, `discussions`, `pages`,
+`forking`. Not built: template flag, archived state, visibility as declared.
+
+### R6 — Access & credential surface (audit-only)
 
 All advisory: these are people and credentials.
 
@@ -253,21 +208,24 @@ All advisory: these are people and credentials.
 | Repo secrets inventory | named in override (existence, never values) | `GET /repos/{o}/{r}/actions/secrets` |
 | App installations touching this repo | subset of org-approved list | `GET /repos/{o}/{r}/installation` (app-scoped) / org view |
 
+Built: `outside-collaborators`, `deploy-keys`, `webhooks`. Not built: environments,
+the secrets inventory, app installations.
+
 ### R7 — Community health (mostly existing limen file rules)
 
 CODEOWNERS, SECURITY.md, issue/PR templates, CONTRIBUTING: these are *files*, so they
 belong to the existing rule engine (candidate new mandatory-file rules), not the gh
 API — with one twist: GitHub falls back to the **org `.github` repository** for all of
-them. Decision proposed below (O7): keep per-repo `README`/`LICENSE` mandatory as today,
-put SECURITY.md, CONTRIBUTING, and templates in the org `.github` fallback once, and
-have `limen github check --repo` verify the *effective* value (repo file or org fallback)
-via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side).
+them. Decided (O7): per-repo `README`/`LICENSE` stay mandatory, SECURITY.md,
+CONTRIBUTING and the templates live in the org `.github` fallback once. Built at the org
+(`org-community-health-repo`, `org-community-health-content`). Not built: the
+*effective* value per repository through `GET /repos/{o}/{r}/community/profile`.
 
 ---
 
 ## Org-level catalog
 
-### O1 — Authentication & membership floor (v3)
+### O1 — Authentication & membership floor
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
@@ -279,7 +237,13 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 | Pages creation | restricted | ✓ | same |
 | Default repo permission audit: owners list | named set (peribolos-style roster, inventory only) | adv | `GET /orgs/{o}/members?role=admin` |
 
-### O2 — Org-wide Actions policy (v3)
+Built: every row (`org-two-factor-requirement`, `org-default-repository-permission`,
+`org-members-create-public-repositories`, `org-members-fork-private-repositories`,
+`org-members-change-repository-visibility`, `org-members-delete-repositories`,
+`org-members-create-public-pages`, `org-admins`), the visibility and deletion floors as
+advisories since the REST API reads them and does not write them.
+
+### O2 — Org-wide Actions policy
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
@@ -290,7 +254,12 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 | Fork PR approval | required | ✓ | org actions settings |
 | Self-hosted runners / runner groups | none (inventory advisory if any appear) | adv | `GET /orgs/{o}/actions/runner-groups` |
 
-### O3 — Org security defaults (v3)
+Built: every row (`org-actions-enabled-repositories`, `org-actions-allowed`,
+`org-actions-sha-pinning`, `org-actions-workflow-permissions`,
+`org-actions-approve-pull-requests`, `org-actions-fork-pr-approval`,
+`org-actions-self-hosted-runners`).
+
+### O3 — Org security defaults
 
 | Check | Baseline (floor) | Fix | API |
 |---|---|---|---|
@@ -299,7 +268,10 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 | Dependabot security updates in every org-owned configuration | **disabled** — the org half of R1: while a configuration says `enabled`, the repository-level `DELETE /automated-security-fixes` answers 422, so the repo check cannot reach the floor on its own. Disabled at the org, not `not_set`: unsetting merely unlocks the repo toggle and every repository created later is born enabled again. Configurations this org does not own (`target_type` `global`/`enterprise`) are advisory — detaching is a human act | ✓ | `PATCH /orgs/{o}/code-security/configurations/{id}` |
 | Security manager team | defined if org grows beyond one human | adv | `PUT /orgs/{o}/security-managers/teams/{t}` |
 
-### O4 — Org surface audits (advisory, v3)
+Built: `org-code-security-configuration` (advisory: creating one is a human act),
+`org-dependabot-security-updates` (with its fix). Not built: the security-manager team.
+
+### O4 — Org surface audits (advisory)
 
 | Check | Baseline | API |
 |---|---|---|
@@ -311,7 +283,11 @@ via `GET /repos/{o}/{r}/community/profile` (which resolves fallbacks server-side
 | Teams & grants | inventory (peribolos territory; management out of scope while the org is one person) — plus the one asserted grant: the `agents` team exists, has members, and holds write on every non-archived repository; fix grants the missing ones | `GET /orgs/{o}/teams`, `/teams/agents/repos`, `/teams/agents/members`, `PUT /orgs/{o}/teams/agents/repos/{o}/{r}` |
 | Custom properties schema | reserved for future repo classification (safe-settings uses these well) | `/orgs/{o}/properties/schema` |
 
-### O5 — Org rulesets (v3, powerful)
+Built: `org-installed-apps`, `org-renovate-installed`, `org-webhooks`,
+`org-actions-secrets`, `org-personal-access-tokens`, `org-teams`, `org-agents-team`. Not
+built: the custom properties schema.
+
+### O5 — Org rulesets
 
 Org-level rulesets apply protections across repos by name/property patterns — the
 org-wide successor to per-repo R4. Once trusted, migrate `limen:main`/`limen:tags` from
@@ -320,12 +296,17 @@ per-repo reconciliation to **one org ruleset each**, and the per-repo check redu
 on free-plan private repos is limited — public repos and paid plans fine; the check
 must classify accordingly, `unverifiable`/plan-gated rather than fail.)
 
-### O6 — Org profile & metadata (v3, low stakes)
+Not built: https://github.com/farcloser/limen/issues/507, with the scheduled audit.
+
+### O6 — Org profile & metadata
 
 Display name, description, email, URL, verified domains (adv), sponsor settings (adv) —
 `PATCH /orgs/{o}` for the fixable subset; mostly advisory prose.
 
-### O7 — The org `.github` repository (v3 — the fallback mechanism, explicitly in scope)
+Built: `org-profile-description`, `org-web-commit-signoff`. Not built: email, URL,
+verified domains, sponsorship.
+
+### O7 — The org `.github` repository (the fallback mechanism, explicitly in scope)
 
 GitHub resolves several files from an org-level `.github` repo when a repo lacks its
 own: community health files (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
@@ -353,89 +334,57 @@ Proposed use — high leverage, pure limen-shape:
 `limen github check --org` gains: `.github` repo exists, is public, passes `limen check`,
 carries the canonical fallback set.
 
-Timing (decided): the repo itself is created **opportunistically, now-ish** — it is just
-a repo limen already knows how to bootstrap, and the SECURITY.md / profile-README value
-is immediate. Only the *automated checks* of it wait for phase 3.
+Built: points 1 and 2 (`org-community-health-repo`, `org-community-health-content`;
+`farcloser/.github` and `forkcloser/.github` exist and pass `limen check`). Not built:
+point 3, the workflow templates.
 
 ---
-
-## Phasing
-
-| Phase | Scope | Ships when |
-|---|---|---|
-| 1 | `limen github check --repo`: R1 + R2 + R3 + R5 (read-only), verdict classes, `gh` transport + fixtures | first |
-| 2 | `limen github fix --repo` (plan/apply) for R1/R2/R3/R5 ✓-items; R4 rulesets check+fix; R6 audits | after 1 settles |
-| 3 | `-org`: O1–O7, incl. the `.github` repo work and community-profile resolution | **shipped 2026-07-06** (O3 partly fixable — one check verifies a default code-security configuration exists, advisory because creating one is a human act; a second asserts that no org-owned configuration enables Dependabot security updates, with the PATCH as its fix; O5 stays in phase 4 per this table; the visibility/deletion member floors are read-only in the REST API and report as advisories) |
-| 4 | Scheduled drift audit (weekly workflow running `limen github check`, failing loudly); org rulesets migration (O5); PR-time dry-run à la safe-settings | last |
 
 ## Auth & scopes
 
 | Mode | Token | Notes |
 |---|---|---|
-| `check --repo` (public) | none-to-minimal | much of R3/R4/R5 is public-readable; R1/R2 need `repo`/fine-grained Administration:read — below that, findings degrade to `unverifiable`, never `ok` |
+| `check --repo` (public) | none-to-minimal | much of R3/R4/R5 is public-readable; R1/R2 need repository administration read — below that, findings degrade to `unverifiable`, never `ok` |
 | `check --org` | `read:org` + admin-read equivalents | 2FA/member-privilege fields require org owner tokens |
-| `fix --repo` | fine-grained: Administration:write on the repo | narrowest that works; document the exact fine-grained permission set in the book chapter |
-| `fix --org` | org owner | rare, deliberate, never in CI initially |
+| `fix --repo` | fine-grained: administration write on the repository | the exact per-check permission set is https://github.com/farcloser/limen/issues/509 |
+| `fix --org` | org owner | rare, deliberate, never in CI |
 
-CI usage note: the default `GITHUB_TOKEN` cannot read most of R1/R2 — the scheduled
-audit workflow needs a fine-grained PAT or GitHub App, which is the same decision
-already pending for `UPDATE_AQUA_CHECKSUM_TOKEN`; solve once, reuse.
+The scheduled audit (issue 507) cannot run on the default `GITHUB_TOKEN`, which reads
+little of R1/R2: it extends the update App of decision 8 with the admin-read permissions
+rather than minting a second identity.
 
-## Decisions (2026-07-03)
+## Decisions
 
-1. **Merge doctrine**: rebase + squash, merge commits disallowed, linear history —
-   confirmed as the 2026 posture for this org (bisectable/revertable main, DCO survives
-   rebase); to be written into the book alongside implementation.
+1. **Merge doctrine**: merge commits allowed, linear history not required. The first
+   version of this document decided the reverse (rebase + squash, linear history), which
+   lost to a GitHub constraint: a rebase merge recreates commits unsigned, so a branch
+   requiring signatures loses that button, and squash collapses a multi-commit pull
+   request; the merge commit is the one method that keeps a reviewed history. Stated in
+   [book/github.md](../book/github.md), which the code enforces (`allow_merge_commit`
+   required, `required_linear_history` forbidden).
 2. **Code scanning**: not required. Our SAST posture is gosec + staticcheck (golangci,
    per platform) + govulncheck; CodeQL's marginal value (taint-flow) applies to
    network/parser-heavy services we do not currently ship. Opt-in via the override file;
    revisit when that changes.
 3. **PRs on main**: mandatory, always, no exceptions — with 0 required approvals
    acceptable while the org is solo. The PR is the audit trail and the CI gate.
-4. **Override file**: delta-only with required reasons, as specified above.
-   Amended 2026-07-06: consolidated to root `limen.yaml` (`github:` section) — the
-   single project-owned declarations file for everything limen judges.
-   Amended 2026-09-29: `.lint-github.yaml`, entries at top level — the other
-   judgments grew their own files (`.lint-go.yaml`, `.lint-links.toml`), so this
-   one has its own too.
+4. **Override file**: `.lint-github.yaml` at the repository root, flat `check: reason`
+   lines, exceptions only. It moved twice (`.github/limen-github.yaml`, a sectioned root
+   `limen.yaml`) before the other judgments grew their own files (`.lint-go.yaml`,
+   `.lint-links.toml`) and this one took the same shape.
 5. **Command name**: `limen github`, never `limen gh` — per the naming doctrine (no
    shorthand, no abbreviations; explicit qualified names readable without a syllabus),
-   now recorded in book/recipes.md. `gh` remains only the *transport binary's* name.
+   recorded in book/recipes.md. `gh` remains only the *transport binary's* name.
 6. **Workflow-content checks** (token permissions, dangerous triggers, unpinned uses):
-   folded into the existing file-rule engine — they are tree checks, not API checks.
-7. **`farcloser/.github`**: created opportunistically now; automated org-side checks of
-   it remain phase 3.
-8. **Bump-PR push credential** (added 2026-07-07): GitHub App over fine-grained PAT for
-   the `update-aqua-checksum` push — per-run one-hour repo-scoped tokens, org-owned,
+   tree checks for the file-rule engine, not API checks.
+7. **The org `.github` repository**: a limen-managed repository like any other, carrying
+   the community health fallback; its org-side checks are O7.
+8. **Bump-PR push credential**: a GitHub App over a fine-grained PAT for the
+   `update-aqua-checksum` push — per-run one-hour repo-scoped tokens, org-owned,
    nothing expires on a calendar. Workflow token preference: App
    (`UPDATE_AQUA_CHECKSUM_APP_ID` variable + `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`
    secret) → PAT (`UPDATE_AQUA_CHECKSUM_TOKEN`) → default token. Each org registers its
-   own App — private keys don't travel, so a shared App is structurally impossible;
-   the App is named `limen-ci-<org>` (globally-unique App names force the org suffix),
-   so farcloser's is `limen-ci-farcloser`. This resolves the "solve once, reuse" note
-   above: when the scheduled audit workflow lands, extend the same App with the
-   admin-read permissions instead of minting a second identity. Adopter setup is four
-   UI steps (documented in book/tooling.md). Amended 2026-07-07: automated in
-   `limen bootstrap` (`-org`, or inferred from origin) via the app-manifest flow —
-   pre-filled manifest form on localhost, one browser approval, then
-   `POST /app-manifests/{code}/conversions` yields id + private key, stored as the org
-   variable/secret; installation is the one remaining click, polled for. Idempotent;
-   every state it cannot create or verify (no org admin, headless, half-configured)
-   degrades to a warning, never a failed bootstrap (internal/github/app.go).
-
-## Open questions (decide at review)
-
-1. **Merge doctrine** (R3): squash+rebase/no-merge-commits + linear history is the
-   proposal — confirm, it's currently unwritten anywhere.
-2. **Code scanning** (R1): adopt CodeQL default-setup, or declare golangci+govulncheck
-   our SAST posture and set the baseline to "not required"?
-3. **PR requirement on main** (R4) for a one-person org: PRs required with 0 approvals
-   (audit trail, CI gate) vs direct pushes allowed until contributors arrive?
-4. **Override file** name/shape: `.github/limen-github.yaml`? And is it subset-pinned
-   (exceptions only) — proposed yes.
-5. **Command name**: `limen github` (implies the transport) vs `limen github` (implies the
-   platform). Mild preference: `gh`, it is honest about the dependency.
-6. **R2 workflow-content checks**: fold into the existing file-rule engine now (they are
-   tree checks, not API checks) or keep with limen-gh for cohesion?
-7. **O7 timing**: the `.github` repo could be created much earlier than phase 3 by hand
-   (it is just a repo limen already knows how to bootstrap) — do it opportunistically?
+   own App, named `limen-ci-<org>`; `limen bootstrap` registers it through the
+   app-manifest flow (internal/github/app.go), and every state it cannot create or
+   verify degrades to a warning, never a failed bootstrap. The scheduled audit extends
+   this App rather than minting a second identity.
