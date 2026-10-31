@@ -86,8 +86,8 @@ bare-digest path for every environment; the pin names `registry: local`. The sam
 carries the Windows URL fix below; it retires when both are fixed upstream.
 
 **Lifts when** aqua records an http package's per-runtime checksum under the runtime it
-fetched it for, or the standard registry's entry reads the file by pattern. Reporting it
-upstream is pending a decision.
+fetched it for, or the standard registry's entry reads the file by pattern. Not reported
+upstream, by decision.
 
 ## The standard registry's rustup entry cannot install on Windows
 
