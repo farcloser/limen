@@ -60,9 +60,9 @@ jobs:
           # shellcheck disable=SC1010 # `do` is just's shared-task namespace, not the shell keyword.
           just do release --ci
 
-      # Build provenance for what goreleaser published: every archive and
-      # checksums.txt a subject (the cosign bundle beside them is a signature,
-      # not a subject), so nothing fetched goes unattested: verifiable with
+      # Build provenance for what goreleaser published: every archive, every
+      # SBOM and checksums.txt a subject (the cosign bundle beside them is a
+      # signature, not a subject), so nothing fetched goes unattested: verifiable with
       # `gh attestation verify <asset> --repo <owner>/<repo>` wherever gh is,
       # no cosign needed, which is how a bootstrap verifies the binary it
       # fetches before any tool exists. The cosign bundle over checksums.txt
@@ -76,4 +76,5 @@ jobs:
         with:
           subject-path: |
             .build/release/*.tar.gz
+            .build/release/*.sbom.json
             .build/release/checksums.txt

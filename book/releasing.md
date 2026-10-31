@@ -3,40 +3,73 @@
 A release is a signed tag the human makes, and everything that follows from it. The recipe is
 the interface (`just do release`); this chapter is its rules and its lanes.
 
-- **The recipe is shared; artifacts are opt-in.** `.limen/just/release.just` is imported *flat*
-  into the `do` namespace (hence `just do release vX.Y.Z`; a module invocation could not take
-  the tag argument). Every repository can be released: `just do release vX.Y.Z` verifies a
-  clean tree, creates the *signed* tag and pushes it. For a repository without a
+- **The recipe is shared; artifacts are opt-in.** `.limen/just/release.just` is imported
+  *flat* into the `do` namespace (hence `just do release vX.Y.Z`; a module invocation could
+  not take the tag argument). Every repository can be released: `just do release vX.Y.Z`
+  verifies a clean tree, creates the *signed* tag and pushes it. For a repository without a
   `.release-go.yaml` — a Go module, a tap, a configuration — that signed tag **is** the
   release: Go's module proxy, Renovate and `go get` all read it. **Every tag has a release
   page**, so the recipe then creates it (`gh release create --verify-tag --generate-notes`,
   through the pinned `gh` and the human's own auth), with the notes below; a retry finds the
-  page and leaves it. The recipe owns that page: a project's own release workflow uploads its
-  artifacts into it (`gh release upload`) and creates it only when none exists — a tag pushed
-  by hand — since two creators on one tag leave the second failing with the assets
+  page and leaves it. The recipe owns that page: a project's own release workflow uploads
+  its artifacts into it (`gh release upload`) and creates it only when none exists — a tag
+  pushed by hand — since two creators on one tag leave the second failing with the assets
   unattached. The tag is `vX.Y.Z`, `vX.Y.Z-prerelease`, or a repackaging's rebuild of the
-  same upstream version, `vX.Y.Z.N` ([forks](./forks.md)). A `.release-go.yaml` (project-owned,
-  like the root `.justfile`) opts the repository into artifacts, and the two lanes below share
-  every guard. It is goreleaser's configuration under the lane's name, like `.lint-go.yaml`
-  (the recipes pass it with `--config`), and its first line is
-  `# yaml-language-server: $schema=https://goreleaser.com/static/schema.json`, how an editor
-  finds the schema away from goreleaser's default name; `limen check` requires it and
-  `limen fix` adds it. The **CI lane** (public repos, the default): `just do release vX.Y.Z` creates the
-  signed tag — a human signs the intent — and pushes it; the tag push triggers the release
-  workflow, which runs `just do release --ci`: goreleaser plus **keyless** cosign, the
-  artifacts signed by the workflow's short-lived Fulcio identity (no key exists anywhere) and
-  logged in Rekor, then GitHub's build provenance attestation over every archive and
-  `checksums.txt`, which `gh attestation verify <asset> --repo <owner>/<repo>`
-  checks wherever `gh` is, no cosign needed: what a bootstrap verifies a binary with before
-  any tool exists (a public repository; GitHub stores attestations for a private one on
-  Enterprise Cloud only, and the lane skips the step there). The **local lane** (private
-  repos, where nothing touches the public
-  transparency log, and the escape hatch when CI is down): `just do release --local
-  <cosign-key> vX.Y.Z` does the same tag work, then runs goreleaser with key-based cosign; the
-  key path is a mandatory argument, and the passphrase is prompted (or piped in with
-  `--cosign-password-stdin`, keeping it out of argv and shell history). `just do release
-  --local --dry-run` builds an unsigned snapshot into `.build/release/` in either lane. The
-  workflow contains no release logic of its own.
+  same upstream version, `vX.Y.Z.N` ([forks](./forks.md)). A `.release-go.yaml`
+  (project-owned, like the root `.justfile`) opts the repository into artifacts; the lane
+  below and the dry run share every guard. It is goreleaser's configuration under the lane's
+  name, like `.lint-go.yaml` (the recipes pass it with `--config`), and its first line is `#
+  yaml-language-server: $schema=https://goreleaser.com/static/schema.json`, how an editor
+  finds the schema away from goreleaser's default name; `limen check` requires it and `limen
+  fix` adds it. The **CI lane** (public repos, the default): `just do release vX.Y.Z`
+  creates the signed tag — a human signs the intent — and pushes it; the tag push triggers
+  the release workflow, which runs `just do release --ci`: goreleaser plus **keyless**
+  cosign, the artifacts signed by the workflow's short-lived Fulcio identity (no key exists
+  anywhere) and logged in Rekor, then GitHub's build provenance attestation over every
+  archive, every SBOM and `checksums.txt`, which `gh attestation verify <asset> --repo
+  <owner>/<repo>` checks wherever `gh` is, no cosign needed: what a bootstrap verifies a
+  binary with before any tool exists (a public repository; GitHub stores attestations for a
+  private one on Enterprise Cloud only, and the lane skips the step there). `just do release
+  --local --dry-run` builds an unsigned snapshot into `.build/release/`, SBOMs included, so
+  the whole lane is proved on a laptop short of the signature. There is no key-based lane:
+  one existed, and no repository ever used it or committed the public key a verifier would
+  need, so a release is signed keyless in CI or not at all. The workflow contains no release
+  logic of its own.
+- **The signing and provenance policy.** Written once, for the fleet; the canonical lane
+  carries it, and a repository's own release lane (a fork's, an app's) conforms to it.
+  - **Every release artifact is covered by two independent verifications**: the cosign
+    Sigstore bundle over `checksums.txt`, keyless, the workflow's identity, Rekor-logged;
+    and GitHub's build provenance attestation over every archive, every SBOM and
+    `checksums.txt`. A consumer verifies either: `cosign verify-blob` against the workflow
+    identity, or `gh attestation verify <asset> --repo <owner>/<repo>`; hermetic verifies
+    the checksums against the bundle on every install. Nothing fetched goes unattested.
+  - **Every release carries an SBOM per archive**, SPDX JSON by syft from the toolset
+    (goreleaser's `sboms:`), listed in `checksums.txt` and attested like the archives. It
+    names the modules the binaries were built from, read off Go's embedded build
+    information, so a vulnerability in a dependency is matched to the releases that carry it
+    without rebuilding them.
+  - **No long-lived signing key exists.** No cosign key pair, no key-based lane, no
+    `cosign.pub`: a key is a thing to leak and rotate, and the keyless identity is the
+    workflow at the tag, which is what a consumer wants to know.
+  - **Apple: sign what macOS evaluates, notarize what a human installs.** A bundle a human
+    installs through the Finder or a System Settings pane (a screen saver, an app) is signed
+    with the team's Developer ID Application identity, hardened runtime on, notarized and
+    stapled: Gatekeeper evaluates it, and without notarization a current macOS refuses it
+    outright, or an installer strips the quarantine attribute, which is a workaround and not
+    a release. A bundle launched by path and never through Launch Services (Taciturn.app,
+    run by its LaunchAgent) is signed with the same identity and not notarized: Gatekeeper
+    is not in its path. A command-line binary hermetic installs is neither: hermetic's
+    download carries no quarantine attribute, so Gatekeeper never consults a notarization
+    for it, and a long-lived Apple certificate does not belong in lanes that are keyless
+    otherwise. One exception by necessity: a binary that needs an Apple entitlement to run
+    at all (ossein and Virtualization.framework) is signed ad hoc with that entitlement at
+    build, which grants the entitlement and claims no identity. The identity lives in the
+    repository's release workflow as the secrets Taciturn's documents (a `.p12` imported
+    into a keychain the job creates and deletes), never in the tree; notarization adds an
+    App Store Connect API key the same way.
+  - **What is deliberately not done**: no notarization of command-line binaries, no SBOM for
+    a repository without artifacts (its release is the signed tag), no signature of the
+    source archive GitHub generates (it is not a release asset of ours).
 - **A command under `cmd/` either ships or says it does not.** `cmd/` is where a Go
   repository keeps its main packages, released or not, as Go projects do. The release
   configuration, `.release-go.yaml`, says which of them ship: `limen check` fails a main under
