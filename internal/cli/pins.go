@@ -34,15 +34,15 @@ func runPins(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func pinsUsage(writer io.Writer) {
 	_, _ = fmt.Fprint(writer, `Usage:
-  limen pins get <name> <field>      Print one field of a pin: version, url (resolved), or sha256
-  limen pins refresh [-all] [path]   Recompute the digests whose version moved, through each
+  limen pins get <name> <field>      Print one field of a pin: version, commit, url (resolved), or sha256
+  limen pins refresh [-all] [path]   Recompute the digests whose version or commit moved, through each
                                      entry's verify method, and rewrite pins.yaml in place
 
 pins.yaml, at the repository root, declares the artifacts a build fetches by
 hand, pinned by digest: the build reads values back with get, Renovate moves
 the version through the shared preset, and refresh brings the digest along —
 the checksum workflow runs it on every Renovate branch. "limen check" fails a
-digest computed for another version than the one pinned.
+digest computed for another version or commit than the one pinned.
 `)
 }
 

@@ -558,6 +558,16 @@ pins:
     digest:
       version: 7.1.5-ossein.2
       sha256: <64 hex>
+  - name: foxenflac
+    renovate: git-refs https://github.com/astoeckel/libfoxenflac
+    version: master
+    commit: e491d2ec76709975f09d1820367a92a1772ccfb1
+    url: https://github.com/astoeckel/libfoxenflac/archive/${commit}.tar.gz
+    verify: download
+    digest:
+      version: master
+      commit: e491d2ec76709975f09d1820367a92a1772ccfb1
+      sha256: <64 hex>
 ```
 
 - **The build reads it back**: `limen pins get llvm url` and `limen pins get llvm sha256`,
@@ -566,19 +576,22 @@ pins:
 - **Renovate reads it, from the shared preset.** The `renovate:` line names the datasource
   and the depName; `extract-version:` (a regexp pulling the version out of a tag such as
   `llvmorg-22.1.8`) and `versioning:` (a scheme for tags semver misreads, such as a
-  `-ossein.N` suffix) may follow it; the `version:` line closes the block and is what moves.
-  The four come in that order with nothing between them — the preset's regex reads the block
-  as one — and the `pins` rule refuses another order. One custom manager in
+  `-ossein.N` suffix) may follow it; the `version:` line is what moves. An upstream with no
+  releases or tags is pinned to a commit through `git-refs`: `version:` is the branch
+  Renovate follows and a `commit:` line after it is the commit; Renovate reads `commit:` as
+  the digest and proposes the branch's new head as its replacement; the url names
+  `${commit}`. The lines come in that order with nothing between them — the preset's regex
+  reads the block as one — and the `pins` rule refuses another order. One custom manager in
   `.limen/renovate.json` watches every `pins.yaml`.
-- **limen owns the digest.** `digest.version` records the version the sha256 was computed
-  for, so a digest left behind by a bump is visible offline: the `pins` rule fails it, naming
-  the pin and the command. `limen pins refresh` recomputes every stale digest through the
-  method the entry declares and rewrites the two lines in place; the checksum workflow runs
-  it on every Renovate branch, in the same step as `limen fix`, from the same checksummed
-  release — data the branch can change only in ways the release understands, never recipe
-  text in a write job. A new entry leaves `digest:` out: `limen pins refresh` writes the
-  block, and until it does the `pins` rule fails the entry and `limen pins get <name>
-  sha256` refuses it.
+- **limen owns the digest.** `digest.version` (and `digest.commit` for a commit pin) records
+  what the sha256 was computed for, so a digest left behind by a bump is visible offline:
+  the `pins` rule fails it, naming the pin and the command. `limen pins refresh` recomputes
+  every stale digest through the method the entry declares and rewrites the digest block in
+  place; the checksum workflow runs it on every Renovate branch, in the same step as `limen
+  fix`, from the same checksummed release — data the branch can change only in ways the
+  release understands, never recipe text in a write job. A new entry leaves `digest:` out:
+  `limen pins refresh` writes the block, and until it does the `pins` rule fails the entry
+  and `limen pins get <name> sha256` refuses it.
 - **A pin can be a workload, not a dependency.** A benchmark's compile input — the kernel tree
   a cross-runtime bench builds inside each container — is a `pins.yaml` entry like any other,
   fetched and verified the same way, but held where it is by a `packageRule` in the

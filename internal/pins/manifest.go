@@ -26,8 +26,16 @@
 // sha256 was computed for, so a stale digest is visible without the network.
 // A new entry leaves `digest:` out: `limen pins refresh` writes it.
 // The `renovate` line, the optional `extract-version` and `versioning` lines,
-// and the `version` line come in that order with nothing else between them:
-// that is the block the shared preset's regex reads.
+// the `version` line and the optional `commit` line come in that order with
+// nothing else between them: that is the block the shared preset's regex
+// reads.
+//
+// An upstream with no releases or tags is pinned to a commit: `version` is
+// the branch Renovate follows, `commit` the commit, `${commit}` names it in
+// the url, and `digest.commit` records what the sha256 was computed for
+// beside `digest.version`. Renovate reads `commit` as the digest and proposes
+// the branch's new head as its replacement. The shape is in book/tooling.md,
+// "Pinned artifacts beyond aqua".
 package pins
 
 import (
@@ -49,6 +57,7 @@ const (
 	fieldExtractVersion = "extract-version"
 	fieldVersioning     = "versioning"
 	fieldVersion        = "version"
+	fieldCommit         = "commit"
 	fieldURL            = "url"
 	fieldVerify         = "verify"
 	fieldDigest         = "digest"
@@ -111,6 +120,7 @@ var (
 var (
 	nameRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 	sha256RE = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	commitRE = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	// fingerprintRE is a v4 OpenPGP fingerprint as the manifest carries it:
 	// forty hex digits, no spaces (the arguments split on whitespace).
 	fingerprintRE = regexp.MustCompile(`^[0-9A-Fa-f]{40}$`)
@@ -122,6 +132,9 @@ var (
 type Entry struct {
 	Name    string
 	Version string
+	// Commit is the pinned commit of a branch, when the pin is one; Version
+	// is then the branch.
+	Commit string
 	// Renovate is the datasource and the depName, as the shared preset
 	// reads them; ExtractVersion and Versioning are its optional companions.
 	Renovate       []string
@@ -131,8 +144,10 @@ type Entry struct {
 	URL string
 	// Verify is the method followed by its arguments, templates unexpanded.
 	Verify []string
-	// DigestVersion is the version the SHA256 was computed for.
+	// DigestVersion and DigestCommit are the version and the commit the
+	// SHA256 was computed for.
 	DigestVersion string
+	DigestCommit  string
 	SHA256        string
 
 	// Line indexes into the manifest: the digest's, for the in-place
@@ -142,17 +157,19 @@ type Entry struct {
 	digestLine         int
 	lastLine           int
 	digestVersionLine  int
+	digestCommitLine   int
 	sha256Line         int
 	renovateLine       int
 	extractVersionLine int
 	versioningLine     int
 	versionLine        int
+	commitLine         int
 }
 
-// Stale reports whether the digest was computed for another version than the
-// one pinned now — the state a Renovate bump leaves behind until a refresh —
-// or was never computed.
-func (e Entry) Stale() bool { return e.DigestVersion != e.Version }
+// Stale reports whether the digest was computed for another version or
+// commit than the one pinned now — the state a Renovate bump leaves behind
+// until a refresh — or was never computed.
+func (e Entry) Stale() bool { return e.DigestVersion != e.Version || e.DigestCommit != e.Commit }
 
 // Pinned reports whether the entry carries a digest at all.
 func (e Entry) Pinned() bool { return e.sha256Line >= 0 }
@@ -173,14 +190,29 @@ func (e Entry) VerifyArgs() []string {
 // Method is the verification method's name.
 func (e Entry) Method() string { return e.Verify[0] }
 
+// label names the pin's position for messages: the version, with the commit
+// when the pin is one.
+func (e Entry) label() string {
+	if e.Commit == "" {
+		return e.Version
+	}
+
+	return e.Version + "@" + e.Commit
+}
+
 // variables are the template's: ${version}, ${major} (the version up to its
-// first dot, the way kernel.org names its series directories), and, under a
-// `regex:` versioning, each named group as the version matches it — a tag
-// whose asset spells the version differently (R_2_8_5, expat-2.8.5.tar.gz)
-// is rebuilt from its groups. A group named major replaces the default.
+// first dot, the way kernel.org names its series directories), ${commit}
+// when the pin is one, and, under a `regex:` versioning, each named group as
+// the version matches it — a tag whose asset spells the version differently
+// (R_2_8_5, expat-2.8.5.tar.gz) is rebuilt from its groups. A group named
+// major replaces the default.
 func (e Entry) variables() map[string]string {
 	major, _, _ := strings.Cut(e.Version, ".")
 	vars := map[string]string{"version": e.Version, "major": major}
+
+	if e.Commit != "" {
+		vars["commit"] = e.Commit
+	}
 
 	pattern, isRegex := strings.CutPrefix(e.Versioning, "regex:")
 	if !isRegex {
@@ -360,8 +392,8 @@ func (p *parser) top(index int, trimmed string) error {
 // newEntry is an entry with every line index unset.
 func newEntry() Entry {
 	return Entry{
-		digestLine: -1, lastLine: -1, digestVersionLine: -1, sha256Line: -1,
-		renovateLine: -1, extractVersionLine: -1, versioningLine: -1, versionLine: -1,
+		digestLine: -1, lastLine: -1, digestVersionLine: -1, digestCommitLine: -1, sha256Line: -1,
+		renovateLine: -1, extractVersionLine: -1, versioningLine: -1, versionLine: -1, commitLine: -1,
 	}
 }
 
@@ -387,6 +419,9 @@ func setField(entry *Entry, field string, line int) error {
 	case fieldVersion:
 		entry.Version = value
 		entry.versionLine = line
+	case fieldCommit:
+		entry.Commit = value
+		entry.commitLine = line
 	case fieldURL:
 		entry.URL = value
 	case fieldVerify:
@@ -409,6 +444,9 @@ func setDigestField(entry *Entry, field string, line int) error {
 	case fieldVersion:
 		entry.DigestVersion = value
 		entry.digestVersionLine = line
+	case fieldCommit:
+		entry.DigestCommit = value
+		entry.digestCommitLine = line
 	case fieldSHA256:
 		entry.SHA256 = value
 		entry.sha256Line = line
@@ -464,6 +502,10 @@ func (e Entry) validate() error {
 			" (leave digest out and `limen pins refresh` writes it)", ErrEntry, label)
 	case e.Pinned() && !sha256RE.MatchString(e.SHA256):
 		return fmt.Errorf("%w: %s: sha256 must be 64 hex characters", ErrEntry, label)
+	case e.commitLine >= 0 && !commitRE.MatchString(e.Commit):
+		return fmt.Errorf("%w: %s: commit must be 40 hex characters", ErrEntry, label)
+	case e.digestCommitLine >= 0 && e.commitLine < 0:
+		return fmt.Errorf("%w: %s: digest.commit without a commit line", ErrEntry, label)
 	}
 
 	want, known := verifyArity[e.Verify[0]]
@@ -483,8 +525,8 @@ func (e Entry) validate() error {
 	}
 
 	if ref := e.unknownVariable(); ref != "" {
-		return fmt.Errorf("%w: %s: %s is not a template variable (${version}, ${major}, or a named group"+
-			" of a regex: versioning that matches the version)", ErrEntry, label, ref)
+		return fmt.Errorf("%w: %s: %s is not a template variable (${version}, ${major}, ${commit} of a"+
+			" commit pin, or a named group of a regex: versioning that matches the version)", ErrEntry, label, ref)
 	}
 
 	return e.validateOrder()
@@ -492,10 +534,11 @@ func (e Entry) validate() error {
 
 // validateOrder holds the Renovate block to the order the preset's regex
 // reads: renovate, then extract-version and versioning when present, then
-// version, with nothing but blank and comment lines between. An entry
-// written in another order parses, and Renovate never moves it.
+// version, then commit when present, with nothing but blank and comment
+// lines between. An entry written in another order parses, and Renovate
+// never moves it.
 func (e Entry) validateOrder() error {
-	order := []int{e.renovateLine, e.extractVersionLine, e.versioningLine, e.versionLine}
+	order := []int{e.renovateLine, e.extractVersionLine, e.versioningLine, e.versionLine, e.commitLine}
 
 	previous := -1
 
@@ -505,8 +548,8 @@ func (e Entry) validateOrder() error {
 		}
 
 		if line < previous {
-			return fmt.Errorf("%w: %s: renovate, extract-version, versioning and version must come in that order,"+
-				" one after the other", ErrEntry, e.Name)
+			return fmt.Errorf("%w: %s: renovate, extract-version, versioning, version and commit must come in"+
+				" that order, one after the other", ErrEntry, e.Name)
 		}
 
 		previous = line
@@ -527,7 +570,8 @@ func Methods() []string {
 	return methods
 }
 
-// Get serves one field of one pin to a build: version, url (resolved), sha256.
+// Get serves one field of one pin to a build: version, commit, url
+// (resolved), sha256.
 func (m Manifest) Get(name, field string) (string, error) {
 	for _, entry := range m.Entries {
 		if entry.Name != name {
@@ -537,6 +581,12 @@ func (m Manifest) Get(name, field string) (string, error) {
 		switch field {
 		case fieldVersion:
 			return entry.Version, nil
+		case fieldCommit:
+			if entry.Commit == "" {
+				return "", fmt.Errorf("%w: %s pins no commit", ErrNoSuchField, name)
+			}
+
+			return entry.Commit, nil
 		case fieldURL:
 			return entry.ResolvedURL(), nil
 		case fieldSHA256:
@@ -546,7 +596,7 @@ func (m Manifest) Get(name, field string) (string, error) {
 
 			return entry.SHA256, nil
 		default:
-			return "", fmt.Errorf("%w: %q (one of version, url, sha256)", ErrNoSuchField, field)
+			return "", fmt.Errorf("%w: %q (one of version, commit, url, sha256)", ErrNoSuchField, field)
 		}
 	}
 
@@ -587,19 +637,23 @@ func (m Manifest) Text() string { return strings.Join(m.lines, "\n") + "\n" }
 func (m Manifest) String() string { return strconv.Itoa(len(m.Entries)) + " pin(s)" }
 
 // withDigest returns the manifest text with one entry's digest rewritten in
-// place: the two lines change, everything else is byte for byte the file
-// the project wrote. An entry without one gets its digest block after its
-// last line (or under its bare `digest:`), and the manifest is parsed again,
+// place: its lines change, everything else is byte for byte the file the
+// project wrote. An entry without one gets its digest block after its last
+// line (or under its bare `digest:`), a commit pin whose digest has no
+// `commit` line yet gets that line, and the manifest is then parsed again,
 // since every later line moved.
 func (m Manifest) withDigest(index int, sha256 string) (Manifest, error) {
 	entry := m.Entries[index]
 	lines := slices.Clone(m.lines)
+	indent := strings.Repeat(" ", digestIndent)
 
 	if !entry.Pinned() {
-		block := []string{
-			strings.Repeat(" ", digestIndent) + fieldVersion + ": " + entry.Version,
-			strings.Repeat(" ", digestIndent) + fieldSHA256 + ": " + sha256,
+		block := []string{indent + fieldVersion + ": " + entry.Version}
+		if entry.Commit != "" {
+			block = append(block, indent+fieldCommit+": "+entry.Commit)
 		}
+
+		block = append(block, indent+fieldSHA256+": "+sha256)
 
 		insertAt := entry.digestLine + 1
 		if entry.digestLine < 0 {
@@ -613,8 +667,18 @@ func (m Manifest) withDigest(index int, sha256 string) (Manifest, error) {
 	lines[entry.digestVersionLine] = rewriteScalar(lines[entry.digestVersionLine], entry.Version)
 	lines[entry.sha256Line] = rewriteScalar(lines[entry.sha256Line], sha256)
 
+	switch {
+	case entry.Commit != "" && entry.digestCommitLine < 0:
+		commit := indent + fieldCommit + ": " + entry.Commit
+
+		return Parse([]byte(strings.Join(slices.Insert(lines, entry.digestVersionLine+1, commit), "\n") + "\n"))
+	case entry.Commit != "":
+		lines[entry.digestCommitLine] = rewriteScalar(lines[entry.digestCommitLine], entry.Commit)
+	}
+
 	out := Manifest{lines: lines, Entries: slices.Clone(m.Entries)}
 	out.Entries[index].DigestVersion = entry.Version
+	out.Entries[index].DigestCommit = entry.Commit
 	out.Entries[index].SHA256 = sha256
 
 	return out, nil
@@ -637,15 +701,19 @@ func rewriteScalar(line, value string) string {
 // last lines that is not one of the block's own, blank, or a comment — the
 // preset's regex would stop matching there.
 func (m Manifest) blockIsContiguous(entry Entry) error {
-	own := map[int]bool{entry.renovateLine: true, entry.extractVersionLine: true, entry.versioningLine: true}
+	own := map[int]bool{
+		entry.renovateLine: true, entry.extractVersionLine: true, entry.versioningLine: true, entry.versionLine: true,
+	}
 
-	for line := entry.renovateLine + 1; line < entry.versionLine; line++ {
+	end := max(entry.versionLine, entry.commitLine)
+
+	for line := entry.renovateLine + 1; line < end; line++ {
 		trimmed := strings.TrimSpace(m.lines[line])
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") || own[line] {
 			continue
 		}
 
-		return fmt.Errorf("%w: %s: %q sits between the renovate line and the version line;"+
+		return fmt.Errorf("%w: %s: %q sits inside the renovate block (renovate to version, or to commit);"+
 			" only extract-version and versioning may", ErrEntry, entry.Name, trimmed)
 	}
 
