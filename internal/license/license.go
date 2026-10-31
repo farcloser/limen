@@ -15,7 +15,7 @@ import (
 // generate, verified against each license's authority (apache.org, gnu.org,
 // and the SPDX license list). Only MIT carries {{year}} and {{holder}}
 // placeholders: its copyright line is part of the license body and must be
-// filled. Apache-2.0, GPL-2.0, and AGPL-3.0 keep "[yyyy] [name of copyright
+// filled. Apache-2.0, GPL-2.0-only, and AGPL-3.0-only keep "[yyyy] [name of copyright
 // owner]" and "<year>  <name of author>" untouched — that is how the ASF and the
 // FSF themselves publish the files; those appendices are instructions for
 // source-file headers, not part of the LICENSE, and the FSF forbids altering
@@ -36,8 +36,8 @@ func generatableFile(licenseID ID) (string, bool) {
 	name, found := map[ID]string{
 		MIT:      "MIT.txt",
 		Apache20: "Apache-2.0.txt",
-		GPL20:    "GPL-2.0.txt",
-		AGPL30:   "AGPL-3.0.txt",
+		GPL20:    "GPL-2.0-only.txt",
+		AGPL30:   "AGPL-3.0-only.txt",
 		CCBYSA40: "CC-BY-SA-4.0.txt",
 		CCBYND40: "CC-BY-ND-4.0.txt",
 	}[licenseID]
@@ -106,13 +106,15 @@ const (
 
 	MIT      ID = "MIT"
 	Apache20 ID = "Apache-2.0"
-	// GPL20 is GPL-2.0-only — the license the Linux kernel is under, for repos
-	// that are kernel-derivative works (modules, patches, derived tooling) and so
-	// must be GPL-2.0. Not the "WITH Linux-syscall-note" variant: that exception
-	// is a per-file grant for exported UAPI headers, not a derivative work's
-	// whole-repo license.
-	GPL20  ID = "GPL-2.0"
-	AGPL30 ID = "AGPL-3.0"
+	// GPL20 is the license the Linux kernel is under, for repos that are
+	// kernel-derivative works (modules, patches, derived tooling) and so must
+	// be GPL-2.0-only. Not the "WITH Linux-syscall-note" variant: that
+	// exception is a per-file grant for exported UAPI headers, not a derivative
+	// work's whole-repo license. The "-only" is the identifier's: the text is
+	// the same under "-or-later", and the choice is the author's, so a bare
+	// "GPL-2.0" names no choice and SPDX retired it.
+	GPL20  ID = "GPL-2.0-only"
+	AGPL30 ID = "AGPL-3.0-only"
 	// BSD3 is BSD-3-Clause, accepted for inherited code only: a fork of a
 	// BSD-licensed upstream cannot shed the upstream's terms, so the check
 	// recognizes the license — including the personalized clause-3 variants
@@ -199,7 +201,7 @@ func isAGPL30(n string) bool {
 
 // isGPL20 recognizes GPL-2.0-only. The anchor is the title's date, "version 2,
 // june 1991": it is GPLv2's own heading and appears in none of the v3 family
-// (GPL/LGPL/AGPL-3.0 all say "version 3"), so it cleanly separates the one GPL
+// (GPL/LGPL/AGPL 3 all say "version 3"), so it cleanly separates the one GPL
 // we allow from the ones we reject — which TestIdentifyRejectsFullTexts pins on
 // the real GPL-3.0 and LGPL-3.0 texts. Title-windowed for the same reason as
 // isAGPL30: other licenses name the GPL in their bodies, but only GPLv2

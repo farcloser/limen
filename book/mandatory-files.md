@@ -81,8 +81,8 @@ library from a large platform.
 |------------|-------------|----------------------|
 | `MIT` | **Small libraries** and utilities. | MIT grant (*"Permission is hereby granted, free of charge…"*) plus the *"AS IS"* disclaimer. |
 | `Apache-2.0` | **Larger projects and anything enterprise-facing.** | Declares *"Apache License"* and *"Version 2.0"*. |
-| `GPL-2.0` | **Kernel-derivative works**: Linux modules, patches, tooling that must be GPL-2.0-compatible with the kernel. | Declares *"GNU General Public License"* and *"Version 2, June 1991"*. |
-| `AGPL-3.0` | **SaaS / network services**, when the copyleft should reach hosted use. | Declares *"Affero General Public License"* and *"Version 3"*. |
+| `GPL-2.0-only` | **Kernel-derivative works**: Linux modules, patches, tooling that must be GPL-2.0-compatible with the kernel. | Declares *"GNU General Public License"* and *"Version 2, June 1991"*. |
+| `AGPL-3.0-only` | **SaaS / network services**, when the copyleft should reach hosted use. | Declares *"Affero General Public License"* and *"Version 3"*. |
 | `BSD-3-Clause` | **Inherited only**: forks of BSD-licensed upstreams. **Never a choice for new code**; `limen bootstrap` will not generate it. | *"Redistribution and use in source and binary forms"* plus the non-endorsement clause, without BSD-4's advertising clause. Tolerant of the personalized clause-3 subjects older projects carry. |
 | `Unlicense` | **Inherited only**: forks of upstreams that dedicated their work to the public domain. **Never a choice for new code**; `limen bootstrap` will not generate it. | *"free and unencumbered software released into the public domain"* plus the dedication of *"any and all copyright interest in the software to the public domain"*. CC0 is worded otherwise and stays a failure. |
 | `Closed-source` | **Proprietary**: anything not released publicly. | Explicit reservation of rights, no open grant. The canonical text below. |
@@ -94,15 +94,17 @@ library from a large platform.
   retaliation clause protect users from patent claims by contributors, the assurance
   enterprise legal teams look for; the explicit `NOTICE` and contribution terms scale across
   many contributors.
-- **GPL-2.0 for kernel-derivative works.** A kernel module, a patch, or tooling that derives
-  from GPL-2.0 code inherits GPL-2.0: an obligation the kernel imposes, allowed for exactly
-  that case. `GPL-2.0-only`, not the `WITH Linux-syscall-note` variant, which is a per-file
-  grant for exported UAPI headers, not a whole-repo license. New code not forced onto GPL
-  takes Apache-2.0 or AGPL-3.0.
-- **AGPL-3.0 for SaaS, as an option.** Plain GPL's copyleft is defeated by "we only run it on
-  our servers"; AGPL closes that: providing the software over a network triggers the
+- **GPL-2.0-only for kernel-derivative works.** A kernel module, a patch, or tooling that
+  derives from GPL-2.0 code inherits GPL-2.0: an obligation the kernel imposes, allowed for
+  exactly that case. `GPL-2.0-only`, the kernel's own choice, not the `WITH
+  Linux-syscall-note` variant, which is a per-file grant for exported UAPI headers, not a
+  whole-repo license. New code not forced onto GPL takes Apache-2.0 or AGPL-3.0-only.
+- **AGPL-3.0-only for SaaS, as an option.** Plain GPL's copyleft is defeated by "we only run
+  it on our servers"; AGPL closes that: providing the software over a network triggers the
   obligation to share source. A deliberate option, since the same reciprocity deters
-  commercial adopters.
+  commercial adopters. The identifiers carry `-only`: the text is the same under
+  `-or-later`, and whether a later version of the licence may be applied is the author's
+  choice, one the bare `GPL-2.0` and `AGPL-3.0`, which SPDX retired, did not record.
 - **BSD-3-Clause for inherited code, and nothing else.** A fork of a BSD-licensed upstream
   cannot shed the upstream's terms, so `limen check` accepts it. MIT already owns the
   permissive slot for code we author, so `bootstrap` never offers it: acceptance of the
