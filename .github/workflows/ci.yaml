@@ -8,6 +8,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The checksum workflow dispatches this one on the head it pushes to a
+  # Renovate branch: a push made with a run's own token starts no run by
+  # itself, and the gate must report on that head.
+  workflow_dispatch:
 
 # No default token permissions: each job states what it needs. This workflow
 # only ever reads the repository — it cannot write code, releases, or

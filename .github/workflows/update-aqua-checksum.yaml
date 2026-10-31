@@ -44,6 +44,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      # To dispatch the checks on the head this job pushes (the last step).
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -117,26 +119,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: limen pins refresh
 
-      - name: Mint a push token, if the App is configured
-        # After the update steps, so those run with no secrets. One-hour token,
-        # this repository only; the private key only mints.
-        if: vars.UPDATE_AQUA_CHECKSUM_APP_ID != ''
-        id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ vars.UPDATE_AQUA_CHECKSUM_APP_ID }}
-          private-key: ${{ secrets.UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY }}
-          # Least privilege, but both: naming any permission scopes the token to
-          # exactly those, and the fix-up carries canonical workflow files whenever
-          # a limen bump changed one. GitHub refuses that commit from a token
-          # without workflows:write ("Resource not accessible by integration").
-          permission-contents: write
-          permission-workflows: write
-
       - name: Commit the update through the API, if any
+        id: commit
         env:
           BRANCH: ${{ github.ref_name }}
-          TOKEN: ${{ steps.app-token.outputs.token || secrets.UPDATE_AQUA_CHECKSUM_TOKEN || github.token }}
+          # The job's own token: the commit carries canonical workflow files
+          # whenever a limen bump changed one, and this token may write them
+          # (the mutation runs as the repository, not as an integration).
+          TOKEN: ${{ github.token }}
         run: |
           [ -z "$(git status --porcelain)" ] && { echo "checksums and baseline already in sync"; exit 0; }
           # GraphQL createCommitOnBranch, not `git commit` + push: those commits
@@ -214,3 +204,20 @@ jobs:
             exit 1
           fi
           echo "pushed ${oid}"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run the checks on the new head
+        # A push made with the job's token starts no workflow run, so the
+        # pull request's gate would never report on the head just pushed. The
+        # one exception GitHub documents is the dispatch events, which always
+        # create runs: the two workflows whose checks limen:main requires are
+        # dispatched on this branch, and report on its head.
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          gh workflow run ci.yaml --ref "$BRANCH"
+          if [ -f .github/workflows/security.yaml ]; then
+            gh workflow run security.yaml --ref "$BRANCH"
+          fi
