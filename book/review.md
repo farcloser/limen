@@ -105,7 +105,7 @@ truth, and the review says where:
 
 A local clone is a source of truth once it has been fetched *and the fetch succeeded*; a
 fetch whose error went to `/dev/null` has audited the past. Use the rig's transport
-(`git c fetch`) or the API, and say which. What could not be verified is stated as
+(`git fetch`) or the API, and say which. What could not be verified is stated as
 unverified, not inferred.
 
 A search that found nothing has verified the search, not the tree, until the same search

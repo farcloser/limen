@@ -20,26 +20,22 @@ branches in its own worktrees. The human's branches are the human's.
   and lets tasks run side by side. In a new worktree: `hermetic policy allow
   .hermetic/policy.yaml` — the policy's record is keyed by path; the tools' links come with
   the first recipe run.
-- **Every git command is `git c …`.** Local commands included, `git -C <clone> c …`
-  where the tree is named: the harness sets `GIT_SSH_COMMAND`, which sends a raw `git
-  fetch` or `push` to the system ssh and the machine's own keys, and the `c` alias drops it
-  ([the bot's sandbox](./identity.md#the-bots-sandbox)). The habit is the rule: a session
-  that types raw `git` for `log` and `status` types it for `push`, once, when it matters. A
-  network command is plain `git c fetch`, `push` or `pull`, with no `-c core.sshCommand=…`
-  added: the sessions' gitconfig, named by `GIT_CONFIG_GLOBAL`, carries the transport once
-  the variable is gone, and the added option breaks the allow rule for
-  `git c push --force-with-lease`, so every force push goes to the classifier instead. That
-  rule matches a prefix, `git c push --force-with-lease=` at the start of its own Bash
-  command: nothing between `git c` and `push`, nothing between `push` and
-  `--force-with-lease=` (no `-q`), no `&&` or `;` around it; a force push of any other shape
-  is refused as destructive, which is the rule doing its job, not a defect to route
-  around. The tail is the session's to get right, and the form it uses is
-  `git c push --force-with-lease=<branch>:<old sha> origin <branch>:refs/heads/<branch>`:
-  the lease on the sha it last saw, so a push it did not see is refused by git, and the
-  branch by name as the source, never `HEAD`. The command takes no `-C` without leaving the
-  prefix, so it runs from wherever the shell is, and the shell's directory is the clone as
-  often as the worktree: `HEAD:` would force the clone's checkout onto the branch
-  ([the bot's sandbox](./identity.md#the-bots-sandbox)).
+- **Git is plain `git`.** The rig configures a session's git and ssh ([the bot's
+  sandbox](./identity.md#the-bots-sandbox)), so `git fetch`, `push` and `pull` reach GitHub
+  as the bot as they are. A network command that fails is broken tooling, reported, never
+  worked around with an option of the session's own: an added option would also break the
+  allow rule for `git push --force-with-lease`, so every force push would go to the
+  classifier instead. That rule matches a prefix, `git push --force-with-lease=` at the
+  start of its own Bash command: nothing between `git` and `push`, nothing between `push`
+  and `--force-with-lease=` (no `-q`), no `&&` or `;` around it; a force push of any other
+  shape is refused as destructive, which is the rule doing its job, not a defect to route
+  around. The tail is the session's to get right, and the form it uses is `git push
+  --force-with-lease=<branch>:<old sha> origin <branch>:refs/heads/<branch>`: the lease on
+  the sha it last saw, so a push it did not see is refused by git, and the branch by name as
+  the source, never `HEAD`. The command takes no `-C` without leaving the prefix, so it runs
+  from wherever the shell is, and the shell's directory is the clone as often as the
+  worktree: `HEAD:` would force the clone's checkout onto the branch ([the bot's
+  sandbox](./identity.md#the-bots-sandbox)).
 - **Never on `work`.** The human's `work` branch is the human's, or the human's with the
   agent pairing interactively at their request. The agent never commits there on its own,
   and never on `main`.

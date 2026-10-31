@@ -14,22 +14,16 @@ is the [engineering book](https://github.com/farcloser/limen/tree/main/book).
   recipe covers the need — say so when you do it. `just --list` shows every task.
 - Always name the recipe; module defaults are curated subsets, not "run everything".
 - Never bump a tool version by hand: `just do tools set` / `just do tools update`.
-- **Every git command is `git c …`, never raw `git`**, local commands included: the
-  harness sets `GIT_SSH_COMMAND`, which sends raw git's ssh to the system ssh and the
-  machine's own keys; the sessions' `c` alias (`env -u GIT_SSH_COMMAND git`) drops it so
-  the rig's ssh and the bot's key are used. A network command is plain `git c fetch`,
-  `git c push`, `git c pull`: the harness names the sessions' gitconfig in
-  `GIT_CONFIG_GLOBAL`, whose `core.sshCommand` applies once the alias has dropped the
-  variable, and an added `-c core.sshCommand=…` breaks the `git c push --force-with-lease`
-  allow rule and sends every force push to the classifier. That rule matches the prefix
-  `git c push --force-with-lease=` at the start of its own Bash command: nothing between
-  `git c` and `push`, nothing between `push` and `--force-with-lease=` (no `-q`), no `&&`
-  or `;` around it; a force push of any other shape is refused as destructive. The form a
-  session uses is `git c push --force-with-lease=<branch>:<old sha> origin
-  <branch>:refs/heads/<branch>`: the lease on the sha it last saw, and the branch by name
-  as the source, never `HEAD`, since the shell's directory is not the worktree and the
-  command takes no `-C`, so `HEAD:` would force the clone's checkout onto the branch. The
-  alias composes with `-C` everywhere else: `git -C <clone> c …`.
+- **Git is plain `git`.** The rig configures a session's git and ssh, so `git fetch`,
+  `git push`, `git pull` reach GitHub as the bot as they are; a network command that fails
+  is broken tooling, reported, never worked around with an option of your own. The force
+  push has one shape, the allow rule's prefix at the start of its own
+  Bash command: `git push --force-with-lease=<branch>:<old sha> origin
+  <branch>:refs/heads/<branch>`, nothing between `git` and `push`, nothing between `push`
+  and `--force-with-lease=` (no `-q`), no `&&` or `;` around it; the lease on the sha it
+  last saw, and the branch by name as the source, never `HEAD`, since the shell's
+  directory is not the worktree and the command takes no `-C`, so `HEAD:` would force the
+  clone's checkout onto the branch. Everywhere else, name the tree: `git -C <clone> …`.
 
 ## Contributing
 
