@@ -225,7 +225,7 @@ jobs:
           OID: ${{ steps.commit.outputs.oid }}
         run: |
           for attempt in 1 2 3 4 5 6; do
-            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${OID}&per_page=50" --jq '.workflow_runs[] | select(.status=="action_required") | .id')"
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${OID}&per_page=50" --jq '.workflow_runs[] | select(.conclusion=="action_required") | .id')"
             [ -n "$runs" ] && break
             echo "no pending runs yet (attempt $attempt)"; sleep 10
           done
