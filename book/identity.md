@@ -407,7 +407,17 @@ validate *` (2026-10-31), was weighed so: stapler looks a notarization ticket up
 Apple's URL loading, which honours the system proxy only, and the sandbox reaches DNS and
 egress through its own proxy only, so no sandboxed process reaches Apple's ticket service
 and no sandbox setting says otherwise; the command is read-only, and it names the binary
-rather than the `xcrun` launcher, which resolves through `xcode-select`.
+rather than the `xcrun` launcher, which resolves through `xcode-select`. The third,
+`farclauder worktree remove *` by its absolute path under Claude Code's own directory
+(`~/.claude/bin`, 2026-10-31, https://github.com/farcloser/limen-install/pull/164), was
+weighed so: inside a session `git worktree remove` deletes the checkout and then fails on
+the record's `commondir` and the worktree's `.claude/settings*.json`, paths the sandbox
+protects against every write, which no `allowWrite` lifts and only switching the filesystem
+sandbox off would; the script is the installer's file in a directory sessions cannot write,
+runs no git, since an unsandboxed git would honour a `.git/config` or hooks a session can
+write in another clone, removes only `<clone>/.claude/worktrees/<name>` and
+`<clone>/.git/worktrees/<name>`, each checked physical from inside and removed by bare name,
+and refuses a live checkout.
 
 **Breakage is reported, not routed around.** An agent that finds the rig not working — the
 installed ssh refused, signing unable to reach the agent, a recipe failing — says so first
