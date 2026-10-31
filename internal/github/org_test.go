@@ -615,3 +615,28 @@ func TestAuditOrgDependabotSecurityUpdatesUnverifiable(t *testing.T) {
 		t.Fatalf("an unreadable configuration list must be unverifiable, got %v", finding.Status)
 	}
 }
+
+// TestOrgSecretHoldsUpdateAppKey: the update App's key as an organisation
+// secret is readable by a workflow on any branch of every repository it
+// covers; the inventory says so as an advisory, since deleting it is the
+// human's once every repository holds its own.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestOrgSecretHoldsUpdateAppKey(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/actions/secrets?per_page=100"] = stubResponse{
+		Body: `{"total_count":1,"secrets":[{"name":"UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, _ := github.AuditOrg(t.Context(), testOrg, nil)
+
+	finding, _ := findingByCheck(findings, "org-actions-secrets")
+	if finding.Status != github.StatusAdvisory || !strings.Contains(finding.Message, "renovate environment") {
+		t.Errorf(
+			"the key at the organisation: %v (%s), want advisory naming the environment",
+			finding.Status,
+			finding.Message,
+		)
+	}
+}

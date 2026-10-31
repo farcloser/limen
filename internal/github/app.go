@@ -8,7 +8,9 @@
 // to a single approval click: limen serves a pre-filled manifest form on
 // localhost, GitHub redirects back with a one-time code, and converting the
 // code returns the App id and private key. The id lands in the org Actions
-// variable and the key in the org secret the workflow reads.
+// variable; the key lands in the bootstrapped repository's renovate
+// environment (renovate.go), never in an organisation secret, which any run
+// on any branch of a covered repository could read.
 //
 // The whole flow is idempotent and never fails a bootstrap: every state it
 // cannot create or verify — a token without org admin, a headless terminal,
@@ -98,14 +100,14 @@ func openBrowser(ctx context.Context, url string) error {
 	return nil
 }
 
-// writeOrgSecret stores an org Actions secret through `gh secret set`, which
-// owns the sealed-box encryption the raw API would demand of us. The one
-// sanctioned deviation from the `gh api` shape — still the gh CLI, still
-// gh's credential.
-func writeOrgSecret(ctx context.Context, org, name string, value []byte) error {
-	args := []string{"secret", "set", name, "--org", org, "--visibility", "all"}
+// writeEnvironmentSecret stores a secret of the repository's renovate
+// environment through `gh secret set`, which owns the sealed-box encryption
+// the raw API would demand of us. The one sanctioned deviation from the
+// `gh api` shape — still the gh CLI, still gh's credential.
+func writeEnvironmentSecret(ctx context.Context, repo, name string, value []byte) error {
+	args := []string{"secret", "set", name, "--env", renovateEnvironment, "--repo", repo}
 
-	// gh on the hermetic PATH; args are fixed flags plus the org.
+	// gh on the hermetic PATH; args are fixed flags plus the repository.
 	cmd := exec.CommandContext(ctx, "gh", args...) // #nosec G204 -- see above.
 	cmd.Stdin = strings.NewReader(string(value))
 
@@ -114,28 +116,42 @@ func writeOrgSecret(ctx context.Context, org, name string, value []byte) error {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gh secret set %s --org %s: %w: %s", name, org, err, condenseStderr(stderr.String()))
+		return fmt.Errorf("gh secret set %s --env %s --repo %s: %w: %s",
+			name, renovateEnvironment, repo, err, condenseStderr(stderr.String()))
 	}
 
 	return nil
+}
+
+// secretCommand is the command a human runs to give a repository the key.
+func secretCommand(repo string) string {
+	return "gh secret set " + updateAppSecret + " --env " + renovateEnvironment + " --repo " + repo +
+		" < <the App's private key>"
 }
 
 // interactive reports whether a browser ceremony can happen at all. CI
 // covers GitHub Actions and every mainstream CI system.
 func interactive() bool { return os.Getenv("CI") == "" }
 
-// EnsureUpdateAquaChecksumApp converges the org toward a configured push
-// credential and reports the resulting state as a single finding:
+// EnsureUpdateAquaChecksumApp converges the org toward a registered update
+// App and the repository ("owner/name") toward holding its key, and reports
+// the resulting state as a single finding:
 //
-//	ok           — variable and secret present (created now or found), App installed
-//	advisory     — a human must act (half-configured org, abandoned browser flow, user account)
+//	ok           — the org variable and the repository's environment secret present
+//	               (created now or found), App installed
+//	advisory     — a human must act (a repository without the key, an abandoned
+//	               browser flow, a user account)
 //	unverifiable — the token cannot answer; nothing was changed
 //
-// It never returns StatusFail: bootstrap treats every non-ok as a warning.
-// ctx bounds the two waits on the human (the browser approval and the
-// installation click); cancelling it turns the wait into an advisory.
-func EnsureUpdateAquaChecksumApp(ctx context.Context, org string, progress io.Writer) Finding {
+// The key is disclosed once, at registration, and stored in the repository
+// being bootstrapped; every later repository gets its environment here and
+// the key from the human (secretCommand). It never returns StatusFail:
+// bootstrap treats every non-ok as a warning. ctx bounds the two waits on the
+// human (the browser approval and the installation click); cancelling it
+// turns the wait into an advisory.
+func EnsureUpdateAquaChecksumApp(ctx context.Context, org, repo string, progress io.Writer) Finding {
 	orgAPI := orgClient(org)
+	repoAPI := repoClient(repo)
 
 	if outcome := orgAPI.api(ctx, "GET", "", nil); outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
@@ -146,7 +162,7 @@ func EnsureUpdateAquaChecksumApp(ctx context.Context, org string, progress io.Wr
 			fmt.Sprintf("cannot read the organization: %v — an org-admin token is required", outcome.err))
 	}
 
-	state, finding := probeUpdateApp(ctx, orgAPI)
+	state, finding := probeUpdateApp(ctx, orgAPI, repoAPI)
 	if finding != nil {
 		return *finding
 	}
@@ -154,17 +170,24 @@ func EnsureUpdateAquaChecksumApp(ctx context.Context, org string, progress io.Wr
 	switch {
 	case state.hasVariable && state.hasSecret:
 		return confirmInstallation(ctx, orgAPI, state.appID,
-			fmt.Sprintf("%s and %s already set", updateAppVariable, updateAppSecret))
-	case state.hasVariable != state.hasSecret:
-		present, missing := updateAppVariable, updateAppSecret
-		if state.hasSecret {
-			present, missing = updateAppSecret, updateAppVariable
+			fmt.Sprintf("%s set and %s holds %s", updateAppVariable, repo, updateAppSecret))
+	case state.hasVariable:
+		// The App exists; this repository is a later one. Its environment is
+		// made here, the key is the human's to give: it was disclosed once.
+		if err := ensureRenovateEnvironment(ctx, repoAPI); err != nil {
+			return updateAppFinding(StatusAdvisory,
+				fmt.Sprintf("the %s environment of %s could not be made: %v", renovateEnvironment, repo, err))
 		}
 
 		return updateAppFinding(StatusAdvisory, fmt.Sprintf(
-			"%s is set but %s is missing — a private key cannot be recovered; delete the stale half and rerun, or complete it by hand (book/tooling.md)",
-			present,
-			missing,
+			"the App is registered (%s) and %s has its %s environment; give it the key: %s "+
+				"(a key is generated in the App's settings when none is kept)",
+			updateAppVariable, repo, renovateEnvironment, secretCommand(repo),
+		))
+	case state.hasSecret:
+		return updateAppFinding(StatusAdvisory, fmt.Sprintf(
+			"%s holds %s but the org has no %s — set the variable to the App's id (book/tooling.md)",
+			repo, updateAppSecret, updateAppVariable,
 		))
 	}
 
@@ -175,7 +198,7 @@ func EnsureUpdateAquaChecksumApp(ctx context.Context, org string, progress io.Wr
 		)
 	}
 
-	return registerUpdateApp(ctx, org, orgAPI, progress)
+	return registerUpdateApp(ctx, org, repo, orgAPI, repoAPI, progress)
 }
 
 // updateAppState is what the two idempotence probes found.
@@ -185,9 +208,10 @@ type updateAppState struct {
 	hasSecret   bool
 }
 
-// probeUpdateApp reads the variable and the secret; a non-404 error on either
-// is the "cannot verify" case and short-circuits into a finding.
-func probeUpdateApp(ctx context.Context, orgAPI client) (updateAppState, *Finding) {
+// probeUpdateApp reads the org variable and the repository's environment
+// secret; a non-404 error on either is the "cannot verify" case and
+// short-circuits into a finding.
+func probeUpdateApp(ctx context.Context, orgAPI, repoAPI client) (updateAppState, *Finding) {
 	var state updateAppState
 
 	var variable struct {
@@ -205,10 +229,11 @@ func probeUpdateApp(ctx context.Context, orgAPI client) (updateAppState, *Findin
 	state.hasVariable = !outcome.notFound
 	state.appID = variable.Value
 
-	outcome = orgAPI.api(ctx, "GET", "/actions/secrets/"+updateAppSecret, nil)
+	outcome = repoAPI.api(ctx, "GET", environmentSecretPath, nil)
 	if outcome.err != nil {
 		finding := updateAppFinding(StatusUnverifiable,
-			fmt.Sprintf("cannot read org Actions secrets: %v — an org-admin token is required", outcome.err))
+			fmt.Sprintf("cannot read the %s environment's secrets of %s: %v — an admin token is required",
+				renovateEnvironment, repoAPI.slug(), outcome.err))
 
 		return state, &finding
 	}
@@ -331,7 +356,7 @@ type appConversion struct {
 // registerUpdateApp runs the manifest flow end to end: browser approval,
 // code conversion, credential storage, installation. Each failure names the
 // step so the finding is actionable.
-func registerUpdateApp(ctx context.Context, org string, orgAPI client, progress io.Writer) Finding {
+func registerUpdateApp(ctx context.Context, org, repo string, orgAPI, repoAPI client, progress io.Writer) Finding {
 	code, err := manifestApproval(ctx, org, progress)
 	if err != nil {
 		return updateAppFinding(StatusAdvisory, fmt.Sprintf("App registration did not complete: %v", err))
@@ -360,19 +385,35 @@ func registerUpdateApp(ctx context.Context, org string, orgAPI client, progress 
 		)
 	}
 
-	if err := writeOrgSecret(ctx, org, updateAppSecret, []byte(conversion.PEM)); err != nil {
+	if err := ensureRenovateEnvironment(ctx, repoAPI); err != nil {
 		return updateAppFinding(
 			StatusAdvisory,
 			fmt.Sprintf(
-				"App id %s registered and variable stored, but the secret was not: %v — the key is only downloadable from the App's settings page; set %s by hand",
+				"App id %s registered and variable stored, but the %s environment of %s was not made: %v — the key is only downloadable from the App's settings page; make the environment (limen github fix) and %s",
 				appID,
+				renovateEnvironment,
+				repo,
 				err,
-				updateAppSecret,
+				secretCommand(repo),
 			),
 		)
 	}
 
-	_, _ = fmt.Fprintf(progress, "limen: %s and %s set on org %s\n", updateAppVariable, updateAppSecret, org)
+	if err := writeEnvironmentSecret(ctx, repo, updateAppSecret, []byte(conversion.PEM)); err != nil {
+		return updateAppFinding(
+			StatusAdvisory,
+			fmt.Sprintf(
+				"App id %s registered and variable stored, but the secret was not: %v — the key is only downloadable from the App's settings page; %s",
+				appID,
+				err,
+				secretCommand(repo),
+			),
+		)
+	}
+
+	_, _ = fmt.Fprintf(progress, "limen: %s set on org %s; %s set in the %s environment of %s\n"+
+		"       every other repository gets its environment from `limen github fix` and the key from you: %s\n",
+		updateAppVariable, org, updateAppSecret, renovateEnvironment, repo, secretCommand("<owner/name>"))
 
 	return awaitInstallation(ctx, orgAPI, conversion, progress)
 }

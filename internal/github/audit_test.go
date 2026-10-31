@@ -461,8 +461,23 @@ func compliantResponses() map[string]stubResponse {
 		},
 		"GET repos/test/repo/actions/permissions": {Body: `{"enabled":true,"allowed_actions":"selected"}`},
 		"GET repos/test/repo/rulesets?per_page=100": {
-			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
+			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"},{"id":3,"name":"limen:renovate","target":"branch","enforcement":"active"}]`,
 		},
+		"GET repos/test/repo/rulesets/3": {
+			Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"},{"actor_id":2740,"actor_type":"Integration","bypass_mode":"always"},{"actor_id":7,"actor_type":"Integration","bypass_mode":"always"}],"rules":[{"type":"creation"},{"type":"update"}]}`,
+		},
+		// The checksum workflow on the default branch is what the renovate
+		// environment and ruleset guard; the App's id comes from its public
+		// record under the name limen registers it with.
+		"GET repos/test/repo/contents/.github/workflows/update-aqua-checksum.yaml": {Body: `{"content":""}`},
+		"GET apps/limen-ci-test": {Body: `{"id":7,"slug":"limen-ci-test"}`},
+		"GET repos/test/repo/environments/renovate": {
+			Body: `{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[]}`,
+		},
+		"GET repos/test/repo/environments/renovate/deployment-branch-policies?per_page=100": {
+			Body: `{"total_count":1,"branch_policies":[{"id":11,"name":"renovate/*","type":"branch"}]}`,
+		},
+		"GET repos/test/repo/environments/renovate/secrets/UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY": {Body: `{}`},
 		"GET repos/test/repo/rulesets/1": {
 			Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"required_status_checks":[{"context":"verify (ubuntu-24.04)"}]}}]}`,
 		},

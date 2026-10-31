@@ -76,6 +76,9 @@ func repoClient(slug string) client { return client{base: "repos/" + slug} }
 // orgClient targets one organization.
 func orgClient(org string) client { return client{base: "orgs/" + org} }
 
+// slug is the "owner/name" a repository client targets, for a message.
+func (c client) slug() string { return strings.TrimPrefix(c.base, "repos/") }
+
 // apiOutcome classifies one gh api invocation. notFound distinguishes the
 // endpoints that answer through their status code (HTTP 404 = feature off)
 // from real errors, which land in err.

@@ -19,9 +19,13 @@ import (
 )
 
 const (
+	testRepoSlug     = "test-org/test-repo"
 	testVariablePath = "GET orgs/test-org/actions/variables/" + "UPDATE_AQUA_CHECKSUM_APP_ID"
-	testSecretPath   = "GET orgs/test-org/actions/secrets/" + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY"
-	testSecretWrite  = "secret set " + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" + " --org test-org"
+	testSecretPath   = "GET repos/test-org/test-repo/environments/renovate/secrets/" + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY"
+	testSecretWrite  = "secret set " + "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY" + " --env renovate"
+	testEnvPut       = "PUT repos/test-org/test-repo/environments/renovate"
+	testPoliciesGet  = "GET repos/test-org/test-repo/environments/renovate/deployment-branch-policies?per_page=100"
+	testPolicyPost   = "POST repos/test-org/test-repo/environments/renovate/deployment-branch-policies"
 )
 
 // interactiveRig makes the scenario interactive whatever the runner is (the
@@ -154,7 +158,7 @@ func TestEnsureUpdateAppAlreadyConfigured(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, io.Discard)
 
 	if finding.Status != github.StatusOK {
 		t.Fatalf("configured org: %v (%s), want ok", finding.Status, finding.Message)
@@ -187,7 +191,7 @@ func TestEnsureUpdateAppInstalledWithoutWorkflowsPermission(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("installation without workflows: %v (%s), want advisory", finding.Status, finding.Message)
@@ -212,7 +216,7 @@ func TestEnsureUpdateAppUnverifiable(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, io.Discard)
 
 	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable variables: %v (%s), want unverifiable", finding.Status, finding.Message)
@@ -229,7 +233,7 @@ func TestEnsureUpdateAppInstallationUnverifiable(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, io.Discard)
 
 	if finding.Status != github.StatusUnverifiable {
 		t.Fatalf("unreadable installations: %v (%s), want unverifiable", finding.Status, finding.Message)
@@ -237,22 +241,31 @@ func TestEnsureUpdateAppInstallationUnverifiable(t *testing.T) {
 }
 
 //nolint:paralleltest // serial by design: sets the process environment.
-func TestEnsureUpdateAppHalfConfigured(t *testing.T) {
+func TestEnsureUpdateAppLaterRepository(t *testing.T) {
+	// The App exists (an earlier repository registered it); this repository
+	// gets its environment made and the command for the key, which only the
+	// human has.
 	stubGH(t, map[string]stubResponse{
 		"GET orgs/test-org": {Body: `{}`},
 		testVariablePath:    {Body: `{"value":"42"}`},
 		testSecretPath:      {NotFound: true},
+		testEnvPut:          {Body: `{}`},
+		testPoliciesGet:     {Body: `{"total_count":0,"branch_policies":[]}`},
+		testPolicyPost:      {Body: `{}`},
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
-		t.Fatalf("half-configured org: %v, want advisory", finding.Status)
+		t.Fatalf("later repository: %v, want advisory", finding.Status)
 	}
 
-	if !strings.Contains(finding.Message, "UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY") {
-		t.Errorf("advisory does not name the missing secret: %s", finding.Message)
+	if !strings.Contains(
+		finding.Message,
+		"gh secret set UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY --env renovate --repo "+testRepoSlug,
+	) {
+		t.Errorf("advisory does not carry the command for the key: %s", finding.Message)
 	}
 }
 
@@ -263,7 +276,7 @@ func TestEnsureUpdateAppNotAnOrg(t *testing.T) {
 	})
 	interactiveRig(t)
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("user-account owner: %v, want advisory", finding.Status)
@@ -278,7 +291,7 @@ func TestEnsureUpdateAppNonInteractive(t *testing.T) {
 	})
 	t.Setenv("CI", "1")
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, io.Discard)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, io.Discard)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("non-interactive environment: %v (%s), want advisory", finding.Status, finding.Message)
@@ -305,7 +318,7 @@ func TestEnsureUpdateAppCallbackTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	finding := github.EnsureUpdateAquaChecksumApp(ctx, testOrg, cancelOnForm{cancel: cancel})
+	finding := github.EnsureUpdateAquaChecksumApp(ctx, testOrg, testRepoSlug, cancelOnForm{cancel: cancel})
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("abandoned browser flow: %v (%s), want advisory", finding.Status, finding.Message)
@@ -330,8 +343,11 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 		"POST app-manifests/test-code/conversions": {
 			Body: `{"id":7,"slug":"limen-test-org","pem":"PRIVATE-KEY-PEM","html_url":"https://github.com/apps/limen-test-org"}`,
 		},
-		"POST orgs/test-org/actions/variables":                           {Body: `{}`},
-		"secret set UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY --org test-org": {},
+		"POST orgs/test-org/actions/variables": {Body: `{}`},
+		testEnvPut:                             {Body: `{}`},
+		testPoliciesGet:                        {Body: `{"total_count":0,"branch_policies":[]}`},
+		testPolicyPost:                         {Body: `{}`},
+		testSecretWrite:                        {},
 		"GET orgs/test-org/installations?per_page=100": {
 			Body: `{"installations":[{"app_id":7,"permissions":{"contents":"write","workflows":"write"}}]}`,
 		},
@@ -350,7 +366,7 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 	}}
 	defer human.wg.Wait()
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, human)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, human)
 
 	if finding.Status != github.StatusOK {
 		t.Fatalf("full flow: %v (%s), want ok", finding.Status, finding.Message)
@@ -362,7 +378,11 @@ func TestEnsureUpdateAppRegisters(t *testing.T) {
 	}
 
 	if !strings.Contains(string(calls), testSecretWrite+"\nPRIVATE-KEY-PEM\n") {
-		t.Errorf("the secret was not stored on the org through gh:\n%s", calls)
+		t.Errorf("the key was not stored in the repository's environment through gh:\n%s", calls)
+	}
+
+	if !strings.Contains(string(calls), testPolicyPost+"\n{\"name\":\"renovate/*\",\"type\":\"branch\"}") {
+		t.Errorf("the environment was not restricted to renovate/*:\n%s", calls)
 	}
 
 	if !strings.Contains(string(calls), `"value":"7"`) {
@@ -383,6 +403,9 @@ func TestEnsureUpdateAppSecretFailure(t *testing.T) {
 			Body: `{"id":7,"slug":"limen-test-org","pem":"PRIVATE-KEY-PEM","html_url":"https://github.com/apps/limen-test-org"}`,
 		},
 		"POST orgs/test-org/actions/variables": {Body: `{}`},
+		testEnvPut:                             {Body: `{}`},
+		testPoliciesGet:                        {Body: `{"total_count":0,"branch_policies":[]}`},
+		testPolicyPost:                         {Body: `{}`},
 		testSecretWrite:                        {Fail: true},
 	})
 
@@ -391,7 +414,7 @@ func TestEnsureUpdateAppSecretFailure(t *testing.T) {
 	human := &approver{t: t, code: "test-code"}
 	defer human.wg.Wait()
 
-	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, human)
+	finding := github.EnsureUpdateAquaChecksumApp(t.Context(), testOrg, testRepoSlug, human)
 
 	if finding.Status != github.StatusAdvisory {
 		t.Fatalf("failed secret write: %v (%s), want advisory", finding.Status, finding.Message)

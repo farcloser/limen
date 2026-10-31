@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -949,6 +950,19 @@ func (a *auditor) auditOrgActionsSecrets() {
 	names := make([]string, 0, len(secrets))
 	for _, secret := range secrets {
 		names = append(names, secret.Name)
+	}
+
+	// An organisation secret is handed to any run in a covered repository's
+	// own context, on any branch a write account can push; the update App's
+	// key lives in each repository's renovate environment instead. Deleting
+	// it here is the human's, once every repository holds its own.
+	if slices.Contains(names, updateAppSecret) {
+		a.flag(checkOrgActionsSecrets, StatusAdvisory, updateAppSecret+" at the organisation", "(absent)",
+			updateAppSecret+" is an organisation secret, readable by a workflow on any branch of every repository "+
+				"it covers: move the key into each repository's "+renovateEnvironment+
+				" environment (limen github check names the ones without it) and delete it here", nil)
+
+		return
 	}
 
 	a.flag(checkOrgActionsSecrets, StatusOK, "", "",

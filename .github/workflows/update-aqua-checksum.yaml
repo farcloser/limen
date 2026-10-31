@@ -16,11 +16,11 @@
 #
 # The commit goes through GraphQL createCommitOnBranch because GitHub signs
 # those and the main ruleset requires signatures (see the commit step). Its
-# author is the token's identity: github-actions[bot] by default, or the
-# App/PAT identity when UPDATE_AQUA_CHECKSUM_APP_ID (+ private key secret) or
-# UPDATE_AQUA_CHECKSUM_TOKEN is set — that identity must be in renovate.json's
-# gitIgnoredAuthors or Renovate stops rebasing. The App is worth it:
-# default-token commits get no CI run.
+# author is the token's identity: the update App's when UPDATE_AQUA_CHECKSUM_APP_ID
+# is set and the renovate environment holds its key, github-actions[bot]
+# otherwise — that identity must be in renovate.json's gitIgnoredAuthors or
+# Renovate stops rebasing. The App is worth it: default-token commits get no
+# CI run.
 name: update-aqua-checksum
 
 on:
@@ -42,6 +42,12 @@ jobs:
   update:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # The update App's key is this environment's secret, and the environment
+    # admits renovate/* branches alone (limen github check reconciles it):
+    # a run on any other branch, whatever its workflow says, never sees the
+    # key. The branches themselves are Renovate's and the App's to create
+    # (the limen:renovate ruleset).
+    environment: renovate
     permissions:
       contents: write
     steps:
@@ -136,7 +142,7 @@ jobs:
       - name: Commit the update through the API, if any
         env:
           BRANCH: ${{ github.ref_name }}
-          TOKEN: ${{ steps.app-token.outputs.token || secrets.UPDATE_AQUA_CHECKSUM_TOKEN || github.token }}
+          TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
           [ -z "$(git status --porcelain)" ] && { echo "checksums and baseline already in sync"; exit 0; }
           # GraphQL createCommitOnBranch, not `git commit` + push: those commits

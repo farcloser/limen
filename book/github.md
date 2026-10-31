@@ -77,6 +77,8 @@ Every declarable identifier, grouped (a test pins this list to the live check ca
 # --- Repository: rulesets ---
 # ruleset-default-branch: <reason>
 # ruleset-version-tags: <reason>
+# ruleset-renovate-branches: <reason>
+# renovate-environment: <reason>
 # --- Repository: hygiene & surface ---
 # description: <reason>
 # topics: <reason>
@@ -404,12 +406,28 @@ The `limen:tags` ruleset restricts `v*` tag creation, update and deletion to rep
 admins: the tag push is the release button ([releasing](./releasing.md)), and the ruleset
 names who may press it.
 
-Both rulesets are canonical objects owned by limen: created when missing, reconciled when
-drifted, recognized by name. Local weakening is drift and gets reset by `limen github fix`.
-The bypass list is compared too, and must be exactly the repository admins: with none, the
-admins' own release tag push and merges are refused; with another actor, that actor can
-press the button. GitHub shows the list only to an admin's token, so under any other the
-check reports it unverifiable rather than guessing.
+The `limen:renovate` ruleset restricts the creation and update of `renovate/**` branches to
+the Renovate App, the organisation's update App and the repository admins, in every
+repository whose default branch carries the checksum workflow. It pairs with the
+**`renovate` environment**, which holds the update App's private key and admits
+`renovate/*` branches alone, with no reviewer and no wait, since its runs are automation:
+the environment keeps the key from a run on any other branch, the ruleset keeps any other
+account from making such a branch, and together the key is reachable only from a branch
+Renovate, the update App or an admin made
+([tooling](./tooling.md#the-push-credential--the-update-app-its-key-in-each-repositorys-environment)).
+`limen github fix` creates the environment and its branch policy; the key's value is the
+human's, and the check fails naming the `gh secret set` command until it is there. The
+update App is named in the ruleset's bypass list by its registry id, looked up by the name
+limen registers it under; an organisation without the App gets a failure naming the
+registration, never a ruleset without it.
+
+All three rulesets are canonical objects owned by limen: created when missing, reconciled
+when drifted, recognized by name. Local weakening is drift and gets reset by `limen github
+fix`. The bypass list is compared too, and must be exactly the definition's: the repository
+admins for `limen:main` and `limen:tags` (with none, the admins' own release tag push and
+merges are refused; with another actor, that actor can press the button), the admins plus
+the two Apps for `limen:renovate`. GitHub shows the list only to an admin's token, so under
+any other the check reports it unverifiable rather than guessing.
 
 ## Fix semantics
 

@@ -508,7 +508,17 @@ func ensureUpdateApp(ctx context.Context, org, root string, stderr io.Writer) {
 		return
 	}
 
-	finding := github.EnsureUpdateAquaChecksumApp(ctx, org, stderr)
+	repo := repositoryOf(ctx, root)
+	if repo == "" {
+		_, _ = fmt.Fprintln(
+			stderr,
+			"limen: warning: update-app: no repository known (no origin remote) — the key's environment is per repository; rerun once origin is set",
+		)
+
+		return
+	}
+
+	finding := github.EnsureUpdateAquaChecksumApp(ctx, org, repo, stderr)
 	if finding.OK() {
 		_, _ = fmt.Fprintf(stderr, "limen: update-app: %s\n", finding.Message)
 

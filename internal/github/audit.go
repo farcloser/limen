@@ -98,6 +98,8 @@ func knownChecks() map[string]bool {
 		checkCodeScanning:         true,
 		checkRulesetDefaultBranch: true,
 		checkRulesetVersionTags:   true,
+		checkRulesetRenovate:      true,
+		checkRenovateEnvironment:  true,
 		checkWebhooks:             true,
 		checkDeployKeys:           true,
 		checkAgentsTeam:           true,
@@ -193,6 +195,9 @@ type auditor struct {
 	// auditRepoObject to the checks that only apply to private repositories.
 	private      bool
 	privateKnown bool
+	// checksumWorkflow caches whether the default branch carries the checksum
+	// workflow (renovateGuardsApply); nil until read.
+	checksumWorkflow *bool
 	// securityVisible is whether the repository object answered with its
 	// security_and_analysis block, which only tokens with administration
 	// read receive. It is the admin probe the Dependabot-alerts check needs:
@@ -219,6 +224,7 @@ func Audit(ctx context.Context, repo string, overrides map[string]string) ([]Fin
 	aud.auditActions()
 	aud.auditCodeScanning()
 	aud.auditRulesets()
+	aud.auditRenovateEnvironment()
 	aud.auditSurface()
 	aud.auditRenovateProcessing()
 	aud.auditAgentsTeam(owner, name)
@@ -1015,9 +1021,19 @@ func (d rulesetDetail) statusCheckContexts() []string {
 func (a *auditor) auditRulesets() {
 	var summaries []rulesetSummary
 
+	guarded, guardErr := a.renovateGuardsApply()
+	if guardErr != nil {
+		a.unverifiable(guardErr, checkRulesetRenovate)
+	}
+
+	checks := []string{checkRulesetDefaultBranch, checkRulesetVersionTags}
+	if guarded {
+		checks = append(checks, checkRulesetRenovate)
+	}
+
 	outcome := a.client.getJSONAllPages(a.ctx, "/rulesets?per_page=100", &summaries)
 	if outcome.err != nil || outcome.notFound {
-		a.unverifiable(orNotFound(outcome), checkRulesetDefaultBranch, checkRulesetVersionTags)
+		a.unverifiable(orNotFound(outcome), checks...)
 
 		return
 	}
@@ -1050,6 +1066,28 @@ func (a *auditor) auditRulesets() {
 		},
 	}
 
+	if guarded {
+		// The bypass list names the update App by its registry id, which the
+		// repository does not carry: without the App there is no key to guard
+		// and no list to write.
+		switch appID, err := updateAppID(a.ctx, a.owner); {
+		case errors.Is(err, errUpdateAppNotRegistered):
+			a.flag(checkRulesetRenovate, StatusFail, "(absent)", rulesetRenovateName,
+				"the canonical ruleset "+rulesetRenovateName+" cannot be written: "+err.Error(), nil)
+		case err != nil:
+			a.unverifiable(err, checkRulesetRenovate)
+		default:
+			bypass := renovateBypass(appID)
+			targets = append(targets, rulesetTarget{
+				check:  checkRulesetRenovate,
+				name:   rulesetRenovateName,
+				build:  func([]string) map[string]any { return canonicalRenovateRuleset(bypass) },
+				rules:  []string{"creation", "update"},
+				bypass: bypass,
+			})
+		}
+	}
+
 	for _, target := range targets {
 		a.auditRuleset(target, byName)
 	}
@@ -1064,6 +1102,18 @@ type rulesetTarget struct {
 	name      string
 	rules     []string
 	forbidden []string
+	// bypass is who may bypass the ruleset; nil means the repository admins
+	// alone (canonicalBypass).
+	bypass []bypassActor
+}
+
+// wantBypass is the bypass list the target's definition writes.
+func (t rulesetTarget) wantBypass() []bypassActor {
+	if t.bypass == nil {
+		return canonicalBypass()
+	}
+
+	return t.bypass
 }
 
 func (a *auditor) auditRuleset(target rulesetTarget, byName map[string]rulesetSummary) {
@@ -1376,7 +1426,7 @@ func rulesetDrift(target rulesetTarget, detail rulesetDetail, payload map[string
 		}, true
 	}
 
-	if current, want, differs := bypassDrift(detail); differs {
+	if current, want, differs := bypassDrift(detail, target.wantBypass()); differs {
 		return rulesetProblem{
 			current: "bypass: " + current,
 			desired: want,
@@ -1394,16 +1444,16 @@ func canonicalBypass() []bypassActor {
 	return []bypassActor{{ActorType: "RepositoryRole", BypassMode: "always", ActorID: repositoryAdminRoleID}}
 }
 
-// bypassDrift compares the live bypass list against canonicalBypass, as sets.
+// bypassDrift compares the live bypass list against the wanted one, as sets.
 // Equality, not the floor: a missing admin bypass blocks the release and the
 // owner's merges, and an extra actor widens who may do either. A list the token
 // cannot read is not drift; auditRuleset reports it unverifiable.
-func bypassDrift(detail rulesetDetail) (current, desired string, differs bool) {
+func bypassDrift(detail rulesetDetail, wanted []bypassActor) (current, desired string, differs bool) {
 	if detail.BypassActors == nil {
 		return "", "", false
 	}
 
-	want := actorStrings(canonicalBypass())
+	want := actorStrings(wanted)
 	have := actorStrings(*detail.BypassActors)
 
 	if slices.Equal(have, want) {
@@ -1651,20 +1701,13 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 		checkEntries = append(checkEntries, map[string]any{"context": name})
 	}
 
-	return map[string]any{
-		jsonNameKey:   rulesetMainName,
-		"target":      "branch",
-		"enforcement": enforcementActive,
-		"conditions": map[string]any{
-			"ref_name": map[string]any{"include": []string{"~DEFAULT_BRANCH"}, "exclude": []string{}},
-		},
-		// The same bypass the tags ruleset carries, for the same reason: a
-		// repository admin is the trust root, and a solo maintainer cannot get
-		// their own pull request approved by anyone else. The agent account and
-		// every App are write-level, not admin, so the approval requirement
-		// binds them and only them.
-		"bypass_actors": canonicalBypass(),
-		jsonRulesKey: []map[string]any{
+	// The same bypass the tags ruleset carries, for the same reason: a
+	// repository admin is the trust root, and a solo maintainer cannot get
+	// their own pull request approved by anyone else. The agent account and
+	// every App are write-level, not admin, so the approval requirement
+	// binds them and only them.
+	return rulesetObject(rulesetMainName, "branch", "~DEFAULT_BRANCH", canonicalBypass(),
+		[]map[string]any{
 			ruleOf(ruleDeletion),
 			ruleOf("non_fast_forward"),
 			ruleOf(ruleRequiredSigs),
@@ -1703,26 +1746,32 @@ func canonicalMainRuleset(existingContexts []string) map[string]any {
 				"strict_required_status_checks_policy": false,
 				"required_status_checks":               checkEntries,
 			}},
-		},
-	}
+		})
 }
 
 // canonicalTagsRuleset restricts v* tag creation/update/deletion to repository
 // admins — the tag push is the release button, and this names who may press it.
 func canonicalTagsRuleset() map[string]any {
-	return map[string]any{
-		jsonNameKey:   rulesetTagsName,
-		"target":      "tag",
-		"enforcement": enforcementActive,
-		"conditions": map[string]any{
-			"ref_name": map[string]any{"include": []string{"refs/tags/v*"}, "exclude": []string{}},
-		},
-		"bypass_actors": canonicalBypass(),
-		jsonRulesKey: []map[string]any{
+	return rulesetObject(rulesetTagsName, "tag", "refs/tags/v*", canonicalBypass(),
+		[]map[string]any{
 			ruleOf("creation"),
 			ruleOf("update"),
 			ruleOf(ruleDeletion),
+		})
+}
+
+// rulesetObject is the ruleset payload every canonical definition shares:
+// active, one included ref pattern, the given bypass list and rules.
+func rulesetObject(name, target, include string, bypass []bypassActor, rules []map[string]any) map[string]any {
+	return map[string]any{
+		jsonNameKey:   name,
+		"target":      target,
+		"enforcement": enforcementActive,
+		"conditions": map[string]any{
+			"ref_name": map[string]any{"include": []string{include}, "exclude": []string{}},
 		},
+		"bypass_actors": bypass,
+		jsonRulesKey:    rules,
 	}
 }
 
