@@ -1,12 +1,14 @@
 # GIT — a pinned git for the hermetic rig: build it, rewrite it, or scope it
 
-Status: **research, not a decision.** Three questions were studied on 2026-09-20: building
-git for all three platforms the way `forkcloser/curl` builds curl; replacing git with a Go
-implementation; and a scoped `limen-git` covering only what limen and the shared recipes
-use. The trials and measurements are the Forkcloser session's, run that day and relayed here;
-the inventory of what limen and the recipes ask of git was re-verified against this tree by the
-Limen session (`internal/github/infer.go`, `internal/rules/fix.go`, the `.limen/just` modules,
-the checksum workflow). Versions are as-researched, not pinned here.
+Status: **research, not a decision.** The decision is parked as
+https://github.com/farcloser/limen/issues/504; the inventory of git calls below has drifted
+since and is re-counted when it is taken up. Three questions were studied on 2026-09-20:
+building git for all three platforms the way `forkcloser/curl` builds curl; replacing git
+with a Go implementation; and a scoped `limen-git` covering only what limen and the shared
+recipes use. The build trials and their measurements were run that day; the inventory of
+what limen and the recipes ask of git was checked against this tree
+(`internal/github/infer.go`, `internal/rules/fix.go`, the `.limen/just` modules, the
+checksum workflow). Versions are as-researched, not pinned here.
 
 ## Why
 

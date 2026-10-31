@@ -506,10 +506,11 @@ working directory, canonically the org's `.github` repository). The catalog:
   repository's own compliance is `limen check` inside it.
 
 One deliberate absence: **org rulesets**. The per-repository `limen:main` / `limen:tags`
-rulesets remain authoritative; migrating them to org-level rulesets is phase 4 of
-[`design/LIMEN-GITHUB.md`](../design/LIMEN-GITHUB.md), with the scheduled drift audit. Org
-reads need an owner-scoped token: the governed fields are absent from anonymous responses,
-and absent classifies as `unverifiable`, never as passing.
+rulesets remain authoritative; migrating them to org-level rulesets comes with the
+scheduled drift audit (https://github.com/farcloser/limen/issues/507; the catalog is
+[`design/LIMEN-GITHUB.md`](../design/LIMEN-GITHUB.md)). Org reads need an owner-scoped
+token: the governed fields are absent from anonymous responses, and absent classifies as
+`unverifiable`, never as passing.
 
 ## Enforcement
 
