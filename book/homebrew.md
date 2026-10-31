@@ -1,18 +1,20 @@
 # Homebrew
 
-A repository that is a Homebrew tap: how its formulas are linted, what they pin, and
-where the tap is tested.
+A repository that is a Homebrew tap: how its formulas are linted, what they pin, and where
+the tap is tested.
 
 ## Homebrew formulas
 
 A repository that is a Homebrew tap — formulas under `Formula/` (sharded subdirectories
 included), casks under `Casks/`; the **modern layout only**, by decision: brew still reads
 the legacy locations (`HomebrewFormula/`, bare `*.rb` at the repository root), the recipes
-deliberately do not — lints them with brew's **own** tooling — `just do lint homebrew` runs `brew style`
-(Homebrew's vendored RuboCop with the formula cops) and `brew audit --strict`;
-`just do fix homebrew` is `brew style --fix`. No Ruby toolchain is ever installed for
-this: brew vendors its own Ruby and RuboCop, and plain RuboCop would not know the
-formula rules anyway. Both recipes pass vacuously when the repository carries no
+deliberately do not — lints them with brew's **own** tooling — `just do lint homebrew` runs
+`brew style` (Homebrew's vendored RuboCop with the formula cops) and `brew audit --strict`;
+`just do fix homebrew` is `brew style --fix`. brew loads a non-official tap's formulas only
+once the tap is trusted, so the audit trusts the tap for the run and withdraws the trust at
+exit when it granted it; the user's trust store is left as it was. No Ruby toolchain is ever
+installed for this: brew vendors its own Ruby and RuboCop, and plain RuboCop would not know
+the formula rules anyway. Both recipes pass vacuously when the repository carries no
 formulas.
 
 Two deliberate exceptions, named because they cut against doctrine:
