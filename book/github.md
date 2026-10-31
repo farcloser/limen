@@ -237,14 +237,14 @@ The decided merge model, enforced by the repository settings and the `limen:main
 - **Merges wait for green CI.** The `limen:main` ruleset carries required status checks,
   without which auto-merge (and a hasty human) would merge on red. A fresh ruleset requires
   `gate` — the job in the canonical `ci.yaml` that `needs` the shared lanes (the `limen`
-  call to the pinned `limen-verify.yaml`: every verify leg, fuzz and tools) and any job the
-  project adds, and fails unless all succeeded — and, where the default branch carries
-  `security.yaml`, the `security` check beside it (**Security**, below): what the canonical
-  workflows report, read from the default branch, never assumed from the seed. The check
-  names stay project-owned, so reconciliation preserves what a repository declared, with one
-  exception: canonical names follow the workflows. A ruleset still naming the matrix legs
-  (`verify (…)`) on a repository whose `ci.yaml` carries the gate job is drift, and
-  `limen github fix` moves it onto `gate`: a leg the matrix dropped is a check nothing
+  call to the pinned `limen-verify.yaml`: every verify leg, fuzz, race and tools) and any
+  job the project adds, and fails unless all succeeded — and, where the default branch
+  carries `security.yaml`, the `security` check beside it (**Security**, below): what the
+  canonical workflows report, read from the default branch, never assumed from the seed. The
+  check names stay project-owned, so reconciliation preserves what a repository declared,
+  with one exception: canonical names follow the workflows. A ruleset still naming the
+  matrix legs (`verify (…)`) on a repository whose `ci.yaml` carries the gate job is drift,
+  and `limen github fix` moves it onto `gate`: a leg the matrix dropped is a check nothing
   reports, and the pull request waits on it forever. `gate` alone on a repository whose
   default branch carries the security lane is moved onto `gate` and `security`, and
   `security` required where no lane reports it is moved back. A repository without the gate
@@ -285,6 +285,13 @@ The decided merge model, enforced by the repository settings and the `limen:main
   sources) so a short budget compounds into depth, uploads any crasher under `testdata/fuzz/`
   as an artifact, and feeds `gate`, so a crasher blocks a merge like a failing test. Safe
   everywhere: the recipe reports "no Fuzz* targets" and passes where there are none.
+
+  <a id="race"></a>
+  **Race.** The shared lanes carry a `race` job: one linux leg running `just do test go
+  race`, the unit tests under the race detector ([testing Go](./testing-go.md)). One leg:
+  the detector finds the same races on any platform it runs on, and the verify legs run the
+  suite without it. It feeds `gate`, so a race blocks a merge like a failing test. Safe
+  everywhere: the recipe says "no go.mod" and passes where there is none.
 
   <a id="security"></a>
   **Security.** The verdicts that move without the tree are not in `ci.yaml` at all: the
