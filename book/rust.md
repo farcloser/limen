@@ -56,6 +56,10 @@ project's default.
   lane carries no wrapper of its own, which would be a copy of that list, behind. Both pins
   are the Rust repository's, next to rustup's.
 
+In CI the canonical cache action keeps what the lanes install under `.build/` (rustup with
+the toolchain, cargo's caches, zig's) when the repository carries a `rust-toolchain.toml`,
+keyed on that file and every `Cargo.lock` ([github](./github.md)); nothing to configure.
+
 Every cargo call carries `--locked`: `Cargo.lock` is the crate pin, committed, and a lane
 never rewrites it; a dependency moves by a pull request that changes the lock, from
 Renovate's `cargo` manager (on by default; the shared preset restricts no manager). A lock

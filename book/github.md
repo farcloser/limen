@@ -337,7 +337,11 @@ The decided merge model, enforced by the repository settings and the `limen:main
   mechanism; what differs between jobs is an input (`go`, `linter-cache`, `aqua-fallback`),
   not a copy of the steps that drifts apart unseen, which is how the verify and security
   lanes came to share a Go key over different paths; the Go cache with the linter's is now
-  `go-lint-`, the one without it `go-`. Each mode is called once per job: attach and restore
+  `go-lint-`, the one without it `go-`. A repository that pins a Rust toolchain
+  (`rust-toolchain.toml`) gets a `rust-` cache too, with no input: what the Rust lanes install
+  under `.build/` (rustup with the toolchain, cargo's caches, zig's), keyed on the toolchain
+  file and every `Cargo.lock`; on Windows those directories are junctions into the image, as
+  the linter's cache is. Each mode is called once per job: attach and restore
   leave what save needs in the job's environment, and a second call fails. A key is never overwritten, so the
   caches that accumulate (Go's build cache, the fuzz corpus, the Windows image that holds the
   Go caches) carry the UTC day in their key: without it `main` would keep the first build of a
