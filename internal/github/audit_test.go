@@ -95,6 +95,9 @@ type stubResponse struct {
 	Stderr   string `json:"stderr"`
 	NotFound bool   `json:"notFound"`
 	Fail     bool   `json:"fail"`
+	// Times is how often a listed write is performed, when it is not once:
+	// two checks whose fixes share one PUT run it twice.
+	Times int `json:"times"`
 }
 
 // render is the body the stub writes for the flags gh was invoked with.
@@ -133,9 +136,13 @@ const ghStubEnv = "LIMEN_TEST_GH_STUB_DIR"
 // names that directory in the environment the code under test inherits: the
 // fake answers "METHOD path" keys from responses; anything unlisted errors
 // generically (the unverifiable path). Every invocation is logged to the
-// returned file, write payloads included. No shell is involved anywhere — a
-// generated script cannot be exec'd on Windows (no shebangs, PATHEXT), and a
-// .bat shim re-parses metacharacters like the '&' in query strings.
+// returned file, write payloads included. The writes a test lists are the
+// plan it expects: when the test ends, each must have been performed exactly
+// its count (once unless Times says otherwise), and the stub refused every
+// other, so a fix grows no write a test did not assert. No shell is involved
+// anywhere — a generated script cannot be exec'd on Windows (no shebangs,
+// PATHEXT), and a .bat shim re-parses metacharacters like the '&' in query
+// strings.
 func stubGH(t *testing.T, responses map[string]stubResponse) string {
 	t.Helper()
 
@@ -155,7 +162,52 @@ func stubGH(t *testing.T, responses map[string]stubResponse) string {
 	// the responses are process-wide state, so these tests are serial.
 	t.Setenv(ghStubEnv, dir)
 
-	return filepath.Join(dir, "calls.log")
+	logPath := filepath.Join(dir, "calls.log")
+
+	// Counted now: a test that calls stubGH again edits the same map.
+	want := map[string]int{}
+
+	for key, response := range responses {
+		if isWriteKey(key) {
+			want[key] += max(response.Times, 1)
+		}
+	}
+
+	t.Cleanup(func() {
+		if t.Failed() {
+			return
+		}
+
+		log, _ := os.ReadFile(logPath)
+		for line := range strings.SplitSeq(string(log), "\n") {
+			if isWriteKey(line) {
+				want[line]--
+			}
+		}
+
+		for key, delta := range want {
+			switch {
+			case delta > 0:
+				t.Errorf("listed write never performed: %s", key)
+			case delta < 0:
+				t.Errorf("write performed %d times beyond its listing: %s", -delta, key)
+			}
+		}
+	})
+
+	return logPath
+}
+
+// isWriteKey tells a write's stub key (and its log line, the same text) from
+// a read's and from a logged payload.
+func isWriteKey(key string) bool {
+	for _, prefix := range []string{"POST ", "PUT ", "PATCH ", "DELETE ", "secret set "} {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // TestMain lets the binary play both roles: the test suite, and — invoked
@@ -317,14 +369,12 @@ func runGHStub(dir string) int {
 	response, listed := responses[key]
 
 	switch {
-	case !listed && method == "GET":
-		// Unknown reads error (the unverifiable path)...
+	case !listed:
+		// A read the test did not list is the unverifiable path; a write it
+		// did not list is one the plan never showed, and it fails the same way.
 		fmt.Fprintln(os.Stderr, "gh: boom (HTTP 500)")
 
 		return 1
-	case !listed:
-		// ...while unlisted writes succeed silently.
-		return 0
 	case response.NotFound:
 		fmt.Fprintln(os.Stderr, "gh: Not Found (HTTP 404)")
 
@@ -565,6 +615,9 @@ func TestAuditUnverifiable(t *testing.T) { //nolint:paralleltest // serial by de
 
 func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
+	responses["PATCH repos/test/repo"] = stubResponse{}
+	responses["PUT repos/test/repo/vulnerability-alerts"] = stubResponse{}
+	responses["DELETE repos/test/repo/automated-security-fixes"] = stubResponse{}
 	responses["GET repos/test/repo"] = stubResponse{Body: strings.NewReplacer(
 		`"has_wiki": false`, `"has_wiki": true`,
 		`"has_issues": true`, `"has_issues": false`,
@@ -616,6 +669,7 @@ func TestApplyChanges(t *testing.T) { //nolint:paralleltest // serial by design:
 // endpoint.
 func TestRenameDefaultBranch(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
+	responses["POST repos/test/repo/branches/master/rename"] = stubResponse{}
 	responses["GET repos/test/repo"] = stubResponse{Body: strings.Replace(
 		compliantRepoJSON, `"default_branch": "main"`, `"default_branch": "master"`, 1,
 	)}
@@ -691,6 +745,7 @@ func TestOverrideExempts(t *testing.T) { //nolint:paralleltest // serial by desi
 // only failing toggle, so no other change carries the payload.)
 func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
+	responses["PATCH repos/test/repo"] = stubResponse{}
 	body := strings.Replace(compliantRepoJSON, `"has_wiki": false`, `"has_wiki": true`, 1)
 	body = strings.Replace(body, `"delete_branch_on_merge": true`, `"delete_branch_on_merge": false`, 1)
 	responses["GET repos/test/repo"] = stubResponse{Body: body}
@@ -734,6 +789,7 @@ func TestOverrideExemptsKeepsPatchClean(t *testing.T) { //nolint:paralleltest //
 //nolint:paralleltest // serial: sets the process environment.
 func TestWorkflowFixPreservesExemptedField(t *testing.T) {
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/actions/permissions/workflow"] = stubResponse{}
 	responses["GET repos/test/repo/actions/permissions/workflow"] = stubResponse{
 		Body: `{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}`,
 	}
@@ -973,6 +1029,8 @@ func TestInferRepo(t *testing.T) {
 // and the fix enables them with the restricted policy.
 func TestActionsDisabled(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/actions/permissions"] = stubResponse{}
+	responses["PUT repos/test/repo/actions/permissions/selected-actions"] = stubResponse{}
 	responses["GET repos/test/repo/actions/permissions"] = stubResponse{
 		Body: `{"enabled":false,"allowed_actions":"selected"}`,
 	}
@@ -1002,6 +1060,7 @@ func TestActionsDisabled(t *testing.T) { //nolint:paralleltest // serial by desi
 
 func TestForkPRApproval(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/actions/permissions/fork-pr-contributor-approval"] = stubResponse{}
 	responses["GET repos/test/repo/actions/permissions/fork-pr-contributor-approval"] = stubResponse{
 		Body: `{"approval_policy":"first_time_contributors_new_to_github"}`,
 	}
@@ -1083,6 +1142,7 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 
 	// Opted in via the override file, not configured: fail with a fix.
 	responses := compliantResponses()
+	responses["PATCH repos/test/repo/code-scanning/default-setup"] = stubResponse{}
 	responses["GET repos/test/repo/code-scanning/default-setup"] = stubResponse{Body: `{"state":"not-configured"}`}
 	logPath := stubGH(t, responses)
 
@@ -1106,7 +1166,8 @@ func TestCodeScanningOptIn(t *testing.T) { //nolint:paralleltest // serial by de
 		t.Error("expected default setup to be configured via PATCH")
 	}
 
-	// Opted in and configured: ok.
+	// Opted in and configured: ok, nothing to write.
+	delete(responses, "PATCH repos/test/repo/code-scanning/default-setup")
 	responses["GET repos/test/repo/code-scanning/default-setup"] = stubResponse{Body: `{"state":"configured"}`}
 	stubGH(t, responses)
 
@@ -1147,6 +1208,7 @@ func TestRulesetContextPreservation(t *testing.T) { //nolint:paralleltest // ser
 	// status-check context: the reconcile payload must preserve it and must not
 	// inject the canonical defaults.
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/rulesets/1"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request"},{"type":"deletion"},` +
 			`{"type":"required_signatures"},` +
@@ -1208,6 +1270,7 @@ func securityWorkflowResponse() stubResponse {
 //nolint:paralleltest // serial: sets the process environment.
 func TestRulesetRequiresSecurityWithLane(t *testing.T) {
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/rulesets/1"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
@@ -1250,6 +1313,7 @@ func TestRulesetRequiresSecurityWithLane(t *testing.T) {
 //nolint:paralleltest // serial: sets the process environment.
 func TestRulesetDropsSecurityWithoutLane(t *testing.T) {
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/rulesets/1"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_signatures"},` +
@@ -1288,6 +1352,7 @@ func TestRulesetDropsSecurityWithoutLane(t *testing.T) {
 //nolint:paralleltest // serial: sets the process environment.
 func TestRulesetCreatesWithSecurityContext(t *testing.T) {
 	responses := compliantResponses()
+	responses["POST repos/test/repo/rulesets"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
 		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 	}
@@ -1389,6 +1454,7 @@ func TestRulesetAllowsMergeCommits(t *testing.T) { //nolint:paralleltest // seri
 	// multi-commit pull request collapsed to one commit. A merge commit is the
 	// only method that lands the commits AND their signatures intact.
 	responses := compliantResponses()
+	responses["POST repos/test/repo/rulesets"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
 		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 	}
@@ -1423,6 +1489,7 @@ func TestRulesetCreatesSingleGateContext(t *testing.T) { //nolint:paralleltest /
 	// runner list into every ruleset, and a project whose CI differs then waits
 	// forever on checks nothing reports.
 	responses := compliantResponses()
+	responses["POST repos/test/repo/rulesets"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets?per_page=100"] = stubResponse{
 		Body: `[{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 	}
@@ -1461,6 +1528,7 @@ func TestRulesetRequiresSignatures(t *testing.T) { //nolint:paralleltest // seri
 	// commits is drift: the DCO trailer git-validation checks is a typed
 	// assertion, not proof of authorship. The reconcile must add the rule back.
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/rulesets/1"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["merge","squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},` +
@@ -1515,6 +1583,7 @@ func TestRulesetEmptyContextsFail(t *testing.T) { //nolint:paralleltest // seria
 // sends it as true.
 func TestRulesetKeptApprovalsFixed(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/rulesets/1"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],` +
 			`"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,` +
@@ -1555,6 +1624,7 @@ func TestRulesetStaleShapeReconciled(t *testing.T) { //nolint:paralleltest // se
 	// reconcile must drop the forbidden rule while preserving the project's
 	// own status-check context.
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/rulesets/1"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets/1"] = stubResponse{
 		Body: `{"rules":[{"type":"pull_request","parameters":{"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"allowed_merge_methods":["squash","rebase"]}},` +
 			`{"type":"deletion"},{"type":"non_fast_forward"},{"type":"required_linear_history"},` +
@@ -1748,6 +1818,7 @@ func TestDependabotAlerts404WithAdmin(t *testing.T) {
 //nolint:paralleltest // serial: sets the process environment.
 func TestRulesetTagsWithoutBypassFails(t *testing.T) {
 	responses := compliantResponses()
+	responses["PUT repos/test/repo/rulesets/2"] = stubResponse{}
 	responses["GET repos/test/repo/rulesets/2"] = stubResponse{
 		Body: `{"bypass_actors":[],"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}`,
 	}

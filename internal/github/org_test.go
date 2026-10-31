@@ -152,9 +152,12 @@ func TestAuditOrgNonCompliant(t *testing.T) {
 	responses["GET repos/test-org/.github/contents/.github/CONTRIBUTING.md"] = stubResponse{NotFound: true}
 	responses["GET repos/test-org/.github/contents/docs/CONTRIBUTING.md"] = stubResponse{NotFound: true}
 	responses["PATCH orgs/test-org"] = stubResponse{Body: `{}`}
-	responses["PUT orgs/test-org/actions/permissions"] = stubResponse{Body: `{}`}
-	responses["PUT orgs/test-org/actions/permissions/selected-actions"] = stubResponse{Body: `{}`}
-	responses["PUT orgs/test-org/actions/permissions/workflow"] = stubResponse{Body: `{}`}
+	// The allowed-actions and sha-pinning checks share one fix, as do the
+	// workflow-permissions and approve-pull-requests checks: applying every
+	// planned change runs each shared PUT twice.
+	responses["PUT orgs/test-org/actions/permissions"] = stubResponse{Body: `{}`, Times: 2}
+	responses["PUT orgs/test-org/actions/permissions/selected-actions"] = stubResponse{Body: `{}`, Times: 2}
+	responses["PUT orgs/test-org/actions/permissions/workflow"] = stubResponse{Body: `{}`, Times: 2}
 	responses["PUT orgs/test-org/actions/permissions/fork-pr-contributor-approval"] = stubResponse{Body: `{}`}
 	logPath := stubGH(t, responses)
 
@@ -455,6 +458,7 @@ func TestOrgOverridesValidate(t *testing.T) {
 //nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 	responses := compliantOrgResponses()
+	responses["PUT orgs/test-org/actions/permissions"] = stubResponse{}
 	responses["GET orgs/test-org/actions/permissions"] = stubResponse{
 		Body: `{"enabled_repositories": "selected", "allowed_actions": "local_only", "sha_pinning_required": false}`,
 	}
@@ -520,6 +524,7 @@ func configurationsResponse(targetType, securityUpdates string) stubResponse {
 //nolint:paralleltest // serial by design: sets the process environment.
 func TestAuditOrgDependabotSecurityUpdatesFixed(t *testing.T) {
 	responses := compliantOrgResponses()
+	responses["PATCH orgs/test-org/code-security/configurations/264288"] = stubResponse{}
 	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = configurationsResponse(
 		"organization", "enabled",
 	)

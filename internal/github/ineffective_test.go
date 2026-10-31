@@ -98,6 +98,7 @@ func TestAutoMergeNotPlannedOnFreePrivate(t *testing.T) { //nolint:paralleltest 
 		responses := compliantResponses()
 		responses["GET repos/test/repo"] = stubResponse{Body: private}
 		responses["GET orgs/test"] = plan.org
+		responses["PATCH repos/test/repo"] = stubResponse{}
 		logPath := stubGH(t, responses)
 
 		findings, changes := github.Audit(t.Context(), testRepo, nil)
