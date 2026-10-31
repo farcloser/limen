@@ -20,7 +20,7 @@ runs:
         # against checksums.txt, and checksums.txt against this.
         # renovate: depName=forkcloser/hermetic
         HERMETIC_VERSION: v0.2.3
-        HERMETIC_CHECKSUMS_SHA256: c7eb09712dc3d756bead96ae1286b53de275134d0012601ef37f57ec793f9431
+        HERMETIC_CHECKSUMS_SHA256: 0000000000000000000000000000000000000000000000000000000000000000
         # The job's own token, for `gh attestation verify` only, here and not
         # exported: a read of GitHub's attestations API, before any
         # branch-declared binary runs.
