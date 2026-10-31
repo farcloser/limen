@@ -332,31 +332,32 @@ The decided merge model, enforced by the repository settings and the `limen:main
   action, `.github/actions/cache`, keeps a job's caches in three calls: `attach` before
   setup-hermetic (on Windows the caches live in one disk image that holds hermetic's root, so
   it is attached first), `restore` right after setup-hermetic, before the job runs a tool (on
-  Linux and macOS, hermetic's store first, then the Go caches as files: resolving their paths
-  runs `go`, which the store holds) and `save` at the end. A workflow names no platform and no cache
-  mechanism; what differs between jobs is an input (`go`, `linter-cache`, `aqua-fallback`),
-  not a copy of the steps that drifts apart unseen, which is how the verify and security
-  lanes came to share a Go key over different paths; the Go cache with the linter's is now
-  `go-lint-`, the one without it `go-`. A repository that pins a Rust toolchain
-  (`rust-toolchain.toml`) gets a `rust-` cache too, with no input: what the Rust lanes install
-  under `.build/` (rustup with the toolchain, cargo's caches, zig's), keyed on the toolchain
-  file and every `Cargo.lock`; on Windows those directories are junctions into the image, as
-  the linter's cache is. Each mode is called once per job: attach and restore
-  leave what save needs in the job's environment, and a second call fails. A key is never overwritten, so the
-  caches that accumulate (Go's build cache, the fuzz corpus, the Windows image that holds the
-  Go caches) carry the UTC day in their key: without it `main` would keep the first build of a
-  `go.sum` forever and the corpus would never grow, with it `main`'s first run of a day
-  refreshes them. A content-pinned `caches.yaml` keeps one generation per key on the
-  default branch, which it reads from the repository, never assumes by name: after each `ci`
-  run there, and once a day, every entry under a canonical prefix that is not
-  the newest of its family is deleted, through GitHub's own token with `actions: write` on
-  that one job. A family is the key without its day, content hash and Go version, plus the
-  entry's version, which GitHub derives from the cached paths: two entries under one key over
-  different paths are two families, never each other's older generation (the verify and
-  security Go caches were exactly that until `go-lint-` split them, and a family on the key
-  alone had each delete the other in turn). A pull request restores `main`'s caches through the
-  fallback keys and pays for what its change touched, which is what a pull request should
-  pay for.
+  Linux and macOS, hermetic's store first, then the Go caches as files: the build cache is
+  `.build/go-build`, the module cache's path comes from `go env`, which runs the store's
+  `go`) and `save` at the end. A workflow names no platform and no cache mechanism; what
+  differs between jobs is an input (`go`, `linter-cache`, `aqua-fallback`), not a copy of
+  the steps that drifts apart unseen, which is how the verify and security lanes came to
+  share a Go key over different paths; the Go cache with the linter's is now `go-lint-`, the
+  one without it `go-`. A repository that pins a Rust toolchain (`rust-toolchain.toml`) gets
+  a `rust-` cache too, with no input: what the Rust lanes install under `.build/` (rustup
+  with the toolchain, cargo's caches, zig's), keyed on the toolchain file and every
+  `Cargo.lock`; on Windows those directories are junctions into the image, as the Go build
+  cache and the linter's are. Each mode is called once per job: attach and restore leave
+  what save needs in the job's environment, and a second call fails. A key is never
+  overwritten, so the caches that accumulate (Go's build cache, the fuzz corpus, the Windows
+  image that holds the Go caches) carry the UTC day in their key: without it `main` would
+  keep the first build of a `go.sum` forever and the corpus would never grow, with it
+  `main`'s first run of a day refreshes them. A content-pinned `caches.yaml` keeps one
+  generation per key on the default branch, which it reads from the repository, never
+  assumes by name: after each `ci` run there, and once a day, every entry under a canonical
+  prefix that is not the newest of its family is deleted, through GitHub's own token with
+  `actions: write` on that one job. A family is the key without its day, content hash and Go
+  version, plus the entry's version, which GitHub derives from the cached paths: two entries
+  under one key over different paths are two families, never each other's older generation
+  (the verify and security Go caches were exactly that until `go-lint-` split them, and a
+  family on the key alone had each delete the other in turn). A pull request restores
+  `main`'s caches through the fallback keys and pays for what its change touched, which is
+  what a pull request should pay for.
 
   The Go cache is the one that matters. Measured on primordium's verify job at one commit,
   three runs each: 545 s on Linux with no cache, 536 s with aqua's store alone, 253 s with

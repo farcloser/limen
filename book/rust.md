@@ -33,8 +33,9 @@ story. The toolchain is pinned in two halves:
 ## What a lane does
 
 Every Rust lane starts the same way (`rust_env` in `.limen/just/lib.just`). rustup's and
-cargo's homes are `.build/rustup` and `.build/cargo`, under the checkout like the Go caches,
-so a checkout owns what it runs and nothing lands in `~/.cargo` or `~/.rustup`. The first
+cargo's homes are `.build/rustup` and `.build/cargo`, under the checkout like the Go
+build cache, so a checkout owns what it runs and nothing lands in `~/.cargo` or
+`~/.rustup`. The first
 lane installs rustup from the pinned `rustup-init` there with no toolchain, and the first
 cargo call installs the toolchain `rust-toolchain.toml` names. On Windows the two homes are
 given to rustup as native paths and hermetic's link resolves `rustup-init` to the `.exe`. A

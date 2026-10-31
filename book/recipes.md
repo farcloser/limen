@@ -32,11 +32,12 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   asking for a pin bump instead of fetching an unpinned compiler; `GOFLAGS`, `GOPRIVATE`,
   `GOOS`/`GOARCH` neutralized, so ambient flags or a cross-compile target cannot rewrite a
   build; `GOSUMDB`/`GOPROXY` pinned to their real defaults, so an ambient `GOSUMDB=off`
-  cannot defeat the checksum verification the `.limen/tools/go.mod` pins rely on. Each stays
-  overridable by a project's own `.justfile`: explicit and tracked, never ambient. The one
-  exception is `GOWORK`: a `go.work` in the tree (or a parent) deliberately puts recipes into
-  workspace mode, at the eyes-open cost that a build under an active workspace can differ
-  from CI.
+  cannot defeat the checksum verification the `.limen/tools/go.mod` pins rely on; `GOCACHE`
+  set to `.build/go-build`, the checkout's own, so no build or clean in another checkout
+  removes an entry a lane here was just handed. Each stays overridable by a project's own
+  `.justfile`: explicit and tracked, never ambient. The one exception is `GOWORK`: a
+  `go.work` in the tree (or a parent) deliberately puts recipes into workspace mode, at the
+  eyes-open cost that a build under an active workspace can differ from CI.
 - **git's transport is the configured one**: `GIT_SSH_COMMAND` is set to the tracked
   `core.sshCommand` where one is configured. A sandbox exports a value that outranks the
   configuration, and every git a recipe spawns, the `go mod download` of a private module
