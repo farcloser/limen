@@ -9,13 +9,16 @@ import (
 	"crypto"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -232,6 +235,157 @@ func TestParseAndGet(t *testing.T) {
 	}
 }
 
+// TestCommitPin: an upstream pinned to a commit of a branch. The commit is a
+// template variable and a served field, a digest computed for another commit
+// is stale, and a refresh writes the digest's commit line beside its version.
+func TestCommitPin(t *testing.T) {
+	t.Parallel()
+
+	const (
+		old     = "e491d2ec76709975f09d1820367a92a1772ccfb1"
+		current = "0123456789abcdef0123456789abcdef01234567"
+		tarball = "the sources at the new head"
+	)
+
+	host := artifactHost(t, map[string]string{"/archive/" + current + ".tar.gz": tarball})
+	text := "pins:\n  - name: fox\n    renovate: git-refs https://h/fox\n    version: master\n" +
+		"    commit: " + current + "\n    url: " + host.URL + "/archive/${commit}.tar.gz\n    verify: download\n" +
+		"    digest:\n      version: master\n      commit: " + old + "\n      sha256: " + strings.Repeat("0", 64) + "\n"
+
+	manifest, err := pins.Parse([]byte(text))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	for _, tc := range []struct{ field, want string }{
+		{"version", "master"},
+		{"commit", current},
+		{"url", host.URL + "/archive/" + current + ".tar.gz"},
+	} {
+		if got, getErr := manifest.Get("fox", tc.field); getErr != nil || got != tc.want {
+			t.Errorf("Get(fox, %s) = %q, %v; want %q", tc.field, got, getErr, tc.want)
+		}
+	}
+
+	if got := manifest.Stale(); !slices.Equal(got, []string{"fox"}) {
+		t.Errorf("stale = %v, want [fox]: the digest was computed for another commit", got)
+	}
+
+	root := writePins(t, text)
+
+	if changed, refreshErr := pins.Refresh(t.Context(), root, io.Discard); refreshErr != nil ||
+		!slices.Equal(changed, []string{"fox"}) {
+		t.Fatalf("refresh = %v, %v; want [fox]", changed, refreshErr)
+	}
+
+	after, _ := os.ReadFile(filepath.Join(root, pins.File))
+	want := strings.Replace(strings.Replace(text, "commit: "+old, "commit: "+current, 1),
+		strings.Repeat("0", 64), sha256Of(tarball), 1)
+
+	if string(after) != want {
+		t.Errorf("after refresh:\n%s\nwant:\n%s", after, want)
+	}
+
+	// A digest written before the pin had a commit line gains one.
+	without := strings.Replace(text, "      commit: "+old+"\n", "", 1)
+	root = writePins(t, without)
+
+	if _, refreshErr := pins.Refresh(t.Context(), root, io.Discard); refreshErr != nil {
+		t.Fatalf("refresh of a digest without a commit line: %v", refreshErr)
+	}
+
+	after, _ = os.ReadFile(filepath.Join(root, pins.File))
+	if string(after) != want {
+		t.Errorf("after refresh without a digest commit line:\n%s\nwant:\n%s", after, want)
+	}
+
+	// Not a commit pin: the commit field is not served.
+	plain, _ := pins.Parse([]byte(fmt.Sprintf(fixture, "https://h", "https://h", "https://h", "https://h")))
+	if _, getErr := plain.Get("tool", "commit"); !errors.Is(getErr, pins.ErrNoSuchField) {
+		t.Errorf("Get(tool, commit) on a version pin = %v, want ErrNoSuchField", getErr)
+	}
+}
+
+// TestRenovateManagerReadsBothShapes: the shared preset's pins.yaml manager,
+// read from the canonical .limen/renovate.json, captures a commit pin's
+// branch as currentValue and its commit as currentDigest, and a version
+// pin's version alone.
+func TestRenovateManagerReadsBothShapes(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join("..", "..", ".limen", "renovate.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type customManager struct {
+		ManagerFilePatterns []string `json:"managerFilePatterns"`
+		MatchStrings        []string `json:"matchStrings"`
+	}
+
+	var preset struct {
+		CustomManagers []customManager `json:"customManagers"`
+	}
+
+	if err := json.Unmarshal(data, &preset); err != nil {
+		t.Fatal(err)
+	}
+
+	var pattern string
+
+	for _, manager := range preset.CustomManagers {
+		if slices.ContainsFunc(
+			manager.ManagerFilePatterns,
+			func(p string) bool { return strings.Contains(p, "pins") },
+		) {
+			pattern = manager.MatchStrings[0]
+		}
+	}
+
+	if pattern == "" {
+		t.Fatal("no pins.yaml manager in the preset")
+	}
+
+	matcher := regexp.MustCompile(pattern)
+	groups := func(text string) map[string]string {
+		t.Helper()
+
+		match := matcher.FindStringSubmatch(text)
+		if match == nil {
+			t.Fatalf("the manager does not match:\n%s", text)
+		}
+
+		out := map[string]string{}
+
+		for index, name := range matcher.SubexpNames() {
+			if name != "" && match[index] != "" {
+				out[name] = match[index]
+			}
+		}
+
+		return out
+	}
+
+	commitPin := "    renovate: git-refs https://h/fox\n    version: master\n" +
+		"    commit: e491d2ec76709975f09d1820367a92a1772ccfb1\n    url: https://h/${commit}.tar.gz\n"
+	versionPin := "    renovate: github-releases x/y\n    extract-version: ^v(?<version>.*)$\n" +
+		"    version: 2.0.0\n    url: https://h/${version}.tar.gz\n"
+
+	if got, want := groups(commitPin), (map[string]string{
+		"datasource": "git-refs", "depName": "https://h/fox",
+		"currentValue": "master", "currentDigest": "e491d2ec76709975f09d1820367a92a1772ccfb1",
+	}); !maps.Equal(got, want) {
+		t.Errorf("commit pin groups = %v, want %v", got, want)
+	}
+
+	if got, want := groups(versionPin), (map[string]string{
+		"datasource": "github-releases", "depName": "x/y",
+		"extractVersion": "^v(?<version>.*)$", "currentValue": "2.0.0",
+	}); !maps.Equal(got, want) {
+		t.Errorf("version pin groups = %v, want %v", got, want)
+	}
+}
+
 // TestVersioningGroupsExpand: a tag whose release asset spells the version
 // another way is rebuilt from the named groups of its regex versioning, in the
 // url and in the method's arguments.
@@ -274,11 +428,27 @@ func TestParseRejects(t *testing.T) {
 		text string
 		want error
 	}{
-		"no pins section":    {"other:\n  - name: a\n", pins.ErrSyntax},
-		"field before pins":  {"  - name: a\npins:\n", pins.ErrSyntax},
-		"bad indentation":    {strings.Replace(good, "    url:", "   url:", 1), pins.ErrSyntax},
-		"unknown field":      {strings.Replace(good, "    url:", "    where:", 1), pins.ErrEntry},
-		"bad name":           {strings.Replace(good, "name: a", "name: A_b", 1), pins.ErrEntry},
+		"no pins section":   {"other:\n  - name: a\n", pins.ErrSyntax},
+		"field before pins": {"  - name: a\npins:\n", pins.ErrSyntax},
+		"bad indentation":   {strings.Replace(good, "    url:", "   url:", 1), pins.ErrSyntax},
+		"unknown field":     {strings.Replace(good, "    url:", "    where:", 1), pins.ErrEntry},
+		"bad name":          {strings.Replace(good, "name: a", "name: A_b", 1), pins.ErrEntry},
+		"short commit": {
+			strings.Replace(good, "    version: 1\n", "    version: 1\n    commit: abc\n", 1),
+			pins.ErrEntry,
+		},
+		"commit before version": {strings.Replace(good, "    version: 1\n",
+			"    commit: "+strings.Repeat("a", 40)+"\n    version: 1\n", 1), pins.ErrEntry},
+		"digest commit alone": {strings.Replace(good, "      version: 1\n",
+			"      version: 1\n      commit: "+strings.Repeat("a", 40)+"\n", 1), pins.ErrEntry},
+		"commit before renovate": {strings.Replace(good, "    renovate: github-tags x/y\n",
+			"    commit: "+strings.Repeat("a", 40)+"\n    renovate: github-tags x/y\n", 1), pins.ErrEntry},
+		"field between version and commit": {strings.Replace(good, "    version: 1\n    url: https://h/a\n",
+			"    version: 1\n    url: https://h/a\n    commit: "+strings.Repeat("a", 40)+"\n", 1), pins.ErrEntry},
+		"commit variable on a version pin": {
+			strings.Replace(good, "url: https://h/a", "url: https://h/${commit}", 1),
+			pins.ErrEntry,
+		},
 		"no version":         {strings.Replace(good, "    version: 1\n", "", 1), pins.ErrEntry},
 		"renovate too short": {strings.Replace(good, "github-tags x/y", "github-tags", 1), pins.ErrEntry},
 		"renovate too long": {

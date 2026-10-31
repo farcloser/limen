@@ -92,7 +92,7 @@ func refreshDue(ctx context.Context, root string, progress io.Writer, due func(E
 		}
 
 		if sum == entry.SHA256 && !entry.Stale() {
-			_, _ = fmt.Fprintf(progress, "%s: %s unchanged\n", entry.Name, entry.Version)
+			_, _ = fmt.Fprintf(progress, "%s: %s unchanged\n", entry.Name, entry.label())
 
 			continue
 		}
@@ -104,7 +104,7 @@ func refreshDue(ctx context.Context, root string, progress io.Writer, due func(E
 
 		changed = append(changed, entry.Name)
 
-		_, _ = fmt.Fprintf(progress, "%s: %s → sha256 %s\n", entry.Name, entry.Version, sum)
+		_, _ = fmt.Fprintf(progress, "%s: %s → sha256 %s\n", entry.Name, entry.label(), sum)
 	}
 
 	if len(changed) == 0 {
