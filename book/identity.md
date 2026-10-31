@@ -334,8 +334,9 @@ thrown away and cloned afresh, never repaired, and nothing in it is ever staged 
 **Bypass mode cannot be refused from the user's settings.** `disableBypassPermissionsMode:
 "disable"` is honoured in managed settings only; placed in `~/.claude/settings.json` it
 changes nothing, and a session switched to bypass mode a minute after it was written
-(2026-10-12). So the one sandbox exclusion, UTM's `utmctl` by absolute path, runs
-unprompted whenever a session is in bypass mode, and nothing in the rig prevents that mode.
+(2026-10-12). So the sandbox exclusions, UTM's `utmctl` and Xcode's `stapler validate` by
+absolute path, run unprompted whenever a session is in bypass mode, and nothing in the rig
+prevents that mode.
 Bypass mode is the human's break-glass and stays one; the rule is to leave it the moment the
 emergency is over, and never to run a VM tool from a session in it.
 
@@ -398,7 +399,12 @@ the VM boots the others served cannot run sandboxed, because the sandbox denies 
 `kern.hv_support` sysctl ([known upstream bugs](./upstream.md)), so a boot is a human-run
 step until Anthropic moves. The rule for the next request: a name on `PATH` or a recipe is
 refused on sight; a human-owned binary a session cannot replace, by its absolute path, may
-be weighed.
+be weighed. The second entry, `/Applications/Xcode.app/Contents/Developer/usr/bin/stapler
+validate *` (2026-10-31), was weighed so: stapler looks a notarization ticket up through
+Apple's URL loading, which honours the system proxy only, and the sandbox reaches DNS and
+egress through its own proxy only, so no sandboxed process reaches Apple's ticket service
+and no sandbox setting says otherwise; the command is read-only, and it names the binary
+rather than the `xcrun` launcher, which resolves through `xcode-select`.
 
 **Breakage is reported, not routed around.** An agent that finds the rig not working — the
 installed ssh refused, signing unable to reach the agent, a recipe failing — says so first
