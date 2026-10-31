@@ -144,22 +144,28 @@ read a key. Three consequences the script handles:
 
 The bot's git configuration is one file, `~/.claude/gitconfig`, written whole by
 `limen-install-agent` and named by `GIT_CONFIG_GLOBAL` in the sessions' environment: the
-identity, the signing wrapper, the ssh command, the `c` alias, an empty excludes file,
-`push.autosetupremote` off, the gh credential helper. The `c` alias is `env -u
-GIT_SSH_COMMAND git`, and every git command a session runs goes through it, local ones
-included: the harness sets `GIT_SSH_COMMAND` in the sessions' environment, which outranks
-`core.sshCommand`, so a raw `git fetch` reaches the system ssh and the machine's own keys
-instead of the rig's ssh and the bot's key, and a raw local command is the habit that
-produces the raw network one. A network command is plain `git c fetch`, `push` or `pull`:
-`GIT_CONFIG_GLOBAL` names this file, so its `core.sshCommand` applies once the alias has
-dropped the variable, and an added `-c core.sshCommand=…` buys nothing and costs the
-`git c push --force-with-lease` allow rule, which matches the prefix
-`git c push --force-with-lease=` at the start of its own Bash command and fixes the head
-of the command only: nothing between `git c` and `push`, nothing between `push` and
+identity, the signing wrapper, the ssh command, an empty excludes file,
+`push.autosetupremote` off, the gh credential helper. A session's git is plain `git`. The
+harness sets `GIT_SSH_COMMAND` in every sandboxed command, naming a bare `ssh` with the
+sandbox's own proxy and nothing else, and that variable outranks `core.sshCommand`; the
+rig makes that command work as it is. Bare `ssh` resolves through
+hermetic to the fork's ssh in the sessions' root, the same fork hermetic verified against
+its pin, and the bot key's peers in taciturn name the fork's two clients under both roots,
+the machine's and the sessions'. The client options the bot needs, the agent, the key's
+algorithm as the one accepted, the pinned `known_hosts`, strict host checking, are a file
+the installer writes in the sessions' root and names in `SSH_CONFIG_INCLUDE`, a variable
+only a session's environment carries; the fork's shipped `ssh_config` reads
+`Include ${SSH_CONFIG_INCLUDE}` first and skips the line when the variable is unset, so
+the human's own ssh, the same fork, never reads it. `core.sshCommand` in this file stays
+for a git run with no injected variable; it is never reached inside the sandbox. An
+added `-c core.sshCommand=…` buys nothing and costs the
+`git push --force-with-lease` allow rule, which matches the prefix
+`git push --force-with-lease=` at the start of its own Bash command and fixes the head
+of the command only: nothing between `git` and `push`, nothing between `push` and
 `--force-with-lease=`, no `-q`, no `&&` or `;` around it. A force push of any other shape,
 an option between, a chained command, a bare `--force`, is refused as destructive and goes
 to the classifier, which is the rule working. The tail the rule leaves free is the
-session's to get right: the form is `git c push --force-with-lease=<branch>:<old sha>
+session's to get right: the form is `git push --force-with-lease=<branch>:<old sha>
 origin <branch>:refs/heads/<branch>`, the lease on the sha it last saw, so git refuses a
 push over a commit it did not see, and the branch by name as the source. Never `HEAD:`
 there: the command takes no `-C` without leaving the prefix, so it runs in the shell's
