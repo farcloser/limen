@@ -202,11 +202,12 @@ What each shared module is *for*; mechanics live in the module files:
   ([github](./github.md#mainline-doctrine-pull-requests-always)).
 - **`test`**: the suites, per language. `just do test go`: `unit`; `race`, which asks the
   toolchain whether the host has a race detector and, where it does not (windows/arm64), says
-  so and passes rather than fail every push on a Go limitation; `fuzz`, a short smoke of
-  every `Fuzz*` target, run by the canonical CI's own `fuzz` job on one leg, not from the
-  `test` aggregate; `cover`, with an optional minimum gate. `just do test rust`: `unit`,
-  `cargo test` from the pinned toolchain ([rust](./rust.md)). No default: `just test` is the
-  project's aggregate.
+  so and passes rather than fail every push on a Go limitation; `fuzz`, a short smoke of every
+  `Fuzz*` target, run by the canonical CI's own `fuzz` job on one leg, not from the `test`
+  aggregate; `cover`, with an optional minimum gate. `just do test rust`: `unit`, `cargo test`
+  from the pinned toolchain ([rust](./rust.md)). No default: `just test` is the project's
+  aggregate. A root `.justfile` that defines `_test-prepare` has it run before every shared Go
+  test recipe, for the inputs a compile needs built first ([testing](./testing.md)).
 - **`perf`**: the reports that judge nothing, per language. `just do perf go`: `bce` and
   `escape` by default (every bounds check the compiler could not eliminate, every value it
   moved to the heap, every function it refused to inline; compile-only and quick), and,
