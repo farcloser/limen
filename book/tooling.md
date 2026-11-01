@@ -612,7 +612,20 @@ The methods, each a way to obtain a sha256 the entry can stand behind:
 | `github-release-asset <owner/repo> [<tag>]` | downloads, has `gh release verify-asset <tag> --repo <owner/repo>` accept it, hashes it; the tag is `${version}` unless templated (`v${version}`) | GitHub's own attestation of an immutable release, which `gh attestation verify` does not see (Kata) |
 | `cosign-sha256sums <sums-url> <bundle-url> <identity-regexp> <issuer>` | fetches the SHA256SUMS and its cosign bundle, has `cosign verify-blob` accept the pair, takes the artifact's line; the artifact is not downloaded | a release that ships a cosign-signed sums file (ossein-kernel) |
 | `pgp-sha256sums <sums-url> <key-url> <fingerprint>` | fetches the clearsigned sums and the signer's public key block, verifies the signature in-process (limen's own OpenPGP reader: v4 keys and signatures, RSA or Ed25519, SHA-2), requires the signing key to be the one the fingerprint pins, takes the artifact's line from the signed text; the artifact is not downloaded | a source that clearsigns its checksums (kernel.org's `sha256sums.asc`) |
-| `cms <sig-url> <signer-subject-regexp> <root-url> <root-sha256-fingerprint>` | downloads the artifact, the detached CMS signature (RFC 5652 SignedData, the PKCS#7 file a vendor publishes beside a download), verifies the signature in-process over the downloaded bytes (limen's own reader: signed attributes or the content alone, RSA or ECDSA with SHA-2), requires the signing certificate to be for code signing, to match the subject regexp (against the RFC 2253 form, `CN=…,O=…,C=…`; the arguments split on whitespace, so a space in a name is written `\s`) and to chain to the root whose SHA-256 fingerprint is pinned, the root fetched from the CA's own URL (PEM, DER or a certs-only `.p7c`, the form the intermediate's CA Issuers field names; the URL is transport, the fingerprint the trust, never the system's store, which differs by platform), hashes the bytes it verified; the chain is held at the time of the check, no timestamp countersignature read, so a refresh after the signer's certificate expires refuses and an older artifact's digest is then written by hand | a vendor download signed with a public-CA code-signing certificate (Intel's SDE) |
+| `cms <sig-url> <signer-subject-regexp> <root-url> <root-sha256-fingerprint>` | downloads the artifact and the detached CMS signature beside it, verifies the signature in-process over the downloaded bytes against a code-signing certificate that matches the subject and chains to the pinned root, hashes them (below) | a vendor download signed with a public-CA code-signing certificate (Intel's SDE) |
+
+The `cms` method reads RFC 5652 SignedData, the PKCS#7 file a vendor publishes beside a
+download, with limen's own reader: signed attributes (content-type data, the message digest of
+the content, the signature over them) or a signature over the content alone, RSA or ECDSA with
+SHA-2, the signer by issuer and serial or by subject key identifier, and the leaf's
+code-signing purpose stated, not assumed. The root is fetched from the CA's own URL (PEM, DER
+or a certs-only `.p7c`, the form the intermediate's CA Issuers field names) and pinned by its
+SHA-256 fingerprint: the URL is transport, the fingerprint the trust, and the system's store
+is never consulted, since it differs by platform. The subject regexp matches the RFC 2253 form
+(`CN=…,O=…,C=…`); the arguments split on whitespace, so a space in a name is written `\s`. The
+chain is held at the time of the check, no timestamp countersignature read, so a refresh after
+the signer's certificate expires refuses, and an older artifact's digest is then written by
+hand.
 
 `${version}` and `${major}` (the version up to its first dot, the way kernel.org names a
 series directory) expand in `url` and in the method's arguments. Under a `regex:` versioning
