@@ -100,15 +100,18 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     form `farcloser/limen/.github/workflows/limen-release-apple.yaml@<commit>` that Renovate moves,
     and runs `limen fix`: the file is a thin caller from then on, reset around its reference like
     the three every repository carries ([mandatory files](./mandatory-files.md)).
-  - **The `sign` job**, on macOS in the `release` environment with a read-only token: it imports the
-    Developer ID identity into a job-scoped keychain, reads the team id off the certificate, writes
-    the provisioning profile and the notarization key when the environment holds them (the identity
-    is required; the other two are read as set or absent, never half set, since the policy signs
-    every bundle and notarizes only what Launch Services evaluates), exports the lane's names
+  - **The `sign` job**, on macOS in the `release` environment with a read-only token: it imports
+    the Developer ID identity into a job-scoped keychain, reads the team id off the
+    certificate, writes the provisioning profile and the notarization key when the environment
+    holds them (the job requires the identity; the other two are read as set or absent, never
+    half set, since the policy signs every bundle and notarizes only what Launch Services
+    evaluates; none is a `required` secret of the call, since GitHub checks those in the
+    caller's scope, where an environment secret does not exist yet), exports the lane's names
     (`APPLE_SIGN_IDENTITY`, `APPLE_SIGN_TEAM`, `APPLE_SIGNING_KEYCHAIN`,
     `APPLE_PROVISIONING_PROFILE_PATH`, `APPLE_NOTARY_KEY`, `APPLE_NOTARY_KEY_ID`,
-    `APPLE_NOTARY_ISSUER_ID`), runs the project's `just package <version>`, removes every credential
-    whatever the outcome, and hands `.build/assets/` to `publish` as a run artifact.
+    `APPLE_NOTARY_ISSUER_ID`), runs the project's `just package <version>`, removes every
+    credential whatever the outcome, and hands `.build/assets/` to `publish` as a run
+    artifact.
   - **The `publish` job** holds no Apple secret: it runs `just do release --ci` on macOS, where
     `verify-assets` has `codesign` and `stapler`, and attests `.build/assets/*` and `checksums.txt`.
   - **What the project owes**: `package <version>`, which builds, signs with the exported identity,
