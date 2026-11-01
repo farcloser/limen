@@ -159,11 +159,6 @@ func (f Finding) OK() bool { return f.Status == StatusOK }
 type Policy struct {
 	// AllowedLicenses is the set of license IDs a repository's LICENSE may be.
 	AllowedLicenses []license.ID
-	// UpdateAppIdentity is the commit author address of the organization's
-	// update-aqua-checksum App ("<id>+<slug>[bot]@users.noreply.github.com"),
-	// resolved by the caller (see cmd/limen; the rules package is offline).
-	// Empty means unknown, and the renovate rule then passes without enforcing.
-	UpdateAppIdentity string
 	// Repository is the repository's own "owner/name", resolved by the caller
 	// from the origin remote: renovate.json extends the shared configuration
 	// by that name. Empty means unknown, and the renovate rule then does not
@@ -212,8 +207,9 @@ func Check(root string, policy Policy) []Finding {
 		checkJustfile(root),
 		checkAqua(root),
 		checkLychee(root),
-		checkWorkflows(root),
+		checkWorkflows(root, policy),
 		checkRenovate(root, policy),
+		checkSecrets(root),
 		checkShellcheck(root),
 	}
 
@@ -648,22 +644,22 @@ func checkLychee(root string) Finding {
 // exist (limen fix seeds the canonical ones; their content is the project's
 // own after that). The release workflow is required exactly when the
 // repository carries a goreleaser config — releasing is opt-in.
-func checkWorkflows(root string) Finding {
+func checkWorkflows(root string, policy Policy) Finding {
 	const rule = "workflows"
 
 	for _, pinned := range []struct{ path, content string }{
-		{pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum},
 		{pathActionSetupAqua, limen.CanonicalActionSetupAqua},
 		{pathActionWinCache, limen.CanonicalActionWindowsCacheImage},
 		{pathActionCache, limen.CanonicalActionCache},
-		{pathWorkflowVerify, limen.CanonicalWorkflowVerify},
-		{pathWorkflowSecurity, limen.CanonicalWorkflowSecurity},
-		{pathWorkflowCaches, limen.CanonicalWorkflowCaches},
 		{pathReleaseNotes, limen.CanonicalReleaseNotes},
 	} {
 		if f := checkPinned(root, rule, pinned.path, pinned.content); f != nil {
 			return *f
 		}
+	}
+
+	if f := checkCallers(root, rule, policy.Repository); f != nil {
+		return *f
 	}
 
 	for _, seeded := range []string{pathWorkflowCI, pathRenovate} {
@@ -674,6 +670,15 @@ func checkWorkflows(root string) Finding {
 				"no "+seeded+" (limen fix seeds the canonical one; the content is the project's afterwards)",
 			)
 		}
+	}
+
+	if ciCallsLocalVerify(root, policy.Repository) {
+		return fail(
+			rule,
+			pathWorkflowCI,
+			pathWorkflowCI+" calls "+localUses(reusableVerify)+", which only "+limenRepository+
+				" carries: the shared lanes are "+limenRepository+"/"+reusablePath(reusableVerify)+"@<commit> (limen fix rewrites the line)",
+		)
 	}
 
 	if f := checkReleaseGo(root, rule); f != nil {

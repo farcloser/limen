@@ -5,11 +5,11 @@
 package cli_test
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,7 +19,6 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/farcloser/limen"
@@ -181,15 +180,10 @@ func compliantRepo(t *testing.T) string {
 		".limen/lychee.toml":            rules.CanonicalLychee,
 		".limen/.yamlfmt":               rules.CanonicalYamlfmt,
 		".limen/.shellcheckrc":          rules.CanonicalShellcheckrc,
-		".github/workflows/update-aqua-checksum.yaml":     limen.CanonicalWorkflowUpdateAquaChecksum,
 		".github/actions/setup-hermetic/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
 		".github/actions/cache/action.yaml":               limen.CanonicalActionCache,
-		".github/workflows/limen-verify.yaml":             limen.CanonicalWorkflowVerify,
 		".github/release.yml":                             limen.CanonicalReleaseNotes,
-		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
-		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
-		".github/workflows/caches.yaml":                   limen.CanonicalWorkflowCaches,
 		".limen/renovate.json":                            limen.CanonicalRenovatePreset,
 		"renovate.json":                                   rules.CanonicalRenovateFor(""),
 		// The Go-built tools every repository declares (the gotools rule).
@@ -201,6 +195,13 @@ func compliantRepo(t *testing.T) string {
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
 	}
+
+	// The callers in a consumer's form, at a release's commit: accepted with
+	// or without an origin remote to name the repository.
+	maps.Copy(
+		files,
+		rules.CanonicalCallersFor("example-org/thing", "0123456789abcdef0123456789abcdef01234567", "v9.9.9"),
+	)
 
 	for name, content := range files {
 		path := filepath.Join(dir, filepath.FromSlash(name))
@@ -284,8 +285,7 @@ func TestRunFixAndBootstrap(t *testing.T) {
 // is absent or the environment forbids it, the test is skipped rather than
 // failed. The stubs on PATH keep the install and gotools steps hermetic and
 // record the aqua calls, so the exact install sequence is asserted instead
-// of suppressed. With no -org and no origin remote, the update-App step is a
-// warning that names the way forward, never a failure.
+// of suppressed.
 // toolsSeededDir is a bootstrap target already carrying limen's own
 // .limen/tools/go.mod: the test binary is a development build, which embeds no tool
 // pins and refuses to seed a tool directive (the rules tests cover seeding),
@@ -331,10 +331,6 @@ func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.S
 
 	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
 		t.Errorf("check on a bootstrapped repo = %d, want 0", code)
-	}
-
-	if warning := stderr.String(); !strings.Contains(warning, "warning") || !strings.Contains(warning, "-org") {
-		t.Errorf("no-org bootstrap did not warn usably: %q", warning)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(stubs, "log"))
@@ -553,162 +549,6 @@ func TestGithubFixUnverifiedPlansNothing(t *testing.T) {
 	// nothing else may, and nothing may fail: a failure is a judgment.
 	if strings.Contains(out.String(), "✗") || !strings.Contains(out.String(), "0 fail ·") {
 		t.Errorf("run(%v) judged a check it could not read:\n%s", args, out.String())
-	}
-}
-
-// usersEndpoint serves the public users endpoint for the bot logins in
-// users (editable between phases) and records every login asked for.
-type usersEndpoint struct {
-	mu    sync.Mutex
-	users map[string]string
-	asked []string
-}
-
-func (u *usersEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-
-	login := strings.TrimPrefix(r.URL.Path, "/users/")
-	u.asked = append(u.asked, login)
-
-	body, found := u.users[login]
-	if !found {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
-
-		return
-	}
-
-	_, _ = w.Write([]byte(body))
-}
-
-func (u *usersEndpoint) set(login, body string) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-
-	if body == "" {
-		delete(u.users, login)
-	} else {
-		u.users[login] = body
-	}
-}
-
-// TestUpdateAppIdentityFlowsIntoRenovate: the org comes from the origin
-// remote, the resolvers reach the users endpoint GITHUB_API_URL names (and,
-// for discovery, the gh on PATH), and `limen fix` writes the App's address
-// into renovate.json where `limen check` then requires it. Without a
-// resolvable identity neither command enforces anything.
-func TestUpdateAppIdentityFlowsIntoRenovate(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
-	dir := compliantRepo(t)
-
-	// compliantRepo seeds a bare .git directory; the identity path needs a
-	// real repository with an origin remote.
-	if err := os.RemoveAll(filepath.Join(dir, ".git")); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, args := range [][]string{
-		{"init", "-q"},
-		{"remote", "add", "origin", "git@github.com:test-org/thing.git"},
-	} {
-		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Skipf("git %v unavailable: %v (%s)", args, err, out)
-		}
-	}
-
-	// With the origin remote the repository is known, and so is the
-	// reference its renovate.json must carry.
-	if err := os.WriteFile(filepath.Join(dir, "renovate.json"),
-		[]byte(rules.CanonicalRenovateFor("test-org/thing")), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	// gh fails every call until the renamed scenario is switched on.
-	stubs := stubDir(t)
-	t.Setenv(ghStubEnv, "1")
-	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	endpoint := &usersEndpoint{users: map[string]string{}}
-	server := httptest.NewServer(endpoint)
-	t.Cleanup(server.Close)
-
-	// Unresolvable everywhere (an endpoint that refuses the connection):
-	// check passes, fix leaves the seed alone.
-	dead := httptest.NewServer(http.NotFoundHandler())
-	dead.Close()
-	t.Setenv("GITHUB_API_URL", dead.URL)
-
-	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
-		t.Fatalf("check with an unresolvable identity = %d, want 0", code)
-	}
-
-	seed, err := os.ReadFile(filepath.Join(dir, "renovate.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if code := run([]string{"fix", dir}, io.Discard, io.Discard); code != 0 {
-		t.Fatalf("fix with an unresolvable identity = %d, want 0", code)
-	}
-
-	after, _ := os.ReadFile(filepath.Join(dir, "renovate.json"))
-	if !bytes.Equal(after, seed) {
-		t.Error("fix edited renovate.json without a resolved identity")
-	}
-
-	// Resolvable by convention: the org inferred from origin names the bot
-	// user asked for; check fails until fix adds the address; then check
-	// passes.
-	const email = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
-
-	endpoint.set("limen-ci-test-org[bot]", `{"id": 317468017, "login": "limen-ci-test-org[bot]", "type": "Bot"}`)
-	t.Setenv("GITHUB_API_URL", server.URL)
-
-	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 1 {
-		t.Errorf("check with the identity missing = %d, want 1", code)
-	}
-
-	if !slices.Contains(endpoint.asked, "limen-ci-test-org[bot]") {
-		t.Errorf("the users endpoint was asked for %q, want limen-ci-test-org[bot] (the org from the origin remote)",
-			endpoint.asked)
-	}
-
-	if code := run([]string{"fix", dir}, io.Discard, io.Discard); code != 0 {
-		t.Fatalf("fix = %d, want 0", code)
-	}
-
-	fixed, _ := os.ReadFile(filepath.Join(dir, "renovate.json"))
-	if !strings.Contains(string(fixed), "\""+email+"\",\n") {
-		t.Errorf("fix did not add the address:\n%s", fixed)
-	}
-
-	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
-		t.Errorf("check after fix = %d, want 0", code)
-	}
-
-	// The split: an App only the privileged tier can see (renamed; the
-	// convention name no longer exists). check must NOT fail for it — the
-	// same tree must get the same verdict on a laptop with an admin token and
-	// on a runner without one — while fix, the credentialed step, still
-	// writes it.
-	const renamed = "300983632+limenreapp[bot]@users.noreply.github.com"
-
-	endpoint.set("limen-ci-test-org[bot]", "")
-	endpoint.set("limenreapp[bot]", `{"id": 300983632, "login": "limenreapp[bot]", "type": "Bot"}`)
-	t.Setenv(ghRenamedEnv, "1")
-
-	if code := run([]string{"check", dir}, io.Discard, io.Discard); code != 0 {
-		t.Errorf("check with an App only discover can see = %d, want 0 (credential-independent)", code)
-	}
-
-	if code := run([]string{"fix", dir}, io.Discard, io.Discard); code != 0 {
-		t.Fatalf("fix (discover) = %d, want 0", code)
-	}
-
-	fixed, _ = os.ReadFile(filepath.Join(dir, "renovate.json"))
-	if !strings.Contains(string(fixed), "\""+renamed+"\",\n") || !strings.Contains(string(fixed), "\""+email+"\",\n") {
-		t.Errorf("fix did not add the discovered address alongside the earlier one:\n%s", fixed)
 	}
 }
 

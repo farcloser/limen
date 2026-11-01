@@ -1,0 +1,218 @@
+# DO NOT EDIT MANUALLY: content-pinned by limen, reset by `limen fix`.
+# The release lane for a project that ships a bundle macOS evaluates, called
+# from its own release.yaml at a commit of farcloser/limen (book/releasing.md,
+# the Apple policy). Two jobs: `sign` holds the Apple credentials and
+# publishes nothing; `publish` holds no Apple credential and publishes what
+# `sign` handed over.
+#
+# What the project owes: `package <version>` (build, sign with the exported
+# identity, notarize where the policy says, and write every release asset
+# under .build/assets/) and `verify-assets <version>` (goreleaser's before
+# hook, asserting what .build/assets/ holds), both composed from
+# .limen/just/apple.just; and a .release-go.yaml that builds nothing and
+# lists .build/assets/* as its extra files (book/releasing.md).
+name: limen-release-apple
+
+on:
+  workflow_call:
+    # Passed by the caller's `secrets: inherit`, and the release environment's:
+    # a run on any other ref is refused them by GitHub, whatever the file says.
+    # The identity is required; the provisioning profile and the notarization
+    # key are the project's policy, read as set or absent, never half set.
+    secrets:
+      APPLE_DEVELOPER_ID_P12:
+        required: true
+      APPLE_DEVELOPER_ID_P12_PASSWORD:
+        required: true
+      APPLE_PROVISIONING_PROFILE:
+        required: false
+      APPLE_NOTARY_KEY:
+        required: false
+      APPLE_NOTARY_KEY_ID:
+        required: false
+      APPLE_NOTARY_ISSUER_ID:
+        required: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # The job that holds the certificate. While the identity is in its
+  # keychain, what runs is the pinned toolchain (hermetic, just, the project's
+  # build through its recipes) and Apple's tools: actions/checkout runs before
+  # the identity is imported, actions/upload-artifact after it is removed, and
+  # goreleaser, cosign and the attestation live in `publish`, which never sees
+  # the secrets. Its token is read-only.
+  sign:
+    runs-on: macos-15
+    timeout-minutes: 30
+    # The signing credentials are the `release` environment's, which admits
+    # v* tags alone and waits for an owner's review (limen github fix builds
+    # it): declared here, on the job that reads them, as a reusable workflow
+    # requires.
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A build number read from the commit count needs the whole history.
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install hermetic (pinned, verified)
+        uses: ./.github/actions/setup-hermetic
+
+      # The Developer ID Application identity goes into a keychain made for
+      # this job and deleted at its end, never into the login keychain and
+      # never onto disk unencrypted. The team id is read off the identity's
+      # name rather than written into the project, which pins no team so
+      # that a local build stays ad hoc.
+      - name: Signing identity
+        env:
+          P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          [ -n "$P12_BASE64" ] && [ -n "$P12_PASSWORD" ] || {
+            echo "APPLE_DEVELOPER_ID_P12 and APPLE_DEVELOPER_ID_P12_PASSWORD are not both set in the release environment" >&2; exit 1; }
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          # Named to the cleanup step first, so it finds the keychain even
+          # when a step below fails.
+          echo "APPLE_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          password="$(openssl rand -hex 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 1800 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$P12_BASE64" | base64 -d > "$RUNNER_TEMP/identity.p12"
+          security import "$RUNNER_TEMP/identity.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/identity.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          # The keychain joins the search list in front of the ones there,
+          # read one per line as `security` prints them, quoted.
+          existing=()
+          while IFS= read -r line; do existing+=("$line"); done < <(security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"$//')
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -n 1)"
+          [ -n "$identity" ] || {
+            echo "no Developer ID Application identity in the imported certificate" >&2; exit 1; }
+          team="$(printf '%s' "$identity" | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p')"
+          [ -n "$team" ] || { echo "no team id in the identity's name: $identity" >&2; exit 1; }
+          echo "APPLE_SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
+          echo "APPLE_SIGN_TEAM=$team" >> "$GITHUB_ENV"
+
+      # A bundle whose entitlements need one (an app with its LaunchAgent,
+      # say) has a provisioning profile in the environment; the build reads
+      # its path. Absent, nothing is written.
+      - name: Provisioning profile
+        env:
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+        run: |
+          [ -n "$PROFILE_BASE64" ] || { echo "no provisioning profile in the release environment"; exit 0; }
+          profile="$RUNNER_TEMP/release.provisionprofile"
+          printf '%s' "$PROFILE_BASE64" | base64 -d > "$profile"
+          echo "APPLE_PROVISIONING_PROFILE_PATH=$profile" >> "$GITHUB_ENV"
+
+      # The App Store Connect API key notarytool submits with, written where
+      # apple-notarize reads it and removed at the end. A bundle the policy
+      # does not notarize (one never launched through Launch Services) has
+      # no key in its environment, and `package` does not call the recipe;
+      # a key half set is a misconfiguration, named.
+      - name: Notarization credentials
+        env:
+          KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY }}
+        run: |
+          if [ -z "$KEY_ID" ] && [ -z "$ISSUER_ID" ] && [ -z "$KEY_BASE64" ]; then
+            echo "no notarization key in the release environment"; exit 0
+          fi
+          [ -n "$KEY_ID" ] && [ -n "$ISSUER_ID" ] && [ -n "$KEY_BASE64" ] || {
+            echo "APPLE_NOTARY_KEY, APPLE_NOTARY_KEY_ID and APPLE_NOTARY_ISSUER_ID are not all set in the release environment" >&2; exit 1; }
+          key="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          printf '%s' "$KEY_BASE64" | base64 -d > "$key"
+          chmod 0600 "$key"
+          {
+            echo "APPLE_NOTARY_KEY=$key"
+            echo "APPLE_NOTARY_KEY_ID=$KEY_ID"
+            echo "APPLE_NOTARY_ISSUER_ID=$ISSUER_ID"
+          } >> "$GITHUB_ENV"
+
+      # The tag without its v is the version goreleaser publishes under, so
+      # the asset names match what `publish` looks up.
+      - name: Build, sign, notarize and package
+        env:
+          TAG: ${{ github.ref_name }}
+        run: just package "${TAG#v}"
+
+      # The job's keychain, the profile and the API key go, success or not,
+      # before the one action that runs after signing.
+      - name: Remove the signing identity, the profile and the notarization key
+        if: always()
+        run: |
+          [ -z "${APPLE_SIGNING_KEYCHAIN:-}" ] || security delete-keychain "$APPLE_SIGNING_KEYCHAIN" || true
+          rm -f "${APPLE_PROVISIONING_PROFILE_PATH:-/nonexistent}" "${APPLE_NOTARY_KEY:-/nonexistent}"
+
+      # Hand-over to `publish`, within this run: a ditto zip keeps the
+      # bundle's signature intact where a directory upload would not.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: assets
+          path: .build/assets/
+          if-no-files-found: error
+          retention-days: 1
+
+  # The canonical release job with the assets riding in: macOS, since
+  # verify-assets checks the bundle's signature and ticket with codesign and
+  # stapler; no Apple secret.
+  publish:
+    needs: sign
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      # Publish the GitHub release and its assets.
+      contents: write
+      # Keyless signing: cosign exchanges the workflow's OIDC token for a
+      # short-lived Fulcio certificate bound to this workflow@tag identity;
+      # the attestation below is signed the same way.
+      id-token: write
+      # Store the build provenance attestations.
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # goreleaser walks the full history to find the previous tag, where
+          # GitHub's generated notes start; the git credential is not needed
+          # after checkout (publishing goes through the API with the
+          # step-scoped token below).
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install hermetic (pinned, verified)
+        uses: ./.github/actions/setup-hermetic
+
+      # What `sign` made, where .release-go.yaml's extra_files and
+      # verify-assets expect it.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: assets
+          path: .build/assets/
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # shellcheck disable=SC1010 # `do` is just's shared-task namespace, not the shell keyword.
+          just do release --ci
+
+      # Build provenance for what goreleaser published: every asset `sign`
+      # made and checksums.txt, so nothing fetched goes unattested;
+      # verifiable with `gh attestation verify <asset> --repo <owner>/<repo>`.
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: |
+            .build/assets/*
+            .build/release/checksums.txt

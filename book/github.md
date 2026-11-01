@@ -89,6 +89,8 @@ Every declarable identifier, grouped (a test pins this list to the live check ca
 # outside-collaborators: <reason>
 # webhooks: <reason>
 # deploy-keys: <reason>
+# actions-secrets: <reason>
+# environments: <reason>
 # agents-team: <reason>
 # renovate-processing: <reason>  # self-hosted Renovate without a dashboard, say
 # --- Organization (only read by `limen github … -org <name>`) ---
@@ -161,11 +163,26 @@ declaring only where the code is on that list.
   Renovate that keeps no dashboard declares `renovate-processing`.
 - **Actions hardened, and on.** The default workflow token is read-only, workflows cannot
   approve pull requests, and the allowed-actions policy is restricted: GitHub-owned actions
-  plus an explicitly pinned allowlist, never "all". Actions switched off at the repository
-  fails the same check: the required checks can then never run, and a pull request waits on
-  an empty check suite with nothing naming the cause (forkcloser/xz, two hours of it). This
-  mirrors the canonical workflows' own construction: one SHA-pinned first-party action,
-  everything else through aqua and `just`.
+  plus an allowlist, never "all". Outside farcloser the allowlist names limen's reusable
+  workflows (`farcloser/limen/.github/workflows/*@*`), which the lanes are called from and
+  which a restricted policy admits from the owner's own organisation alone; the pattern
+  applies to public repositories, GitHub's rule. Whatever else a repository allows stays.
+  Actions switched off at the repository fails the same check: the required checks can then
+  never run, and a pull request waits on an empty check suite with nothing naming the cause
+  (forkcloser/xz, two hours of it). This mirrors the canonical workflows' own construction:
+  one SHA-pinned first-party action, everything else through aqua and `just`.
+- **A secret stays behind an environment.** A repository or organisation secret is one every account
+  with write access reads (why: the tree's [`secrets`
+  rule](./mandatory-files.md#the-secrets-rule--a-secret-stays-behind-an-environment), which holds
+  the workflows' side, the `environment:` on the job). So a repository secret is an advisory naming
+  the move (`gh secret set … --env …`, then the delete), an organisation secret the same in the
+  organisation audit, and the `environments` check holds GitHub's side: every environment the
+  default branch's workflows deploy to exists, admits some refs rather than every branch, and holds
+  the secrets its jobs read, the finding naming the `gh secret set` that is missing. The signing
+  policy's `release` environment is held to its shape, custom deployment policies with the one `v*`
+  tag policy and a required reviewer ([releasing](./releasing.md)): `fix` creates or reconciles it,
+  the organisation's owners (or the user the repository belongs to) as reviewers when it has none,
+  and never touches a value.
 - **Features off unless used, issues on.** Wiki, projects, discussions off: documentation
   lives in the repository, issues are the tracker — so issues themselves must be on, or
   `SUPPORT.md` and the org-wide issue forms point at nothing. An exception either way is
@@ -237,8 +254,8 @@ The decided merge model, enforced by the repository settings and the `limen:main
 - **Merges wait for green CI.** The `limen:main` ruleset carries required status checks,
   without which auto-merge (and a hasty human) would merge on red. A fresh ruleset requires
   `gate` — the job in the canonical `ci.yaml` that `needs` the shared lanes (the `limen`
-  call to the pinned `limen-verify.yaml`: every verify leg, fuzz, race and tools) and any
-  job the project adds, and fails unless all succeeded — and, where the default branch
+  call to limen's reusable `limen-verify.yaml`: every verify leg, fuzz, race and tools) and
+  any job the project adds, and fails unless all succeeded — and, where the default branch
   carries `security.yaml`, the `security` check beside it (**Security**, below): what the
   canonical workflows report, read from the default branch, never assumed from the seed. The
   check names stay project-owned, so reconciliation preserves what a repository declared,
@@ -296,9 +313,10 @@ The decided merge model, enforced by the repository settings and the `limen:main
   <a id="security"></a>
   **Security.** The verdicts that move without the tree are not in `ci.yaml` at all: the
   vulnerability scans, and the link check, whose verdict is the web's. A canonical
-  `security.yaml`, content-pinned like `limen-verify.yaml`, runs the project's `just
-  security` (the shared `do::security::default` plus whatever scans the project adds) on one
-  linux leg, on every push and pull request and once a day. Apart on purpose: a linter's
+  `security.yaml`, a content-pinned caller of limen's reusable `limen-security.yaml`, runs
+  the project's `just security` (the shared `do::security::default` plus whatever scans the
+  project adds) on one linux leg, on every push and pull request and once a day, and asserts
+  it in a `security` job, the check the ruleset requires. Apart on purpose: a linter's
   verdict is a function of the tree, a scan's of a database that moves without it, so inside
   `ci.yaml` a new advisory would turn `gate` red on a pull request that changed nothing near
   it. In its own lane the red is one check that says what it is, the schedule is how `main`
@@ -385,7 +403,7 @@ The decided merge model, enforced by the repository settings and the `limen:main
   commit in its range not signed by a key listed for its committer. Not a security boundary
   (a pull request can edit the file) but a forcing function: an author lists themselves in
   their first pull request. Merges author nothing and are skipped, as are GitHub Apps'
-  commits (Renovate, the checksum-update App), which GitHub signs. A commit made in the web
+  commits (Renovate, the checksum workflow), which GitHub signs. A commit made in the web
   UI is signed by GitHub too, and fails: editing in a browser is not a way to contribute.
 - **Squash commits default to the pull request title and body**, merged branches are
   deleted automatically, auto-merge is allowed (the project manager arms it at the reviewed
@@ -438,20 +456,13 @@ a second later.
 
 All GitHub access goes through the aqua-pinned `gh` CLI: `gh auth` owns identity, limen
 never sees a credential, and the same invocation works on a laptop and in CI (`GH_TOKEN`).
-Reading most of the security settings needs a token with repository administration read
-access; below that, findings degrade to `unverifiable`, which fails the check rather than
-faking compliance. A `fix` whose checks could not be verified plans nothing and says so;
-"nothing to fix" is said only when every check was answered. And `gh` is the one on PATH:
-where none answers, the run fails up front naming that, instead of reporting every check
-unverifiable.
-
-One call is the exception, on purpose: the lookup of the update-App's bot user id, which
-`limen check` needs to verify `gitIgnoredAuthors` in `renovate.json`. It reads the public
-users endpoint directly, with no credential: `gh` refuses to run without a login, and the
-verify legs carry none, so a lookup through `gh` would resolve on a laptop and not in CI —
-the same tree, red in one place and green in the other, the one thing `check` must never
-do. The endpoint honors `GITHUB_API_URL`, the variable Actions exports and an Enterprise
-host sets.
+Reading most of the security settings needs a token with repository administration read access,
+listing secrets (the repository's, an environment's, the organisation's) its secrets read, and
+writing an environment its administration write; below that, findings degrade to `unverifiable`,
+which fails the check rather than faking compliance. A `fix` whose checks could not be verified
+plans nothing and says so; "nothing to fix" is said only when every check was answered. And `gh` is
+the one on PATH: where none answers, the run fails up front naming that, instead of reporting every
+check unverifiable.
 
 ## Organization level
 
@@ -487,9 +498,10 @@ working directory, canonically the org's `.github` repository). The catalog:
 - **Security configuration**: a default code security configuration exists for new
   repositories (the mechanism GitHub replaced the legacy per-org security fields with).
   Advisory: creating the canonical configuration is a human act.
-- **Standing inventories**: installed GitHub Apps, org webhooks (HTTPS + secret + TLS
-  verification), org-level Actions secrets (names only), teams, fine-grained PAT grants —
-  visible on every audit, so a grant nobody remembers making has nowhere to hide.
+- **Standing inventories**: installed GitHub Apps, org webhooks (HTTPS + secret + TLS verification),
+  org-level Actions secrets (names only, each an advisory naming the environment move), teams,
+  fine-grained PAT grants — visible on every audit, so a grant nobody remembers making has nowhere
+  to hide.
 - **The agents team, organization-wide**: the team exists, has members, and holds write on
   every repository that is not archived; the org view of the per-repository `agents-team`
   check, so one audit lists every repository created without the grant, and `fix -org`

@@ -168,6 +168,7 @@ func AuditOrg(ctx context.Context, org string, overrides map[string]string) ([]F
 	aud := &auditor{
 		ctx:           ctx,
 		client:        orgClient(org),
+		owner:         org,
 		overrides:     overrides,
 		settingsPatch: map[string]any{},
 	}
@@ -476,11 +477,7 @@ func orgActionsFix(
 			return nil
 		}
 
-		return apiClient.writeJSON(ctx, methodPut, "/actions/permissions/selected-actions", map[string]any{
-			"github_owned_allowed": true,
-			"verified_allowed":     false,
-			"patterns_allowed":     []string{},
-		})
+		return apiClient.writeJSON(ctx, methodPut, selectedActionsPath, allowlistPayload(selectedActions{}))
 	}
 }
 
@@ -500,7 +497,8 @@ func (a *auditor) auditOrgActionsPermissions() {
 	// field keeping the current value here is what keeps plan and PUT equal.
 	enabledFixes := permissions.EnabledRepositories == enabledReposNone &&
 		!a.exempted(checkOrgActionsEnabledRepos)
-	allowedFixes := permissions.AllowedActions == allowedActionsAll &&
+	allowedFixes := (permissions.AllowedActions == allowedActionsAll ||
+		(permissions.AllowedActions == allowedActionsLocal && a.needsLimenPattern())) &&
 		!a.exempted(checkOrgActionsAllowed)
 	shaFixes := permissions.ShaPinningRequired != nil && !*permissions.ShaPinningRequired &&
 		!a.exempted(checkOrgActionsShaPinning)
@@ -531,23 +529,7 @@ func (a *auditor) auditOrgActionsPermissions() {
 			"Actions are enabled ("+permissions.EnabledRepositories+" repositories)", nil)
 	}
 
-	if permissions.AllowedActions == allowedActionsAll {
-		a.flag(
-			checkOrgActionsAllowed,
-			StatusFail,
-			allowedActionsAll,
-			"selected",
-			"the org-wide allowed-actions policy must not be \"all\" — restrict to GitHub-owned plus a pinned allowlist",
-			&Change{
-				Check:   checkOrgActionsAllowed,
-				Summary: "org allowed actions: all → selected (GitHub-owned only)",
-				apply:   fixPermissions,
-			},
-		)
-	} else {
-		a.flag(checkOrgActionsAllowed, StatusOK, "", "",
-			"the org-wide allowed-actions policy is restricted", nil)
-	}
+	a.auditOrgAllowedActions(permissions.AllowedActions, fixPermissions)
 
 	switch {
 	case permissions.ShaPinningRequired == nil:
@@ -568,6 +550,55 @@ func (a *auditor) auditOrgActionsPermissions() {
 				apply:   fixPermissions,
 			},
 		)
+	}
+}
+
+// auditOrgAllowedActions judges the org-wide allowed-actions policy: never
+// "all"; outside farcloser `local_only` cannot admit limen's reusable
+// workflows and a `selected` policy must name them.
+func (a *auditor) auditOrgAllowedActions(allowed string, fixPermissions func(context.Context, client) error) {
+	switch allowed {
+	case allowedActionsAll:
+		a.flag(
+			checkOrgActionsAllowed,
+			StatusFail,
+			allowedActionsAll,
+			"selected",
+			"the org-wide allowed-actions policy must not be \"all\" — restrict to GitHub-owned plus limen's reusable workflows",
+			&Change{
+				Check:   checkOrgActionsAllowed,
+				Summary: "org allowed actions: all → selected (GitHub-owned and limen's reusable workflows)",
+				apply:   fixPermissions,
+			},
+		)
+	case allowedActionsLocal:
+		if !a.needsLimenPattern() {
+			a.flag(checkOrgActionsAllowed, StatusOK, "", "", "the org-wide allowed-actions policy is restricted", nil)
+
+			break
+		}
+
+		a.flag(
+			checkOrgActionsAllowed,
+			StatusFail,
+			allowedActionsLocal,
+			"selected",
+			"the org-wide allowed-actions policy admits the organization's actions alone: the shared lanes are reusable "+
+				"workflows in "+limenRepository+", another organisation's, which it must name",
+			&Change{
+				Check:   checkOrgActionsAllowed,
+				Summary: "org allowed actions: local_only → selected (GitHub-owned and limen's reusable workflows)",
+				apply:   fixPermissions,
+			},
+		)
+	default:
+		if !a.needsLimenPattern() {
+			a.flag(checkOrgActionsAllowed, StatusOK, "", "", "the org-wide allowed-actions policy is restricted", nil)
+
+			break
+		}
+
+		a.auditAllowlist(checkOrgActionsAllowed, "the org-wide")
 	}
 }
 
@@ -930,8 +961,9 @@ func (a *auditor) auditOrgWebhooks() {
 	a.flag(checkOrgWebhooks, StatusOK, "", "", "org webhooks are compliant (or none exist)", nil)
 }
 
-// auditOrgActionsSecrets inventories org-level Actions secrets (names only —
-// the API never exposes values).
+// auditOrgActionsSecrets: an organization secret is one every write account
+// in a covered repository reads from a branch of its own, so any present is
+// an advisory naming the move (names only — the API never exposes values).
 func (a *auditor) auditOrgActionsSecrets() {
 	secrets, outcome := listPages[orgNamed](a.ctx, a.client, "/actions/secrets?per_page=100", "secrets")
 	if outcome.err != nil || outcome.notFound {
@@ -951,8 +983,11 @@ func (a *auditor) auditOrgActionsSecrets() {
 		names = append(names, secret.Name)
 	}
 
-	a.flag(checkOrgActionsSecrets, StatusOK, "", "",
-		"org-level Actions secrets: "+strings.Join(names, listSeparator), nil)
+	a.flag(checkOrgActionsSecrets, StatusAdvisory, strings.Join(names, listSeparator), "(none: an environment's)",
+		"an organization secret is read by any workflow run in a repository it covers, so every account with "+
+			"write access there prints it from a branch of its own: each belongs to an environment of the repository "+
+			"that uses it, gated to the refs that may (`gh secret set "+names[0]+" --env <environment> --repo "+
+			a.owner+"/<repository>`, then `gh secret delete "+names[0]+" --org "+a.owner+"`)", nil)
 }
 
 // auditOrgTeams inventories teams — management is deliberately out of scope

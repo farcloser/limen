@@ -37,6 +37,9 @@ func compliantOrgResponses() map[string]stubResponse {
 		"GET orgs/test-org/actions/permissions": {
 			Body: `{"enabled_repositories": "all", "allowed_actions": "selected", "sha_pinning_required": true}`,
 		},
+		"GET orgs/test-org/actions/permissions/selected-actions": {
+			Body: `{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":["farcloser/limen/.github/workflows/*@*"]}`,
+		},
 		"GET orgs/test-org/actions/permissions/workflow": {
 			Body: `{"default_workflow_permissions": "read", "can_approve_pull_request_reviews": false}`,
 		},
@@ -453,21 +456,25 @@ func TestOrgOverridesValidate(t *testing.T) {
 // TestOrgActionsFixPreservesCompliantPolicy: the actions-permissions PUT
 // replaces the whole object, so a fix that only tightens SHA pinning must
 // write the compliant allowed-actions policy back unchanged — and must not
-// touch the selected-actions allowlist, which belongs to whoever curated it.
+// touch the selected-actions allowlist, which belongs to whoever curated it,
+// as long as it names limen's reusable workflows.
 //
 //nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 	responses := compliantOrgResponses()
 	responses["PUT orgs/test-org/actions/permissions"] = stubResponse{}
 	responses["GET orgs/test-org/actions/permissions"] = stubResponse{
-		Body: `{"enabled_repositories": "selected", "allowed_actions": "local_only", "sha_pinning_required": false}`,
+		Body: `{"enabled_repositories": "selected", "allowed_actions": "selected", "sha_pinning_required": false}`,
+	}
+	responses["GET orgs/test-org/actions/permissions/selected-actions"] = stubResponse{
+		Body: `{"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":["octo/*","farcloser/limen/.github/workflows/*@*"]}`,
 	}
 	logPath := stubGH(t, responses)
 
 	findings, changes := github.AuditOrg(t.Context(), testOrg, nil)
 
 	if finding, found := findingByCheck(findings, "org-actions-allowed"); !found || finding.Status != github.StatusOK {
-		t.Fatalf("local_only policy: %v, want ok", finding.Status)
+		t.Fatalf("a curated allowlist naming limen: %v (%s), want ok", finding.Status, finding.Message)
 	}
 
 	applied := false
@@ -494,7 +501,7 @@ func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 	calls := string(log)
 
 	for _, want := range []string{
-		`"allowed_actions":"local_only"`,
+		`"allowed_actions":"selected"`,
 		`"enabled_repositories":"selected"`,
 		`"sha_pinning_required":true`,
 	} {
@@ -503,8 +510,57 @@ func TestOrgActionsFixPreservesCompliantPolicy(t *testing.T) {
 		}
 	}
 
-	if strings.Contains(calls, "selected-actions") {
-		t.Error("an already-restricted policy must keep its allowlist — no selected-actions PUT")
+	if strings.Contains(calls, "selected-actions\n{") {
+		t.Error("an allowlist naming limen must keep its allowlist — no selected-actions PUT")
+	}
+}
+
+// TestOrgAllowlistNamesLimen: a restricted org policy whose allowlist does
+// not name limen's reusable workflows fails, and the fix adds the pattern
+// beside what the list carries; the owner's actions alone (local_only) fails
+// too, since limen's workflows are another organisation's.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestOrgAllowlistNamesLimen(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/actions/permissions/selected-actions"] = stubResponse{
+		Body: `{"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":["octo/*"]}`,
+	}
+	responses["PUT orgs/test-org/actions/permissions/selected-actions"] = stubResponse{}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.AuditOrg(t.Context(), testOrg, nil)
+
+	finding, _ := findingByCheck(findings, "org-actions-allowed")
+	if finding.Status != github.StatusFail ||
+		!strings.Contains(finding.Message, "farcloser/limen/.github/workflows/*@*") {
+		t.Fatalf("an allowlist without limen: %v (%s), want fail naming the pattern", finding.Status, finding.Message)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == "org-actions-allowed" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), `"patterns_allowed":["octo/*","farcloser/limen/.github/workflows/*@*"]`) ||
+		!strings.Contains(string(log), `"verified_allowed":true`) {
+		t.Errorf("the fix must add the pattern beside the curated list:\n%s", log)
+	}
+
+	local := compliantOrgResponses()
+	local["GET orgs/test-org/actions/permissions"] = stubResponse{
+		Body: `{"enabled_repositories": "all", "allowed_actions": "local_only", "sha_pinning_required": true}`,
+	}
+	stubGH(t, local)
+
+	findings, _ = github.AuditOrg(t.Context(), testOrg, nil)
+
+	if finding, _ := findingByCheck(findings, "org-actions-allowed"); finding.Status != github.StatusFail {
+		t.Errorf("local_only: %v, want fail", finding.Status)
 	}
 }
 
@@ -613,5 +669,54 @@ func TestAuditOrgDependabotSecurityUpdatesUnverifiable(t *testing.T) {
 	finding, found := findingByCheck(findings, "org-dependabot-security-updates")
 	if !found || finding.Status != github.StatusUnverifiable {
 		t.Fatalf("an unreadable configuration list must be unverifiable, got %v", finding.Status)
+	}
+}
+
+// TestFarcloserOrgNeedsNoPattern: the farcloser organisation's own policy
+// admits its repositories' workflows, limen's among them: local_only passes.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestFarcloserOrgNeedsNoPattern(t *testing.T) {
+	responses := map[string]stubResponse{}
+	for key, value := range compliantOrgResponses() {
+		responses[strings.ReplaceAll(key, "orgs/test-org", "orgs/farcloser")] = value
+	}
+
+	responses["GET orgs/farcloser/actions/permissions"] = stubResponse{
+		Body: `{"enabled_repositories": "all", "allowed_actions": "local_only", "sha_pinning_required": true}`,
+	}
+	delete(responses, "GET orgs/farcloser/actions/permissions/selected-actions")
+	stubGH(t, responses)
+
+	findings, _ := github.AuditOrg(t.Context(), "farcloser", nil)
+
+	if finding, _ := findingByCheck(findings, "org-actions-allowed"); finding.Status != github.StatusOK {
+		t.Errorf("local_only in farcloser: %v (%s), want ok", finding.Status, finding.Message)
+	}
+}
+
+// TestOrgSecretIsAdvisory: an organization secret is read from any branch a
+// write account pushes in a covered repository, so one present is an
+// advisory naming the environment move, never an inventory that passes.
+func TestOrgSecretIsAdvisory(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/actions/secrets?per_page=100"] = stubResponse{
+		Body: `{"total_count":1,"secrets":[{"name":"APP_PRIVATE_KEY","visibility":"all"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, changes := github.AuditOrg(t.Context(), testOrg, map[string]string{"org-admins": "alice is the org"})
+
+	finding, found := findingByCheck(findings, "org-actions-secrets")
+	if !found || finding.Status != github.StatusAdvisory || finding.Current != "APP_PRIVATE_KEY" {
+		t.Fatalf("org-actions-secrets: %+v, want an advisory naming the secret", finding)
+	}
+
+	if !strings.Contains(finding.Message, "gh secret delete APP_PRIVATE_KEY --org test-org") {
+		t.Errorf("the advisory does not name the move: %s", finding.Message)
+	}
+
+	if len(changes) != 0 {
+		t.Errorf("a secret is never moved by a fix: %+v", changes)
 	}
 }

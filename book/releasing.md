@@ -69,10 +69,9 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   - **A signing credential is an environment secret, held by one job that publishes
     nothing.** The Developer ID `.p12` and its password, the App Store Connect API key, a
     provisioning profile: each is a secret of a `release` environment, never of the
-    repository or the organisation. GitHub hands a repository secret to any workflow run in
-    the repository's own context that references it, so every account with write access
-    (a bot, an app, Renovate) could push a branch whose workflow prints the certificate, and
-    masking is defeated by re-encoding. The environment admits release tags only (`v*`) and
+    repository or the organisation, which every account with write access reads (the
+    [`secrets` rule](./mandatory-files.md#the-secrets-rule--a-secret-stays-behind-an-environment)
+    says why). The environment admits release tags only (`v*`) and
     names the human as its required reviewer, so no run holds the credential without the
     human's click on that run. The job that holds it (`environment: release`) runs the
     pinned toolchain and the platform's own tools with a read-only token, imports the
@@ -85,10 +84,45 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     secret: it verifies what arrived (the signature's chain to Developer ID, the stapled
     ticket, `stapler validate`) and runs goreleaser, cosign and the attestation. The
     installer asserts the same chain and ticket again on the user's machine. Nothing about
-    the credential lives in the tree.
+    the credential lives in the tree. `limen github check` holds GitHub to it: no such secret
+    at the repository or the organisation (`actions-secrets`), and a `release` environment of
+    that shape holding what the job reads (`environments`), which `fix` creates or reconciles
+    with the owners as reviewers; the values are set by hand (`gh secret set NAME --env
+    release`). The tree's `secrets` rule holds the job to `environment: release`
+    ([github](./github.md), [mandatory files](./mandatory-files.md)).
   - **What is deliberately not done**: no notarization of command-line binaries, no SBOM for
     a repository without artifacts (its release is the signed tag), no signature of the
     source archive GitHub generates (it is not a release asset of ours).
+- **The Apple release lane.** A project that ships a bundle macOS evaluates releases through
+  `limen-release-apple.yaml`, a reusable workflow in limen, called at a commit like the other
+  lanes.
+  - **Declaring it.** The project points its `release.yaml` at the lane, a `uses:` reference of the
+    form `farcloser/limen/.github/workflows/limen-release-apple.yaml@<commit>` that Renovate moves,
+    and runs `limen fix`: the file is a thin caller from then on, reset around its reference like
+    the three every repository carries ([mandatory files](./mandatory-files.md)).
+  - **The `sign` job**, on macOS in the `release` environment with a read-only token: it imports the
+    Developer ID identity into a job-scoped keychain, reads the team id off the certificate, writes
+    the provisioning profile and the notarization key when the environment holds them (the identity
+    is required; the other two are read as set or absent, never half set, since the policy signs
+    every bundle and notarizes only what Launch Services evaluates), exports the lane's names
+    (`APPLE_SIGN_IDENTITY`, `APPLE_SIGN_TEAM`, `APPLE_SIGNING_KEYCHAIN`,
+    `APPLE_PROVISIONING_PROFILE_PATH`, `APPLE_NOTARY_KEY`, `APPLE_NOTARY_KEY_ID`,
+    `APPLE_NOTARY_ISSUER_ID`), runs the project's `just package <version>`, removes every credential
+    whatever the outcome, and hands `.build/assets/` to `publish` as a run artifact.
+  - **The `publish` job** holds no Apple secret: it runs `just do release --ci` on macOS, where
+    `verify-assets` has `codesign` and `stapler`, and attests `.build/assets/*` and `checksums.txt`.
+  - **What the project owes**: `package <version>`, which builds, signs with the exported identity,
+    notarizes where the policy says and writes every release asset under `.build/assets/`; and
+    `verify-assets <version>`, goreleaser's before hook, asserting what `.build/assets/` holds. Both
+    are composed from `just do apple-verify-signed`, `apple-verify-notarized`, `apple-notarize` and
+    `apple-package` ([recipes](./recipes.md)).
+  - **Its `.release-go.yaml`** builds nothing: `builds: [{id: none, skip: true}]`, `archives: []`,
+    `before.hooks: [just verify-assets {{ .Version }}]`, `.build/assets/*` under
+    `checksum.extra_files` and `release.extra_files`, and `snapshot.version_template` set to the
+    project's development version, so that a local dry run looks for the zip `package` made
+    (goreleaser's default, `-SNAPSHOT-<sha>`, breaks it).
+  - **The environment** is `limen github fix`'s to build; its secrets are set by hand (`gh secret
+    set APPLE_DEVELOPER_ID_P12 --env release`, and so on).
 - **A command under `cmd/` either ships or says it does not.** `cmd/` is where a Go
   repository keeps its main packages, released or not, as Go projects do. The release
   configuration, `.release-go.yaml`, says which of them ship: `limen check` fails a main under

@@ -204,12 +204,12 @@ All advisory: these are people and credentials.
 | Direct collaborators | none outside the baseline's named set; no outside collaborator with admin/push (Allstar's check) | `GET /repos/{o}/{r}/collaborators?affiliation=…` |
 | Deploy keys | none, or read-only + named in override | `GET /repos/{o}/{r}/keys` |
 | Webhooks | HTTPS only, secret set (scorecard's check), named in override | `GET /repos/{o}/{r}/hooks` |
-| Environments | protection rules on any env that holds secrets; no self-review | `GET /repos/{o}/{r}/environments` |
-| Repo secrets inventory | named in override (existence, never values) | `GET /repos/{o}/{r}/actions/secrets` |
+| Environments | every env the default branch's workflows deploy to exists, has a deployment branch policy and holds what its jobs read; `release` = the one `v*` tag policy + a required reviewer (fix creates or reconciles it, owners as reviewers; values never) | `GET /repos/{o}/{r}/environments`, `…/deployment-branch-policies`, `…/secrets`; `PUT /repos/{o}/{r}/environments/release` |
+| Repo secrets | none: a repository secret is read from any branch a write account pushes; advisory naming the environment move (existence, never values) | `GET /repos/{o}/{r}/actions/secrets` |
 | App installations touching this repo | subset of org-approved list | `GET /repos/{o}/{r}/installation` (app-scoped) / org view |
 
-Built: `outside-collaborators`, `deploy-keys`, `webhooks`. Not built: environments,
-the secrets inventory, app installations.
+Built: `outside-collaborators`, `deploy-keys`, `webhooks`, `actions-secrets`,
+`environments`. Not built: app installations.
 
 ### R7 — Community health (mostly existing limen file rules)
 
@@ -278,7 +278,7 @@ Built: `org-code-security-configuration` (advisory: creating one is a human act)
 | Installed GitHub Apps | subset of a named allowlist (Renovate just joined — this check makes such grants reviewable) with scopes recorded | `GET /orgs/{o}/installations` |
 | Renovate installed | the `renovate` app is among the installations — the seeded `renovate.json` and the checksum-refresh workflow depend on it. Fail, no fix: app installation has no API. Self-hosted Renovate = exemption | `GET /orgs/{o}/installations` |
 | Org webhooks | HTTPS + secret + named | `GET /orgs/{o}/hooks` |
-| Org-level secrets | named inventory | `GET /orgs/{o}/actions/secrets` |
+| Org-level secrets | none: an org secret is read from any branch a write account pushes in a covered repository; advisory naming the environment move | `GET /orgs/{o}/actions/secrets` |
 | Fine-grained PAT approvals | inventory (API is partial; mark unverifiable where gated) | `/orgs/{o}/personal-access-token*` |
 | Teams & grants | inventory (peribolos territory; management out of scope while the org is one person) — plus the one asserted grant: the `agents` team exists, has members, and holds write on every non-archived repository; fix grants the missing ones | `GET /orgs/{o}/teams`, `/teams/agents/repos`, `/teams/agents/members`, `PUT /orgs/{o}/teams/agents/repos/{o}/{r}` |
 | Custom properties schema | reserved for future repo classification (safe-settings uses these well) | `/orgs/{o}/properties/schema` |
@@ -350,8 +350,8 @@ point 3, the workflow templates.
 | `fix --org` | org owner | rare, deliberate, never in CI |
 
 The scheduled audit (issue 507) cannot run on the default `GITHUB_TOKEN`, which reads
-little of R1/R2: it extends the update App of decision 8 with the admin-read permissions
-rather than minting a second identity.
+little of R1/R2; the identity it runs under is that issue's to decide (the update App of
+decision 8 no longer exists).
 
 ## Decisions
 
@@ -379,12 +379,12 @@ rather than minting a second identity.
    tree checks for the file-rule engine, not API checks.
 7. **The org `.github` repository**: a limen-managed repository like any other, carrying
    the community health fallback; its org-side checks are O7.
-8. **Bump-PR push credential**: a GitHub App over a fine-grained PAT for the
-   `update-aqua-checksum` push — per-run one-hour repo-scoped tokens, org-owned,
-   nothing expires on a calendar. Workflow token preference: App
-   (`UPDATE_AQUA_CHECKSUM_APP_ID` variable + `UPDATE_AQUA_CHECKSUM_APP_PRIVATE_KEY`
-   secret) → PAT (`UPDATE_AQUA_CHECKSUM_TOKEN`) → default token. Each org registers its
-   own App, named `limen-ci-<org>`; `limen bootstrap` registers it through the
-   app-manifest flow (internal/github/app.go), and every state it cannot create or
-   verify degrades to a warning, never a failed bootstrap. The scheduled audit extends
-   this App rather than minting a second identity.
+8. **Bump-PR push credential**: none. The `update-aqua-checksum` workflow pushes its fix-up
+   with the run's own token, which starts no run, and then approves the pull request's runs
+   awaiting approval with the same token (`actions: write`); the checks report on the new
+   head. The first version was a per-org GitHub App (`limen-ci-<org>`, registered by `limen
+   bootstrap` through the app-manifest flow) whose private key was an organisation secret,
+   readable by any run on any branch of a covered repository; the approval route was
+   verified on a test pull request; limen no longer registers or uses the App, and the human
+   deletes it once every repository has merged its migration bump. A dispatch of the CI does
+   not do: GitHub does not count a dispatched run's checks for the pull request.
