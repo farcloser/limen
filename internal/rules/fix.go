@@ -476,8 +476,8 @@ func remediateWorkflows(root string) []Outcome {
 }
 
 // remediateReleaseGo gives .release-go.yaml its schema header and the
-// canonical `changelog:` section; the content is otherwise the project's,
-// untouched.
+// canonical `changelog:` and `sboms:` sections; the content is otherwise the
+// project's, untouched.
 func remediateReleaseGo(root, rule string) Outcome {
 	data, err := readRepoFile(root, releaseGoFile)
 	if err != nil {
@@ -492,13 +492,14 @@ func remediateReleaseGo(root, rule string) Outcome {
 	content := string(data)
 	headed := strings.HasPrefix(content, releaseGoHeader+"\n") || strings.HasPrefix(content, releaseGoHeader+"\r\n")
 	_, drifted := changelogDrift(content)
+	_, sbomsDrifted := sbomsDrift(content)
 
-	if headed && !drifted {
+	if headed && !drifted && !sbomsDrifted {
 		return Outcome{
 			Rule:    rule,
 			Action:  ActionNone,
 			Path:    releaseGoFile,
-			Message: releaseGoFile + " carries its schema line and the canonical changelog section",
+			Message: releaseGoFile + " carries its schema line and the canonical changelog and sboms sections",
 		}
 	}
 
@@ -514,6 +515,12 @@ func remediateReleaseGo(root, rule string) Outcome {
 		content = withCanonicalChangelog(content)
 
 		done = append(done, "set the changelog section to `use: github-native`")
+	}
+
+	if sbomsDrifted {
+		content = withCanonicalSboms(content)
+
+		done = append(done, "set the sboms section to one SBOM per archive")
 	}
 
 	if err := writeFile(root, releaseGoFile, content); err != nil {

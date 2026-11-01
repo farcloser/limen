@@ -47,7 +47,9 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     (goreleaser's `sboms:`), listed in `checksums.txt` and attested like the archives. It
     names the modules the binaries were built from, read off Go's embedded build
     information, so a vulnerability in a dependency is matched to the releases that carry it
-    without rebuilding them.
+    without rebuilding them. The section is limen's inside `.release-go.yaml`: `limen check`
+    fails a configuration that makes archives without the canonical one, `limen fix` writes
+    it; a configuration saying `archives: []` has nothing to catalog and needs none.
   - **No long-lived signing key exists.** No cosign key pair, no key-based lane, no
     `cosign.pub`: a key is a thing to leak and rotate, and the keyless identity is the
     workflow at the tag, which is what a consumer wants to know.
