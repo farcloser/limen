@@ -238,9 +238,12 @@ func remediateCaller(root, rule string, item caller, opts FixOptions) Outcome {
 	}
 
 	// On a Renovate branch the fix-up is the run's own token's commit, which
-	// may not write a workflow file: the caller is left as it is and check
-	// says what it needs, for a hand push.
-	if opts.RenovateBranch {
+	// may not write a workflow file: a drifted or missing caller is left as it
+	// is and check says what it needs, for a hand push. A file that is not a
+	// caller at all is the workflow from before the lanes moved, met by the
+	// migration bump, whose old checksum workflow still runs under the update
+	// App and may write it: that one write is made.
+	if opts.RenovateBranch && (err != nil || usesIn(content, item.reusable) != "") {
 		return Outcome{
 			Rule: rule, Action: ActionAdvisory, Path: item.path,
 			Message: item.path + " drifted from the canonical caller; a Renovate branch's fix-up may not write a " +
