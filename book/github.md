@@ -161,11 +161,14 @@ declaring only where the code is on that list.
   Renovate that keeps no dashboard declares `renovate-processing`.
 - **Actions hardened, and on.** The default workflow token is read-only, workflows cannot
   approve pull requests, and the allowed-actions policy is restricted: GitHub-owned actions
-  plus an explicitly pinned allowlist, never "all". Actions switched off at the repository
-  fails the same check: the required checks can then never run, and a pull request waits on
-  an empty check suite with nothing naming the cause (forkcloser/xz, two hours of it). This
-  mirrors the canonical workflows' own construction: one SHA-pinned first-party action,
-  everything else through aqua and `just`.
+  plus an allowlist, never "all". Outside farcloser the allowlist names limen's reusable
+  workflows (`farcloser/limen/.github/workflows/*@*`), which the lanes are called from and
+  which a restricted policy admits from the owner's own organisation alone; the pattern
+  applies to public repositories, GitHub's rule. Whatever else a repository allows stays.
+  Actions switched off at the repository fails the same check: the required checks can then
+  never run, and a pull request waits on an empty check suite with nothing naming the cause
+  (forkcloser/xz, two hours of it). This mirrors the canonical workflows' own construction:
+  one SHA-pinned first-party action, everything else through aqua and `just`.
 - **Features off unless used, issues on.** Wiki, projects, discussions off: documentation
   lives in the repository, issues are the tracker — so issues themselves must be on, or
   `SUPPORT.md` and the org-wide issue forms point at nothing. An exception either way is
@@ -237,8 +240,8 @@ The decided merge model, enforced by the repository settings and the `limen:main
 - **Merges wait for green CI.** The `limen:main` ruleset carries required status checks,
   without which auto-merge (and a hasty human) would merge on red. A fresh ruleset requires
   `gate` — the job in the canonical `ci.yaml` that `needs` the shared lanes (the `limen`
-  call to the pinned `limen-verify.yaml`: every verify leg, fuzz, race and tools) and any
-  job the project adds, and fails unless all succeeded — and, where the default branch
+  call to limen's reusable `limen-verify.yaml`: every verify leg, fuzz, race and tools) and
+  any job the project adds, and fails unless all succeeded — and, where the default branch
   carries `security.yaml`, the `security` check beside it (**Security**, below): what the
   canonical workflows report, read from the default branch, never assumed from the seed. The
   check names stay project-owned, so reconciliation preserves what a repository declared,
@@ -296,9 +299,10 @@ The decided merge model, enforced by the repository settings and the `limen:main
   <a id="security"></a>
   **Security.** The verdicts that move without the tree are not in `ci.yaml` at all: the
   vulnerability scans, and the link check, whose verdict is the web's. A canonical
-  `security.yaml`, content-pinned like `limen-verify.yaml`, runs the project's `just
-  security` (the shared `do::security::default` plus whatever scans the project adds) on one
-  linux leg, on every push and pull request and once a day. Apart on purpose: a linter's
+  `security.yaml`, a content-pinned caller of limen's reusable `limen-security.yaml`, runs
+  the project's `just security` (the shared `do::security::default` plus whatever scans the
+  project adds) on one linux leg, on every push and pull request and once a day, and asserts
+  it in a `security` job, the check the ruleset requires. Apart on purpose: a linter's
   verdict is a function of the tree, a scan's of a database that moves without it, so inside
   `ci.yaml` a new advisory would turn `gate` red on a pull request that changed nothing near
   it. In its own lane the red is one check that says what it is, the schedule is how `main`

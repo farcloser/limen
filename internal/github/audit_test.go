@@ -244,6 +244,9 @@ func compliantResponses() map[string]stubResponse {
 			Body: `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`,
 		},
 		"GET repos/test/repo/actions/permissions": {Body: `{"enabled":true,"allowed_actions":"selected"}`},
+		"GET repos/test/repo/actions/permissions/selected-actions": {
+			Body: `{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":["farcloser/limen/.github/workflows/*@*"]}`,
+		},
 		"GET repos/test/repo/rulesets?per_page=100": {
 			Body: `[{"id":1,"name":"limen:main","target":"branch","enforcement":"active"},{"id":2,"name":"limen:tags","target":"tag","enforcement":"active"}]`,
 		},
@@ -1670,6 +1673,75 @@ func TestRulesetBypassHiddenIsUnverifiable(t *testing.T) {
 	for _, change := range changes {
 		if change.Check == "ruleset-version-tags" {
 			t.Error("a verdict limen could not reach must plan no write")
+		}
+	}
+}
+
+// TestRepoAllowlistNamesLimen: a restricted repository policy whose
+// allowlist does not name limen's reusable workflows fails, and the fix adds
+// the pattern beside what the list carries.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestRepoAllowlistNamesLimen(t *testing.T) {
+	responses := compliantResponses()
+	responses["GET repos/test/repo/actions/permissions/selected-actions"] = stubResponse{
+		Body: `{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":["octo/*"]}`,
+	}
+	responses["PUT repos/test/repo/actions/permissions/selected-actions"] = stubResponse{}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "actions-allowed")
+	if finding.Status != github.StatusFail ||
+		!strings.Contains(finding.Message, "farcloser/limen/.github/workflows/*@*") {
+		t.Fatalf("an allowlist without limen: %v (%s), want fail naming the pattern", finding.Status, finding.Message)
+	}
+
+	for _, planned := range changes {
+		if planned.Check == "actions-allowed" {
+			if err := planned.Apply(t.Context()); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+		}
+	}
+
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), `"patterns_allowed":["octo/*","farcloser/limen/.github/workflows/*@*"]`) {
+		t.Errorf("the fix must add the pattern beside the curated list:\n%s", log)
+	}
+}
+
+// TestFarcloserNeedsNoPattern: a restricted policy admits the owner's own
+// repositories, so in farcloser limen's workflows run without a pattern and
+// local_only is as good as any: both pass, and nothing is planned.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestFarcloserNeedsNoPattern(t *testing.T) {
+	for name, policy := range map[string]string{"selected": "selected", "local_only": "local_only"} {
+		responses := map[string]stubResponse{}
+		for key, value := range compliantResponses() {
+			responses[strings.ReplaceAll(key, "repos/test/repo", "repos/farcloser/thing")] = value
+		}
+
+		responses["GET repos/farcloser/thing/actions/permissions"] = stubResponse{
+			Body: `{"enabled":true,"allowed_actions":"` + policy + `"}`,
+		}
+		delete(responses, "GET repos/farcloser/thing/actions/permissions/selected-actions")
+		responses["GET orgs/farcloser"] = stubResponse{Body: `{"login":"farcloser"}`}
+		responses["GET orgs/farcloser/teams?per_page=100"] = stubResponse{Body: `[{"slug":"agents"}]`}
+		stubGH(t, responses)
+
+		findings, changes := github.Audit(t.Context(), "farcloser/thing", nil)
+
+		if finding, _ := findingByCheck(findings, "actions-allowed"); finding.Status != github.StatusOK {
+			t.Errorf("%s in farcloser: %v (%s), want ok", name, finding.Status, finding.Message)
+		}
+
+		for _, planned := range changes {
+			if planned.Check == "actions-allowed" {
+				t.Errorf("%s in farcloser: a change was planned", name)
+			}
 		}
 	}
 }

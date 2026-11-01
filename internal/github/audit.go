@@ -119,6 +119,13 @@ const (
 	rulesetTagsName       = "limen:tags"
 	enforcementActive     = "active"
 	allowedActionsAll     = "all"
+	allowedActionsLocal   = "local_only"
+	limenRepository       = "farcloser/limen"
+	limenOwner            = "farcloser"
+	selectedActionsPath   = "/actions/permissions/selected-actions"
+	// limenWorkflowsPattern names limen's reusable workflows, which every
+	// repository's lanes are called from, in an allowlist's syntax.
+	limenWorkflowsPattern = "farcloser/limen/.github/workflows/*@*"
 	approvalWeakest       = "first_time_contributors_new_to_github"
 	approvalBaseline      = "first_time_contributors"
 	accessLevelNone       = "none"
@@ -768,8 +775,9 @@ func (a *auditor) auditActionsAllowed() {
 
 	permissionsOutcome := a.client.getJSON(a.ctx, "/actions/permissions", &permissions)
 
-	// Enabled, with GitHub-owned actions plus a pinned allowlist: the fix for
-	// a policy of "all" and for Actions switched off alike.
+	// Enabled, with GitHub-owned actions plus limen's reusable workflows: the
+	// fix for a policy of "all", for the repository's own alone and for
+	// Actions switched off alike.
 	restrict := func(ctx context.Context, apiClient client) error {
 		if err := apiClient.writeJSON(ctx, "PUT", "/actions/permissions", map[string]any{
 			"enabled":         true,
@@ -778,11 +786,7 @@ func (a *auditor) auditActionsAllowed() {
 			return err
 		}
 
-		return apiClient.writeJSON(ctx, "PUT", "/actions/permissions/selected-actions", map[string]any{
-			"github_owned_allowed": true,
-			"verified_allowed":     false,
-			"patterns_allowed":     []string{},
-		})
+		return apiClient.writeJSON(ctx, "PUT", selectedActionsPath, allowlistPayload(selectedActions{}))
 	}
 
 	switch {
@@ -802,14 +806,100 @@ func (a *auditor) auditActionsAllowed() {
 			})
 	case permissions.AllowedActions == allowedActionsAll:
 		a.flag(checkActionsAllowed, StatusFail, allowedActionsAll, "selected",
-			"the allowed-actions policy must not be \"all\" — restrict to GitHub-owned plus a pinned allowlist",
+			"the allowed-actions policy must not be \"all\" — restrict to GitHub-owned plus limen's reusable workflows",
 			&Change{
 				Check:   checkActionsAllowed,
-				Summary: "allowed actions: all → selected (GitHub-owned only)",
+				Summary: "allowed actions: all → selected (GitHub-owned and limen's reusable workflows)",
 				apply:   restrict,
 			})
-	default:
+	case permissions.AllowedActions == allowedActionsLocal && a.needsLimenPattern():
+		a.flag(checkActionsAllowed, StatusFail, allowedActionsLocal, "selected",
+			"the allowed-actions policy admits the owner's actions alone: the shared lanes are reusable workflows in "+
+				limenRepository+", another organisation's, which it must name",
+			&Change{
+				Check:   checkActionsAllowed,
+				Summary: "allowed actions: local_only → selected (GitHub-owned and limen's reusable workflows)",
+				apply:   restrict,
+			})
+	case permissions.AllowedActions == allowedActionsLocal || !a.needsLimenPattern():
 		a.flag(checkActionsAllowed, StatusOK, "", "", "allowed-actions policy is restricted", nil)
+	default:
+		a.auditAllowlist(checkActionsAllowed, "the repository's")
+	}
+}
+
+// needsLimenPattern reports whether the allowlist must name limen's reusable
+// workflows: in every organisation but limen's own. A restricted policy
+// admits the owner's repositories, so farcloser's call farcloser/limen
+// without a pattern, and another organisation's only by one.
+func (a *auditor) needsLimenPattern() bool {
+	return a.owner != limenOwner
+}
+
+// auditAllowlist judges a "selected" policy's allowlist where the pattern is
+// needed: GitHub-owned actions on, and limen's reusable workflows named.
+// Whatever else the list carries stays. The pattern applies to public
+// repositories alone, GitHub's rule; a private repository outside farcloser
+// cannot call the lanes.
+func (a *auditor) auditAllowlist(check, whose string) {
+	var current selectedActions
+
+	outcome := a.client.getJSON(a.ctx, selectedActionsPath, &current)
+	if outcome.err != nil || outcome.notFound {
+		a.unverifiable(orNotFound(outcome), check)
+
+		return
+	}
+
+	if current.GitHubOwnedAllowed && slices.Contains(current.PatternsAllowed, limenWorkflowsPattern) {
+		a.flag(
+			check,
+			StatusOK,
+			"",
+			"",
+			whose+" allowed-actions policy is restricted and names limen's reusable workflows",
+			nil,
+		)
+
+		return
+	}
+
+	a.flag(check, StatusFail, "selected without "+limenWorkflowsPattern, "selected, "+limenWorkflowsPattern+" allowed",
+		whose+" allowed-actions allowlist does not name limen's reusable workflows ("+limenWorkflowsPattern+
+			"): the shared lanes are called from "+limenRepository+", another organisation's, and would not run",
+		&Change{
+			Check:   check,
+			Summary: "allowed actions: name " + limenWorkflowsPattern,
+			apply: func(ctx context.Context, c client) error {
+				return c.writeJSON(ctx, "PUT", selectedActionsPath, allowlistPayload(current))
+			},
+		})
+}
+
+// selectedActions is the GET/PUT /actions/permissions/selected-actions shape,
+// at the repository and at the organization.
+type selectedActions struct {
+	PatternsAllowed    []string `json:"patterns_allowed"`
+	GitHubOwnedAllowed bool     `json:"github_owned_allowed"`
+	VerifiedAllowed    bool     `json:"verified_allowed"`
+}
+
+// allowlistPayload is the allowlist the floor writes over the current one:
+// GitHub-owned on, limen's reusable workflows named, the rest as it was.
+func allowlistPayload(current selectedActions) map[string]any {
+	patterns := slices.Clone(current.PatternsAllowed)
+	if !slices.Contains(patterns, limenWorkflowsPattern) {
+		patterns = append(patterns, limenWorkflowsPattern)
+	}
+
+	if patterns == nil {
+		patterns = []string{}
+	}
+
+	return map[string]any{
+		"github_owned_allowed": true,
+		"verified_allowed":     current.VerifiedAllowed,
+		"patterns_allowed":     patterns,
 	}
 }
 

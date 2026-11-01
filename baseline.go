@@ -107,8 +107,10 @@ var CanonicalAquaPackages string
 // Adding a canonical workflow means adding it to the right list here — the
 // pin/seed decision stays explicit and reviewable.
 
-// CanonicalWorkflowUpdateAquaChecksum is content-pinned in every repo that
-// carries it: the write-capable Renovate companion workflow.
+// CanonicalWorkflowUpdateAquaChecksum is the thin caller of the checksum
+// workflow, content-pinned in every repository but for its `uses:` reference,
+// the reusable workflow at a commit of farcloser/limen that Renovate moves;
+// limen's own copy, embedded here, calls it locally.
 //
 //go:embed .github/workflows/update-aqua-checksum.yaml
 var CanonicalWorkflowUpdateAquaChecksum string
@@ -132,29 +134,24 @@ var CanonicalActionWindowsCacheImage string
 //go:embed .github/actions/cache/action.yaml
 var CanonicalActionCache string
 
-// CanonicalWorkflowVerify is the reusable workflow holding the shared CI
-// lanes, called from every repository's ci.yaml — content-pinned.
-//
-//go:embed .github/workflows/limen-verify.yaml
-var CanonicalWorkflowVerify string
-
 // CanonicalWorkflowCI seeds .github/workflows/ci.yaml once; the file is the
 // project's own afterwards (its own jobs, a trimmed runner list).
 //
 //go:embed .github/workflows/ci.yaml
 var CanonicalWorkflowCI string
 
-// CanonicalWorkflowSecurity is the vulnerability scans' lane, apart from
+// CanonicalWorkflowSecurity is the thin caller of the scans' lane, apart from
 // ci.yaml because a scan's verdict moves with a database rather than with the
-// tree — content-pinned: a project's own scans go in its `security` recipe.
+// tree — content-pinned but for its `uses:` reference, like the checksum
+// caller; a project's own scans go in its `security` recipe.
 //
 //go:embed .github/workflows/security.yaml
 var CanonicalWorkflowSecurity string
 
-// CanonicalWorkflowCaches is the repository's .github/workflows/caches.yaml:
-// the cache budget's keeper, content-pinned in every repository. After each
-// ci run on main, and daily, it keeps one generation per cache key on main.
-// See book/github.md.
+// CanonicalWorkflowCaches is the thin caller of the cache budget's keeper,
+// content-pinned but for its `uses:` reference, like the checksum caller.
+// After each ci run on main, and daily, it keeps one generation per cache
+// key on main. See book/github.md.
 //
 //go:embed .github/workflows/caches.yaml
 var CanonicalWorkflowCaches string

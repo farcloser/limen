@@ -310,14 +310,13 @@ The `.github` surface mixes two regimes, and the split is the point:
 
 | File | Regime | Why |
 |------|--------|-----|
-| `.github/workflows/update-aqua-checksum.yaml` | **Content-pinned** | Limen machinery, and a *write-capable* workflow: its hardening (no `pull_request_target`, no secrets near branch-controlled code, env-only branch names) must never drift. Drift here is a vulnerability, not customization. |
+| `.github/workflows/update-aqua-checksum.yaml` | **Content-pinned caller** | A thin caller of limen's reusable `limen-update-aqua-checksum.yaml` at a commit of `farcloser/limen` (`uses: farcloser/limen/.github/workflows/limen-update-aqua-checksum.yaml@<sha> # vX.Y.Z`): the triggers, the permissions and that one line, which Renovate moves with the limen pin in the same pull request. The steps, a *write-capable* workflow whose hardening (no `pull_request_target`, no secrets near branch-controlled code, env-only branch names) must never drift, live in limen, so a change to them reaches a repository as that one-line bump in Renovate's own commit, never as a workflow file the fix-up has to write, which the run's token may not. |
 | `.github/actions/setup-hermetic/action.yaml` | **Content-pinned** | The composite action every canonical workflow bootstraps hermetic with, verified against its release's `checksums.txt` (whose sha256 is pinned beside the version) and GitHub's build provenance, then authorizes the committed policy, links the pins and exports `HERMETIC_CONFIG` as the checkout's manifest, so a later step resolves the repository's pins from any working directory; its pins and verification are the supply-chain floor. |
 | `.github/actions/cache/action.yaml` | **Content-pinned** | The composite action every canonical job keeps its caches with, in three calls (`attach` before setup-hermetic, `restore` right after setup-hermetic, `save` at the end): hermetic's store and the Go caches as files on Linux and macOS, the Windows cache image on Windows; one key scheme and one save rule (on `main`, on a miss) for every job ([github](./github.md#cache-budget)). |
 | `.github/actions/windows-cache-image/action.yaml` | **Content-pinned** | The Windows half of the cache action, called by it: one NTFS disk image holding the Go caches, hermetic's root and the linter cache, cached as one file and attached at `C:\vcache` with a Defender exclusion ([windows](./windows.md#caches-on-the-windows-runners)). |
-| `.github/workflows/ci.yaml` | **Seeded once** | Projects add to CI (jobs, runners, services), so the file is theirs; the shared lanes are not in it. The seed carries two jobs: `limen`, which calls `limen-verify.yaml` (optionally with its own runner list as the `os` input, and `submodules` when the tests read fixtures from one), and `gate`, the one required check, which needs `limen` and every project job. The file is the project's; fix notes when it does not call `limen-verify.yaml` yet. |
-| `.github/workflows/limen-verify.yaml` | **Content-pinned** | The shared CI lanes as a reusable workflow every `ci.yaml` calls: `verify` (lint and test on each runner of the `os` input, with the Windows cache image), `fuzz` (one linux leg) and `tools` (a real install of every pin) ([github](./github.md#mainline-doctrine-pull-requests-always)). Pinned so a change to the lanes reaches every repository with its limen bump. |
-| `.github/workflows/security.yaml` | **Content-pinned** | The scans' lane, apart from `ci.yaml`: one linux leg running the project's `just security` on every push and pull request and once a day, since the database a scan judges against moves without a push. Its own check, so a new advisory reddens `security`, never `gate`. What a project adds is a scan, in its `security` recipe; the workflow around it is the same everywhere. |
-| `.github/workflows/caches.yaml` | **Content-pinned** | The cache budget's keeper: after each `ci` run on the default branch, and once a day, it keeps one generation per cache key there and deletes the superseded ones ([github](./github.md#cache-budget)). The one workflow with `actions: write`, on that one job. |
+| `.github/workflows/ci.yaml` | **Seeded once** | Projects add to CI (jobs, runners, services), so the file is theirs; the shared lanes are not in it. The seed carries two jobs: `limen`, which calls limen's reusable `limen-verify.yaml` at a commit of `farcloser/limen` (optionally with its own runner list as the `os` input, and `submodules` when the tests read fixtures from one), and `gate`, the one required check, which needs `limen` and every project job. The file is the project's but for that one `uses:` line: `check` fails one still calling a local copy, `fix` rewrites the line to the release's commit, and Renovate moves it from there; fix notes when the file does not call `limen-verify.yaml` at all. A local copy of `limen-verify.yaml`, from before the lanes were called at a commit, is a stray `fix` removes. |
+| `.github/workflows/security.yaml` | **Content-pinned caller** | The scans' lane, apart from `ci.yaml`: a thin caller of limen's reusable `limen-security.yaml`, which runs the project's `just security` on one linux leg on every push and pull request and once a day, since the database a scan judges against moves without a push, plus the `security` job that asserts the called one, the one check the ruleset requires, so a new advisory reddens `security`, never `gate`. What a project adds is a scan, in its `security` recipe. |
+| `.github/workflows/caches.yaml` | **Content-pinned caller** | The cache budget's keeper: a thin caller of limen's reusable `limen-caches.yaml`, which after each `ci` run on the default branch, and once a day, keeps one generation per cache key there and deletes the superseded ones ([github](./github.md#cache-budget)). The one caller granting `actions: write`. |
 | `pins.yaml` | **Optional, the project's own**; judged by the `pins` rule when present | The artifacts a build fetches by hand, pinned by digest, declared once and read back by the build; Renovate moves the version through the shared preset and `limen pins refresh` brings the digest along ([tooling](./tooling.md#pinned-artifacts-beyond-aqua-pinsyaml)). |
 | `.limen/renovate.json` | **Content-pinned** | The canonical Renovate configuration: cooldowns, groups, the managers for `pins.yaml` and the Go-built tools, the dashboard. Carried byte for byte like the rest of `.limen/`, so a fix reaches every repository with its limen bump, in that pull request's diff, and Renovate reads it from the repository itself. |
 | `renovate.json` | **Seeded once**; three things maintained by the `renovate` rule | The project's Renovate config, which extends the canonical preset by the repository's own name (`local>owner/name//.limen/renovate`); the rule's section below. |
@@ -329,6 +328,26 @@ never judged after the seed), and a missing release workflow in a repo that carr
 goreleaser config. `limen fix` resets the pinned pieces and seeds the rest, after which
 `ci.yaml`, `release.yaml` and `renovate.json` are the project's own, like the root
 `.justfile`.
+
+A **content-pinned caller** is pinned but for one line, the `uses:` reference to the
+reusable workflow it calls: `./.github/workflows/limen-<name>.yaml` in limen itself, where
+the reusable workflows live, and `farcloser/limen/.github/workflows/limen-<name>.yaml@<sha>
+# vX.Y.Z` everywhere else, the commit of a limen release with the version Renovate reads.
+`limen fix` seeds a caller at its own release's commit and resets a drifted body around the
+reference the file carries; Renovate moves the reference, grouped with the limen pin, so the
+recipes a repository runs and the lanes it calls change in one pull request. The reason is
+the fix-up on a Renovate branch: the run's own token may not write a file under
+`.github/workflows/`, and with the steps in limen it has to only when a caller's own lines
+change. A caller is held to its code lines, comments aside, so a comment edited in limen
+asks nothing of a repository; a change to what a caller does (a trigger, a permission) is
+one the fix-up cannot write: on a Renovate branch `fix` leaves the caller and says so,
+`check` names it, and the caller is pushed by hand, once per repository. The release that
+introduced the callers is the last to write workflow files through the fix-up, under the
+update App, which stays until every repository has merged that bump and goes then. For the
+shared lanes to be called from another organisation's repository, the allowed-actions floor
+names them there: `farcloser/limen/.github/workflows/*@*` beside GitHub-owned actions, at
+the repository and the organisation; farcloser's own need no pattern, and a private
+repository outside farcloser cannot call them, GitHub's rule ([github](./github.md)).
 
 ### The `renovate` rule — who may commit onto Renovate's branches
 

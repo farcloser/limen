@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -79,17 +80,13 @@ func compliantFiles() map[string]string {
 		// with the canonical baseline. The shellcheck config is unconditional.
 		".limen/.yamlfmt":      rules.CanonicalYamlfmt,
 		".limen/.shellcheckrc": rules.CanonicalShellcheckrc,
-		// The .github surface: two content-pinned pieces, two seeded ones
-		// (any content satisfies the seeded pair — canonical used here).
-		".github/workflows/update-aqua-checksum.yaml":     limen.CanonicalWorkflowUpdateAquaChecksum,
+		// The .github surface: the content-pinned actions and release notes,
+		// the thin callers at a release's commit (a consumer's form), the
+		// seeded ci.yaml with its call at that commit.
 		".github/actions/setup-hermetic/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
 		".github/actions/cache/action.yaml":               limen.CanonicalActionCache,
-		".github/workflows/limen-verify.yaml":             limen.CanonicalWorkflowVerify,
 		".github/release.yml":                             limen.CanonicalReleaseNotes,
-		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
-		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
-		".github/workflows/caches.yaml":                   limen.CanonicalWorkflowCaches,
 		// The shared Renovate configuration, content-pinned, and the seed
 		// extending it by the repository's name — what `limen fix` leaves
 		// behind (the renovate rule).
@@ -100,6 +97,8 @@ func compliantFiles() map[string]string {
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
 	}
+
+	maps.Copy(files, rules.CanonicalCallersFor(testRepository, testRevision, testVersion))
 
 	return files
 }
@@ -1312,7 +1311,7 @@ func TestWorkflowsRule(t *testing.T) {
 
 	// A drifted pinned piece fails — the write-capable workflow is machinery.
 	drifted := compliantFiles()
-	drifted[".github/workflows/update-aqua-checksum.yaml"] = limen.CanonicalWorkflowUpdateAquaChecksum + "\n# local edit\n"
+	drifted[".github/workflows/update-aqua-checksum.yaml"] += "  stray:\n    runs-on: ubuntu-24.04\n"
 
 	if f := findingByRule(rules.Check(writeRepo(t, drifted), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error("a drifted update-aqua-checksum workflow should fail (content-pinned)")
@@ -1320,7 +1319,7 @@ func TestWorkflowsRule(t *testing.T) {
 
 	// The security workflow is pinned too: a project's scans live in its recipe.
 	driftedSecurity := compliantFiles()
-	driftedSecurity[".github/workflows/security.yaml"] = limen.CanonicalWorkflowSecurity + "\n# local edit\n"
+	driftedSecurity[".github/workflows/security.yaml"] += "  stray:\n    runs-on: ubuntu-24.04\n"
 
 	if f := findingByRule(rules.Check(writeRepo(t, driftedSecurity), rules.DefaultPolicy()), "workflows"); f.OK() {
 		t.Error("a drifted security workflow should fail (content-pinned)")
@@ -1367,6 +1366,13 @@ func TestWorkflowsRule(t *testing.T) {
 
 // releaseGoHeader is the schema pointer .release-go.yaml opens with.
 const releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/static/schema.json"
+
+// testRevision and testVersion stand for the release the fixtures' workflow
+// callers reference.
+const (
+	testRevision = "0123456789abcdef0123456789abcdef01234567"
+	testVersion  = "v9.9.9"
+)
 
 // changelogSection is the `changelog:` section limen holds .release-go.yaml to.
 const changelogSection = "changelog:\n  use: github-native\n"

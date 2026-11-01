@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -181,15 +182,10 @@ func compliantRepo(t *testing.T) string {
 		".limen/lychee.toml":            rules.CanonicalLychee,
 		".limen/.yamlfmt":               rules.CanonicalYamlfmt,
 		".limen/.shellcheckrc":          rules.CanonicalShellcheckrc,
-		".github/workflows/update-aqua-checksum.yaml":     limen.CanonicalWorkflowUpdateAquaChecksum,
 		".github/actions/setup-hermetic/action.yaml":      limen.CanonicalActionSetupAqua,
 		".github/actions/windows-cache-image/action.yaml": limen.CanonicalActionWindowsCacheImage,
 		".github/actions/cache/action.yaml":               limen.CanonicalActionCache,
-		".github/workflows/limen-verify.yaml":             limen.CanonicalWorkflowVerify,
 		".github/release.yml":                             limen.CanonicalReleaseNotes,
-		".github/workflows/ci.yaml":                       limen.CanonicalWorkflowCI,
-		".github/workflows/security.yaml":                 limen.CanonicalWorkflowSecurity,
-		".github/workflows/caches.yaml":                   limen.CanonicalWorkflowCaches,
 		".limen/renovate.json":                            limen.CanonicalRenovatePreset,
 		"renovate.json":                                   rules.CanonicalRenovateFor(""),
 		// The Go-built tools every repository declares (the gotools rule).
@@ -201,6 +197,13 @@ func compliantRepo(t *testing.T) string {
 	for _, m := range limen.JustModules() {
 		files[m.Path] = m.Content
 	}
+
+	// The callers in a consumer's form, at a release's commit: accepted with
+	// or without an origin remote to name the repository.
+	maps.Copy(
+		files,
+		rules.CanonicalCallersFor("example-org/thing", "0123456789abcdef0123456789abcdef01234567", "v9.9.9"),
+	)
 
 	for name, content := range files {
 		path := filepath.Join(dir, filepath.FromSlash(name))

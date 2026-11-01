@@ -15,4 +15,5 @@ shares:
   pinned `limen fix` on the branch) — running a dev-build fix in them plants files their
   pinned limen flags as drift, failing their CI. The one exception: when canonical files
   are MOVED or renamed outside `.limen/just/` (which fix sweeps itself), the fixer seeds
-  the new path but never deletes the old one, so the strays need a manual sweep.
+  the new path but never deletes the old one, so the strays need a manual sweep; and a
+  repository's copy of `limen-verify.yaml`, which fix removes.

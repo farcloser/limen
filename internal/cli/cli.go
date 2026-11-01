@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -63,6 +64,36 @@ func releaseVersion(stamp string) string {
 	}
 
 	return stamp
+}
+
+// releaseRevision is the commit the running release was built from, read
+// off the binary's build information, or "" for a development build or a
+// build from a modified tree: the reference a seeded workflow caller carries
+// to the reusable workflows of the same release.
+func releaseRevision(stamp string) string {
+	if releaseVersion(stamp) == "" {
+		return ""
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+
+	revision := ""
+
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			if setting.Value == "true" {
+				return ""
+			}
+		}
+	}
+
+	return revision
 }
 
 // Subcommand and flag names, shared between dispatch, flag setup, and reporting.
@@ -253,6 +284,7 @@ func runFix(ctx context.Context, version string, args []string, stdout, stderr i
 	outcomes := rules.Fix(ctx, root, rules.FixOptions{
 		Policy:         policyFor(ctx, root, discoverIdentity),
 		SelfVersion:    releaseVersion(version),
+		SelfRevision:   releaseRevision(version),
 		ToolPins:       releaseToolPins(),
 		RenovateBranch: strings.HasPrefix(os.Getenv("GITHUB_REF_NAME"), "renovate/"),
 	})
@@ -382,8 +414,8 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		License:     opts.licenseID,
 		Holder:      opts.holder,
 		Year:        time.Now().Year(),
-		SelfVersion: releaseVersion(version),
-		ToolPins:    releaseToolPins(),
+		SelfVersion: releaseVersion(version), SelfRevision: releaseRevision(version),
+		ToolPins: releaseToolPins(),
 	})
 
 	code := reportOutcomes(stdout, stderr, cmdBootstrap, root, outcomes, opts.asJSON)
@@ -626,7 +658,7 @@ func printOutcomes(writer io.Writer, verb, root string, outcomes []rules.Outcome
 		switch outcome.Action {
 		case rules.ActionNone:
 			mark = "✓"
-		case rules.ActionCreated, rules.ActionOverwrote, rules.ActionMerged:
+		case rules.ActionCreated, rules.ActionOverwrote, rules.ActionMerged, rules.ActionDeleted:
 			mark = "✎"
 		case rules.ActionAdvisory:
 			mark = "!"

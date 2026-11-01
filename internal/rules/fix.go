@@ -29,6 +29,8 @@ const (
 	// ActionAdvisory means the rule fails but cannot be auto-fixed safely; a human
 	// must act. The message says what to do.
 	ActionAdvisory Action = "advisory"
+	// ActionDeleted is a file the baseline retired, removed.
+	ActionDeleted Action = "deleted"
 	// ActionFailed means remediation was attempted but errored (e.g. a write or
 	// `git init` failed). The message carries the error.
 	ActionFailed Action = "failed"
@@ -37,7 +39,7 @@ const (
 // resolved reports whether the action left the rule compliant. Advisory and
 // failed do not; the rest do.
 func (a Action) resolved() bool {
-	return a == ActionNone || a == ActionCreated || a == ActionOverwrote || a == ActionMerged
+	return a == ActionNone || a == ActionCreated || a == ActionOverwrote || a == ActionMerged || a == ActionDeleted
 }
 
 // Outcome is the result of remediating one rule (or, for the .justfile rule, one
@@ -65,6 +67,10 @@ type FixOptions struct {
 	// limen that wrote its canonical files is the limen it pins — see
 	// mergeAquaManifest for the full argument.
 	SelfVersion string
+	// SelfRevision is the commit of the running limen's release, from its
+	// build information, or empty for dev builds: the reference a seeded
+	// workflow caller carries to the reusable workflows of that release.
+	SelfRevision string
 	// RenovateBranch is set when fix runs on a branch Renovate owns (the
 	// checksum workflow). Renovate renders .hermetic/hermetic.yaml itself on every
 	// run, so a line fix adds there is removed on the next, fix adds it
@@ -103,7 +109,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateBareTools(root))
 	add(remediateLintGo(root)...)
 	add(remediateLychee(root)...)
-	add(remediateWorkflows(root)...)
+	add(remediateWorkflows(root, opts)...)
 	add(remediateRenovate(root, opts)...)
 
 	add(remediateShellcheck(root))
@@ -413,17 +419,68 @@ func seedIfMissing(root, rule, relPath, content, createdMessage string) Outcome 
 // with a note when it does not call the shared lanes yet. Never advisory:
 // the checksum workflow runs fix on every Renovate branch, and an
 // unresolved outcome would fail every bump until a hand edit.
-func remediateCI(root, rule string) Outcome {
-	outcome := seedIfMissing(root, rule, pathWorkflowCI, limen.CanonicalWorkflowCI,
-		"seeded the canonical CI workflow (the content is the project's own from here)")
+func remediateCI(root, rule string, opts FixOptions) Outcome {
+	repository := opts.Policy.Repository
+
+	if !callsLocally(repository) && opts.SelfRevision == "" &&
+		!exists(filepath.Join(root, filepath.FromSlash(pathWorkflowCI))) {
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionAdvisory,
+			Path:    pathWorkflowCI,
+			Message: pathWorkflowCI + ": " + devBuildCallerNotice,
+		}
+	}
+
+	outcome := seedIfMissing(
+		root,
+		rule,
+		pathWorkflowCI,
+		CanonicalCIFor(repository, opts.SelfRevision, opts.SelfVersion),
+		"seeded the canonical CI workflow (the content is the project's own from here)",
+	)
 	if outcome.Action != ActionNone {
 		return outcome
 	}
 
+	// The one line of the project's file that is limen's: the call to the
+	// shared lanes, which moved from a local copy to limen's repository.
+	if ciCallsLocalVerify(root, repository) {
+		if opts.SelfRevision == "" {
+			return Outcome{
+				Rule:    rule,
+				Action:  ActionAdvisory,
+				Path:    pathWorkflowCI,
+				Message: pathWorkflowCI + ": " + devBuildCallerNotice,
+			}
+		}
+
+		data, err := readRepoFile(root, pathWorkflowCI)
+		if err != nil {
+			return failed(rule, pathWorkflowCI, err)
+		}
+
+		rewritten := withUses(
+			string(data),
+			reusableVerify,
+			remoteUses(reusableVerify, opts.SelfRevision, opts.SelfVersion),
+		)
+		if e := writeFile(root, pathWorkflowCI, rewritten); e != nil {
+			return failed(rule, pathWorkflowCI, e)
+		}
+
+		return Outcome{
+			Rule:    rule,
+			Action:  ActionMerged,
+			Path:    pathWorkflowCI,
+			Message: pathWorkflowCI + ": the shared lanes are called at " + limenRepository + " " + opts.SelfRevision + " now",
+		}
+	}
+
 	// #nosec G304 -- a fixed path under the caller-designated repository.
 	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(pathWorkflowCI)))
-	if err == nil && !strings.Contains(string(data), "uses: ./"+pathWorkflowVerify) {
-		outcome.Message = pathWorkflowCI + " is the project's own and does not call " + pathWorkflowVerify +
+	if err == nil && usesIn(string(data), reusableVerify) == "" {
+		outcome.Message = pathWorkflowCI + " is the project's own and does not call " + reusableVerify +
 			" yet: realign it by hand (book/mandatory-files.md)"
 	}
 
@@ -437,25 +494,28 @@ func remediateCI(root, rule string) Outcome {
 // workflow and the renovate config are seeded once and never overwritten; the
 // release workflow is seeded only where a goreleaser config makes it
 // applicable.
-func remediateWorkflows(root string) []Outcome {
+func remediateWorkflows(root string, opts FixOptions) []Outcome {
 	const rule = "workflows"
 
 	out := []Outcome{
-		pinExact(root, rule, pathWorkflowChecksum, limen.CanonicalWorkflowUpdateAquaChecksum),
 		pinExact(root, rule, pathActionSetupAqua, limen.CanonicalActionSetupAqua),
 		pinExact(root, rule, pathActionWinCache, limen.CanonicalActionWindowsCacheImage),
 		pinExact(root, rule, pathActionCache, limen.CanonicalActionCache),
-		pinExact(root, rule, pathWorkflowVerify, limen.CanonicalWorkflowVerify),
-		pinExact(root, rule, pathWorkflowSecurity, limen.CanonicalWorkflowSecurity),
-		pinExact(root, rule, pathWorkflowCaches, limen.CanonicalWorkflowCaches),
 		pinExact(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes),
-		remediateCI(root, rule),
-		seedIfMissing(root, rule, pathRenovate, renovateSeed,
-			"seeded the canonical renovate config (the content is the project's own from here)"),
 	}
 
-	out = append(
-		out,
+	for _, item := range callers() {
+		out = append(out, remediateCaller(root, rule, item, opts))
+	}
+
+	if strayVerify(root, opts.Policy.Repository) {
+		out = append(out, removeStrayVerify(root, rule))
+	}
+
+	out = append(out,
+		remediateCI(root, rule, opts),
+		seedIfMissing(root, rule, pathRenovate, renovateSeed,
+			"seeded the canonical renovate config (the content is the project's own from here)"),
 		remediateReleaseGo(root, rule),
 		remediateReleasedCommands(root, rule),
 	)

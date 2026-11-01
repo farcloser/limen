@@ -1,0 +1,60 @@
+# DO NOT EDIT MANUALLY: content-pinned by limen, reset on drift.
+# The security lane as a reusable workflow, called from every repository's
+# security.yaml (`uses: farcloser/limen/.github/workflows/limen-security.yaml@<sha>`,
+# the sha Renovate moves): the scan's steps live here, in limen, so a change
+# to them reaches a repository as a one-line bump of that sha in a Renovate
+# commit, never as a workflow file a fix-up has to write. Same glue as
+# limen-verify: GitHub's own actions pinned by SHA, hermetic at
+# .hermetic/hermetic.yaml's pins, `just` running the recipe a laptop runs.
+name: limen-security
+
+on:
+  workflow_call:
+
+# No default token permissions: the job states what it needs, within what the
+# caller grants (contents: read).
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # One linux leg: the scan loops over every supported platform itself
+  # (_per-platform in lib.just), so more legs would repeat one verdict.
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The token is not left behind in .git/config: nothing in this
+          # workflow talks to GitHub after checkout.
+          persist-credentials: false
+
+      - name: Install hermetic (pinned, verified)
+        uses: ./.github/actions/setup-hermetic
+
+      # The job's caches (.github/actions/cache): hermetic's store and the Go
+      # caches, which the scan needs once per supported platform, cold
+      # without them; no linter cache, so the Go key is go-, not the verify
+      # legs' go-lint-. The pins are linked by setup-hermetic: a tool
+      # downloads lazily on first use, checksum-verified.
+      - uses: ./.github/actions/cache
+        with:
+          mode: restore
+
+      # The project's `security`, like ci's `lint` and `test`: the root
+      # .justfile names the shared scans and adds its own (a cgo project scans
+      # the packages the native leg cannot load). The shared scans pass on a
+      # tree with no Go module, so this job is safe in every repository.
+      - name: Scan
+        run: just security
+
+      # Saved on the default branch only, on a miss (the cache budget:
+      # caches.yaml); the scheduled run is on it by definition.
+      - uses: ./.github/actions/cache
+        with:
+          mode: save
