@@ -231,6 +231,11 @@ Two roles close the enforcement loop:
   working tree is judged by its own enforcer rather than the always-older released pin.
 - **`just do release`** is shared; artifacts are opt-in. The recipe, its lane, the signing
   and provenance policy and the rules a release follows are [releasing](./releasing.md).
+- **`just do apple-verify-signed`, `apple-verify-notarized`, `apple-notarize` and
+  `apple-package`** are the shared halves of an Apple bundle's release: codesign's verdict,
+  the stapled ticket's, notarytool with the staple, and the ditto zip that keeps a signature
+  intact. A project composes its own `package` and `verify-assets` from them for the Apple
+  release lane ([releasing](./releasing.md)).
 
 ## Extending the baseline
 

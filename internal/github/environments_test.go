@@ -354,3 +354,72 @@ func TestReleaseEnvForUserOwnedRepo(t *testing.T) { //nolint:paralleltest // ser
 		t.Errorf("the owning user does not review:\n%s", calls)
 	}
 }
+
+// appleCallerWorkflow is a project's release.yaml on the Apple release lane:
+// the lane's sign job declares the release environment, in limen's file.
+const appleCallerWorkflow = "on:\n  push:\n    tags: ['v*']\njobs:\n  release:\n" +
+	"    uses: farcloser/limen/.github/workflows/limen-release-apple.yaml@" +
+	"0123456789abcdef0123456789abcdef01234567 # v9.9.9\n    secrets: inherit\n"
+
+// TestAppleLaneCallerNeedsRelease: a release.yaml calling the Apple lane
+// deploys to release through the called sign job, which reads the identity
+// there: the environment is required, created by the fix, and judged for
+// the identity's two secrets.
+func TestAppleLaneCallerNeedsRelease(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
+	responses := signingResponses()
+	responses["GET repos/test/repo/contents/.github/workflows/release.yaml"] = fileResponse(appleCallerWorkflow)
+	responses["GET repos/test/repo/environments?per_page=100"] = stubResponse{
+		Body: `{"total_count":0,"environments":[]}`,
+	}
+	responses["GET orgs/test/members?role=admin&per_page=100"] = stubResponse{Body: `[{"login":"alice","id":7}]`}
+	stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	if finding, _ := findingByCheck(findings, "environments"); finding.Current != "does not exist" {
+		t.Fatalf("environments: %+v, want the missing release environment", finding)
+	}
+
+	if len(changes) != 1 {
+		t.Fatalf("changes: %+v, want the environment created", changes)
+	}
+
+	// With the environment there, the identity's secrets are what it must hold.
+	responses = signingResponses()
+	responses["GET repos/test/repo/contents/.github/workflows/release.yaml"] = fileResponse(appleCallerWorkflow)
+	responses["GET repos/test/repo/environments/release/secrets?per_page=100"] = stubResponse{
+		Body: `{"total_count":1,"secrets":[{"name":"APPLE_DEVELOPER_ID_P12"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, _ = github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "environments")
+	if finding.Status != github.StatusFail ||
+		!strings.Contains(finding.Message, "gh secret set APPLE_DEVELOPER_ID_P12_PASSWORD --env release") {
+		t.Fatalf("environments: %+v, want the missing password named", finding)
+	}
+}
+
+// TestCalledOnlyWorkflowDeploysNowhere: a workflow that runs only when called
+// (limen's own copy of the lane) deploys in its callers' repositories, so
+// the environment its job declares is not this repository's to hold.
+func TestCalledOnlyWorkflowDeploysNowhere(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/contents/.github/workflows"] = workflowListing("limen-release-apple.yaml")
+	responses["GET repos/test/repo/contents/.github/workflows/limen-release-apple.yaml"] = fileResponse(
+		"on:\n  workflow_call:\n    secrets:\n      APPLE_DEVELOPER_ID_P12:\n        required: true\n" +
+			"jobs:\n  sign:\n    environment: release\n    env:\n      P: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}\n",
+	)
+	stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	if finding, _ := findingByCheck(findings, "environments"); finding.Status != github.StatusOK {
+		t.Errorf("environments: %+v, want ok", finding)
+	}
+
+	if len(changes) != 0 {
+		t.Errorf("changes: %+v, want none", changes)
+	}
+}

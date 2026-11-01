@@ -261,3 +261,33 @@ func TestSigningSecrets(t *testing.T) {
 		t.Errorf("signing secrets: %v, want %v", got, want)
 	}
 }
+
+// TestCalledOnly: a workflow with workflow_call as its one trigger runs in
+// its callers' repositories; one that is also pushed runs here too.
+func TestCalledOnly(t *testing.T) {
+	t.Parallel()
+
+	if !workflow.Parse([]byte("on:\n  workflow_call:\n    secrets:\n      A:\n        required: true\n")).CalledOnly() {
+		t.Error("a workflow_call block is called only")
+	}
+
+	if workflow.Parse([]byte("on: [workflow_call, push]\n")).CalledOnly() {
+		t.Error("a workflow also pushed is not called only")
+	}
+
+	if workflow.Parse([]byte("jobs:\n  a:\n    runs-on: x\n")).CalledOnly() {
+		t.Error("a workflow with no trigger is not called only")
+	}
+}
+
+// TestJobUses: the reusable workflow a job calls is read as written.
+func TestJobUses(t *testing.T) {
+	t.Parallel()
+
+	read := workflow.Parse([]byte(
+		"on: push\njobs:\n  release:\n    uses: farcloser/limen/.github/workflows/limen-release-apple.yaml@0123 # v1\n",
+	))
+	if len(read.Jobs) != 1 || read.Jobs[0].Uses != "farcloser/limen/.github/workflows/limen-release-apple.yaml@0123" {
+		t.Errorf("jobs: %+v, want the uses reference without its comment", read.Jobs)
+	}
+}

@@ -477,7 +477,15 @@ func (a *auditor) workflowEnvironments() (map[string]environmentNeeds, error) {
 			return nil, fmt.Errorf("%s: %w", entry.Path, err)
 		}
 
-		for _, job := range workflow.Parse(content).Jobs {
+		// A workflow that runs only when called runs in its callers'
+		// repositories, never in the one carrying it: its environments are
+		// theirs to hold.
+		read := workflow.Parse(content)
+		if read.CalledOnly() {
+			continue
+		}
+
+		for _, job := range read.Jobs {
 			record(needs, job)
 		}
 	}
@@ -485,8 +493,15 @@ func (a *auditor) workflowEnvironments() (map[string]environmentNeeds, error) {
 	return needs, nil
 }
 
-// record adds a job's secrets to its environment's needs.
+// record adds a job's secrets to its environment's needs. A job calling
+// limen's Apple release lane deploys to release through the called sign job,
+// which reads the identity there (the lane's own workflow names the rest as
+// optional).
 func record(needs map[string]environmentNeeds, job workflow.Job) {
+	if callsAppleLane(job) {
+		job = workflow.Job{Environment: releaseEnvironment, Secrets: appleLaneSecrets()}
+	}
+
 	if !job.HoldsSecrets() {
 		return
 	}
@@ -510,6 +525,20 @@ func record(needs map[string]environmentNeeds, job workflow.Job) {
 	}
 
 	needs[name] = need
+}
+
+// appleLaneWorkflow is limen's Apple release lane, which a project's
+// release.yaml calls at a commit of farcloser/limen.
+const appleLaneWorkflow = "/.github/workflows/limen-release-apple.yaml@"
+
+// callsAppleLane reports whether the job calls limen's Apple release lane.
+func callsAppleLane(job workflow.Job) bool { return strings.Contains(job.Uses, appleLaneWorkflow) }
+
+// appleLaneSecrets are the secrets the lane's sign job requires of the
+// release environment: the Developer ID identity. The provisioning profile
+// and the notarization key are the project's policy, optional there.
+func appleLaneSecrets() []string {
+	return []string{"APPLE_DEVELOPER_ID_P12", "APPLE_DEVELOPER_ID_P12_PASSWORD"}
 }
 
 // fileContent reads one file through the contents API.
