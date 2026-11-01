@@ -1,11 +1,16 @@
 # Windows
 
-The canonical CI matrix has two windows legs, x64 and arm64, and both run the shared
-recipes under git-bash. Windows is not Linux with backslashes: a recipe there crosses three
-kinds of program, two path syntaxes, one emulation layer and two exit-code translations, and
-most of what has bitten us is one of those seams. This chapter is what stays true of the
-platform; the machine to reproduce on is [VM testing](./vm_testing.md), and the recipe
-conventions it feeds are in [the recipes chapter](./recipes.md).
+The canonical CI matrix has two windows legs, x64 and arm64, and both run the shared recipes
+under git-bash. The floor is Windows 11 and Windows Server 2025, the one build line both legs
+run (Server 2025 on x64, Windows 11 on arm64): nothing is built, tested or supported below it,
+since support is what the lanes test, a behaviour of the platform or of Go that differs only
+on an older Windows is not a defect of ours, and code in a repository that caters to one goes.
+Windows 10 is out of support; Server 2022 and 2019 are in extended support only and no lane
+runs them. Windows is not Linux with backslashes: a recipe there crosses three kinds of
+program, two path syntaxes, one emulation layer and two exit-code translations, and most of
+what has bitten us is one of those seams. This chapter is what stays true of the platform; the
+machine to reproduce on is [VM testing](./vm_testing.md), and the recipe conventions it feeds
+are in [the recipes chapter](./recipes.md).
 
 ## Three kinds of program
 
