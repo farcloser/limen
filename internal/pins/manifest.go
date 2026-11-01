@@ -87,7 +87,20 @@ const (
 	// signed text; the artifact itself is not downloaded. The key's URL is
 	// transport, the fingerprint is the trust.
 	VerifyPGPSums = "pgp-sha256sums"
+	// VerifyCMS downloads the artifact, the detached CMS signature a vendor
+	// publishes beside it and the CA's root certificate, verifies the
+	// signature in-process over the downloaded bytes (limen's own reader of
+	// RFC 5652 SignedData), and requires the signer's certificate to match
+	// the subject regexp and to chain to the root whose SHA-256 fingerprint
+	// the entry pins; then hashes the bytes it verified. The root's URL is
+	// transport, the fingerprint is the trust.
+	VerifyCMS = "cms"
 )
+
+// RenovateManual is the datasource of a pin no Renovate datasource serves,
+// bumped by hand: the one word, no depName, so the shared preset's regex
+// (which needs both) leaves the entry alone.
+const RenovateManual = "manual"
 
 // arity is how many arguments a method takes after its name.
 type arity struct{ min, max int }
@@ -101,6 +114,7 @@ var verifyArity = map[string]arity{
 	VerifyGitHubReleaseAsset: {1, 2},
 	VerifyCosignSums:         {4, 4},
 	VerifyPGPSums:            {3, 3},
+	VerifyCMS:                {4, 4},
 }
 
 var (
@@ -165,6 +179,10 @@ type Entry struct {
 	versionLine        int
 	commitLine         int
 }
+
+// ManualBump reports whether the entry's version moves by hand: its
+// renovate line is the one word manual, which the preset's regex never reads.
+func (e Entry) ManualBump() bool { return len(e.Renovate) == 1 && e.Renovate[0] == RenovateManual }
 
 // Stale reports whether the digest was computed for another version or
 // commit than the one pinned now — the state a Renovate bump leaves behind
@@ -490,9 +508,16 @@ func (e Entry) validate() error {
 		return fmt.Errorf("%w: %s: name must match %s", ErrEntry, label, nameRE)
 	case e.Version == "":
 		return fmt.Errorf("%w: %s: no version", ErrEntry, label)
-	case len(e.Renovate) != 2:
-		return fmt.Errorf("%w: %s: renovate must be `<datasource> <depName>`"+
-			" (extract-version and versioning are their own lines)", ErrEntry, label)
+	case len(e.Renovate) == 2 && e.Renovate[0] == RenovateManual:
+		return fmt.Errorf(
+			"%w: %s: renovate %s takes no depName: the version moves by hand",
+			ErrEntry,
+			label,
+			RenovateManual,
+		)
+	case len(e.Renovate) != 2 && !e.ManualBump():
+		return fmt.Errorf("%w: %s: renovate must be `<datasource> <depName>`, or `%s` for a pin no datasource"+
+			" serves (extract-version and versioning are their own lines)", ErrEntry, label, RenovateManual)
 	case e.URL == "":
 		return fmt.Errorf("%w: %s: no url", ErrEntry, label)
 	case len(e.Verify) == 0:
@@ -519,9 +544,8 @@ func (e Entry) validate() error {
 			ErrEntry, label, e.Verify[0], want.min, want.max, got)
 	}
 
-	if e.Verify[0] == VerifyPGPSums && !fingerprintRE.MatchString(e.Verify[3]) {
-		return fmt.Errorf("%w: %s: verify %s: the fingerprint must be 40 hex digits without spaces, got %q",
-			ErrEntry, label, VerifyPGPSums, e.Verify[3])
+	if err := e.validateMethodArguments(label); err != nil {
+		return err
 	}
 
 	if ref := e.unknownVariable(); ref != "" {
@@ -530,6 +554,38 @@ func (e Entry) validate() error {
 	}
 
 	return e.validateOrder()
+}
+
+// validateMethodArguments holds a method's arguments to their shapes: the
+// PGP fingerprint; the cms signer regexp, which compiles, and its SHA-256
+// fingerprint.
+func (e Entry) validateMethodArguments(label string) error {
+	switch e.Verify[0] {
+	case VerifyPGPSums:
+		if !fingerprintRE.MatchString(e.Verify[3]) {
+			return fmt.Errorf("%w: %s: verify %s: the fingerprint must be 40 hex digits without spaces, got %q",
+				ErrEntry, label, VerifyPGPSums, e.Verify[3])
+		}
+	case VerifyCMS:
+		return e.validateCMS(label)
+	}
+
+	return nil
+}
+
+// validateCMS is the cms method's arguments.
+func (e Entry) validateCMS(label string) error {
+	if _, err := regexp.Compile(e.Verify[2]); err != nil {
+		return fmt.Errorf("%w: %s: verify %s: the signer subject regexp does not compile: %w",
+			ErrEntry, label, VerifyCMS, err)
+	}
+
+	if !sha256RE.MatchString(strings.ToLower(e.Verify[4])) {
+		return fmt.Errorf("%w: %s: verify %s: the root fingerprint must be 64 hex digits without colons, got %q",
+			ErrEntry, label, VerifyCMS, e.Verify[4])
+	}
+
+	return nil
 }
 
 // validateOrder holds the Renovate block to the order the preset's regex

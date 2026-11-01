@@ -8,8 +8,10 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/sha256"
+	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +27,8 @@ import (
 	"testing"
 
 	"github.com/farcloser/limen/internal/pins"
+	"github.com/farcloser/limen/internal/verify/cms"
+	"github.com/farcloser/limen/internal/verify/cms/cmstest"
 	"github.com/farcloser/limen/internal/verify/openpgp/openpgptest"
 )
 
@@ -310,8 +314,10 @@ func TestCommitPin(t *testing.T) {
 // read from the canonical .limen/renovate.json, captures a commit pin's
 // branch as currentValue and its commit as currentDigest, and a version
 // pin's version alone.
-func TestRenovateManagerReadsBothShapes(t *testing.T) {
-	t.Parallel()
+// renovatePinsPattern is the shared preset's regex for pins.yaml, as Renovate
+// reads it.
+func renovatePinsPattern(t *testing.T) string {
+	t.Helper()
 
 	data, err := os.ReadFile(filepath.Join("..", "..", ".limen", "renovate.json"))
 	if err != nil {
@@ -346,7 +352,13 @@ func TestRenovateManagerReadsBothShapes(t *testing.T) {
 		t.Fatal("no pins.yaml manager in the preset")
 	}
 
-	matcher := regexp.MustCompile(pattern)
+	return pattern
+}
+
+func TestRenovateManagerReadsBothShapes(t *testing.T) {
+	t.Parallel()
+
+	matcher := regexp.MustCompile(renovatePinsPattern(t))
 	groups := func(text string) map[string]string {
 		t.Helper()
 
@@ -875,4 +887,127 @@ func mustRead(t *testing.T, path string) []byte {
 	}
 
 	return data
+}
+
+// TestManualPin: a pin no datasource serves says `renovate: manual`, the one
+// word; it parses, Renovate's regex does not read it, and a depName beside
+// the word is refused.
+func TestManualPin(t *testing.T) {
+	t.Parallel()
+
+	manual := `pins:
+  - name: sde
+    renovate: manual
+    version: 10.13.1
+    url: https://h/sde-external-${version}-lin.tar.xz
+    verify: download
+`
+
+	parsed, err := pins.Parse([]byte(manual))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	if !parsed.Entries[0].ManualBump() {
+		t.Error("the entry is not read as a manual bump")
+	}
+
+	if _, err := pins.Parse(
+		[]byte(strings.Replace(manual, "renovate: manual", "renovate: manual intel/sde", 1)),
+	); err == nil {
+		t.Error("manual with a depName must be refused")
+	}
+
+	matcher := regexp.MustCompile(renovatePinsPattern(t))
+	if matcher.MatchString("    renovate: manual\n    version: 10.13.1\n    url: https://h/x\n") {
+		t.Error("the preset's regex must leave a manual pin alone")
+	}
+}
+
+// TestRefreshThroughCMS: an artifact with a detached CMS signature beside it
+// is hashed once its signature verifies, by a signer matching the regexp,
+// chaining to the pinned root; every departure is refused.
+func TestRefreshThroughCMS(t *testing.T) {
+	t.Parallel()
+
+	artifact := []byte("the sde tarball\n")
+
+	chain, err := cmstest.NewChain(cmstest.Options{RSA: true, Subject: pkix.Name{
+		Country: []string{"US"}, Organization: []string{"Intel Corporation"}, CommonName: "Intel Corporation",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signature, err := chain.Sign(artifact, cmstest.SignOptions{OmitRoot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rootPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: chain.Root.Raw})
+
+	other, err := cmstest.NewChain(cmstest.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	host := artifactHost(t, map[string]string{
+		"/dl/sde-external-10.13.1-lin.tar.xz":     string(artifact),
+		"/dl/sde-external-10.13.1-lin.tar.xz.sig": string(signature),
+		"/dl/tampered.tar.xz":                     string(artifact) + "!",
+		"/ca/root.pem":                            string(rootPEM),
+	})
+
+	manifest := func(name, subject, pin string) string {
+		return `pins:
+  - name: sde
+    renovate: manual
+    version: 10.13.1
+    url: ` + host.URL + `/dl/` + name + `
+    verify: cms ` + host.URL + `/dl/sde-external-${version}-lin.tar.xz.sig ` + subject + ` ` + host.URL + `/ca/root.pem ` + pin + `
+`
+	}
+
+	root := writePins(
+		t,
+		manifest(
+			"sde-external-${version}-lin.tar.xz",
+			`^CN=Intel\sCorporation,O=Intel\sCorporation,`,
+			cms.Fingerprint(chain.Root),
+		),
+	)
+
+	changed, err := pins.Refresh(t.Context(), root, io.Discard)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	if !slices.Equal(changed, []string{"sde"}) {
+		t.Errorf("changed = %v, want sde", changed)
+	}
+
+	parsed, err := pins.Parse(mustRead(t, filepath.Join(root, pins.File)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sum := sha256.Sum256(artifact)
+	if got, _ := parsed.Get("sde", "sha256"); got != hex.EncodeToString(sum[:]) {
+		t.Errorf("sde sha256 = %s, want the artifact's", got)
+	}
+
+	for name, text := range map[string]string{
+		"tampered artifact":   manifest("tampered.tar.xz", "^CN=Intel", cms.Fingerprint(chain.Root)),
+		"another root pinned": manifest("sde-external-${version}-lin.tar.xz", "^CN=Intel", cms.Fingerprint(other.Root)),
+		"signer not the one":  manifest("sde-external-${version}-lin.tar.xz", "^CN=Microsoft", cms.Fingerprint(chain.Root)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := pins.Refresh(t.Context(), writePins(t, text), io.Discard)
+			if !errors.Is(err, pins.ErrVerify) {
+				t.Errorf("error = %v, want a verification failure", err)
+			}
+		})
+	}
 }

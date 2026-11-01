@@ -9,9 +9,12 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/farcloser/limen/internal/fetch"
+	"github.com/farcloser/limen/internal/verify/cms"
 	"github.com/farcloser/limen/internal/verify/openpgp"
 )
 
@@ -142,6 +145,10 @@ func digest(ctx context.Context, root string, entry Entry) (string, error) {
 		return hashFromSignedSums(ctx, root, entry, args)
 	case VerifyPGPSums:
 		return hashFromClearsignedSums(ctx, entry, args)
+	case VerifyCMS:
+		return hashDownload(ctx, entry.ResolvedURL(), func(file string) error {
+			return verifyCMS(ctx, file, args)
+		})
 	default:
 		return "", fmt.Errorf("%w: unknown method %q", ErrEntry, entry.Method())
 	}
@@ -267,6 +274,66 @@ func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (s
 	}
 
 	return sumFor(verified.Text, path.Base(entry.ResolvedURL()), sumsURL)
+}
+
+// verifyCMS fetches the detached signature published beside the artifact
+// and the CA's root, and has limen's own CMS reader accept the signature
+// over the downloaded bytes: a signer whose certificate subject matches the
+// regexp and chains to the root with the pinned fingerprint. The bytes
+// verified are the bytes hashed.
+func verifyCMS(ctx context.Context, file string, args []string) error {
+	sigURL, subjectRE, rootURL, fingerprint := args[0], args[1], args[2], args[3]
+
+	dir, err := os.MkdirTemp("", tempPrefix)
+	if err != nil {
+		return fmt.Errorf(errTempDir, err)
+	}
+
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	sig := filepath.Join(dir, "signature.sig")
+	rootFile := filepath.Join(dir, "root")
+
+	if _, err = download(ctx, sigURL, sig); err != nil {
+		return err
+	}
+
+	if _, err = download(ctx, rootURL, rootFile); err != nil {
+		return err
+	}
+
+	content, err := os.ReadFile(file) // #nosec G304 -- the download this refresh just made.
+	if err != nil {
+		return fmt.Errorf("reading the artifact: %w", err)
+	}
+
+	signature, err := os.ReadFile(sig) // #nosec G304 -- a file this function just wrote.
+	if err != nil {
+		return fmt.Errorf("reading the signature: %w", err)
+	}
+
+	rootData, err := os.ReadFile(rootFile) // #nosec G304 -- a file this function just wrote.
+	if err != nil {
+		return fmt.Errorf("reading the root: %w", err)
+	}
+
+	roots, err := cms.ParseCertificates(rootData)
+	if err != nil {
+		return fmt.Errorf(errAt, ErrVerify, rootURL, err)
+	}
+
+	verified, err := cms.Verify(content, signature, roots, fingerprint, time.Now())
+	if err != nil {
+		return fmt.Errorf(errAt, ErrVerify, sigURL, err)
+	}
+
+	subject := verified.Signer.Subject.String()
+	if !regexp.MustCompile(subjectRE).MatchString(subject) {
+		return fmt.Errorf("%w: %s is signed by %q, which does not match the pinned signer %s",
+			ErrVerify, sigURL, subject, subjectRE)
+	}
+
+	return nil
 }
 
 // sumFor takes the sha256 of one file out of a `<sha256>  <name>` listing;
