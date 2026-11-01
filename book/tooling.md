@@ -573,16 +573,19 @@ pins:
 - **The build reads it back**: `limen pins get llvm url` and `limen pins get llvm sha256`,
   inside the recipe that fetches (not at .justfile load: every top-level `shell()` runs on
   every `just` invocation). The value exists once.
-- **Renovate reads it, from the shared preset.** The `renovate:` line names the datasource
-  and the depName; `extract-version:` (a regexp pulling the version out of a tag such as
+- **Renovate reads it, from the shared preset.** The `renovate:` line names the datasource and
+  the depName; `extract-version:` (a regexp pulling the version out of a tag such as
   `llvmorg-22.1.8`) and `versioning:` (a scheme for tags semver misreads, such as a
-  `-ossein.N` suffix) may follow it; the `version:` line is what moves. An upstream with no
-  releases or tags is pinned to a commit through `git-refs`: `version:` is the branch
-  Renovate follows and a `commit:` line after it is the commit; Renovate reads `commit:` as
-  the digest and proposes the branch's new head as its replacement; the url names
-  `${commit}`. The lines come in that order with nothing between them — the preset's regex
-  reads the block as one — and the `pins` rule refuses another order. One custom manager in
-  `.limen/renovate.json` watches every `pins.yaml`.
+  `-ossein.N` suffix) may follow it; the `version:` line is what moves. A pin no datasource
+  serves (a vendor download page with no feed, Intel's SDE) says `renovate: manual`, the one
+  word: the regex, which needs a depName, leaves the entry alone, and the version moves by
+  hand, with `limen pins refresh` recomputing the digest as for any bump. An upstream with no
+  releases or tags is pinned to a commit through `git-refs`: `version:` is the branch Renovate
+  follows and a `commit:` line after it is the commit; Renovate reads `commit:` as the digest
+  and proposes the branch's new head as its replacement; the url names `${commit}`. The lines
+  come in that order with nothing between them — the preset's regex reads the block as one —
+  and the `pins` rule refuses another order. One custom manager in `.limen/renovate.json`
+  watches every `pins.yaml`.
 - **limen owns the digest.** `digest.version` (and `digest.commit` for a commit pin) records
   what the sha256 was computed for, so a digest left behind by a bump is visible offline:
   the `pins` rule fails it, naming the pin and the command. `limen pins refresh` recomputes
@@ -609,6 +612,7 @@ The methods, each a way to obtain a sha256 the entry can stand behind:
 | `github-release-asset <owner/repo> [<tag>]` | downloads, has `gh release verify-asset <tag> --repo <owner/repo>` accept it, hashes it; the tag is `${version}` unless templated (`v${version}`) | GitHub's own attestation of an immutable release, which `gh attestation verify` does not see (Kata) |
 | `cosign-sha256sums <sums-url> <bundle-url> <identity-regexp> <issuer>` | fetches the SHA256SUMS and its cosign bundle, has `cosign verify-blob` accept the pair, takes the artifact's line; the artifact is not downloaded | a release that ships a cosign-signed sums file (ossein-kernel) |
 | `pgp-sha256sums <sums-url> <key-url> <fingerprint>` | fetches the clearsigned sums and the signer's public key block, verifies the signature in-process (limen's own OpenPGP reader: v4 keys and signatures, RSA or Ed25519, SHA-2), requires the signing key to be the one the fingerprint pins, takes the artifact's line from the signed text; the artifact is not downloaded | a source that clearsigns its checksums (kernel.org's `sha256sums.asc`) |
+| `cms <sig-url> <signer-subject-regexp> <root-url> <root-sha256-fingerprint>` | downloads the artifact, the detached CMS signature (RFC 5652 SignedData, the PKCS#7 file a vendor publishes beside a download), verifies the signature in-process over the downloaded bytes (limen's own reader: signed attributes or the content alone, RSA or ECDSA with SHA-2), requires the signing certificate to be for code signing, to match the subject regexp (against the RFC 2253 form, `CN=…,O=…,C=…`; the arguments split on whitespace, so a space in a name is written `\s`) and to chain to the root whose SHA-256 fingerprint is pinned, the root fetched from the CA's own URL (PEM, DER or a certs-only `.p7c`, the form the intermediate's CA Issuers field names; the URL is transport, the fingerprint the trust, never the system's store, which differs by platform), hashes the bytes it verified; the chain is held at the time of the check, no timestamp countersignature read, so a refresh after the signer's certificate expires refuses and an older artifact's digest is then written by hand | a vendor download signed with a public-CA code-signing certificate (Intel's SDE) |
 
 `${version}` and `${major}` (the version up to its first dot, the way kernel.org names a
 series directory) expand in `url` and in the method's arguments. Under a `regex:` versioning
