@@ -62,7 +62,10 @@ the toolchain, cargo's caches, zig's) when the repository carries a `rust-toolch
 keyed on that file and every `Cargo.lock` ([github](./github.md)); nothing to configure.
 
 Every cargo call carries `--locked`: `Cargo.lock` is the crate pin, committed, and a lane
-never rewrites it; a dependency moves by a pull request that changes the lock, from
-Renovate's `cargo` manager (on by default; the shared preset restricts no manager). A lock
-the tree does not have yet is made once, by hand, with `cargo generate-lockfile` from the
-lane's cargo (`.build/cargo/bin`).
+never rewrites it; a dependency moves by a pull request that changes the lock, from Renovate's
+`cargo` manager (on by default; the shared preset restricts no manager). A lock the tree does
+not have yet is made once, by hand, with `cargo generate-lockfile` from the lane's cargo
+(`.build/cargo/bin`). The transitive crates in the lock move too: the shared preset's lock
+file maintenance regenerates every lock in the repository weekly, in one pull request the
+lanes prove like any other; between those, a transitive crate moves only with a direct bump or
+a vulnerability alert.

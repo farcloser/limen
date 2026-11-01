@@ -148,8 +148,11 @@ declaring only where the code is on that list.
   convention the repository sets: no release cooldown, no aqua preset, its own branch and
   commit shape. The shared Renovate preset enables `vulnerabilityAlerts` explicitly, which
   makes Renovate's fix PRs reach `// indirect` Go modules too, so nothing Dependabot would
-  have caught goes unraised. A repository that wants Dependabot's PRs anyway declares
-  `dependabot-security-updates`.
+  have caught goes unraised. The preset also runs lock file maintenance weekly, one pull
+  request per repository regenerating every lock Renovate supports (`Cargo.lock`), so a
+  transitive crate does not wait for a direct bump; Go has no such lock in Renovate, so an
+  indirect Go requirement moves with the direct bump that re-resolves it and with the alerts.
+  A repository that wants Dependabot's PRs anyway declares `dependabot-security-updates`.
 - **Renovate is processing the repository**, not merely installed on the organization. Every
   configuration check can be green while Renovate skips a repository: it skips forks by
   default under an all-repositories installation, decided from `renovate.json` before any
