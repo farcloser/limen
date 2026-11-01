@@ -389,7 +389,7 @@ The decided merge model, enforced by the repository settings and the `limen:main
   commit in its range not signed by a key listed for its committer. Not a security boundary
   (a pull request can edit the file) but a forcing function: an author lists themselves in
   their first pull request. Merges author nothing and are skipped, as are GitHub Apps'
-  commits (Renovate, the checksum-update App), which GitHub signs. A commit made in the web
+  commits (Renovate, the checksum workflow), which GitHub signs. A commit made in the web
   UI is signed by GitHub too, and fails: editing in a browser is not a way to contribute.
 - **Squash commits default to the pull request title and body**, merged branches are
   deleted automatically, auto-merge is allowed (the project manager arms it at the reviewed
@@ -448,14 +448,6 @@ faking compliance. A `fix` whose checks could not be verified plans nothing and 
 "nothing to fix" is said only when every check was answered. And `gh` is the one on PATH:
 where none answers, the run fails up front naming that, instead of reporting every check
 unverifiable.
-
-One call is the exception, on purpose: the lookup of the update-App's bot user id, which
-`limen check` needs to verify `gitIgnoredAuthors` in `renovate.json`. It reads the public
-users endpoint directly, with no credential: `gh` refuses to run without a login, and the
-verify legs carry none, so a lookup through `gh` would resolve on a laptop and not in CI —
-the same tree, red in one place and green in the other, the one thing `check` must never
-do. The endpoint honors `GITHUB_API_URL`, the variable Actions exports and an Enterprise
-host sets.
 
 ## Organization level
 

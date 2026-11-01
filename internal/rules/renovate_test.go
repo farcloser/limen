@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	testIdentity = "317468017+limen-ci-test-org[bot]@users.noreply.github.com"
+	actionsBot = "41898282+github-actions[bot]@users.noreply.github.com"
 	// testRepository is the "owner/name" the fixtures stand for, as the
 	// caller would resolve it from the origin remote.
 	testRepository = "example-org/thing"
@@ -154,7 +154,8 @@ func TestPresetRefRepositoryUnknown(t *testing.T) {
 		"none":         "config:recommended",
 	} {
 		files := compliantFiles()
-		files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + extends + `"]}` + "\n"
+		files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + extends + `"],` +
+			`"gitIgnoredAuthors":["` + actionsBot + `"]}` + "\n"
 		root := writeRepo(t, files)
 
 		if f := findingByRule(rules.Check(root, rules.DefaultPolicy()), "renovate"); !f.OK() {
@@ -175,7 +176,6 @@ func TestAddIgnoredAuthor(t *testing.T) {
 	t.Parallel()
 
 	known := withRepository()
-	known.UpdateAppIdentity = testIdentity
 
 	files := compliantFiles()
 	files["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + testPresetRef + `"],` +
@@ -188,7 +188,7 @@ func TestAddIgnoredAuthor(t *testing.T) {
 		t,
 		root,
 	), []string{
-		testIdentity,
+		actionsBot,
 		"a@example.com",
 		"b@example.com",
 	}; !slices.Equal(
@@ -210,7 +210,7 @@ func TestAddIgnoredAuthor(t *testing.T) {
 
 	rules.Fix(t.Context(), root, rules.FixOptions{Policy: known})
 
-	if got := ignoredAuthorsOf(t, root); !slices.Equal(got, []string{testIdentity}) {
+	if got := ignoredAuthorsOf(t, root); !slices.Equal(got, []string{actionsBot}) {
 		t.Errorf("absent key: %v", got)
 	}
 }
@@ -237,8 +237,7 @@ func TestCanonicalSeed(t *testing.T) {
 	}
 
 	// The seed carries what every repository needs and nothing of limen's
-	// own: no manager, and no App identity but GitHub's — the org's is the
-	// rule's to add, since the farcloser App never pushes to another org.
+	// own: no manager, and the one commit identity the checksum workflow has.
 	if _, has := cfg["customManagers"]; has {
 		t.Error("the seed must carry no customManagers: a manager is a project's own")
 	}
@@ -254,8 +253,8 @@ func TestCanonicalSeed(t *testing.T) {
 }
 
 // TestOwnConfigIsTheSeed: limen's own renovate.json is the seed as `limen
-// fix` leaves it in limen — its reference and the org's App identity added —
-// plus the one manager only the preset's author needs, and its description
+// fix` leaves it in limen — its reference added — plus the one manager only the preset's author needs, and its
+// description
 // entry. Prose fixed in one and not the other fails here.
 func TestOwnConfigIsTheSeed(t *testing.T) {
 	t.Parallel()
@@ -266,7 +265,6 @@ func TestOwnConfigIsTheSeed(t *testing.T) {
 
 	policy := rules.DefaultPolicy()
 	policy.Repository = "farcloser/limen"
-	policy.UpdateAppIdentity = "300983632+limen-ci-farcloser[bot]@users.noreply.github.com"
 
 	rules.Fix(t.Context(), root, rules.FixOptions{Policy: policy})
 
@@ -373,29 +371,32 @@ func TestSupersededConfig(t *testing.T) {
 	}
 }
 
-// TestRenovateRule: check and fix agree, the identity is enforced only when
-// known, and fix's edit is exactly what check wants.
+// TestRenovateRule: check and fix agree on the checksum workflow's commit
+// identity, and fix's edit is exactly what check wants.
 func TestRenovateRule(t *testing.T) {
 	t.Parallel()
 
 	known := withRepository()
-	known.UpdateAppIdentity = testIdentity
 
-	// Unknown identity: pass / none, file untouched.
+	// The seed carries the identity: pass / none, file untouched.
 	root := writeRepo(t, compliantFiles())
-	if f := findingByRule(rules.Check(root, withRepository()), "renovate"); !f.OK() {
-		t.Errorf("unknown identity must not fail: %s", f.Message)
+	if f := findingByRule(rules.Check(root, known), "renovate"); !f.OK() {
+		t.Errorf("the seed must pass: %s", f.Message)
 	}
 
 	if o := renovateOutcome(
-		rules.Fix(t.Context(), root, rules.FixOptions{Policy: withRepository()}),
+		rules.Fix(t.Context(), root, rules.FixOptions{Policy: known}),
 	); o.Action != rules.ActionNone {
-		t.Errorf("unknown identity: %s, want none", o.Action)
+		t.Errorf("the seed: %s, want none", o.Action)
 	}
 
-	// Known and missing: fail, then fix merges it and check passes.
+	// Missing: fail, then fix merges it and check passes.
+	without := compliantFiles()
+	without["renovate.json"] = `{"forkProcessing":"enabled","extends":["` + testPresetRef + `"]}` + "\n"
+	root = writeRepo(t, without)
+
 	if f := findingByRule(rules.Check(root, known), "renovate"); f.OK() {
-		t.Error("a missing update-App identity must fail when known")
+		t.Error("a file without the workflow's identity must fail")
 	}
 
 	if o := renovateOutcome(
@@ -404,7 +405,7 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("fix: %s (%s), want merged", o.Action, o.Message)
 	}
 
-	if !slices.Contains(ignoredAuthorsOf(t, root), testIdentity) {
+	if !slices.Contains(ignoredAuthorsOf(t, root), actionsBot) {
 		t.Error("fix did not write the identity")
 	}
 
@@ -424,7 +425,7 @@ func TestRenovateRule(t *testing.T) {
 	// decides on values, and a rewrite into limen's form on every run put a
 	// formatting diff into every branch the checksum workflow ran on.
 	handEdited := compliantFiles()
-	handEdited["renovate.json"] = `{"gitIgnoredAuthors":["` + testIdentity + `"],"forkProcessing":"enabled",` +
+	handEdited["renovate.json"] = `{"gitIgnoredAuthors":["` + actionsBot + `"],"forkProcessing":"enabled",` +
 		`"extends":["` + testPresetRef + `"],"description":["— by hand"]}` + "\n"
 	root = writeRepo(t, handEdited)
 
@@ -507,7 +508,7 @@ func TestRenovateRule(t *testing.T) {
 		t.Errorf("no key: %s (%s), want merged", o.Action, o.Message)
 	}
 
-	if !slices.Contains(ignoredAuthorsOf(t, root), testIdentity) {
+	if !slices.Contains(ignoredAuthorsOf(t, root), actionsBot) {
 		t.Error("fix did not create gitIgnoredAuthors")
 	}
 

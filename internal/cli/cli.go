@@ -223,7 +223,7 @@ func runCheck(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	}
 
 	//nolint:contextcheck // Check takes no context by design; the one rule that shells out bounds its own call.
-	findings := rules.Check(root, policyFor(ctx, root, resolveIdentity))
+	findings := rules.Check(root, policyFor(ctx, root))
 
 	if *asJSON {
 		enc := json.NewEncoder(stdout)
@@ -282,7 +282,7 @@ func runFix(ctx context.Context, version string, args []string, stdout, stderr i
 	// fix never creates a LICENSE: no License in the options. GITHUB_REF_NAME
 	// is the Actions runner's; a renovate/ branch is Renovate's.
 	outcomes := rules.Fix(ctx, root, rules.FixOptions{
-		Policy:         policyFor(ctx, root, discoverIdentity),
+		Policy:         policyFor(ctx, root),
 		SelfVersion:    releaseVersion(version),
 		SelfRevision:   releaseRevision(version),
 		ToolPins:       releaseToolPins(),
@@ -292,16 +292,12 @@ func runFix(ctx context.Context, version string, args []string, stdout, stderr i
 	return reportOutcomes(stdout, stderr, cmdFix, root, outcomes, *asJSON)
 }
 
-// policyFor is the default policy plus whatever the repository's context
-// contributes: its own name and the org's update-App commit identity, both
-// from the origin remote, the identity through the given resolver
-// (best-effort; see updateAppIdentity). Which resolver is the command's
-// contract: check gets the deterministic one, fix the discovering one — see
-// identityResolver.
-func policyFor(ctx context.Context, root string, resolve identityResolver) rules.Policy {
+// policyFor is the default policy plus what the repository's context
+// contributes: its own name, from the origin remote (best-effort; the
+// renovate rule leaves its reference unenforced without one).
+func policyFor(ctx context.Context, root string) rules.Policy {
 	policy := rules.DefaultPolicy()
 	policy.Repository = repositoryOf(ctx, root)
-	policy.UpdateAppIdentity = updateAppIdentity(ctx, "", root, resolve)
 
 	return policy
 }
@@ -323,7 +319,6 @@ type bootstrapOptions struct {
 	root      string
 	licenseID license.ID
 	holder    string
-	org       string
 	asJSON    bool
 }
 
@@ -338,16 +333,11 @@ func parseBootstrapOptions(args []string, stderr io.Writer) (bootstrapOptions, b
 	force := flagSet.Bool("force", false, "proceed even if the target directory is not empty")
 	licenseID := flagSet.String("license", string(license.Closed), "license for the new repository")
 	holder := flagSet.String("holder", "Farcloser", "copyright holder for a generated LICENSE")
-	org := flagSet.String(
-		"org",
-		"",
-		"GitHub organization to configure the update-App credential for (default: inferred from the origin remote, skipped if neither)",
-	)
 
 	flagSet.Usage = func() {
 		_, _ = fmt.Fprintln(
 			stderr,
-			"Usage: limen bootstrap [-license id] [-holder name] [-org name] [-force] [-json] <path>",
+			"Usage: limen bootstrap [-license id] [-holder name] [-force] [-json] <path>",
 		)
 
 		flagSet.PrintDefaults()
@@ -366,7 +356,6 @@ func parseBootstrapOptions(args []string, stderr io.Writer) (bootstrapOptions, b
 		root:      flagSet.Arg(0),
 		licenseID: license.ID(*licenseID),
 		holder:    *holder,
-		org:       *org,
 		asJSON:    *asJSON,
 	}
 
@@ -436,118 +425,7 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		return 1
 	}
 
-	ensureUpdateApp(ctx, opts.org, root, stderr)
-
-	// The App may have just been registered: only now can its commit identity
-	// be resolved and written into the seeded renovate.json. A second, narrow
-	// remediation pass — every other rule is already resolved and reports none.
-	if identity := updateAppIdentity(ctx, opts.org, root, discoverIdentity); identity != "" {
-		policy := rules.DefaultPolicy()
-		policy.Repository = repositoryOf(ctx, root)
-		policy.UpdateAppIdentity = identity
-
-		for _, outcome := range rules.Fix(ctx, root, rules.FixOptions{
-			Policy: policy, SelfVersion: releaseVersion(version), ToolPins: releaseToolPins(),
-		}) {
-			if outcome.Rule == "renovate" && outcome.Action != rules.ActionNone {
-				_, _ = fmt.Fprintf(stderr, "limen: renovate: %s\n", outcome.Message)
-			}
-		}
-	}
-
 	return 0
-}
-
-// identityResolver turns an organization into its update-App commit author
-// address. Two implementations, and the split is the point: check must reach
-// the same verdict on every machine, so it may not use anything that depends
-// on the caller's credentials; fix writes the answer into the tree, so it
-// should use the best answer available.
-type identityResolver func(ctx context.Context, org string) (string, error)
-
-// updateAppIdentity resolves the commit author address of the org's
-// update-aqua-checksum App for the repository at root: the org from -org or
-// the origin remote, the App through the given resolver. It is best-effort by
-// design — check and fix must work on a laptop with no network, in a
-// sandbox, or on an org that never registered the App — so every failure
-// returns "" and the rules then do not enforce; the renovate finding says so
-// in its message, which is why nothing is printed here.
-func updateAppIdentity(ctx context.Context, org, root string, resolve identityResolver) string {
-	if org == "" {
-		slug, err := github.InferRepo(ctx, root)
-		if err != nil {
-			return ""
-		}
-
-		org, _, _ = strings.Cut(slug, "/")
-	}
-
-	if org == "" {
-		return ""
-	}
-
-	identity, err := resolve(ctx, org)
-	if err != nil {
-		return ""
-	}
-
-	return identity
-}
-
-// resolveIdentity is check's resolver: deterministic — convention slug,
-// public users endpoint, no credentials consulted.
-func resolveIdentity(ctx context.Context, org string) (string, error) {
-	identity, err := github.ResolveUpdateAppIdentity(ctx, org)
-	if err != nil {
-		return "", fmt.Errorf("resolving the update-app identity of %s: %w", org, err)
-	}
-
-	return identity.Email(), nil
-}
-
-// discoverIdentity is fix's and bootstrap's resolver: reads the App back from
-// the org when gh is authorized (a renamed App is found), convention
-// otherwise.
-func discoverIdentity(ctx context.Context, org string) (string, error) {
-	identity, err := github.DiscoverUpdateAppIdentity(ctx, org)
-	if err != nil {
-		return "", fmt.Errorf("discovering the update-app identity of %s: %w", org, err)
-	}
-
-	return identity.Email(), nil
-}
-
-// ensureUpdateApp converges the org-level push credential of the
-// update-aqua-checksum workflow (book/tooling.md). It is idempotent, and it
-// never moves bootstrap's exit code: whatever cannot be done or verified —
-// no org known, a token without org admin, an abandoned browser flow — is a
-// warning, because the repository itself bootstrapped fine and this step can
-// be rerun any time.
-func ensureUpdateApp(ctx context.Context, org, root string, stderr io.Writer) {
-	if org == "" {
-		slug, err := github.InferRepo(ctx, root)
-		if err == nil {
-			org, _, _ = strings.Cut(slug, "/")
-		}
-	}
-
-	if org == "" {
-		_, _ = fmt.Fprintln(
-			stderr,
-			"limen: warning: update-app: no organization known (no -org, no origin remote) — rerun with -org, or see book/tooling.md",
-		)
-
-		return
-	}
-
-	finding := github.EnsureUpdateAquaChecksumApp(ctx, org, stderr)
-	if finding.OK() {
-		_, _ = fmt.Fprintf(stderr, "limen: update-app: %s\n", finding.Message)
-
-		return
-	}
-
-	_, _ = fmt.Fprintf(stderr, "limen: warning: update-app: %s\n", finding.Message)
 }
 
 // installTooling runs hermetic to make the repo's pinned tools available: it
@@ -726,15 +604,11 @@ Usage:
 bootstrap flags:
   -license id     License for the new repo (default "Closed-source")
   -holder name    Copyright holder for a generated LICENSE (default "Farcloser")
-  -org name       GitHub organization to configure the update-App credential
-                  for (default: inferred from the origin remote; skipped, with
-                  a warning, when neither is available)
   -force          Proceed even if the target directory is not empty
 
 After writing files, bootstrap runs "hermetic policy allow .hermetic/policy.yaml",
 "hermetic update-checksum --prune", and "hermetic install -l" to install the
-pinned tooling, then converges the org's update-App credential (idempotent;
-anything it cannot do or verify under the current gh token is a warning).
+pinned tooling.
 
 Exit codes:
   0  success (check: all passed; fix/bootstrap: all rules resolved)

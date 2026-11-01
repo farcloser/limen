@@ -159,11 +159,6 @@ func (f Finding) OK() bool { return f.Status == StatusOK }
 type Policy struct {
 	// AllowedLicenses is the set of license IDs a repository's LICENSE may be.
 	AllowedLicenses []license.ID
-	// UpdateAppIdentity is the commit author address of the organization's
-	// update-aqua-checksum App ("<id>+<slug>[bot]@users.noreply.github.com"),
-	// resolved by the caller (see cmd/limen; the rules package is offline).
-	// Empty means unknown, and the renovate rule then passes without enforcing.
-	UpdateAppIdentity string
 	// Repository is the repository's own "owner/name", resolved by the caller
 	// from the origin remote: renovate.json extends the shared configuration
 	// by that name. Empty means unknown, and the renovate rule then does not
