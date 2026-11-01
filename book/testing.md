@@ -122,10 +122,14 @@ with an unnamed gap is not done.
 
 ## Where the tests run
 
-- **`just test` is the project's aggregate**, named in the root `.justfile`, and what CI
-  runs on every leg ([the shared recipes](./recipes.md)). It names the unit, race and
-  coverage lanes, every project alike: a race detector nobody runs finds nothing, and a
-  coverage gate some repositories skip is not a gate.
+- **`just test` is the project's aggregate**, named in the root `.justfile`, and what CI runs
+  on every leg ([the shared recipes](./recipes.md)). It names the unit, race and coverage
+  lanes, every project alike: a race detector nobody runs finds nothing, and a coverage gate
+  some repositories skip is not a gate. The race and fuzz lanes call the shared recipes
+  directly (`just do test go race`), not the aggregate, so a compile that needs a generated
+  input (an embedded build product, codegen) declares it as `_test-prepare` in the root
+  `.justfile`: every shared Go test recipe runs it first when it exists, and a project without
+  it is unchanged.
 - **Coverage is measured, never managed.** The coverage lane prints the number, and a
   project that wants a floor sets its own (`TEST_GO_COVER_MIN`, in its `.justfile`); there
   is no fleet-wide minimum, no gate in the shared CI lane beyond what the project set, and
