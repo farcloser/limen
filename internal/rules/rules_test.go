@@ -1351,7 +1351,7 @@ func TestWorkflowsRule(t *testing.T) {
 
 	// The release workflow is required exactly when goreleaser config exists.
 	releasing := compliantFiles()
-	releasing[".release-go.yaml"] = releaseGoHeader + "\nversion: 2\n\n" + changelogSection
+	releasing[".release-go.yaml"] = releaseGoHeader + "\nversion: 2\n\n" + releaseSections
 	releasing[".github/release.yml"] = limen.CanonicalReleaseNotes
 
 	if f := findingByRule(rules.Check(writeRepo(t, releasing), rules.DefaultPolicy()), "workflows"); f.OK() {
@@ -1374,8 +1374,88 @@ const (
 	testVersion  = "v9.9.9"
 )
 
-// changelogSection is the `changelog:` section limen holds .release-go.yaml to.
-const changelogSection = "changelog:\n  use: github-native\n"
+// changelogSection and sbomsSection are the two sections limen holds
+// .release-go.yaml to; a compliant fixture carries both.
+const (
+	changelogSection = "changelog:\n  use: github-native\n"
+	sbomsSection     = "sboms:\n" +
+		"  - artifacts: archive\n" +
+		"    env:\n" +
+		"      - SYFT_FILE_METADATA_CATALOGER_ENABLED=true\n" +
+		"      - SYFT_CHECK_FOR_APP_UPDATE=false\n" +
+		"      - HERMETIC_ROOT_DIR={{ envOrDefault \"HERMETIC_ROOT_DIR\" \"\" }}\n" +
+		"      - HERMETIC_CONFIG={{ envOrDefault \"HERMETIC_CONFIG\" \"\" }}\n"
+	releaseSections = changelogSection + "\n" + sbomsSection
+)
+
+// TestReleaseSBOM: a release configuration that makes archives carries the
+// canonical `sboms:` section, comments allowed; fix appends or replaces it
+// with the rest of the file intact; `archives: []` needs none.
+func TestReleaseSBOM(t *testing.T) {
+	t.Parallel()
+
+	releasing := func(releaseGo string) map[string]string {
+		files := compliantFiles()
+		files[".release-go.yaml"] = releaseGoHeader + "\n" + releaseGo
+		files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
+
+		return files
+	}
+
+	for name, passing := range map[string]string{
+		"commented":           "version: 2\n\n" + changelogSection + "\nsboms: # per archive\n  - artifacts: archive # syft\n    env:\n      - SYFT_FILE_METADATA_CATALOGER_ENABLED=true\n      - SYFT_CHECK_FOR_APP_UPDATE=false\n      - HERMETIC_ROOT_DIR={{ envOrDefault \"HERMETIC_ROOT_DIR\" \"\" }}\n      - HERMETIC_CONFIG={{ envOrDefault \"HERMETIC_CONFIG\" \"\" }}\n",
+		"no archives":         "version: 2\n\narchives: []\n\n" + changelogSection,
+		"no archives, spaced": "version: 2\n\narchives: [ ]  # nothing shipped\n\n" + changelogSection,
+	} {
+		if f := findingByRule(
+			rules.Check(writeRepo(t, releasing(passing)), rules.DefaultPolicy()),
+			"workflows",
+		); !f.OK() {
+			t.Errorf("%s: should pass: %s", name, f.Message)
+		}
+	}
+
+	// names is the section the check reports first: with both missing, the
+	// changelog's, and fix appends both, the changelog's first.
+	for name, tc := range map[string]struct{ before, after, names string }{
+		"missing": {
+			before: "version: 2\n\n" + changelogSection,
+			after:  "version: 2\n\n" + changelogSection + "\n" + sbomsSection,
+			names:  "sboms",
+		},
+		"other": {
+			before: "version: 2\n\n" + changelogSection + "\nsboms:\n  - artifacts: binary\n\nrelease:\n  draft: true\n",
+			after:  "version: 2\n\n" + changelogSection + "\n" + sbomsSection + "\nrelease:\n  draft: true\n",
+			names:  "sboms",
+		},
+		"both missing": {
+			before: "version: 2\n",
+			after:  "version: 2\n\n" + changelogSection + "\n" + sbomsSection,
+			names:  "changelog",
+		},
+	} {
+		dir := writeRepo(t, releasing(tc.before))
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); f.OK() ||
+			!strings.Contains(f.Message, tc.names) {
+			t.Errorf("%s: should fail naming the %s section: %v %s", name, tc.names, f.OK(), f.Message)
+		}
+
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+		if data, _ := os.ReadFile(
+			filepath.Join(dir, ".release-go.yaml"),
+		); string(
+			data,
+		) != releaseGoHeader+"\n"+tc.after {
+			t.Errorf("%s: after fix: %q", name, data)
+		}
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); !f.OK() {
+			t.Errorf("%s: after fix: %s", name, f.Message)
+		}
+	}
+}
 
 // TestReleaseNotes: where a project releases, its .release-go.yaml carries
 // the canonical `changelog:` section (comments in it allowed) and its
@@ -1392,7 +1472,8 @@ func TestReleaseNotes(t *testing.T) {
 		return files
 	}
 
-	commented := "version: 2\n\nchangelog: # GitHub's\n  # from pull-request titles\n  use: github-native # grouped\n"
+	commented := "version: 2\n\nchangelog: # GitHub's\n  # from pull-request titles\n  use: github-native # grouped\n\n" +
+		sbomsSection
 	if f := findingByRule(
 		rules.Check(writeRepo(t, releasing(commented)), rules.DefaultPolicy()),
 		"workflows",
@@ -1402,12 +1483,13 @@ func TestReleaseNotes(t *testing.T) {
 
 	for name, tc := range map[string]struct{ before, after string }{
 		"missing": {
-			before: "version: 2\n",
-			after:  "version: 2\n\n" + changelogSection,
+			before: "version: 2\n\n" + sbomsSection,
+			after:  "version: 2\n\n" + sbomsSection + "\n" + changelogSection,
 		},
 		"other": {
-			before: "version: 2\nchangelog:\n  use: git\n  filters:\n    exclude:\n      - '^docs:'\n\nrelease:\n  draft: true\n",
-			after:  "version: 2\n" + changelogSection + "\nrelease:\n  draft: true\n",
+			before: "version: 2\nchangelog:\n  use: git\n  filters:\n    exclude:\n      - '^docs:'\n\nrelease:\n  draft: true\n\n" +
+				sbomsSection,
+			after: "version: 2\n" + changelogSection + "\nrelease:\n  draft: true\n\n" + sbomsSection,
 		},
 	} {
 		dir := writeRepo(t, releasing(tc.before))
@@ -1432,7 +1514,7 @@ func TestReleaseNotes(t *testing.T) {
 		}
 	}
 
-	drifted := releasing("version: 2\n\n" + changelogSection)
+	drifted := releasing("version: 2\n\n" + releaseSections)
 	drifted[".github/release.yml"] = limen.CanonicalReleaseNotes + "# local edit\n"
 	dir := writeRepo(t, drifted)
 
@@ -1467,7 +1549,7 @@ func TestReleaseNotes(t *testing.T) {
 func TestReleaseGoHeader(t *testing.T) {
 	t.Parallel()
 
-	const body = "version: 2\nproject_name: x\n\n" + changelogSection
+	const body = "version: 2\nproject_name: x\n\n" + releaseSections
 
 	headless := compliantFiles()
 	headless[".release-go.yaml"] = body

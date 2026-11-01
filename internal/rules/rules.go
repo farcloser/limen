@@ -737,6 +737,13 @@ func checkReleaseGo(root, rule string) *Finding {
 		return &f
 	}
 
+	if why, drifted := sbomsDrift(string(data)); drifted {
+		f := fail(rule, releaseGoFile, releaseGoFile+" "+why+": every release carries an SBOM per archive, "+
+			"by the toolset's syft, listed in checksums.txt and attested with the archives (limen fix sets it)")
+
+		return &f
+	}
+
 	return nil
 }
 

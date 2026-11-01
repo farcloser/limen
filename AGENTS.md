@@ -82,6 +82,11 @@ chapter; the procedure is limen's `skills/contribute`.
   queue, or refuses it as `UNREVIEWED:`. The human approves on GitHub; auto-merge merges. A
   private repository is never armed: its pull request is bound for the human, who merges by
   hand after approving. No review request, no review comments, no message at open.
+- **Your worktree goes when its pull request has merged.** Once `git status` in it is clean
+  and its head is on `main`, remove it with `~/.claude/bin/farclauder worktree remove <path>`,
+  run as the whole Bash command: `git worktree remove` cannot finish inside the sandbox, and
+  the exclusion that runs farclauder outside it matches the call's text (the book's
+  [identity](https://github.com/farcloser/limen/blob/main/book/identity.md)).
 - **A native stack** is reviewed and opened layer by layer the same way; the project
   manager merges it from the top once every layer is approved, never from the middle. A
   lower layer merged alone comes back rebased and signed by GitHub, which `lint commits`

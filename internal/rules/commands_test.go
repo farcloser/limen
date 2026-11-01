@@ -10,7 +10,7 @@ import (
 
 const (
 	mainGo        = "// Command thing does the thing.\npackage main\n\nfunc main() {}\n"
-	releaseGoHead = releaseGoHeader + "\nversion: 2\n\n" + changelogSection
+	releaseGoHead = releaseGoHeader + "\nversion: 2\n\n" + releaseSections
 )
 
 // releasing is a repository whose release configuration builds the given

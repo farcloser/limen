@@ -3,7 +3,9 @@
 Bugs in tools we pin and do not own: what each looks like when it bites, why it happens,
 what we do about it, and when the workaround can go. An entry stays until its lift condition
 is met; the workaround it names is a rule in the code or the recipes, and whoever removes
-the rule removes the entry in the same change.
+the rule removes the entry in the same change. A bug one of our forks patches is listed the
+same way, the fork's patch as the workaround; reporting it upstream is the human's, later,
+and no session asks.
 
 ## aqua-proxy matches `.exe` case-sensitively (Windows)
 
@@ -322,3 +324,53 @@ restart, is unverified.
 
 **Lifts when** the classifier judges a command on what it does, not on the preceding
 denial. Reported to Anthropic by email on 2026-10-12.
+
+## Graphviz's `webp_size` reads a lossless or extended WebP's size from the wrong bytes
+
+**Symptom.** A WebP image with alpha, animation or metadata (VP8X), or a lossless one
+(VP8L), used as a node image comes out tens of thousands to hundreds of millions of points a
+side; native `dot` 16.1.0 does the same.
+
+**Cause.** `lib/gvc/gvusershape.c`'s `webp_size` reads the size from where only a plain
+lossy VP8 chunk keeps it (two 16-bit fields at offset 26), and for VP8X reads 32-bit fields
+at 24 where the format has two 24-bit ones; VP8L, whose width and height, 14 bits each,
+follow the 0x2f signature at 20, is not recognised at all.
+
+**Workaround.** forkcloser/go-graphviz's `webp-size.patch` (`internal/wasm/build`, applied
+to the Graphviz its `pins.yaml` pins) replaces the function with one that reads each
+layout's canvas size where the format keeps it.
+
+**Lifts when.** a Graphviz release reads all three layouts; then the patch and this entry
+go. Not reported upstream yet (https://github.com/forkcloser/go-graphviz/issues/144).
+
+## Graphviz's `storeline` never zeroes the span it is about to fill
+
+**Symptom.** A label whose first line is empty frees a garbage layout pointer in
+`free_textspan`; under wasm that is an indirect call into nowhere and the render aborts.
+
+**Cause.** `lib/common/labels.c`'s `storeline` passes `gv_recalloc` an old count of
+`nspans + 1`, one more than existed, so the new span is never zeroed, and an empty line
+skips `textspan_size`, the only other thing that nulls the span's layout fields.
+
+**Workaround.** forkcloser/go-graphviz's `build.sh` rewrites the old count to `nspans`, and
+refuses to build a Graphviz whose `storeline` no longer matches.
+
+**Lifts when.** a Graphviz release passes the stored count; then the rewrite and this entry
+go. Not reported upstream yet (https://github.com/forkcloser/go-graphviz/issues/144).
+
+## Graphviz keeps every image file it sizes open for the life of the process
+
+**Symptom.** An image file sized by Graphviz cannot be deleted while the process lives on a
+file system that pins open files (Windows); Graphviz closes sized files only once 50 are
+open.
+
+**Cause.** `gvusershape_file_release` closes the file only when the shape is marked
+`nocache`; otherwise the handle stays in the usershape cache, though nothing reads it after
+sizing (the renderer reads images itself) and `gvusershape_file_access` reopens a closed
+file when anything does.
+
+**Workaround.** forkcloser/go-graphviz's `build.sh` rewrites the condition so the release
+always closes the file, and refuses to build a Graphviz whose function no longer matches.
+
+**Lifts when.** a Graphviz release closes the file after sizing; then the rewrite and this
+entry go. Not reported upstream yet (https://github.com/forkcloser/go-graphviz/issues/144).
