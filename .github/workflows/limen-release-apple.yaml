@@ -17,13 +17,18 @@ on:
   workflow_call:
     # Passed by the caller's `secrets: inherit`, and the release environment's:
     # a run on any other ref is refused them by GitHub, whatever the file says.
-    # The identity is required; the provisioning profile and the notarization
-    # key are the project's policy, read as set or absent, never half set.
+    # None is `required: true`: GitHub checks that at the call, in the caller's
+    # scope, where only repository and organization secrets exist, and the
+    # environment's are resolved later, in the job that declares the
+    # environment, so a required environment secret fails every run before
+    # the sign job starts. The identity is required by that job's own check;
+    # the provisioning profile and the notarization key are the project's
+    # policy, read as set or absent, never half set.
     secrets:
       APPLE_DEVELOPER_ID_P12:
-        required: true
+        required: false
       APPLE_DEVELOPER_ID_P12_PASSWORD:
-        required: true
+        required: false
       APPLE_PROVISIONING_PROFILE:
         required: false
       APPLE_NOTARY_KEY:
