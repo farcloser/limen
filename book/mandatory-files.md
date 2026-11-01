@@ -438,6 +438,24 @@ an advisory, since the line is the project's to rewrite: `just do lint go` or `j
 go`, which build the tool, or `.build/tools/<name>` after one of them. The canonical `.limen/`
 recipes are not scanned: they are content-pinned.
 
+### The `secrets` rule — a secret stays behind an environment
+
+A workflow job that reads a secret (`${{ secrets.NAME }}`, `secrets: inherit`,
+`toJSON(secrets)`) names an `environment:`, and the environment admits the refs that may use
+it. GitHub hands a repository or organisation secret to any run in the repository's own
+context that references it, so a job reading one on an open trigger, a pull request, a
+dispatch or a push to a branch, runs it for anyone with write access, from a branch of their
+own whose copy of the workflow prints it, and masking is defeated by re-encoding. The rule
+reads every workflow under `.github/workflows/`, `GITHUB_TOKEN` aside, and fails the first
+job that reads a secret with no environment on such a trigger. A push confined to tags is not
+one, the `limen:tags` ruleset decides who creates them, and neither are the events that run
+what a reviewed merge put on the default branch (a schedule, a release). A signing credential
+(`APPLE_DEVELOPER_ID_*`, `APPLE_NOTARY_*`, `APPLE_PROVISIONING_*`) is the `release`
+environment's wherever it is read ([releasing](./releasing.md)). The environment itself is
+GitHub's side: `limen github check` verifies the gate and builds the release one
+([github](./github.md)). `fix` writes nothing here, which refs an environment admits is the
+project's to name, and reports the finding as an advisory.
+
 ## Link checking — `.limen/lychee.toml`
 
 Links die silently. `just do security links` checks every link in the repository with

@@ -67,10 +67,9 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   - **A signing credential is an environment secret, held by one job that publishes
     nothing.** The Developer ID `.p12` and its password, the App Store Connect API key, a
     provisioning profile: each is a secret of a `release` environment, never of the
-    repository or the organisation. GitHub hands a repository secret to any workflow run in
-    the repository's own context that references it, so every account with write access
-    (a bot, an app, Renovate) could push a branch whose workflow prints the certificate, and
-    masking is defeated by re-encoding. The environment admits release tags only (`v*`) and
+    repository or the organisation, which every account with write access reads (the
+    [`secrets` rule](./mandatory-files.md#the-secrets-rule--a-secret-stays-behind-an-environment)
+    says why). The environment admits release tags only (`v*`) and
     names the human as its required reviewer, so no run holds the credential without the
     human's click on that run. The job that holds it (`environment: release`) runs the
     pinned toolchain and the platform's own tools with a read-only token, imports the
@@ -83,7 +82,12 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     secret: it verifies what arrived (the signature's chain to Developer ID, the stapled
     ticket, `stapler validate`) and runs goreleaser, cosign and the attestation. The
     installer asserts the same chain and ticket again on the user's machine. Nothing about
-    the credential lives in the tree.
+    the credential lives in the tree. `limen github check` holds GitHub to it: no such secret
+    at the repository or the organisation (`actions-secrets`), and a `release` environment of
+    that shape holding what the job reads (`environments`), which `fix` creates or reconciles
+    with the owners as reviewers; the values are set by hand (`gh secret set NAME --env
+    release`). The tree's `secrets` rule holds the job to `environment: release`
+    ([github](./github.md), [mandatory files](./mandatory-files.md)).
   - **What is deliberately not done**: no notarization of command-line binaries, no SBOM for
     a repository without artifacts (its release is the signed tag), no signature of the
     source archive GitHub generates (it is not a release asset of ours).

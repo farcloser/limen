@@ -62,6 +62,8 @@ const (
 	checkDeployKeys           = "deploy-keys"
 	checkAgentsTeam           = "agents-team"
 	checkRenovateProcessing   = "renovate-processing"
+	checkActionsSecrets       = "actions-secrets"
+	checkEnvironments         = "environments"
 )
 
 // knownChecks is every check identifier — repository and organization level
@@ -97,6 +99,8 @@ func knownChecks() map[string]bool {
 		checkOutsideCollaborators: true,
 		checkCodeScanning:         true,
 		checkRulesetDefaultBranch: true,
+		checkActionsSecrets:       true,
+		checkEnvironments:         true,
 		checkRulesetVersionTags:   true,
 		checkWebhooks:             true,
 		checkDeployKeys:           true,
@@ -227,6 +231,8 @@ func Audit(ctx context.Context, repo string, overrides map[string]string) ([]Fin
 	aud.auditCodeScanning()
 	aud.auditRulesets()
 	aud.auditSurface()
+	aud.auditActionsSecrets()
+	aud.auditEnvironments()
 	aud.auditRenovateProcessing()
 	aud.auditAgentsTeam(owner, name)
 	aud.flushSettingsPatch()

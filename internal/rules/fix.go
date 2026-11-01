@@ -111,6 +111,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateLychee(root)...)
 	add(remediateWorkflows(root, opts)...)
 	add(remediateRenovate(root, opts)...)
+	add(remediateSecrets(root))
 
 	add(remediateShellcheck(root))
 

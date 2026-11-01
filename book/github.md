@@ -89,6 +89,8 @@ Every declarable identifier, grouped (a test pins this list to the live check ca
 # outside-collaborators: <reason>
 # webhooks: <reason>
 # deploy-keys: <reason>
+# actions-secrets: <reason>
+# environments: <reason>
 # agents-team: <reason>
 # renovate-processing: <reason>  # self-hosted Renovate without a dashboard, say
 # --- Organization (only read by `limen github … -org <name>`) ---
@@ -169,6 +171,18 @@ declaring only where the code is on that list.
   never run, and a pull request waits on an empty check suite with nothing naming the cause
   (forkcloser/xz, two hours of it). This mirrors the canonical workflows' own construction:
   one SHA-pinned first-party action, everything else through aqua and `just`.
+- **A secret stays behind an environment.** A repository or organisation secret is one every account
+  with write access reads (why: the tree's [`secrets`
+  rule](./mandatory-files.md#the-secrets-rule--a-secret-stays-behind-an-environment), which holds
+  the workflows' side, the `environment:` on the job). So a repository secret is an advisory naming
+  the move (`gh secret set … --env …`, then the delete), an organisation secret the same in the
+  organisation audit, and the `environments` check holds GitHub's side: every environment the
+  default branch's workflows deploy to exists, admits some refs rather than every branch, and holds
+  the secrets its jobs read, the finding naming the `gh secret set` that is missing. The signing
+  policy's `release` environment is held to its shape, custom deployment policies with the one `v*`
+  tag policy and a required reviewer ([releasing](./releasing.md)): `fix` creates or reconciles it,
+  the organisation's owners (or the user the repository belongs to) as reviewers when it has none,
+  and never touches a value.
 - **Features off unless used, issues on.** Wiki, projects, discussions off: documentation
   lives in the repository, issues are the tracker — so issues themselves must be on, or
   `SUPPORT.md` and the org-wide issue forms point at nothing. An exception either way is
@@ -442,12 +456,13 @@ a second later.
 
 All GitHub access goes through the aqua-pinned `gh` CLI: `gh auth` owns identity, limen
 never sees a credential, and the same invocation works on a laptop and in CI (`GH_TOKEN`).
-Reading most of the security settings needs a token with repository administration read
-access; below that, findings degrade to `unverifiable`, which fails the check rather than
-faking compliance. A `fix` whose checks could not be verified plans nothing and says so;
-"nothing to fix" is said only when every check was answered. And `gh` is the one on PATH:
-where none answers, the run fails up front naming that, instead of reporting every check
-unverifiable.
+Reading most of the security settings needs a token with repository administration read access,
+listing secrets (the repository's, an environment's, the organisation's) its secrets read, and
+writing an environment its administration write; below that, findings degrade to `unverifiable`,
+which fails the check rather than faking compliance. A `fix` whose checks could not be verified
+plans nothing and says so; "nothing to fix" is said only when every check was answered. And `gh` is
+the one on PATH: where none answers, the run fails up front naming that, instead of reporting every
+check unverifiable.
 
 ## Organization level
 
@@ -483,9 +498,10 @@ working directory, canonically the org's `.github` repository). The catalog:
 - **Security configuration**: a default code security configuration exists for new
   repositories (the mechanism GitHub replaced the legacy per-org security fields with).
   Advisory: creating the canonical configuration is a human act.
-- **Standing inventories**: installed GitHub Apps, org webhooks (HTTPS + secret + TLS
-  verification), org-level Actions secrets (names only), teams, fine-grained PAT grants —
-  visible on every audit, so a grant nobody remembers making has nowhere to hide.
+- **Standing inventories**: installed GitHub Apps, org webhooks (HTTPS + secret + TLS verification),
+  org-level Actions secrets (names only, each an advisory naming the environment move), teams,
+  fine-grained PAT grants — visible on every audit, so a grant nobody remembers making has nowhere
+  to hide.
 - **The agents team, organization-wide**: the team exists, has members, and holds write on
   every repository that is not archived; the org view of the per-repository `agents-team`
   check, so one audit lists every repository created without the grant, and `fix -org`

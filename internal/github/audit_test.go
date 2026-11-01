@@ -263,6 +263,11 @@ func compliantResponses() map[string]stubResponse {
 		"GET repos/test/repo/hooks?per_page=100":                             {Body: `[]`},
 		"GET repos/test/repo/keys?per_page=100":                              {Body: `[]`},
 		"GET repos/test/repo/pages":                                          {NotFound: true},
+		"GET repos/test/repo/actions/secrets?per_page=100":                   {Body: `{"total_count":0,"secrets":[]}`},
+		"GET repos/test/repo/environments?per_page=100": {
+			Body: `{"total_count":0,"environments":[]}`,
+		},
+		"GET repos/test/repo/contents/.github/workflows": {Body: `[]`},
 		// The dashboard beside one of Renovate's own pull requests, which the
 		// issues listing returns too: only the issue counts.
 		"GET repos/test/repo/issues?state=open&creator=app%2Frenovate&per_page=100": {
@@ -651,6 +656,8 @@ var listPaths = []string{ //nolint:gochecknoglobals // test table.
 	"GET repos/test/repo/keys?per_page=100",
 	"GET repos/test/repo/issues?state=open&creator=app%2Frenovate&per_page=100",
 	"GET repos/test/repo/teams?per_page=100",
+	"GET repos/test/repo/actions/secrets?per_page=100 --paginate --slurp",
+	"GET repos/test/repo/environments?per_page=100 --paginate --slurp",
 	"GET orgs/test/teams?per_page=100",
 	"GET orgs/test-org/members?role=admin&per_page=100",
 	"GET orgs/test-org/hooks?per_page=100",

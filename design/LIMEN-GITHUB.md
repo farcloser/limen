@@ -204,12 +204,12 @@ All advisory: these are people and credentials.
 | Direct collaborators | none outside the baseline's named set; no outside collaborator with admin/push (Allstar's check) | `GET /repos/{o}/{r}/collaborators?affiliation=…` |
 | Deploy keys | none, or read-only + named in override | `GET /repos/{o}/{r}/keys` |
 | Webhooks | HTTPS only, secret set (scorecard's check), named in override | `GET /repos/{o}/{r}/hooks` |
-| Environments | protection rules on any env that holds secrets; no self-review | `GET /repos/{o}/{r}/environments` |
-| Repo secrets inventory | named in override (existence, never values) | `GET /repos/{o}/{r}/actions/secrets` |
+| Environments | every env the default branch's workflows deploy to exists, has a deployment branch policy and holds what its jobs read; `release` = the one `v*` tag policy + a required reviewer (fix creates or reconciles it, owners as reviewers; values never) | `GET /repos/{o}/{r}/environments`, `…/deployment-branch-policies`, `…/secrets`; `PUT /repos/{o}/{r}/environments/release` |
+| Repo secrets | none: a repository secret is read from any branch a write account pushes; advisory naming the environment move (existence, never values) | `GET /repos/{o}/{r}/actions/secrets` |
 | App installations touching this repo | subset of org-approved list | `GET /repos/{o}/{r}/installation` (app-scoped) / org view |
 
-Built: `outside-collaborators`, `deploy-keys`, `webhooks`. Not built: environments,
-the secrets inventory, app installations.
+Built: `outside-collaborators`, `deploy-keys`, `webhooks`, `actions-secrets`,
+`environments`. Not built: app installations.
 
 ### R7 — Community health (mostly existing limen file rules)
 
@@ -278,7 +278,7 @@ Built: `org-code-security-configuration` (advisory: creating one is a human act)
 | Installed GitHub Apps | subset of a named allowlist (Renovate just joined — this check makes such grants reviewable) with scopes recorded | `GET /orgs/{o}/installations` |
 | Renovate installed | the `renovate` app is among the installations — the seeded `renovate.json` and the checksum-refresh workflow depend on it. Fail, no fix: app installation has no API. Self-hosted Renovate = exemption | `GET /orgs/{o}/installations` |
 | Org webhooks | HTTPS + secret + named | `GET /orgs/{o}/hooks` |
-| Org-level secrets | named inventory | `GET /orgs/{o}/actions/secrets` |
+| Org-level secrets | none: an org secret is read from any branch a write account pushes in a covered repository; advisory naming the environment move | `GET /orgs/{o}/actions/secrets` |
 | Fine-grained PAT approvals | inventory (API is partial; mark unverifiable where gated) | `/orgs/{o}/personal-access-token*` |
 | Teams & grants | inventory (peribolos territory; management out of scope while the org is one person) — plus the one asserted grant: the `agents` team exists, has members, and holds write on every non-archived repository; fix grants the missing ones | `GET /orgs/{o}/teams`, `/teams/agents/repos`, `/teams/agents/members`, `PUT /orgs/{o}/teams/agents/repos/{o}/{r}` |
 | Custom properties schema | reserved for future repo classification (safe-settings uses these well) | `/orgs/{o}/properties/schema` |
