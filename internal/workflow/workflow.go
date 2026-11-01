@@ -36,6 +36,9 @@ type Job struct {
 	Name string
 	// Environment is the job's `environment:`, by name; empty when none.
 	Environment string
+	// Uses is the reusable workflow the job calls, as written; empty when
+	// the job runs steps of its own.
+	Uses string
 	// Secrets are the names the job reads from the secrets context,
 	// GITHUB_TOKEN aside, in order of first appearance.
 	Secrets []string
@@ -76,10 +79,12 @@ const (
 	triggerPullRequest        = "pull_request"
 	triggerPullRequestTarget  = "pull_request_target"
 	triggerWorkflowDispatch   = "workflow_dispatch"
+	triggerWorkflowCall       = "workflow_call"
 	tokenSecret               = "GITHUB_TOKEN" // #nosec G101 -- the token's name, which no job reads as a secret.
 	keyOn, keyJobs            = "on", "jobs"
 	keyEnvironment, keyName   = "environment", "name"
 	keySecrets, valueInherit  = "secrets", "inherit"
+	keyUses                   = "uses"
 	keyBranches, keyBranchesX = "branches", "branches-ignore"
 	keyTags, keyTagsX         = "tags", "tags-ignore"
 )
@@ -95,6 +100,13 @@ func (t Trigger) Open() bool {
 	default:
 		return false
 	}
+}
+
+// CalledOnly reports whether the workflow runs only when another calls it:
+// its jobs then run in the caller's repository, never in the one carrying
+// the file.
+func (w Workflow) CalledOnly() bool {
+	return len(w.Triggers) == 1 && w.Triggers[0].Name == triggerWorkflowCall
 }
 
 // OpenTrigger is the name of the workflow's first open trigger, or "".
@@ -338,6 +350,8 @@ func job(lines []line, index int) Job {
 			if entry.value == valueInherit {
 				read.AllSecrets = true
 			}
+		case keyUses:
+			read.Uses = unquote(entry.value)
 		}
 	}
 
