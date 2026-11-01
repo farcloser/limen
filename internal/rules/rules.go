@@ -209,6 +209,7 @@ func Check(root string, policy Policy) []Finding {
 		checkLychee(root),
 		checkWorkflows(root, policy),
 		checkRenovate(root, policy),
+		checkSecrets(root),
 		checkShellcheck(root),
 	}
 

@@ -320,14 +320,14 @@ The `.github` surface mixes two regimes, and the split is the point:
 | `pins.yaml` | **Optional, the project's own**; judged by the `pins` rule when present | The artifacts a build fetches by hand, pinned by digest, declared once and read back by the build; Renovate moves the version through the shared preset and `limen pins refresh` brings the digest along ([tooling](./tooling.md#pinned-artifacts-beyond-aqua-pinsyaml)). |
 | `.limen/renovate.json` | **Content-pinned** | The canonical Renovate configuration: cooldowns, groups, the managers for `pins.yaml` and the Go-built tools, the dashboard. Carried byte for byte like the rest of `.limen/`, so a fix reaches every repository with its limen bump, in that pull request's diff, and Renovate reads it from the repository itself. |
 | `renovate.json` | **Seeded once**; three things maintained by the `renovate` rule | The project's Renovate config, which extends the canonical preset by the repository's own name (`local>owner/name//.limen/renovate`); the rule's section below. |
-| `.github/workflows/release.yaml` | **Seeded once, conditionally**: only where a `.release-go.yaml` exists | Releasing is opt-in by carrying a goreleaser config (the gate the `release` recipe enforces); a non-releasing repo gets no dormant workflow that would fail red on a stray tag. Seeded once, so a lane change (the attestation step) reaches a repository that already carries the file only by hand, as its header says. A main package under `cmd/` either is one of its builds or is declared under `commands.unshipped` in `.lint-go.yaml`: the `workflows` rule fails one that is neither, naming the commands ([releasing](./releasing.md)). |
+| `.github/workflows/release.yaml` | **Seeded once, conditionally**: only where a `.release-go.yaml` exists; a **content-pinned caller** where it calls `limen-release-apple.yaml` | Releasing is opt-in by carrying a goreleaser config (the gate the `release` recipe enforces); a non-releasing repo gets no dormant workflow that would fail red on a stray tag. Seeded once, so a lane change (the attestation step) reaches a repository that already carries the file only by hand, as its header says. A main package under `cmd/` either is one of its builds or is declared under `commands.unshipped` in `.lint-go.yaml`: the `workflows` rule fails one that is neither, naming the commands ([releasing](./releasing.md)). A project on the Apple release lane declares it by pointing the file's `uses:` at `limen-release-apple.yaml`, after which the file is a thin caller like the three above, reset around its reference ([releasing](./releasing.md)). |
 | `.github/release.yml` | **Content-pinned** | How GitHub groups the release notes it writes from the merged pull requests' titles: breaking changes, changes, dependencies. Every tag has a release page, so every repository carries it. Where a `.release-go.yaml` exists, its `changelog:` section (`use: github-native`) is pinned with it, the one part of that file that is limen's ([release notes](./releasing.md)). |
 
 `limen check` fails a drifted or missing pinned piece, a missing seeded piece (content is
 never judged after the seed), and a missing release workflow in a repo that carries
 goreleaser config. `limen fix` resets the pinned pieces and seeds the rest, after which
-`ci.yaml`, `release.yaml` and `renovate.json` are the project's own, like the root
-`.justfile`.
+`ci.yaml`, `release.yaml` (unless it calls the Apple release lane) and `renovate.json` are
+the project's own, like the root `.justfile`.
 
 A **content-pinned caller** is pinned but for one line, the `uses:` reference to the
 reusable workflow it calls: `./.github/workflows/limen-<name>.yaml` in limen itself, where
@@ -437,6 +437,24 @@ machine, nothing. The rule fails every such line, naming it; `limen fix` reports
 an advisory, since the line is the project's to rewrite: `just do lint go` or `just do fix
 go`, which build the tool, or `.build/tools/<name>` after one of them. The canonical `.limen/`
 recipes are not scanned: they are content-pinned.
+
+### The `secrets` rule — a secret stays behind an environment
+
+A workflow job that reads a secret (`${{ secrets.NAME }}`, `secrets: inherit`,
+`toJSON(secrets)`) names an `environment:`, and the environment admits the refs that may use
+it. GitHub hands a repository or organisation secret to any run in the repository's own
+context that references it, so a job reading one on an open trigger, a pull request, a
+dispatch or a push to a branch, runs it for anyone with write access, from a branch of their
+own whose copy of the workflow prints it, and masking is defeated by re-encoding. The rule
+reads every workflow under `.github/workflows/`, `GITHUB_TOKEN` aside, and fails the first
+job that reads a secret with no environment on such a trigger. A push confined to tags is not
+one, the `limen:tags` ruleset decides who creates them, and neither are the events that run
+what a reviewed merge put on the default branch (a schedule, a release). A signing credential
+(`APPLE_DEVELOPER_ID_*`, `APPLE_NOTARY_*`, `APPLE_PROVISIONING_*`) is the `release`
+environment's wherever it is read ([releasing](./releasing.md)). The environment itself is
+GitHub's side: `limen github check` verifies the gate and builds the release one
+([github](./github.md)). `fix` writes nothing here, which refs an environment admits is the
+project's to name, and reports the finding as an advisory.
 
 ## Link checking — `.limen/lychee.toml`
 

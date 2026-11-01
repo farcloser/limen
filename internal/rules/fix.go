@@ -111,6 +111,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add(remediateLychee(root)...)
 	add(remediateWorkflows(root, opts)...)
 	add(remediateRenovate(root, opts)...)
+	add(remediateSecrets(root))
 
 	add(remediateShellcheck(root))
 
@@ -504,7 +505,7 @@ func remediateWorkflows(root string, opts FixOptions) []Outcome {
 		pinExact(root, rule, pathReleaseNotes, limen.CanonicalReleaseNotes),
 	}
 
-	for _, item := range callers() {
+	for _, item := range callersOf(root) {
 		out = append(out, remediateCaller(root, rule, item, opts))
 	}
 
@@ -520,10 +521,13 @@ func remediateWorkflows(root string, opts FixOptions) []Outcome {
 		remediateReleasedCommands(root, rule),
 	)
 
-	if exists(filepath.Join(root, releaseGoFile)) {
+	switch {
+	case onAppleLane(root):
+		// The caller above is the release workflow; nothing to seed.
+	case exists(filepath.Join(root, releaseGoFile)):
 		out = append(out, seedIfMissing(root, rule, pathWorkflowRelease, limen.CanonicalWorkflowRelease,
 			"seeded the canonical release workflow (the content is the project's own from here)"))
-	} else {
+	default:
 		out = append(out, Outcome{
 			Rule:    rule,
 			Action:  ActionNone,

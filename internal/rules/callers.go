@@ -21,6 +21,7 @@ const (
 	reusableCaches       = "limen-caches.yaml"
 	reusableChecksum     = "limen-update-aqua-checksum.yaml"
 	reusableVerify       = "limen-verify.yaml"
+	reusableReleaseApple = "limen-release-apple.yaml"
 	devBuildCallerNotice = "a development build seeds no workflow caller: the reference is a release's commit"
 )
 
@@ -39,6 +40,81 @@ func callers() []caller {
 		{path: pathWorkflowCaches, reusable: reusableCaches, canonical: limen.CanonicalWorkflowCaches},
 		{path: pathWorkflowChecksum, reusable: reusableChecksum, canonical: limen.CanonicalWorkflowUpdateAquaChecksum},
 	}
+}
+
+// canonicalReleaseAppleCaller is the release.yaml of a project on the Apple
+// release lane (book/releasing.md): the project declares the lane by pointing
+// its release.yaml at limen-release-apple.yaml, and fix holds the file to this
+// around the reference it carries, as it holds the three callers every
+// repository has.
+const canonicalReleaseAppleCaller = `# DO NOT EDIT MANUALLY: content-pinned by limen, reset by ` + "`limen fix`" + `;
+# the uses: reference is Renovate's.
+# The Apple release lane: ` + "`just do release vX.Y.Z`" + ` verifies the tree, creates
+# the SIGNED tag and pushes it; that push runs limen-release-apple.yaml from
+# farcloser/limen at the referenced commit (book/releasing.md). Its sign job
+# holds the release environment's credentials and runs this project's
+# ` + "`package`" + `; its publish job holds none and runs ` + "`just do release --ci`" + `. Pair
+# with the limen:tags ruleset: the tag push is the release button.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+# One run PER TAG, never cancelled: keyed by ref, not a constant — a constant
+# group keeps only the newest pending run, so pushing several tags at once
+# silently cancels the older releases.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    uses: ./.github/workflows/limen-release-apple.yaml
+    # What the called jobs need, publish's being the larger: the release and
+    # its assets, keyless signing, the provenance attestations.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    # The release environment's secrets reach the called sign job, which
+    # declares the environment; a run on any other ref is refused them.
+    secrets: inherit
+`
+
+// appleCaller is the Apple lane's release.yaml, held only where the file
+// calls the lane (onAppleLane).
+func appleCaller() caller {
+	return caller{path: pathWorkflowRelease, reusable: reusableReleaseApple, canonical: canonicalReleaseAppleCaller}
+}
+
+// appleLaneRE matches a `uses:` line naming the lane by any reference: the
+// declaration is the name, and the caller rule then judges the reference.
+var appleLaneRE = regexp.MustCompile(
+	`(?m)^\s+uses:\s+\S*/` + regexp.QuoteMeta(reusableReleaseApple) + `(?:@\S+)?[ \t]*(?:#.*)?$`,
+)
+
+// onAppleLane reports whether the repository's release.yaml calls
+// limen-release-apple.yaml, by whatever reference: the project's declaration
+// of the lane, after which the file is a thin caller and no longer the
+// seeded-once workflow, and a reference that is not a release's commit is
+// the caller rule's to fail and fix's to pin.
+func onAppleLane(root string) bool {
+	data, err := readRepoFile(root, pathWorkflowRelease)
+
+	return err == nil && appleLaneRE.Match(data)
+}
+
+// callersOf is every thin caller the repository is held to: the three every
+// repository carries, and the Apple lane's where the project declared it.
+func callersOf(root string) []caller {
+	items := callers()
+	if onAppleLane(root) {
+		items = append(items, appleCaller())
+	}
+
+	return items
 }
 
 // reusablePath is a reusable workflow's path in the repository.
@@ -230,6 +306,20 @@ func CanonicalCallersFor(repository, revision, version string) map[string]string
 	return out
 }
 
+// CanonicalAppleCallerFor returns the release.yaml of a project on the Apple
+// lane, as `limen fix` writes it in the named repository at the given release
+// commit and version. Exported for the tests that build such a repository.
+func CanonicalAppleCallerFor(repository, revision, version string) string {
+	item := appleCaller()
+
+	ref := localUses(item.reusable)
+	if !callsLocally(repository) {
+		ref = remoteUses(item.reusable, revision, version)
+	}
+
+	return withUses(item.canonical, item.reusable, ref)
+}
+
 // CanonicalCIFor returns the ci.yaml seed for the named repository: calling
 // limen-verify.yaml locally in limen, at the release commit elsewhere.
 func CanonicalCIFor(repository, revision, version string) string {
@@ -276,7 +366,7 @@ func removeStrayVerify(root, rule string) Outcome {
 // checkCallers fails a missing or drifted thin caller, and a copy of
 // limen-verify.yaml outside limen; nil when all is well.
 func checkCallers(root, rule, repository string) *Finding {
-	for _, item := range callers() {
+	for _, item := range callersOf(root) {
 		data, err := readRepoFile(root, item.path)
 		if err != nil {
 			missing := fail(rule, "", item.path+" is missing")

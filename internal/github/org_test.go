@@ -694,3 +694,29 @@ func TestFarcloserOrgNeedsNoPattern(t *testing.T) {
 		t.Errorf("local_only in farcloser: %v (%s), want ok", finding.Status, finding.Message)
 	}
 }
+
+// TestOrgSecretIsAdvisory: an organization secret is read from any branch a
+// write account pushes in a covered repository, so one present is an
+// advisory naming the environment move, never an inventory that passes.
+func TestOrgSecretIsAdvisory(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/actions/secrets?per_page=100"] = stubResponse{
+		Body: `{"total_count":1,"secrets":[{"name":"APP_PRIVATE_KEY","visibility":"all"}]}`,
+	}
+	stubGH(t, responses)
+
+	findings, changes := github.AuditOrg(t.Context(), testOrg, map[string]string{"org-admins": "alice is the org"})
+
+	finding, found := findingByCheck(findings, "org-actions-secrets")
+	if !found || finding.Status != github.StatusAdvisory || finding.Current != "APP_PRIVATE_KEY" {
+		t.Fatalf("org-actions-secrets: %+v, want an advisory naming the secret", finding)
+	}
+
+	if !strings.Contains(finding.Message, "gh secret delete APP_PRIVATE_KEY --org test-org") {
+		t.Errorf("the advisory does not name the move: %s", finding.Message)
+	}
+
+	if len(changes) != 0 {
+		t.Errorf("a secret is never moved by a fix: %+v", changes)
+	}
+}

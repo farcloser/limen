@@ -961,8 +961,9 @@ func (a *auditor) auditOrgWebhooks() {
 	a.flag(checkOrgWebhooks, StatusOK, "", "", "org webhooks are compliant (or none exist)", nil)
 }
 
-// auditOrgActionsSecrets inventories org-level Actions secrets (names only —
-// the API never exposes values).
+// auditOrgActionsSecrets: an organization secret is one every write account
+// in a covered repository reads from a branch of its own, so any present is
+// an advisory naming the move (names only — the API never exposes values).
 func (a *auditor) auditOrgActionsSecrets() {
 	secrets, outcome := listPages[orgNamed](a.ctx, a.client, "/actions/secrets?per_page=100", "secrets")
 	if outcome.err != nil || outcome.notFound {
@@ -982,8 +983,11 @@ func (a *auditor) auditOrgActionsSecrets() {
 		names = append(names, secret.Name)
 	}
 
-	a.flag(checkOrgActionsSecrets, StatusOK, "", "",
-		"org-level Actions secrets: "+strings.Join(names, listSeparator), nil)
+	a.flag(checkOrgActionsSecrets, StatusAdvisory, strings.Join(names, listSeparator), "(none: an environment's)",
+		"an organization secret is read by any workflow run in a repository it covers, so every account with "+
+			"write access there prints it from a branch of its own: each belongs to an environment of the repository "+
+			"that uses it, gated to the refs that may (`gh secret set "+names[0]+" --env <environment> --repo "+
+			a.owner+"/<repository>`, then `gh secret delete "+names[0]+" --org "+a.owner+"`)", nil)
 }
 
 // auditOrgTeams inventories teams — management is deliberately out of scope
