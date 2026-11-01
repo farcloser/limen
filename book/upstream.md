@@ -374,3 +374,27 @@ always closes the file, and refuses to build a Graphviz whose function no longer
 
 **Lifts when.** a Graphviz release closes the file after sizing; then the rewrite and this
 entry go. Not reported upstream yet (https://github.com/forkcloser/go-graphviz/issues/144).
+
+## Intel SDE runs AVX-512 natively on a host that has it, and loses the state under Go
+
+**Symptom.** A Go test binary run under `sde64 -spr` (or `-skx`, `-icx`) computes wrong
+results at random in its AVX-512 code paths, a different failing case each run, or hangs;
+the same binary passes on real AVX-512 hardware and under SDE on a host without AVX-512.
+GitHub's ubuntu-24.04 runners are a mix (AMD EPYC 9V74 has `avx512f`, EPYC 7763 does
+not), so the failure comes and goes with the host drawn. `-mix` makes it worse and is not
+the cause.
+
+**Cause.** SDE executes natively every instruction the host supports and emulates only the
+rest. On an AVX-512 host the kernels run natively under Pin, and Pin does not carry their
+vector state (ZMM registers, mask registers) across Go's asynchronous preemption signals:
+the runs pass with `GODEBUG=asyncpreemptoff=1`.
+
+**Workaround.** `-force_emulate skx` (repeatable; skx holds AVX-512 F/CD/VL/BW/DQ, so a
+kernel using icl-or-later sets adds those too): the state then lives in the emulator on
+every host. Measured on the AVX-512 host:
+eight of eight plain runs fail, nine of nine forced runs pass (forkcloser/blake3's lane,
+https://github.com/forkcloser/blake3/pull/137). That the kernels ran is proven from inside
+the binary (a required-ISA check), not from SDE's instruction mix.
+
+**Lifts when** an SDE or Pin release preserves AVX-512 state across signals for natively
+executed code, or Go stops preempting with signals on amd64. Not reported upstream yet.
