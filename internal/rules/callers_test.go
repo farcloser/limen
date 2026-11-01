@@ -282,3 +282,57 @@ func TestCallerOnRenovateBranch(t *testing.T) {
 		t.Errorf("a Renovate branch's fix must not write the caller:\n%s", data)
 	}
 }
+
+// TestMigrationBumpWritesCallers: on a Renovate branch, a workflow file that
+// is not a caller at all, the one from before the lanes moved, is written:
+// the migration bump's old checksum workflow runs under the update App, which
+// may write it. A drifted caller and a missing one stay advisories there.
+func TestMigrationBumpWritesCallers(t *testing.T) {
+	t.Parallel()
+
+	files := compliantFiles()
+	files[callerSecurity] = "name: security\non:\n  push:\n    branches: [main]\njobs:\n  security:\n" +
+		"    runs-on: ubuntu-24.04\n    steps:\n      - run: just security\n"
+	root := writeRepo(t, files)
+
+	outcomes := rules.Fix(
+		t.Context(),
+		root,
+		rules.FixOptions{
+			Policy:         consumer(),
+			RenovateBranch: true,
+			SelfRevision:   testRevision,
+			SelfVersion:    testVersion,
+		},
+	)
+	for _, o := range outcomes {
+		if o.Path == callerSecurity && o.Action != rules.ActionOverwrote {
+			t.Errorf("the pre-migration workflow must be written on the migration bump: %s (%s)", o.Action, o.Message)
+		}
+	}
+
+	data, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(callerSecurity)))
+	if string(data) != compliantFiles()[callerSecurity] {
+		t.Errorf("fix must write the canonical caller at the release's commit:\n%s", data)
+	}
+
+	missing := compliantFiles()
+	delete(missing, callerSecurity)
+	root = writeRepo(t, missing)
+
+	outcomes = rules.Fix(
+		t.Context(),
+		root,
+		rules.FixOptions{
+			Policy:         consumer(),
+			RenovateBranch: true,
+			SelfRevision:   testRevision,
+			SelfVersion:    testVersion,
+		},
+	)
+	for _, o := range outcomes {
+		if o.Path == callerSecurity && o.Action != rules.ActionAdvisory {
+			t.Errorf("a missing caller on a Renovate branch is a hand push: %s (%s)", o.Action, o.Message)
+		}
+	}
+}

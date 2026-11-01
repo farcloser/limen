@@ -343,12 +343,13 @@ asks nothing of a repository; a change to what a caller does (a trigger, a permi
 one the fix-up cannot write: on a Renovate branch `fix` leaves the caller and says so,
 `check` names it, and the caller is pushed by hand, once per repository. The release that
 introduced the callers is the last to write workflow files through the fix-up, under the
-update App, which limen no longer registers or uses; the human deletes it once every
-repository has merged that bump. For the shared lanes to be called from another
-organisation's repository, the allowed-actions floor names them there:
-`farcloser/limen/.github/workflows/*@*` beside GitHub-owned actions, at the repository and
-the organisation; farcloser's own need no pattern, and a private repository outside
-farcloser cannot call them, GitHub's rule ([github](./github.md)).
+update App, which limen no longer registers or uses: on that migration bump the files are not
+callers yet, and a file that is not a caller at all is the one `fix` writes on a Renovate
+branch; the human deletes the App once every repository has merged that bump. For the shared
+lanes to be called from another organisation's repository, the allowed-actions floor names
+them there: `farcloser/limen/.github/workflows/*@*` beside GitHub-owned actions, at the
+repository and the organisation; farcloser's own need no pattern, and a private repository
+outside farcloser cannot call them, GitHub's rule ([github](./github.md)).
 
 ### The `renovate` rule — who may commit onto Renovate's branches
 
