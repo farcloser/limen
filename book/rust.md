@@ -30,6 +30,17 @@ story. The toolchain is pinned in two halves:
   target the repository cross-builds, so each `rust-std` is fetched and verified the same
   way; `profile` is `minimal`. A lane refuses to run without the file.
 
+On Windows the host triple is the GNU one, `x86_64-pc-windows-gnu` and
+`aarch64-pc-windows-gnullvm`, set on rustup by the lane: rustup's own default there is the
+msvc triple, whose host builds (build scripts, proc-macros, the tests `cargo test` runs) link
+through the runner image's Visual Studio, which nothing pins. The GNU hosts link through
+pinned tools, so the pinned toolchain is the whole build on every leg: x64 through the
+toolchain's own `rust-mingw` component; arm64, whose gnullvm host ships no linker of its own
+and expects a MinGW clang on PATH, through the pinned zig by way of cargo-zigbuild's `zig cc`,
+the linker the cross builds use, pointed at by cargo's linker variable for that target (it
+maps the C runtime rustc asks for, `msvcrt`, to zig's; a bare `zig cc` does not). The cross
+builds link through zig either way.
+
 ## What a lane does
 
 Every Rust lane starts the same way (`rust_env` in `.limen/just/lib.just`). rustup's and
