@@ -132,8 +132,8 @@ names it:
 
 A routine patch bump of a tool module, with nothing in its upstream changes, is approved in
 one line that says so. A bump nobody has evidence for is not approved. A red bump is the
-owning session's to unblock, never the reviewer's to fix: the reviewer reads the failing
-log and forwards what it found.
+owning session's to unblock, never the project manager's to fix: it reads the failing log
+and forwards what it found.
 
 **Red by construction is a baseline defect.** A bump that cannot be green without a hand
 edit the bot will never make — a seeded workflow calling a recipe the project does not
@@ -171,27 +171,28 @@ A trivial documentation-only pull request does not go to the reviewing session: 
 the project manager, which reviews it, logs it and arms it. Trivial is prose alone and
 nothing decided in it: a typo, a wrap, a stale link or name, a sentence restating a fact the
 book already holds. A change that touches code, configuration, a workflow or a test goes to
-the reviewing session, and so does a documentation change that is not trivial: a new rule, a
-changed meaning, a chapter rewritten, a claim a reader would act on. A line that states a
-fact about an artifact or a mechanism, a release, a signature, a command's behaviour, is a
-claim, and when the project manager cannot verify it itself, that is doubt. In doubt, the
-reviewing session; the cost of a needless review is a turn, the cost of a skipped one is a
-wrong rule in the book.
+the reviewing session, a dependency bump excepted (below), and so does a documentation
+change that is not trivial: a new rule, a changed meaning, a chapter rewritten, a claim a
+reader would act on. A line that states a fact about an artifact or a mechanism, a release,
+a signature, a command's behaviour, is a claim, and when the project manager cannot verify
+it itself, that is doubt. In doubt, the reviewing session; the cost of a needless review is
+a turn, the cost of a skipped one is a wrong rule in the book.
 
-Renovate's pull requests are the one review on GitHub: the project manager sweeps them to
-the reviewing session, which reviews each ([dependency bumps](#dependency-bumps)), approves
-it and arms auto-merge (`gh pr merge --auto --merge`); the preset rebases a bump on every
-`main` commit and each rebase drops the approval, which the sweep gives again at the rebased
-head. Renovate re-arms after every rebase, so what holds a bump is the approval the reviewer
-withholds. GitHub does not always re-evaluate an armed merge when the approval lands: an
-approved, green, armed pull request sat seven minutes, and a disarm and re-arm merged it
-within half a minute; so an approved, armed pull request that sits is re-armed by whoever
-armed it: the project manager on a session's, the reviewing session on Renovate's. A native
-stack is merged by the project manager, from the top layer through the asynchronous merge
-API (`PUT /repos/{owner}/{repo}/pulls/{top}/merge-async`), once every layer is green and
-approved; never from the middle, never partially ([a stack is merged whole](./agents.md)).
-Closing, tagging and dismissing alerts are @apostasie's, and a review that needs one of them
-says which and why, in one line, and ends.
+A pull request that only bumps dependencies, Renovate's or a session's, goes to the project
+manager, not the reviewing session. The project manager reviews it ([dependency
+bumps](#dependency-bumps)); a session's it logs, arms and binds for the human as it does a
+trivial documentation change; Renovate's, the one review on GitHub, it approves and arms
+(`gh pr merge --auto --merge`). The preset rebases a bump on every `main` commit and each
+rebase drops the approval, which the sweep gives again at the rebased head. Renovate re-arms
+after every rebase, so what holds a bump is the approval the project manager withholds.
+GitHub does not always re-evaluate an armed merge when the approval lands: an approved,
+green, armed pull request sat seven minutes, and a disarm and re-arm merged it within half a
+minute; so an approved, armed pull request that sits is re-armed by the project manager. A
+native stack is merged by the project manager, from the top layer through the asynchronous
+merge API (`PUT /repos/{owner}/{repo}/pulls/{top}/merge-async`), once every layer is green
+and approved; never from the middle, never partially ([a stack is merged
+whole](./agents.md)). Closing, tagging and dismissing alerts are @apostasie's, and a review
+that needs one of them says which and why, in one line, and ends.
 
 **A 🛑 is argued, not obeyed.** The reviewer reads every repository and may miss what the
 owner knows of its own code: a guard in another file, a setting the rule keeps elsewhere, a
