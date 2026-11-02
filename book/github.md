@@ -251,8 +251,8 @@ The decided merge model, enforced by the repository settings and the `limen:main
   was given on**: the ruleset dismisses it on the next push, since an approved pull request
   merges itself and a push after the human looked would otherwise land unread; the new head
   goes through the review again. The same holds for Renovate's branches, which the preset
-  rebases on every `main` commit: each rebase drops the reviewing session's approval, and
-  the sweep gives it again at the rebased head. Force pushes and branch deletion on the
+  rebases on every `main` commit: each rebase drops the project manager's approval, and the
+  sweep gives it again at the rebased head. Force pushes and branch deletion on the
   default branch are blocked.
 - **Merges wait for green CI.** The `limen:main` ruleset carries required status checks,
   without which auto-merge (and a hasty human) would merge on red. A fresh ruleset requires

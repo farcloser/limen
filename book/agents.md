@@ -94,10 +94,10 @@ branches in its own worktrees. The human's branches are the human's.
   on GitHub, and auto-merge merges the moment the ruleset is satisfied: one approval, `gate`
   and `security` green, a merge commit. The ruleset dismisses a stale approval on push, so a
   push after the approval means the whole flow again from the review; no session merges by
-  hand and nobody bypasses. Renovate's pull requests are the one GitHub-side review: the
-  project manager sweeps them to the reviewing session, which reviews, approves and arms
-  them there. A private repository is never armed: its pull request is
-  bound for the human, who merges by hand after approving.
+  hand and nobody bypasses. A pull request that only bumps dependencies goes to the project
+  manager, not the reviewing session; Renovate's are the one GitHub-side review, which the
+  project manager reviews, approves and arms there. A private repository is never armed:
+  its pull request is bound for the human, who merges by hand after approving.
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local `main`, prune the
   merged branch and its worktree, rebase every open branch onto `main`.
 - **Every pull request targets `main`.** None is based on another pull request's branch by
