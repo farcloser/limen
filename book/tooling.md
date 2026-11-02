@@ -683,8 +683,10 @@ A push made with the run's own `GITHUB_TOKEN` starts no workflow run by itself: 
 rule against recursive workflows. For a pull request's head it does create the
 `pull_request` runs, awaiting approval, and a token with `actions: write` may give that
 approval. The checksum workflow's last step does: it lists the runs awaiting approval on
-the commit it pushed and approves each with its own token, and the pull request's `gate`
-and `security` checks report on the new head. No App, no personal token, no secret
+the commit it pushed and approves each with its own token, and goes on listing until
+thirty seconds pass with none new, since GitHub creates the runs one workflow at a time
+and the first one seen is not the set; the pull request's `gate` and `security` checks
+report on the new head. No App, no personal token, no secret
 anywhere: nothing to register per organisation, nothing to set per repository, nothing to
 rotate or leak. The workflow's commits are github-actions[bot]'s, the one address the
 seeded `renovate.json` lists in `gitIgnoredAuthors` so Renovate keeps rebasing.
