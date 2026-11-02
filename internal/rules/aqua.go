@@ -412,7 +412,7 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 // its isolated modules replaced — so the two rules enforce one doctrine from
 // one source and cannot drift apart.
 func retiredCanonicalPkgs() []string {
-	pkgs := slices.Concat(goToolsEverywhere, goSourceAnalyzers, isolatedAquaRetired)
+	pkgs := slices.Concat(goToolsEverywhere, goSourceAnalyzers, goTestTools, goToolsAquaRetired)
 	for pkg := range retiredGoTools {
 		pkgs = append(pkgs, pkg)
 	}

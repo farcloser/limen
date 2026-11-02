@@ -22,10 +22,10 @@ import (
 // that impossible.
 //
 // The directives live in .limen/tools/go.mod, limen's module, so the tools'
-// dependency graphs never reach the project's. Three tools are required
-// everywhere (git-validation, godolint, dot: the lint and test recipes of
-// every repository run them); a repository whose root carries a go.mod adds
-// the Go-source analyzers. The project's own go.mod is the project's: a tool
+// dependency graphs never reach the project's. Four tools are required
+// everywhere (git-validation, godolint, dot, yamlfmt: the lint and fix recipes
+// of every repository run them); a repository whose root carries a go.mod adds
+// the Go-source analyzers and the test runner. The project's own go.mod is the project's: a tool
 // directive there is none of this rule's business.
 const (
 	ruleGoTools    = "gotools"
@@ -63,6 +63,7 @@ var goToolsEverywhere = []string{
 	"github.com/forkcloser/git-validation/cmd/git-validation",
 	"github.com/forkcloser/godolint/cmd/godolint",
 	"github.com/forkcloser/dot/cmd/dot",
+	"github.com/forkcloser/yamlfmt/cmd/yamlfmt",
 }
 
 // retiredGoTools are tool directives a repository must no longer carry, each
@@ -91,6 +92,13 @@ var goSourceAnalyzers = []string{
 	"github.com/forkcloser/go-licenses/cmd/go-licenses",
 }
 
+// goTestTools are the tool packages a Go module declares for its test lanes.
+//
+//nolint:gochecknoglobals // immutable baseline data.
+var goTestTools = []string{
+	"gotest.tools/gotestsum",
+}
+
 // isolatedGoTools are the tools a Go module declares each in a module of its
 // own, .limen/tools/<name>/go.mod, keyed by the name the tool builds as. A tool
 // goes here when its dependency graph must stay its upstream's exactly:
@@ -108,13 +116,15 @@ var isolatedGoTools = map[string]string{
 	"nilaway": "go.uber.org/nilaway/cmd/nilaway",
 }
 
-// isolatedAquaRetired are the aqua packages the isolated tools replaced: a
+// goToolsAquaRetired are the aqua packages the tool directives replaced: a
 // manifest still pinning one carries an upstream-built binary beside the
 // one the toolchain builds, and the aqua rule retires it.
 //
 //nolint:gochecknoglobals // immutable baseline data.
-var isolatedAquaRetired = []string{
+var goToolsAquaRetired = []string{
 	"golangci/golangci-lint",
+	"gotestyourself/gotestsum",
+	"forkcloser/yamlfmt",
 }
 
 // aquaGoPin finds the golang/go pin of an aqua manifest (`golang/go@go1.N.M`,
@@ -203,8 +213,8 @@ func goModRequires(gomod string) map[string]string {
 }
 
 // requiredGoTools lists the tool packages a repository must declare: the
-// everywhere set, plus the analyzers when the root carries a go.mod (rootMod
-// is its text, nil when there is none). The aqua rule's retired set is built
+// everywhere set, plus the analyzers and the test runner when the root
+// carries a go.mod (rootMod is its text, nil when there is none). The aqua rule's retired set is built
 // from these same tables (retiredCanonicalPkgs): one doctrine, two rules
 // enforcing its two halves from one source.
 func requiredGoTools(rootMod []byte) []string {
@@ -212,7 +222,7 @@ func requiredGoTools(rootMod []byte) []string {
 		return slices.Clone(goToolsEverywhere)
 	}
 
-	return slices.Concat(goToolsEverywhere, goSourceAnalyzers)
+	return slices.Concat(goToolsEverywhere, goSourceAnalyzers, goTestTools)
 }
 
 // rootGoMod reads the project's go.mod: its text, or nil when the repository

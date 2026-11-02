@@ -26,11 +26,13 @@ var (
 		"github.com/forkcloser/git-validation/cmd/git-validation",
 		"github.com/forkcloser/godolint/cmd/godolint",
 		"github.com/forkcloser/dot/cmd/dot",
+		"github.com/forkcloser/yamlfmt/cmd/yamlfmt",
 	}
 	sourceAnalyzers = []string{ //nolint:gochecknoglobals // immutable fixture data.
 		"golang.org/x/tools/cmd/deadcode",
 		"golang.org/x/vuln/cmd/govulncheck",
 		"github.com/forkcloser/go-licenses/cmd/go-licenses",
+		"gotest.tools/gotestsum",
 	}
 )
 
@@ -45,6 +47,7 @@ tool (
 	github.com/forkcloser/git-validation/cmd/git-validation
 	github.com/forkcloser/godolint/cmd/godolint
 	github.com/forkcloser/dot/cmd/dot
+	github.com/forkcloser/yamlfmt/cmd/yamlfmt
 )
 `
 
@@ -61,6 +64,8 @@ tool (
 	github.com/forkcloser/git-validation/cmd/git-validation
 	github.com/forkcloser/godolint/cmd/godolint
 	github.com/forkcloser/dot/cmd/dot
+	github.com/forkcloser/yamlfmt/cmd/yamlfmt
+	gotest.tools/gotestsum
 	example.com/other/cmd/thing
 )
 
@@ -165,7 +170,8 @@ func TestGoModToolDirectives(t *testing.T) {
 			gomod: "module tools\n\ngo 1.26\n\n" +
 				"tool github.com/forkcloser/git-validation/cmd/git-validation // trailing\n" +
 				"tool   github.com/forkcloser/godolint/cmd/godolint\n" +
-				"tool github.com/forkcloser/dot/cmd/dot\n",
+				"tool github.com/forkcloser/dot/cmd/dot\n" +
+				"tool github.com/forkcloser/yamlfmt/cmd/yamlfmt\n",
 			ok: true,
 		},
 		{
@@ -364,6 +370,18 @@ func TestAquaRejectsRetiredPackage(t *testing.T) {
 	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() || !strings.Contains(f.Message, "golangci/golangci-lint") {
 		t.Fatalf("a manifest pinning the prebuilt golangci-lint should fail naming it, got: %+v", f)
+	}
+
+	// So are the prebuilt Go tools the tool directives replaced.
+	for _, pin := range []string{"gotestyourself/gotestsum@v1.0.0", "forkcloser/yamlfmt@v0.1.0"} {
+		files[".hermetic/hermetic.yaml"] = canonicalAquaWith(t, "packages:\n", "packages:\n  - name: "+pin+"\n")
+
+		name, _, _ := strings.Cut(pin, "@")
+
+		f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
+		if f.OK() || !strings.Contains(f.Message, name) {
+			t.Errorf("a manifest pinning the prebuilt %s should fail naming it, got: %+v", name, f)
+		}
 	}
 }
 
