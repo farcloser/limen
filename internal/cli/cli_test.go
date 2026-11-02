@@ -7,7 +7,6 @@ package cli_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -31,66 +30,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return cli.Run("dev", args, stdout, stderr)
 }
 
-// ghStubEnv, when set, makes this test binary act as a fake gh (the stdlib
-// helper-process pattern, portable where a script is not); ghRenamedEnv
-// makes that fake answer the org's App lookups with a renamed App.
-const (
-	ghStubEnv    = "LIMEN_CLI_TEST_GH_STUB"
-	ghRenamedEnv = "LIMEN_CLI_TEST_GH_RENAMED"
-)
-
-// TestMain lets the binary play both roles: the test suite, and — when
-// re-executed by the code under test as gh — the fake.
+// TestMain runs the suite; the stubs the commands shell out to are scripts
+// a test puts on PATH (stubDir).
 func TestMain(m *testing.M) {
-	if os.Getenv(ghStubEnv) != "" {
-		// The stub's exit status IS its contract (gh exits 1 on API errors).
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(runGHStub())
-	}
-
 	m.Run()
-}
-
-// runGHStub answers the two org reads discovery makes when the renamed
-// scenario is on, and fails everything otherwise (an unauthenticated gh).
-func runGHStub() int {
-	args := os.Args[1:]
-	// The preflight asks the API nothing, so an unauthenticated gh passes it.
-	if len(args) == 1 && args[0] == "--version" {
-		_, _ = os.Stdout.WriteString("gh version 0.0.0 (stub)\n")
-
-		return 0
-	}
-
-	if os.Getenv(ghRenamedEnv) == "" || len(args) < 4 || args[0] != "api" {
-		fmt.Fprintln(os.Stderr, "gh: boom (HTTP 500)")
-
-		return 1
-	}
-
-	switch path := args[3]; {
-	case strings.HasPrefix(path, "orgs/test-org/actions/variables/"):
-		_, _ = os.Stdout.WriteString(`{"value":"4242"}`)
-	case strings.HasPrefix(path, "orgs/test-org/installations"):
-		// --paginate --slurp: an array of pages.
-		_, _ = os.Stdout.WriteString(
-			`[{"installations":[{"app_id":1,"app_slug":"renovate"},{"app_id":4242,"app_slug":"limenreapp"}]}]`,
-		)
-	default:
-		fmt.Fprintln(os.Stderr, "gh: Not Found (HTTP 404)")
-
-		return 1
-	}
-
-	return 0
 }
 
 // stubDir builds a directory of stand-ins for the tools the command shells
 // out to — aqua and go as scripts (their arguments carry no shell
-// metacharacters), gh as a copy of this binary in stub mode (its arguments
-// do). The aqua stub logs its invocations to <dir>/log. The caller puts the
-// directory first on PATH and sets ghStubEnv, with t.Setenv, which is what
-// makes those tests serial.
+// metacharacters). The aqua stub logs its invocations to <dir>/log. The
+// caller puts the directory first on PATH with t.Setenv, which is what makes
+// those tests serial.
 func stubDir(t *testing.T) string {
 	t.Helper()
 
@@ -108,7 +58,6 @@ func stubDir(t *testing.T) string {
 		"[ \"$1\" = get ] && [ \"$2\" = -tool ] || exit 0\n" +
 		"shift 2\n" +
 		"for arg; do echo \"tool ${arg%@*}\" >> go.mod; done\n"
-	gh := filepath.Join(dir, "gh")
 
 	if runtime.GOOS == "windows" {
 		aqua += ".bat"
@@ -128,7 +77,6 @@ func stubDir(t *testing.T) string {
 			"if \"%1\"==\"\" exit /b 0\r\n" +
 			"for /f \"delims=@\" %%a in (\"%1\") do >> go.mod echo tool %%a\r\n" +
 			"shift\r\ngoto loop\r\n"
-		gh += ".exe"
 	}
 
 	// 0o700, not 0o600: the stubs must be executable.
@@ -136,20 +84,6 @@ func stubDir(t *testing.T) string {
 		if err := os.WriteFile(path, []byte(content), 0o700); err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	binary, err := os.ReadFile(self)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.WriteFile(gh, binary, 0o700); err != nil {
-		t.Fatal(err)
 	}
 
 	return dir
@@ -319,7 +253,6 @@ func toolsSeededDir(t *testing.T) string {
 
 func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
 	stubs := stubDir(t)
-	t.Setenv(ghStubEnv, "1")
 	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	dir := toolsSeededDir(t)
@@ -364,7 +297,6 @@ func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.S
 // a bootstrap writes and the dev-build warning it prints.
 func TestReleaseStampPinsOnlyExactReleases(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
 	stubs := stubDir(t)
-	t.Setenv(ghStubEnv, "1")
 	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	embedded := regexp.MustCompile(`(?m)^ {2}- name: farcloser/limen@(\S+)`).FindStringSubmatch(limen.CanonicalAquaYAML)
