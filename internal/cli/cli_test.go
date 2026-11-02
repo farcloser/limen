@@ -523,12 +523,17 @@ func TestGithubNeedsGH(t *testing.T) {
 	}
 }
 
-// TestGithubFixUnverifiedPlansNothing: a gh that runs but cannot answer (no
-// login) leaves every check unverifiable. The fix plans nothing and says
-// which, and exits non-zero: "nothing to fix" read that failure as compliance.
+// TestGithubFixUnverifiedPlansNothing: an API that refuses every read (a
+// token with no access) leaves every check unverifiable. The fix plans
+// nothing and says which, and exits non-zero: "nothing to fix" read that
+// failure as compliance.
 func TestGithubFixUnverifiedPlansNothing(t *testing.T) {
-	t.Setenv("PATH", stubDir(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv(ghStubEnv, "1")
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"message":"Resource not accessible by personal access token"}`, http.StatusForbidden)
+	}))
+	t.Cleanup(refusing.Close)
+	t.Setenv("GITHUB_API_URL", refusing.URL)
+	t.Setenv("GH_TOKEN", "test")
 
 	args := []string{"github", "fix", "-repo", "owner/name", "-yes"}
 

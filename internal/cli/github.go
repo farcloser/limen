@@ -89,8 +89,8 @@ func githubAudit(ctx context.Context, scope githubScope, stderr io.Writer) (audi
 		return nil, "", false
 	}
 
-	// Before the first API call, so a gh that does not run fails the run
-	// once, with its cause, rather than every check.
+	// Before the first API call, so a run with no token fails once, with
+	// its cause, rather than every check.
 	if err := github.Preflight(ctx); err != nil {
 		_, _ = fmt.Fprintf(stderr, errFormat, err)
 

@@ -35,10 +35,9 @@ func TestOrgReposSkipsArchived(t *testing.T) {
 	}
 }
 
-// TestOrgReposPaginates: the sweep reads every page, not the first. gh
-// --paginate merges the array pages, so a stub answering the one request with
-// 140 entries stands in for the merged result — what this pins is that the
-// request asks for pagination at all, and that nothing truncates after.
+// TestOrgReposPaginates: the sweep reads every page, not the first: the
+// server serves the 140 entries on one page with a Link to an empty second,
+// and what this pins is that the Link is followed and nothing truncates.
 //
 //nolint:paralleltest // serial by design: sets the process environment.
 func TestOrgReposPaginates(t *testing.T) {
@@ -68,8 +67,8 @@ func TestOrgReposPaginates(t *testing.T) {
 		t.Fatalf("reading call log: %v", err)
 	}
 
-	if !strings.Contains(string(log), "--paginate") {
-		t.Error("the repository listing must ask gh to follow every page")
+	if !strings.Contains(string(log), "GET orgs/test-org/repos?per_page=100&type=all&page=2") {
+		t.Error("the repository listing must follow the Link to the next page")
 	}
 }
 

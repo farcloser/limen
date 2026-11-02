@@ -457,15 +457,18 @@ a second later.
 
 ## Authentication
 
-All GitHub access goes through the aqua-pinned `gh` CLI: `gh auth` owns identity, limen
-never sees a credential, and the same invocation works on a laptop and in CI (`GH_TOKEN`).
-Reading most of the security settings needs a token with repository administration read access,
-listing secrets (the repository's, an environment's, the organisation's) its secrets read, and
-writing an environment its administration write; below that, findings degrade to `unverifiable`,
-which fails the check rather than faking compliance. A `fix` whose checks could not be verified
-plans nothing and says so; "nothing to fix" is said only when every check was answered. And `gh` is
-the one on PATH: where none answers, the run fails up front naming that, instead of reporting every
-check unverifiable.
+The API is called in-process over HTTPS, every call on one connection, which is what makes an audit
+a few seconds rather than a process and a TLS handshake per read. `gh auth` still owns identity: the
+token is `GH_TOKEN` or `GITHUB_TOKEN` from the environment, as CI sets it, else what `gh auth token`
+prints for the account the pinned `gh` is signed in as, asked once; limen stores no credential. gh
+also stays the verifier of attestations (`gh attestation verify`, `gh release verify-asset`), the
+one part worth not rewriting. Reading most of the security settings needs a token with repository
+administration read access, listing secrets (the repository's, an environment's, the organisation's)
+its secrets read, and writing an environment its administration write; below that, findings degrade
+to `unverifiable`, which fails the check rather than faking compliance. A `fix` whose checks could
+not be verified plans nothing and says so; "nothing to fix" is said only when every check was
+answered. A run with no token fails up front naming the two ways in, instead of reporting every
+check unverifiable; a rate limit is waited out once, for as long as GitHub asks, bounded.
 
 ## Organization level
 
