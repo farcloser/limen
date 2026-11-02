@@ -1,4 +1,4 @@
-// Tests for the gh preflight, through PATH alone. Serial where they set it.
+// Tests for the preflight: the token, resolved before the first call.
 
 package github_test
 
@@ -9,28 +9,33 @@ import (
 	"github.com/farcloser/limen/internal/github"
 )
 
-// TestPreflightNoGH: no gh on PATH is one error naming gh and PATH,
-// not an audit of "cannot verify" findings.
-func TestPreflightNoGH(t *testing.T) {
+// TestPreflightNoToken: no token in the environment and no gh on PATH is one
+// error naming both ways in, not an audit of "cannot verify" findings.
+func TestPreflightNoToken(t *testing.T) {
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("PATH", t.TempDir())
 
 	err := github.Preflight(t.Context())
 	if err == nil {
-		t.Fatal("Preflight() = nil with no gh on PATH")
+		t.Fatal("Preflight() = nil with no token and no gh on PATH")
 	}
 
-	for _, want := range []string{"gh", "PATH"} {
+	for _, want := range []string{"GH_TOKEN", "gh auth login"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Preflight() error should mention %q, got: %v", want, err)
 		}
 	}
 }
 
-// TestPreflightGH: a gh that runs passes, whatever the API would answer.
-func TestPreflightGH(t *testing.T) {
-	t.Parallel()
+// TestPreflightEnvironmentToken: a token in the environment is the
+// credential, gh asked nothing; GITHUB_TOKEN is what Actions sets.
+func TestPreflightEnvironmentToken(t *testing.T) {
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "from-actions")
+	t.Setenv("PATH", t.TempDir())
 
 	if err := github.Preflight(t.Context()); err != nil {
-		t.Fatalf("Preflight() = %v with the stub on PATH", err)
+		t.Fatalf("Preflight() = %v with GITHUB_TOKEN set", err)
 	}
 }

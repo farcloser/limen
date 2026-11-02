@@ -10,13 +10,18 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/farcloser/limen/internal/github"
@@ -76,64 +81,52 @@ const repoWithoutSecurityBlock = `{
   "squash_merge_commit_message": "PR_BODY"
 }`
 
-// stubResponse is one canned gh api answer: a body (exit 0), a 404, or a
-// generic error. Fields are exported for the JSON round trip to the stub
-// process; the type stays test-internal.
-//
-// Pages, when set, is the endpoint's answer page by page, and the stub then
-// mirrors gh's pagination: without --paginate only the first page is served;
-// with --paginate the pages, all JSON arrays, are merged into one array; with
-// --paginate --slurp the pages come back as one array of page bodies. A test
-// that puts what it looks for on a later page thereby proves the code under
-// test asked for every page.
+// stubResponse is one canned answer of the test API server: a body, or the
+// pages of a listing; a verbatim refusal line, for the 422 limen classifies
+// by GitHub's prose; a 404; a 500. A listing (a GET with per_page=) served
+// from one body gets a Link to an empty second page, so the log shows whether
+// the code under test followed it: a test that puts what it looks for on a
+// later page thereby proves the code asked for every page.
 type stubResponse struct {
-	Body  string   `json:"body"`
-	Pages []string `json:"pages,omitempty"`
-	// Stderr is a verbatim gh failure line, for the refusals limen classifies
-	// by GitHub's prose rather than by status code alone.
-	Stderr   string `json:"stderr"`
-	NotFound bool   `json:"notFound"`
-	Fail     bool   `json:"fail"`
+	Body  string
+	Pages []string
+	// Stderr is a verbatim gh-style failure line, served as the status it
+	// names with the line as GitHub's message.
+	Stderr   string
+	NotFound bool
+	Fail     bool
 	// Times is how often a listed write is performed, when it is not once:
 	// two checks whose fixes share one PUT run it twice.
-	Times int `json:"times"`
+	Times int
 }
 
-// ghStubEnv carries the directory of one test's canned responses to the
-// fake gh (internal/github/ghstub, built by TestMain and put on PATH).
-const ghStubEnv = "LIMEN_TEST_GH_STUB_DIR"
-
-// stubGH writes the test's canned responses where the fake gh finds them and
-// names that directory in the environment the code under test inherits: the
-// fake answers "METHOD path" keys from responses; anything unlisted errors
-// generically (the unverifiable path). Every invocation is logged to the
-// returned file, write payloads included. The writes a test lists are the
+// stubGH starts an API server answering "METHOD path" keys from responses
+// and points the code under test at it (GITHUB_API_URL, with a GH_TOKEN so
+// no gh is asked): anything unlisted errors generically (the unverifiable
+// path). Every request is logged to the returned file, "METHOD path" with a
+// write's payload on the lines after it. The writes a test lists are the
 // plan it expects: when the test ends, each must have been performed exactly
-// its count (once unless Times says otherwise), and the stub refused every
-// other, so a fix grows no write a test did not assert. No shell is involved
-// anywhere — a generated script cannot be exec'd on Windows (no shebangs,
-// PATHEXT), and a .bat shim re-parses metacharacters like the '&' in query
-// strings.
+// its count (once unless Times says otherwise), and the server refused every
+// other, so a fix grows no write a test did not assert. Setenv forbids
+// t.Parallel: these tests are serial.
 func stubGH(t *testing.T, responses map[string]stubResponse) string {
 	t.Helper()
 
 	dir := t.TempDir()
-
-	data, err := json.Marshal(responses)
-	if err != nil {
-		t.Fatalf("marshaling stub responses: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "responses.json"), data, 0o600); err != nil {
-		t.Fatalf("writing stub responses: %v", err)
-	}
-
-	// Inherited by the children the code under test spawns (it does not set
-	// cmd.Env). Setenv also restores on cleanup and forbids t.Parallel —
-	// the responses are process-wide state, so these tests are serial.
-	t.Setenv(ghStubEnv, dir)
-
 	logPath := filepath.Join(dir, "calls.log")
+
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		serve(w, r, responses, logPath)
+	}))
+	t.Cleanup(server.Close)
+
+	t.Setenv("GITHUB_API_URL", server.URL)
+	t.Setenv("GH_TOKEN", "test")
 
 	// Counted now: a test that calls stubGH again edits the same map.
 	want := map[string]int{}
@@ -169,67 +162,143 @@ func stubGH(t *testing.T, responses map[string]stubResponse) string {
 	return logPath
 }
 
+// pageParamRE is the page parameter the server adds to a Link, stripped to
+// find the request's key.
+var pageParamRE = regexp.MustCompile(`([?&])page=(\d+)(&?)`)
+
+// serve answers one request from the canned responses.
+func serve(w http.ResponseWriter, r *http.Request, responses map[string]stubResponse, logPath string) {
+	requested := strings.TrimPrefix(r.URL.RequestURI(), "/")
+	page := 1
+	key := requested
+
+	if match := pageParamRE.FindStringSubmatch(requested); match != nil {
+		page, _ = strconv.Atoi(match[2])
+		key = pageParamRE.ReplaceAllStringFunc(requested, func(found string) string {
+			sub := pageParamRE.FindStringSubmatch(found)
+			if sub[3] == "&" {
+				return sub[1]
+			}
+
+			return ""
+		})
+	}
+
+	key = r.Method + " " + key
+	payload, _ := io.ReadAll(r.Body)
+	appendLog(logPath, r.Method+" "+requested, payload)
+
+	answer, listed := responses[key]
+
+	switch {
+	case !listed:
+		http.Error(w, `{"message":"boom"}`, http.StatusInternalServerError)
+
+		return
+	case answer.NotFound:
+		http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+
+		return
+	case answer.Stderr != "":
+		status := http.StatusInternalServerError
+		if strings.Contains(answer.Stderr, "(HTTP 422)") {
+			status = http.StatusUnprocessableEntity
+		}
+
+		message, _ := json.Marshal(map[string]string{"message": answer.Stderr})
+		http.Error(w, string(message), status)
+
+		return
+	case answer.Fail:
+		http.Error(w, `{"message":"boom"}`, http.StatusInternalServerError)
+
+		return
+	}
+
+	pages := answer.Pages
+	if len(pages) == 0 {
+		pages = []string{answer.Body}
+	}
+
+	if r.Method == http.MethodGet && strings.Contains(key, "per_page=") && len(pages) == 1 {
+		pages = append(pages, emptyPage(pages[0]))
+	}
+
+	if page > len(pages) {
+		http.Error(w, `{"message":"no such page"}`, http.StatusNotFound)
+
+		return
+	}
+
+	if page < len(pages) {
+		separator := "&"
+		if !strings.Contains(requested, "?") {
+			separator = "?"
+		}
+
+		next := pageParamRE.ReplaceAllString(requested, "$1") + separator + "page=" + strconv.Itoa(page+1)
+		next = strings.ReplaceAll(strings.ReplaceAll(next, "?&", "?"), "&&", "&")
+		w.Header().Set("Link", "<http://"+r.Host+"/"+next+`>; rel="next"`)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = io.WriteString(w, pages[page-1])
+}
+
+// emptyPage is a listing's page with nothing on it, in the shape of its
+// first page: an empty array, or the object with its arrays emptied.
+func emptyPage(first string) string {
+	trimmed := strings.TrimSpace(first)
+	if strings.HasPrefix(trimmed, "[") {
+		return "[]"
+	}
+
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(trimmed), &object); err != nil {
+		return "[]"
+	}
+
+	for name, value := range object {
+		switch {
+		case strings.HasPrefix(strings.TrimSpace(string(value)), "["):
+			object[name] = json.RawMessage("[]")
+		case name == "total_count":
+			object[name] = json.RawMessage("0")
+		}
+	}
+
+	out, _ := json.Marshal(object)
+
+	return string(out)
+}
+
+// appendLog records one request and, for a write, its payload.
+func appendLog(logPath, line string, payload []byte) {
+	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+
+	defer func() { _ = logFile.Close() }()
+
+	_, _ = fmt.Fprintln(logFile, line)
+
+	if len(payload) > 0 {
+		_, _ = logFile.Write(payload)
+		_, _ = fmt.Fprintln(logFile)
+	}
+}
+
 // isWriteKey tells a write's stub key (and its log line, the same text) from
 // a read's and from a logged payload.
 func isWriteKey(key string) bool {
-	for _, prefix := range []string{"POST ", "PUT ", "PATCH ", "DELETE ", "secret set "} {
+	for _, prefix := range []string{"POST ", "PUT ", "PATCH ", "DELETE "} {
 		if strings.HasPrefix(key, prefix) {
 			return true
 		}
 	}
 
 	return false
-}
-
-// TestMain builds the fake gh and puts it first on PATH for the code under
-// test, which spawns `gh` by name.
-func TestMain(m *testing.M) {
-	dir, err := installGHStub()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "installing the gh stub:", err)
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(1)
-	}
-
-	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
-		fmt.Fprintln(os.Stderr, "putting the gh stub on PATH:", err)
-		//revive:disable-next-line:redundant-test-main-exit
-		os.Exit(1)
-	}
-
-	// The runner exits with m.Run's status once TestMain returns; the stub
-	// directory is removed on the way out.
-	m.Run()
-
-	_ = os.RemoveAll(dir)
-}
-
-// installGHStub builds internal/github/ghstub into a fresh directory under
-// the name the code under test spawns, gh plus the extension Windows needs.
-// Built, not this binary re-executed: under -race a process takes about a
-// second to start on macOS, and a package run makes some 1,600 gh calls.
-// `go` is the one on PATH, the toolchain running these tests; the build
-// inherits no -race, that is a flag of this binary's own build.
-func installGHStub() (string, error) {
-	dir, err := os.MkdirTemp("", "limen-gh-stub")
-	if err != nil {
-		return "", err
-	}
-
-	ext := ""
-	if runtime.GOOS == "windows" {
-		ext = ".exe"
-	}
-
-	build := exec.Command("go", "build", "-o", filepath.Join(dir, "gh"+ext), "./ghstub")
-
-	if out, err := build.CombinedOutput(); err != nil {
-		_ = os.RemoveAll(dir)
-
-		return "", fmt.Errorf("go build ./ghstub: %w: %s", err, out)
-	}
-
-	return dir, nil
 }
 
 // compliantResponses answers every audited endpoint with baseline-satisfying
@@ -656,8 +725,8 @@ var listPaths = []string{ //nolint:gochecknoglobals // test table.
 	"GET repos/test/repo/keys?per_page=100",
 	"GET repos/test/repo/issues?state=open&creator=app%2Frenovate&per_page=100",
 	"GET repos/test/repo/teams?per_page=100",
-	"GET repos/test/repo/actions/secrets?per_page=100 --paginate --slurp",
-	"GET repos/test/repo/environments?per_page=100 --paginate --slurp",
+	"GET repos/test/repo/actions/secrets?per_page=100",
+	"GET repos/test/repo/environments?per_page=100",
 	"GET orgs/test/teams?per_page=100",
 	"GET orgs/test-org/members?role=admin&per_page=100",
 	"GET orgs/test-org/hooks?per_page=100",
@@ -667,15 +736,15 @@ var listPaths = []string{ //nolint:gochecknoglobals // test table.
 	"GET orgs/test-org/repos?per_page=100&type=all",
 	"GET orgs/test-org/personal-access-tokens?per_page=100",
 	"GET orgs/test-org/code-security/configurations?per_page=100",
-	"GET orgs/test-org/actions/runners?per_page=100 --paginate --slurp",
-	"GET orgs/test-org/actions/secrets?per_page=100 --paginate --slurp",
-	"GET orgs/test-org/installations?per_page=100 --paginate --slurp",
+	"GET orgs/test-org/actions/runners?per_page=100",
+	"GET orgs/test-org/actions/secrets?per_page=100",
+	"GET orgs/test-org/installations?per_page=100",
 }
 
 // TestEveryListingPaginates: an audit of a repository and of its organization
-// asks gh for every page of every list it reads — arrays with --paginate,
-// object-wrapped lists with --paginate --slurp — and no list is fetched as
-// a single page. The call log is the evidence.
+// follows every list it reads to its last page: the server links each
+// listing's first page to an empty second one, and the log must show the
+// second page fetched for every listing; no list is read as one page.
 func TestEveryListingPaginates(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
 	responses := compliantResponses()
 	maps.Copy(responses, compliantOrgResponses())
@@ -692,17 +761,19 @@ func TestEveryListingPaginates(t *testing.T) { //nolint:paralleltest // serial: 
 	calls := strings.Split(strings.TrimSpace(string(log)), "\n")
 
 	for _, want := range listPaths {
-		if !strings.HasSuffix(want, "--slurp") {
-			want += " --paginate"
+		if !slices.Contains(calls, want) {
+			t.Errorf("listing not read: want a call %q", want)
 		}
 
-		if !slices.Contains(calls, want) {
-			t.Errorf("listing not read whole: want a call %q", want)
+		if !slices.Contains(calls, want+"&page=2") {
+			t.Errorf("listing not read whole: want its second page %q", want+"&page=2")
 		}
 	}
 
 	for _, call := range calls {
-		if strings.Contains(call, "per_page=") && !strings.Contains(call, "--paginate") {
+		if strings.HasPrefix(call, "GET ") && strings.Contains(call, "per_page=") &&
+			!strings.Contains(call, "page=2") &&
+			!slices.Contains(calls, call+"&page=2") {
 			t.Errorf("a list fetched as one page: %q", call)
 		}
 	}

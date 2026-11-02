@@ -42,20 +42,25 @@ limen github fix   [--repo owner/name | --org name [--all-repos]] [-json] [--yes
   the tools/go.mod rollout gave it vulnerable pins and its repo-level Dependabot
   security updates, on since creation and until then harmless, opened PRs).
   Every list the package reads — the sweep's repositories, and every inventory
-  and lookup behind a check — is read whole (`gh api --paginate`, `--slurp` for
-  the object-wrapped lists): a page is not an inventory, and a ruleset, owner,
+  and lookup behind a check — is read whole (the Link header followed to the last
+  page, the object-wrapped lists collected by field): a page is not an inventory, and a ruleset, owner,
   team, or App on a later page is exactly as real as one on the first.
 - `check` is read-only and needs only read scopes. `fix` prints the full plan (current →
   desired, one line per change) and applies only with `--yes` or interactive consent.
 - Output reuses the existing `Finding`/`Outcome` machinery and exit codes (0/1/2), plus
   one new verdict class — see below.
 
-### Transport: `gh`, not tokens
+### Transport: HTTP in-process, identity from `gh`
 
-limen shells out to the `gh` on the hermetic PATH (`gh api …`). `gh auth` owns identity
-(keychain, SSO, fine-grained tokens), limen never stores or even sees a credential, and
-the same invocation works on a laptop and in CI (`GH_TOKEN` env). The tests put a stub
-`gh` first on PATH, so the rule set is tested against canned responses without a network.
+limen calls the REST API itself (`net/http`, one connection pool, Link-header pagination,
+one bounded retry on a rate limit). `gh auth` owns identity: the token is `GH_TOKEN` or
+`GITHUB_TOKEN` from the environment, else `gh auth token` from the `gh` on the hermetic
+PATH, asked once; limen stores no credential, and the same run works on a laptop and in CI.
+`gh` keeps the attestation verification (`gh attestation verify`, `gh release verify-asset`).
+Decided after measuring the first transport, `gh api` per call: 34 processes and TLS
+handshakes for one repository, 0.44 s each, 16 s an audit; in-process the same audit is a
+couple of seconds. The tests run against an in-package HTTP server (`GITHUB_API_URL`), so the
+rule set is tested against canned responses without a network.
 
 ### The baseline: floor semantics, embedded, arguable
 

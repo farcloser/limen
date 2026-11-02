@@ -8,9 +8,10 @@
 // unverifiable (the API cannot answer under the current token — reported
 // distinctly, never counted as ok: what cannot be verified does not pass).
 //
-// All GitHub access goes through the gh CLI (`gh api …`): gh owns
-// authentication, limen never sees a credential, and the same invocation works
-// on a laptop and in CI.
+// The API is called in-process over HTTPS, every call on one connection
+// pool; gh owns the identity (the token is GH_TOKEN or GITHUB_TOKEN from the
+// environment, as CI sets it, else what `gh auth token` prints), so limen
+// stores no credential and the same run works on a laptop and in CI.
 package github
 
 import (
@@ -19,8 +20,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // Status is the verdict of one settings check.
@@ -62,8 +70,8 @@ func AllOK(findings []Finding) bool {
 	return true
 }
 
-// client calls the GitHub API for one target — a repository or an
-// organization — through the gh CLI.
+// client calls the GitHub API for one target, a repository or an
+// organization.
 type client struct {
 	// base is the API root every path is built from: "repos/owner/name" for a
 	// repository, "orgs/owner" for an organization.
@@ -76,9 +84,9 @@ func repoClient(slug string) client { return client{base: "repos/" + slug} }
 // orgClient targets one organization.
 func orgClient(org string) client { return client{base: "orgs/" + org} }
 
-// apiOutcome classifies one gh api invocation. notFound distinguishes the
-// endpoints that answer through their status code (HTTP 404 = feature off)
-// from real errors, which land in err.
+// apiOutcome classifies one API call. notFound distinguishes the endpoints
+// that answer through their status code (HTTP 404 = feature off) from real
+// errors, which land in err.
 type apiOutcome struct {
 	err  error
 	body []byte
@@ -91,30 +99,128 @@ type apiOutcome struct {
 	orgEnforced bool
 }
 
-// httpNotFoundMarker is how gh reports a 404 on stderr.
-const httpNotFoundMarker = "(HTTP 404)"
+// The transport: GitHub's REST API, versioned, over one HTTP client.
+const (
+	defaultAPIURL = "https://api.github.com"
+	apiVersion    = "2022-11-28"
+	// apiURLEnv names the API root. GitHub Actions sets it to the default;
+	// the tests point it at their own server.
+	apiURLEnv = "GITHUB_API_URL"
+	methodGet = "GET"
+	userAgent = "limen"
+	// maxPages bounds a listing at ten thousand entries, the largest page a
+	// hundred times: no organization, team or ruleset of the fleet comes
+	// near, and a longer list is an error, never a truncated inventory.
+	maxPages   = 100
+	perPage    = 100
+	maxRetries = 1
+	// retryWait bounds how long a rate limit's Retry-After is honoured.
+	retryWait        = 60 * time.Second
+	defaultRetryWait = 2 * time.Second
+	requestTimeout   = 60 * time.Second
+	httpTooMany      = http.StatusTooManyRequests
+)
 
-// methodGet is the one method every read shares.
-const methodGet = "GET"
+// The one refusal that is not a failure to fix but a statement about who
+// owns the setting: an organization code security configuration governs it,
+// and the repository endpoint will refuse every attempt until the
+// organization's own object changes. Matched on GitHub's prose because the
+// status code alone does not distinguish it from the other 422s the settings
+// endpoints return.
+const enforcedConfigMarker = "enforced security configuration"
+
+// errOrgEnforced marks a write the repository cannot win: the setting belongs
+// to an enforced organization code security configuration.
+var errOrgEnforced = errors.New("setting is owned by an enforced organization code security configuration")
 
 // errPageWithoutField is an object-wrapped listing whose page lacks the
 // field the caller collects — a shape the API does not answer with.
 var errPageWithoutField = errors.New("a page carries no such field")
 
-// The markers of the one write refusal that is not a failure to fix but a
-// statement about who owns the setting: an organization code security
-// configuration governs it, and the repository endpoint will refuse every
-// attempt until the organization's own object changes. Matched on GitHub's
-// prose because the status code alone does not distinguish it from the other
-// 422s the settings endpoints return.
-const (
-	httpUnprocessableMarker = "(HTTP 422)"
-	enforcedConfigMarker    = "enforced security configuration"
+// errNoToken is a run with no credential to carry.
+var errNoToken = errors.New("no GitHub token")
+
+// errAPI is a call GitHub answered outside 2xx, other than the two statuses
+// read as answers.
+var errAPI = errors.New("github api")
+
+// errTooManyPages is a list longer than the audit follows: a page is not an
+// inventory, and neither is a hundred of them cut short, so the list is an
+// error rather than a truncated answer.
+var errTooManyPages = errors.New("the list runs past the pages followed")
+
+// httpClient is the one pool every call shares: a repository audit is some
+// forty reads, and a connection per read was most of its time.
+var httpClient = &http.Client{Timeout: requestTimeout} //nolint:gochecknoglobals // one pool for the process.
+
+// The token, resolved once for the process.
+var (
+	tokenOnce  sync.Once //nolint:gochecknoglobals // resolved once for the process.
+	tokenValue string    //nolint:gochecknoglobals // resolved once for the process.
+	errToken   error     //nolint:gochecknoglobals // resolved once for the process.
+	linkNextRE = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 )
 
-// errOrgEnforced marks a write the repository cannot win: the setting belongs
-// to an enforced organization code security configuration.
-var errOrgEnforced = errors.New("setting is owned by an enforced organization code security configuration")
+// token is the credential every call carries: GH_TOKEN or GITHUB_TOKEN from
+// the environment, what CI sets, read on every call; else what `gh auth
+// token` prints, the gh on PATH owning the laptop's identity, asked once for
+// the process. limen stores none.
+func token(ctx context.Context) (string, error) {
+	for _, name := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value, nil
+		}
+	}
+
+	tokenOnce.Do(func() { tokenValue, errToken = ghToken(ctx) })
+
+	return tokenValue, errToken
+}
+
+// ghToken asks the gh on PATH for the token of the account it is signed in as.
+func ghToken(ctx context.Context) (string, error) {
+	var stdout, stderr bytes.Buffer
+
+	// gh on the hermetic PATH; fixed arguments.
+	cmd := exec.CommandContext(ctx, "gh", "auth", "token") // #nosec G204 -- see above.
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		detail := condenseStderr(stderr.String())
+		if detail != "" {
+			detail = ": " + detail
+		}
+
+		return "", fmt.Errorf("%w: set GH_TOKEN, or sign in with `gh auth login` (gh auth token: %w%s)",
+			errNoToken, err, detail)
+	}
+
+	value := strings.TrimSpace(stdout.String())
+	if value == "" {
+		return "", fmt.Errorf("%w: `gh auth token` printed nothing; sign in with `gh auth login`", errNoToken)
+	}
+
+	return value, nil
+}
+
+// Preflight resolves the token once, before the first call, so a run with
+// no credential fails with the cause rather than reporting every check
+// unverifiable.
+func Preflight(ctx context.Context) error {
+	_, err := token(ctx)
+
+	return err
+}
+
+// apiURL is the API root: the environment's, else GitHub's.
+func apiURL() string {
+	if root := strings.TrimRight(os.Getenv(apiURLEnv), "/"); root != "" {
+		return root
+	}
+
+	return defaultAPIURL
+}
 
 // orgOf returns the organization a client's base path belongs to, for
 // phrasing an error that has to point somewhere else.
@@ -126,21 +232,14 @@ func (c client) orgOf() string {
 	return owner
 }
 
-// api runs `gh api` with the given method, repo-relative path, and optional
-// JSON payload (sent via --input -), and classifies the outcome.
+// api performs one call with the given method, repo-relative path, and
+// optional JSON payload, and classifies the outcome.
 func (c client) api(ctx context.Context, method, path string, payload []byte) apiOutcome {
-	fullPath := c.base + path
-
-	args := []string{"api", "--method", method, fullPath}
-	if payload != nil {
-		args = append(args, "--input", "-")
-	}
-
-	return c.classify(runGH(ctx, args, method, fullPath, payload))
+	return c.classify(request(ctx, method, c.base+path, payload))
 }
 
 // classify phrases the refusals that need to name where the setting actually
-// lives — runGH only detects them, having no client to ask.
+// lives — request only detects them, having no client to ask.
 func (c client) classify(outcome apiOutcome) apiOutcome {
 	if !outcome.orgEnforced {
 		return outcome
@@ -156,72 +255,168 @@ func (c client) classify(outcome apiOutcome) apiOutcome {
 	return outcome
 }
 
-// Every list endpoint is read whole. The REST API pages its lists (30 entries
-// by default, 100 at most), and a page is not an inventory: an owner, a team,
-// a ruleset, or an installed App on the second page is exactly as real as one
-// on the first, and an audit that judged the first page alone would report
-// the rest as absent — creating a ruleset that exists, flagging a grant that
-// was made, missing an owner nobody declared. So no list is fetched with
-// getJSON: arrays go through getJSONAllPages, object-wrapped lists through
-// listPages, and both ask for the largest page (per_page=100 in the path) so
-// gh follows as few Link headers as possible.
+// request performs one call to fullPath under the API root and classifies
+// its status: a 404 is the endpoint's own answer, a 422 naming an enforced
+// configuration is the organization's, anything else outside 2xx is an error
+// carrying GitHub's message.
+func request(ctx context.Context, method, fullPath string, payload []byte) apiOutcome {
+	outcome, _ := fetchPage(ctx, method, apiURL()+"/"+fullPath, payload)
 
-// apiAllPages is api's paginating GET: gh follows the Link headers and merges
-// the pages of an array response into one array, so callers decode exactly
-// what they decode from a single page. Object-wrapped lists add --slurp (see
-// listPages).
-//
-// --paginate and --slurp go LAST. The test stub reads the method and path off
-// fixed argv positions, and a flag inserted ahead of them shifts every key.
-func (c client) apiAllPages(ctx context.Context, path string, flags ...string) apiOutcome {
-	fullPath := c.base + path
-
-	args := append([]string{"api", "--method", methodGet, fullPath, "--paginate"}, flags...)
-
-	return c.classify(runGH(ctx, args, methodGet, fullPath, nil))
+	return outcome
 }
 
-// runGH executes one gh invocation and classifies the outcome; method and
-// fullPath are carried only to phrase the error.
-func runGH(ctx context.Context, args []string, method, fullPath string, payload []byte) apiOutcome {
-	// gh on the hermetic PATH; every argument is a fixed API path built above.
-	cmd := exec.CommandContext(ctx, "gh", args...) // #nosec G204 -- see above.
+// fetchPage performs one HTTP request and returns its outcome and, for a
+// list, the URL of the next page from the Link header.
+func fetchPage(ctx context.Context, method, target string, payload []byte) (apiOutcome, string) {
+	credential, err := token(ctx)
+	if err != nil {
+		return apiOutcome{err: err}, ""
+	}
+
+	for attempt := 0; ; attempt++ {
+		answer, err := send(ctx, method, target, payload, credential)
+		if err != nil {
+			return apiOutcome{err: fmt.Errorf("%s %s: %w", method, target, err)}, ""
+		}
+
+		if wait, retry := retryAfter(answer); retry && attempt < maxRetries {
+			if err := pause(ctx, wait); err != nil {
+				return apiOutcome{err: fmt.Errorf("%s %s: %w", method, target, err)}, ""
+			}
+
+			continue
+		}
+
+		switch {
+		case answer.status == http.StatusNotFound:
+			return apiOutcome{notFound: true}, ""
+		case answer.status == http.StatusUnprocessableEntity && strings.Contains(string(answer.body), enforcedConfigMarker):
+			return apiOutcome{orgEnforced: true}, ""
+		case answer.status < http.StatusOK || answer.status >= http.StatusMultipleChoices:
+			return apiOutcome{err: fmt.Errorf("%w: %s %s: HTTP %d: %s",
+				errAPI, method, target, answer.status, apiMessage(answer.body))}, ""
+		}
+
+		return apiOutcome{body: answer.body}, nextPage(answer.header.Get("Link"))
+	}
+}
+
+// pause waits for the rate limit's duration, or until the run is cancelled.
+func pause(ctx context.Context, wait time.Duration) error {
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err() //nolint:wrapcheck // the caller names the call.
+	}
+}
+
+// answer is what one exchange returned, the body read and closed.
+type answer struct {
+	header http.Header
+	body   []byte
+	status int
+}
+
+// send performs the HTTP exchange and reads the body.
+func send(ctx context.Context, method, target string, payload []byte, credential string) (answer, error) {
+	var reader io.Reader
 	if payload != nil {
-		cmd.Stdin = bytes.NewReader(payload)
+		reader = bytes.NewReader(payload)
 	}
 
-	var stdout, stderr bytes.Buffer
-
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if strings.Contains(stderr.String(), httpNotFoundMarker) {
-			return apiOutcome{notFound: true}
-		}
-
-		if isOrgEnforced(stderr.String()) {
-			return apiOutcome{orgEnforced: true}
-		}
-
-		return apiOutcome{
-			err: fmt.Errorf("gh api %s %s: %w: %s", method, fullPath, err, condenseStderr(stderr.String())),
-		}
+	req, err := http.NewRequestWithContext(ctx, method, target, reader)
+	if err != nil {
+		return answer{}, err //nolint:wrapcheck // the caller names the call.
 	}
 
-	return apiOutcome{body: stdout.Bytes()}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-Github-Api-Version", apiVersion)
+	req.Header.Set("Authorization", "Bearer "+credential)
+	req.Header.Set("User-Agent", userAgent)
+
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return answer{}, err //nolint:wrapcheck // the caller names the call.
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return answer{}, fmt.Errorf("reading the response: %w", err)
+	}
+
+	return answer{status: resp.StatusCode, header: resp.Header, body: body}, nil
 }
 
-// isOrgEnforced reports whether gh refused a write because an organization
-// code security configuration owns the setting.
-func isOrgEnforced(stderr string) bool {
-	return strings.Contains(stderr, httpUnprocessableMarker) && strings.Contains(stderr, enforcedConfigMarker)
+// retryAfter reports whether an answer is a rate limit (a 429, or the 403
+// GitHub's secondary limit answers with, named by Retry-After or an exhausted
+// X-RateLimit-Remaining) worth one more attempt, and how long GitHub asks to
+// wait, bounded. A server fault is not retried: it is reported, as the
+// finding it makes unverifiable.
+func retryAfter(got answer) (time.Duration, bool) {
+	limited := got.status == httpTooMany ||
+		(got.status == http.StatusForbidden && got.header.Get("Retry-After") != "") ||
+		(got.status == http.StatusForbidden && got.header.Get("X-Ratelimit-Remaining") == "0")
+	if !limited {
+		return 0, false
+	}
+
+	wait := defaultRetryWait
+
+	if seconds, err := strconv.Atoi(got.header.Get("Retry-After")); err == nil && seconds > 0 {
+		wait = time.Duration(seconds) * time.Second
+	} else if reset, err := strconv.ParseInt(got.header.Get("X-Ratelimit-Reset"), 10, 64); err == nil {
+		if until := time.Until(time.Unix(reset, 0)); until > 0 {
+			wait = until
+		}
+	}
+
+	return min(wait, retryWait), true
+}
+
+// apiMessage reduces an error body to GitHub's message, capped: a finding
+// message is a sentence, not a log dump.
+func apiMessage(body []byte) string {
+	const maxErrLen = 200
+
+	var parsed struct {
+		Message string `json:"message"`
+	}
+
+	message := strings.TrimSpace(string(body))
+	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Message != "" {
+		message = parsed.Message
+	}
+
+	if len(message) > maxErrLen {
+		message = message[:maxErrLen] + "…"
+	}
+
+	return message
+}
+
+// nextPage is the URL the Link header names as the next page, or "".
+func nextPage(link string) string {
+	match := linkNextRE.FindStringSubmatch(link)
+	if match == nil {
+		return ""
+	}
+
+	return match[1]
 }
 
 // condenseStderr reduces gh's stderr to a single readable line: aqua's
 // lazy-install log lines (the shim may be downloading gh itself) are dropped,
-// the rest is joined, and the result is capped — a finding message is a
-// sentence, not a log dump.
+// the rest is joined, and the result is capped.
 func condenseStderr(raw string) string {
 	const maxErrLen = 200
 
@@ -229,7 +424,7 @@ func condenseStderr(raw string) string {
 
 	for line := range strings.SplitSeq(raw, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.Contains(line, "program=aqua") {
+		if line == "" || strings.Contains(line, "program=aqua") || strings.Contains(line, `"level":"WARN"`) {
 			continue
 		}
 
@@ -244,44 +439,73 @@ func condenseStderr(raw string) string {
 	return message
 }
 
-// Preflight runs gh once, asking the API nothing. On a hermetic PATH the name
-// gh is a link answered by the nearest project's tool set or the root's pins,
-// and where neither pins it the link stands with no gh behind it; judged here
-// the run fails with the cause, judged by the audit every check reads "cannot
-// verify" and a fix plans nothing.
-func Preflight(ctx context.Context) error {
-	var stderr bytes.Buffer
+// Every list endpoint is read whole. The REST API pages its lists (30 entries
+// by default, 100 at most), and a page is not an inventory: an owner, a team,
+// a ruleset, or an installed App on the second page is exactly as real as one
+// on the first, and an audit that judged the first page alone would report
+// the rest as absent — creating a ruleset that exists, flagging a grant that
+// was made, missing an owner nobody declared. So no list is fetched with
+// getJSON: arrays go through getJSONAllPages, object-wrapped lists through
+// listPages, and both ask for the largest page (per_page=100 in the path) and
+// follow the Link headers to the last.
 
-	// gh on the hermetic PATH; a fixed argument.
-	cmd := exec.CommandContext(ctx, "gh", "--version") // #nosec G204 -- see above.
-	cmd.Stderr = &stderr
+// pages fetches every page of a list, following the Link headers.
+func (c client) pages(ctx context.Context, path string) ([][]byte, apiOutcome) {
+	target := apiURL() + "/" + c.base + path
 
-	if err := cmd.Run(); err != nil {
-		detail := condenseStderr(stderr.String())
-		if detail != "" {
-			detail = ": " + detail
+	var bodies [][]byte
+
+	for target != "" {
+		if len(bodies) == maxPages {
+			return nil, apiOutcome{
+				err: fmt.Errorf("GET %s: %w (%d of %d entries each)", path, errTooManyPages, maxPages, perPage),
+			}
 		}
 
-		return fmt.Errorf(
-			"gh --version: %w%s — the github subcommands run the gh on PATH, and none answers here",
-			err,
-			detail,
-		)
+		outcome, next := fetchPage(ctx, methodGet, target, nil)
+		if outcome.err != nil || outcome.notFound {
+			return nil, c.classify(outcome)
+		}
+
+		bodies = append(bodies, outcome.body)
+		target = next
 	}
 
-	return nil
+	return bodies, apiOutcome{}
 }
 
 // getJSONAllPages fetches every page of a list endpoint whose response is a
 // JSON array and decodes the merged array into out.
 func (c client) getJSONAllPages(ctx context.Context, path string, out any) apiOutcome {
-	outcome := c.apiAllPages(ctx, path)
+	bodies, outcome := c.pages(ctx, path)
 	if outcome.err != nil || outcome.notFound {
 		return outcome
 	}
 
-	if err := json.Unmarshal(outcome.body, out); err != nil {
-		outcome.err = fmt.Errorf("gh api GET %s (paginated): decoding response: %w", path, err)
+	var merged []json.RawMessage
+
+	for _, body := range bodies {
+		var page []json.RawMessage
+		if err := json.Unmarshal(body, &page); err != nil {
+			outcome.err = fmt.Errorf("GET %s: decoding a page: %w", path, err)
+
+			return outcome
+		}
+
+		merged = append(merged, page...)
+	}
+
+	all, err := json.Marshal(merged)
+	if err != nil {
+		outcome.err = fmt.Errorf("GET %s: merging pages: %w", path, err)
+
+		return outcome
+	}
+
+	outcome.body = all
+
+	if err := json.Unmarshal(all, out); err != nil {
+		outcome.err = fmt.Errorf("GET %s: decoding response: %w", path, err)
 	}
 
 	return outcome
@@ -290,37 +514,33 @@ func (c client) getJSONAllPages(ctx context.Context, path string, out any) apiOu
 // listPages fetches every page of a list endpoint whose response is an object
 // wrapping the list — {"total_count": n, "<field>": [...]}, the shape of the
 // installations, Actions secrets, and runners endpoints — and returns the
-// field's entries from all pages, in order. gh merges array pages only;
-// --slurp hands object pages back as one array of page objects, and the
-// field is collected from each.
+// field's entries from all pages, in order.
 func listPages[T any](ctx context.Context, c client, path, field string) ([]T, apiOutcome) {
-	outcome := c.apiAllPages(ctx, path, "--slurp")
+	bodies, outcome := c.pages(ctx, path)
 	if outcome.err != nil || outcome.notFound {
-		return nil, outcome
-	}
-
-	var pages []map[string]json.RawMessage
-
-	if err := json.Unmarshal(outcome.body, &pages); err != nil {
-		outcome.err = fmt.Errorf("gh api GET %s (paginated): decoding pages: %w", path, err)
-
 		return nil, outcome
 	}
 
 	var entries []T
 
-	for _, page := range pages {
+	for _, body := range bodies {
+		var page map[string]json.RawMessage
+		if err := json.Unmarshal(body, &page); err != nil {
+			outcome.err = fmt.Errorf("GET %s: decoding a page: %w", path, err)
+
+			return nil, outcome
+		}
+
 		raw, present := page[field]
 		if !present {
-			outcome.err = fmt.Errorf("gh api GET %s (paginated): %w: %q", path, errPageWithoutField, field)
+			outcome.err = fmt.Errorf("GET %s: %w: %q", path, errPageWithoutField, field)
 
 			return nil, outcome
 		}
 
 		var pageEntries []T
-
 		if err := json.Unmarshal(raw, &pageEntries); err != nil {
-			outcome.err = fmt.Errorf("gh api GET %s (paginated): decoding %q: %w", path, field, err)
+			outcome.err = fmt.Errorf("GET %s: decoding %q: %w", path, field, err)
 
 			return nil, outcome
 		}
@@ -332,7 +552,7 @@ func listPages[T any](ctx context.Context, c client, path, field string) ([]T, a
 }
 
 // getJSON fetches a repo-relative path and decodes the JSON response into out.
-// For single objects only — never a list endpoint (see apiAllPages).
+// For single objects only — never a list endpoint (see pages).
 func (c client) getJSON(ctx context.Context, path string, out any) apiOutcome {
 	outcome := c.api(ctx, methodGet, path, nil)
 	if outcome.err != nil || outcome.notFound {
@@ -340,7 +560,7 @@ func (c client) getJSON(ctx context.Context, path string, out any) apiOutcome {
 	}
 
 	if err := json.Unmarshal(outcome.body, out); err != nil {
-		outcome.err = fmt.Errorf("gh api GET %s: decoding response: %w", path, err)
+		outcome.err = fmt.Errorf("GET %s: decoding response: %w", path, err)
 	}
 
 	return outcome
@@ -351,9 +571,9 @@ func (c client) getJSON(ctx context.Context, path string, out any) apiOutcome {
 // what the audit just observed, so "not found" means the endpoint, not the
 // setting, is missing.
 func (c client) deleteResource(ctx context.Context, path string) error {
-	outcome := c.api(ctx, "DELETE", path, nil)
+	outcome := c.api(ctx, http.MethodDelete, path, nil)
 	if outcome.notFound {
-		return fmt.Errorf("gh api DELETE %s: %w", path, errEndpointNotFound)
+		return fmt.Errorf("DELETE %s: %w", path, errEndpointNotFound)
 	}
 
 	return outcome.err
@@ -369,7 +589,7 @@ func (c client) writeJSON(ctx context.Context, method, path string, payload any)
 
 	outcome := c.api(ctx, method, path, body)
 	if outcome.notFound {
-		return fmt.Errorf("gh api %s %s: %w", method, path, errEndpointNotFound)
+		return fmt.Errorf("%s %s: %w", method, path, errEndpointNotFound)
 	}
 
 	return outcome.err
