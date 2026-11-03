@@ -21,7 +21,8 @@ security: do::security::default
 # a nested module so its YAML parser never enters limen's own go.mod. The
 # shared Go lanes stop at the root module, so this repository builds, lints
 # and tests it itself: the lint runs on the baseline rendered for that module
-# with its own .lint-go.yaml, using the golangci-lint the lint go lane built.
+# with its own .lint-go.yaml, using the golangci-lint the lint go lane built,
+# and the tests through the gotestsum the test go lane built.
 build-lint-go:
     mkdir -p "$LIMEN_BUILD/tools" && GOOS='' GOARCH='' go -C cmd/limen-lint-go build -o "$LIMEN_BUILD/tools/" .
 
@@ -33,7 +34,7 @@ lint-lint-go:
     cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/golangci-lint" fmt --diff -c "$LIMEN_BUILD/golangci-lint-go.yml"
 
 test-lint-go:
-    cd cmd/limen-lint-go && gotestsum -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
+    cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/gotestsum" -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
 
 # Host-side helper, not baseline: presupposes macOS, UTM and a provisioned
 # Windows VM (book/vm_testing.md). The VM mounts this repository's parent as

@@ -109,9 +109,18 @@ matching the toolchain; the tools whose upstream ships no binary (`git-validatio
 toolchain it analyzes, can no longer skew from it. What stays in `.hermetic/hermetic.yaml` is what
 nothing here compiles: tools in other languages; limen's own binaries, `limen` and
 `limen-lint-go`, one release whose checksums and signature every repository pins (built by
-the release workflow with the pinned toolchain, and neither loads Go source); and the Go
-tools a write job must run without a toolchain, `gh` and `cosign`, until in-process
-verification retires them.
+the release workflow with the pinned toolchain, and neither loads Go source); the Go
+tools a write job runs, `gh` and `cosign`, and in the release job, which holds `contents`,
+`id-token` and `attestations` write, `goreleaser` and the `syft` its `sboms:` section runs:
+each is verified on install against its upstream's signed release (cosign over the checksums,
+bound to the release workflow, and goreleaser's attestation), where a build here would fetch
+and compile each one's whole module graph inside the most privileged job and leave the binary
+that signs and attests our release, and writes our SBOMs, with no provenance of its own;
+`forkcloser/compress`, whose programs (`tar`, `xz`, `zip` and the rest) answer to bare names
+on every PATH, a build script's and a shell's, where a tool built into `.build/tools/` is
+reached only by its path; and `farcloser/ossein`, which links Virtualization.framework
+through cgo. Everything else Go is a tool directive, the test runner (gotestsum) and the YAML
+formatter (yamlfmt) included: they run in the read-only lanes.
 
 **One module per tool whose graph must stay upstream's.** The shared `.limen/tools/go.mod`
 resolves every directive's dependencies together, and minimal version selection lifts a
@@ -457,7 +466,7 @@ a canonical tool the project does not pin, since that one moves with limen.
 ```bash
 just do tools add    junegunn/fzf                    # add a tool at its latest version
 just do tools add    casey/just <version>             # or at a given one (here, overriding limen's just)
-just do tools set    goreleaser/goreleaser <version>  # pin an existing tool to an exact version
+just do tools set    jqlang/jq <version>              # pin an existing tool to an exact version
 just do tools update golangci-lint                   # bump an existing tool (by COMMAND name) to its latest version
 just do tools remove junegunn/fzf                    # remove a tool entirely
 ```
@@ -499,7 +508,7 @@ unattended bumps.
 
 ```bash
 # 1. Edit .hermetic/hermetic.yaml — bump the version, e.g.
-#      goreleaser/goreleaser@<old>  ->  @<new>
+#      jqlang/jq@<old>  ->  @<new>
 # 2. Refresh the checksum for the new version:
 hermetic update-checksum
 # 3. Install and verify:

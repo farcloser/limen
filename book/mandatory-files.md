@@ -390,9 +390,9 @@ array, keeping whatever else the project lists.
 Every repository declares the Go-built tools the shared recipes run as `tool` directives in
 `.limen/tools/go.mod`, a module of its own, so each is compiled by the repository's pinned
 toolchain without the tools' dependency graph entering the project's `go.mod` and every
-consumer's. Three are required everywhere — `git-validation`, `godolint`, `dot` — and a
+consumer's. Four are required everywhere — `git-validation`, `godolint`, `dot`, `yamlfmt` — a
 repository whose root carries a `go.mod` adds the Go-source analyzers `deadcode`, `govulncheck`,
-`go-licenses`. A `tool` directive in the project's own `go.mod` fails the rule. The reasoning is
+`go-licenses` and the test runner `gotestsum`. A `tool` directive in the project's own `go.mod` fails the rule. The reasoning is
 in [tooling](./tooling.md#go-built-tools-are-gomod-tools). `limen fix` creates
 `.limen/tools/go.mod` (module path `<module>/tools` and the root's `go` directive in a Go
 repository; `tools` and the aqua-pinned `go` elsewhere), adds a missing directive with `go -C

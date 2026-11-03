@@ -47,9 +47,9 @@ var majorSuffix = regexp.MustCompile(`^v\d+$`)
 // element of each package path, its major-version element skipped, and the
 // isolated tools by their keys.
 func goToolNames() []string {
-	names := make([]string, 0, len(goToolsEverywhere)+len(goSourceAnalyzers)+len(isolatedGoTools))
+	names := make([]string, 0, len(goToolsEverywhere)+len(goSourceAnalyzers)+len(goTestTools)+len(isolatedGoTools))
 
-	for _, pkg := range slices.Concat(goToolsEverywhere, goSourceAnalyzers) {
+	for _, pkg := range slices.Concat(goToolsEverywhere, goSourceAnalyzers, goTestTools) {
 		elems := strings.Split(pkg, slash)
 
 		name := elems[len(elems)-1]
