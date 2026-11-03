@@ -16,8 +16,8 @@ import (
 // organization secret is every write account's). The tree rule holds the
 // workflows to it; these checks hold GitHub's side: no secret at the
 // repository, and every environment a job deploys to gated, the signing
-// policy's `release` admitting release tags alone and waiting for an owner
-// (book/releasing.md).
+// policy's `release` admitting release tags alone and waiting for an owner,
+// administrators included (book/releasing.md).
 const (
 	releaseEnvironment    = workflow.ReleaseEnvironment
 	releaseTagPattern     = "v*"
@@ -33,6 +33,9 @@ type environment struct {
 	DeploymentBranchPolicy *deploymentBranchPolicy `json:"deployment_branch_policy"`
 	Name                   string                  `json:"name"`
 	ProtectionRules        []protectionRule        `json:"protection_rules"`
+	// CanAdminsBypass is GitHub's default for a new environment: an
+	// administrator deploys without the required review.
+	CanAdminsBypass bool `json:"can_admins_bypass"`
 }
 
 type protectionRule struct {
@@ -291,7 +294,7 @@ func (a *auditor) auditReleaseEnvironment(env environment, exists bool, needs en
 
 	a.flag(checkEnvironments, StatusFail, current, desired,
 		"the release environment "+current+": the signing credentials' environment admits release tags alone "+
-			"and waits for an owner's review (book/releasing.md)",
+			"and waits for an owner's review, which an administrator cannot skip (book/releasing.md)",
 		&Change{
 			Check:   checkEnvironments,
 			Summary: "environment release: " + current + " → " + desired,
@@ -321,7 +324,7 @@ func (a *auditor) releasePolicies(env environment, exists bool) ([]branchPolicy,
 // releaseDrift is the first departure of the release environment from its
 // shape, phrased as the finding's current and desired values.
 func releaseDrift(env environment, exists bool, policies []branchPolicy) (current, desired string, drifted bool) {
-	const want = "admits " + releaseTagPattern + " tags alone, owner review required"
+	const want = "admits " + releaseTagPattern + " tags alone, owner review required, no admin bypass"
 
 	switch {
 	case !exists:
@@ -336,6 +339,10 @@ func releaseDrift(env environment, exists bool, policies []branchPolicy) (curren
 
 	if reviewers, _, _ := env.reviewers(); len(reviewers) == 0 {
 		return "requires no reviewer", want, true
+	}
+
+	if env.CanAdminsBypass {
+		return "lets administrators deploy without the review", want, true
 	}
 
 	return "", "", false
@@ -409,6 +416,7 @@ func (t releaseTarget) apply(ctx context.Context, apiClient client) error {
 		"wait_timer":          t.wait,
 		"prevent_self_review": t.preventSelf,
 		"reviewers":           t.reviewers,
+		"can_admins_bypass":   false,
 		"deployment_branch_policy": map[string]any{
 			"protected_branches": false, "custom_branch_policies": true,
 		},

@@ -73,7 +73,8 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     [`secrets` rule](./mandatory-files.md#the-secrets-rule--a-secret-stays-behind-an-environment)
     says why). The environment admits release tags only (`v*`) and
     names the human as its required reviewer, so no run holds the credential without the
-    human's click on that run. The job that holds it (`environment: release`) runs the
+    human's click on that run; administrators may not bypass the review, GitHub's default for a
+    new environment, so an admin account is no shortcut past it either. The job that holds it (`environment: release`) runs the
     pinned toolchain and the platform's own tools with a read-only token, imports the
     certificate into a keychain it creates, signs, and notarizes and staples what
     Gatekeeper evaluates, then removes the keychain and the key; no action from outside the

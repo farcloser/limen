@@ -183,7 +183,8 @@ declaring only where the code is on that list.
   default branch's workflows deploy to exists, admits some refs rather than every branch, and holds
   the secrets its jobs read, the finding naming the `gh secret set` that is missing. The signing
   policy's `release` environment is held to its shape, custom deployment policies with the one `v*`
-  tag policy and a required reviewer ([releasing](./releasing.md)): `fix` creates or reconciles it,
+  tag policy, a required reviewer and no administrator bypass ([releasing](./releasing.md)): `fix`
+  creates or reconciles it,
   the organisation's owners (or the user the repository belongs to) as reviewers when it has none,
   and never touches a value.
 - **Features off unless used, issues on.** Wiki, projects, discussions off: documentation

@@ -220,6 +220,49 @@ func TestReleaseEnvWithoutReviewerFails(t *testing.T) { //nolint:paralleltest //
 	}
 }
 
+// TestReleaseEnvAdminBypassFixed: a release environment an administrator
+// may deploy to without the review is reconciled with the bypass off, its
+// reviewers and tag policy kept.
+func TestReleaseEnvAdminBypassFixed(t *testing.T) { //nolint:paralleltest // serial: sets the process environment.
+	responses := signingResponses()
+	responses["GET repos/test/repo/environments?per_page=100"] = stubResponse{
+		Body: strings.Replace(
+			releaseEnvironmentJSON,
+			`"name":"release",`,
+			`"name":"release","can_admins_bypass":true,`,
+			1,
+		),
+	}
+	responses["PUT repos/test/repo/environments/release"] = stubResponse{}
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	if finding, _ := findingByCheck(findings, "environments"); finding.Status != github.StatusFail ||
+		finding.Current != "lets administrators deploy without the review" {
+		t.Fatalf("environments: %+v, want a failure on the admin bypass", finding)
+	}
+
+	if len(changes) != 1 {
+		t.Fatalf("changes: %+v", changes)
+	}
+
+	if err := changes[0].Apply(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := callLog(t, logPath)
+	for _, want := range []string{`"can_admins_bypass":false`, `"reviewers":[{"id":7,"type":"User"}]`} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("the fix did not send %s:\n%s", want, calls)
+		}
+	}
+
+	if strings.Contains(calls, "POST "+releasePoliciesPath) {
+		t.Errorf("the tag policy already existed and was added again:\n%s", calls)
+	}
+}
+
 // TestReleaseEnvMissingSecretNamed: a secret the sign job
 // reads and the environment does not hold fails with the command that sets
 // it; the value is the human's.
