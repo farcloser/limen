@@ -99,7 +99,11 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   - **Declaring it.** The project points its `release.yaml` at the lane, a `uses:` reference of the
     form `farcloser/limen/.github/workflows/limen-release-apple.yaml@<commit>` that Renovate moves,
     and runs `limen fix`: the file is a thin caller from then on, reset around its reference like
-    the three every repository carries ([mandatory files](./mandatory-files.md)).
+    the three every repository carries ([mandatory files](./mandatory-files.md)). It passes the
+    lane's six secrets by name, never with `secrets: inherit`: GitHub honours `inherit` only
+    for a reusable workflow in the caller's own organization or enterprise, so a project
+    outside limen's organization would reach the lane with none. A name the caller's scope
+    lacks still reaches the sign job, which resolves it in the `release` environment.
   - **The `sign` job**, on macOS in the `release` environment with a read-only token: it imports
     the Developer ID identity into a job-scoped keychain, reads the team id off the
     certificate, writes the provisioning profile and the notarization key when the environment

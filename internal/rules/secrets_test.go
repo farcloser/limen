@@ -85,6 +85,42 @@ func TestInheritedSecretsOnDispatchFail(t *testing.T) {
 	}
 }
 
+// TestAppleLaneCallerPassesSigningSecrets: a caller of the Apple lane passes
+// the signing secrets by name and reads none, the lane's sign job reading them
+// in the release environment; the same names passed to any other reusable
+// workflow are read outside it.
+func TestAppleLaneCallerPassesSigningSecrets(t *testing.T) {
+	t.Parallel()
+
+	byName := "    secrets:\n      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}\n" +
+		"      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}\n"
+	caller := func(uses string) string {
+		return "on:\n  push:\n    tags: ['v*']\njobs:\n  release:\n    uses: " + uses + "\n" + byName
+	}
+
+	for _, uses := range []string{
+		"farcloser/limen/.github/workflows/limen-release-apple.yaml@0123456789abcdef0123456789abcdef01234567 # v9.9.9",
+		"./.github/workflows/limen-release-apple.yaml",
+	} {
+		files := compliantFiles()
+		files[".github/workflows/release.yaml"] = caller(uses)
+
+		if f := secretsFinding(t, files); !f.OK() {
+			t.Errorf("the lane's caller (%s) fails the secrets rule: %s", uses, f.Message)
+		}
+	}
+
+	files := compliantFiles()
+	files[".github/workflows/release.yaml"] = caller(
+		"org/repo/.github/workflows/limen-release-apple.yaml@0123456789abcdef0123456789abcdef01234567",
+	)
+
+	f := secretsFinding(t, files)
+	if f.OK() || !strings.Contains(f.Message, "APPLE_DEVELOPER_ID_P12") {
+		t.Fatalf("signing secrets passed to a workflow not limen's: %+v, want a failure", f)
+	}
+}
+
 // TestSigningSecretNeedsReleaseEnvironment: a signing credential is the
 // release environment's wherever it is read, a tag push included; in that
 // environment it passes.

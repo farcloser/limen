@@ -69,7 +69,9 @@ func secretsFinding(root string) *Finding {
 // may not: a signing credential outside the release environment, or any
 // secret with no environment on an open trigger; "" when the job is fine.
 func jobSecretsProblem(job workflow.Job, open string) string {
-	if !job.HoldsSecrets() {
+	// A caller of the Apple lane passes the signing secrets and reads none:
+	// the lane's sign job reads them, in the release environment it declares.
+	if !job.HoldsSecrets() || callsAppleLane(job) {
 		return ""
 	}
 
@@ -90,6 +92,15 @@ func jobSecretsProblem(job workflow.Job, open string) string {
 	}
 
 	return ""
+}
+
+// callsAppleLane reports whether the job calls limen's Apple release lane, by
+// the local reference limen's own caller carries or at a commit of limen.
+func callsAppleLane(job workflow.Job) bool {
+	ref, _, _ := strings.Cut(job.Uses, "@")
+
+	return ref == localUses(reusableReleaseApple) ||
+		ref == limenRepository+"/"+reusablePath(reusableReleaseApple)
 }
 
 // secretNames phrases what the job reads.
