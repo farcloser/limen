@@ -15,7 +15,8 @@ name: limen-release-apple
 
 on:
   workflow_call:
-    # Passed by the caller's `secrets: inherit`, and the release environment's:
+    # Passed by name by the caller, never `secrets: inherit`, which reaches a
+    # caller in another organization with nothing; the release environment's:
     # a run on any other ref is refused them by GitHub, whatever the file says.
     # None is `required: true`: GitHub checks that at the call, in the caller's
     # scope, where only repository and organization secrets exist, and the

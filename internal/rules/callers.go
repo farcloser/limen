@@ -78,9 +78,17 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    # The release environment's secrets reach the called sign job, which
-    # declares the environment; a run on any other ref is refused them.
-    secrets: inherit
+    # By name, never inherit: inherit reaches a lane in another organization
+    # with nothing. A name the caller's scope lacks still reaches the called
+    # sign job, which declares the release environment and resolves it there;
+    # a run on any other ref is refused them.
+    secrets:
+      APPLE_DEVELOPER_ID_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+      APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
 `
 
 // appleCaller is the Apple lane's release.yaml, held only where the file

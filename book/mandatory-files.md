@@ -452,7 +452,9 @@ job that reads a secret with no environment on such a trigger. A push confined t
 one, the `limen:tags` ruleset decides who creates them, and neither are the events that run
 what a reviewed merge put on the default branch (a schedule, a release). A signing credential
 (`APPLE_DEVELOPER_ID_*`, `APPLE_NOTARY_*`, `APPLE_PROVISIONING_*`) is the `release`
-environment's wherever it is read ([releasing](./releasing.md)). The environment itself is
+environment's wherever it is read ([releasing](./releasing.md)); a job calling the Apple
+release lane passes them and reads none, the lane's sign job reading them in that
+environment. The environment itself is
 GitHub's side: `limen github check` verifies the gate and builds the release one
 ([github](./github.md)). `fix` writes nothing here, which refs an environment admits is the
 project's to name, and reports the finding as an advisory.
