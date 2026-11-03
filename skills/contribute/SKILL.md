@@ -298,10 +298,13 @@ refuses the whole merge and nothing lands. So:
   it; a file the human is editing on `work` is left alone.
 - Keep a queue of the human's instructions across the session; none is
   dropped because another arrived.
-- No GitHub issues unless the human asks for one. What belongs to another
-  repository goes to the session that owns it, as a message (what, why,
-  where, the run or pull request URL); it fixes and opens the pull request.
-  A limen defect goes to the limen session the same way.
+- A follow-up is a GitHub issue: anything left for later, a follow-up or
+  parked work, is filed in the repository it belongs to, one per real item,
+  written so its owner can act on it; never a scratch, `TODO` or notes file,
+  and never an issue for a passing note. A defect or a request in a
+  repository another session owns goes to that session as a message (what,
+  why, where, the run or pull request URL); it fixes and opens the pull
+  request. A limen defect goes to the limen session the same way.
 
 ## Never
 
