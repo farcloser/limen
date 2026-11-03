@@ -234,7 +234,25 @@ the worktree are left for the human to prune.
 ```
 git -C <clone> fetch --prune origin
 git -C <clone> merge --ff-only origin/HEAD   # the clone has the default branch checked out, so a refspec into it is refused there; on any other branch, `fetch origin main:main` with the default branch's name
-git -C <clone> worktree remove .claude/worktrees/<date>-<topic> && git -C <clone> branch -d claudio/<date>-<topic>
+git -C <clone>/.claude/worktrees/<date>-<topic> status --porcelain   # empty: nothing in progress
+git -C <clone> merge-base --is-ancestor claudio/<date>-<topic> origin/HEAD   # exit 0: the head is on main
+```
+
+Then the worktree goes, with this line as the whole Bash command:
+
+```
+~/.claude/bin/farclauder worktree remove <clone>/.claude/worktrees/<date>-<topic>
+```
+
+`git worktree remove` cannot finish inside the sandbox: it deletes the
+checkout, then fails on the record's `commondir` and the worktree's
+`.claude` entries, which no setting makes writable. farclauder runs outside
+the sandbox through an exclusion that matches the call's text, so a pipe, a
+chain or a `cd` before it runs it sandboxed, where it fails
+(`book/identity.md`, "The bot's sandbox").
+
+```
+git -C <clone> branch -d claudio/<date>-<topic>   # "could not write config file" is expected; the ref is deleted
 ```
 
 Rebase every open branch of yours onto the fresh `main`, so the human and you
