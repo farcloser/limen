@@ -234,7 +234,25 @@ the worktree are left for the human to prune.
 ```
 git -C <clone> fetch --prune origin
 git -C <clone> merge --ff-only origin/HEAD   # the clone has the default branch checked out, so a refspec into it is refused there; on any other branch, `fetch origin main:main` with the default branch's name
-git -C <clone> worktree remove .claude/worktrees/<date>-<topic> && git -C <clone> branch -d claudio/<date>-<topic>
+git -C <clone>/.claude/worktrees/<date>-<topic> status --porcelain   # empty: nothing in progress
+git -C <clone> merge-base --is-ancestor claudio/<date>-<topic> origin/HEAD   # exit 0: the head is on main
+```
+
+Then the worktree goes, with this line as the whole Bash command:
+
+```
+~/.claude/bin/farclauder worktree remove <clone>/.claude/worktrees/<date>-<topic>
+```
+
+`git worktree remove` cannot finish inside the sandbox: it deletes the
+checkout, then fails on the record's `commondir` and the worktree's
+`.claude` entries, which no setting makes writable. farclauder runs outside
+the sandbox through an exclusion that matches the call's text, so a pipe, a
+chain or a `cd` before it runs it sandboxed, where it fails
+(`book/identity.md`, "The bot's sandbox").
+
+```
+git -C <clone> branch -d claudio/<date>-<topic>   # "could not write config file" is expected; the ref is deleted
 ```
 
 Rebase every open branch of yours onto the fresh `main`, so the human and you
@@ -280,10 +298,13 @@ refuses the whole merge and nothing lands. So:
   it; a file the human is editing on `work` is left alone.
 - Keep a queue of the human's instructions across the session; none is
   dropped because another arrived.
-- No GitHub issues unless the human asks for one. What belongs to another
-  repository goes to the session that owns it, as a message (what, why,
-  where, the run or pull request URL); it fixes and opens the pull request.
-  A limen defect goes to the limen session the same way.
+- A follow-up is a GitHub issue: anything left for later, a follow-up or
+  parked work, is filed in the repository it belongs to, one per real item,
+  written so its owner can act on it; never a scratch, `TODO` or notes file,
+  and never an issue for a passing note. A defect or a request in a
+  repository another session owns goes to that session as a message (what,
+  why, where, the run or pull request URL); it fixes and opens the pull
+  request. A limen defect goes to the limen session the same way.
 
 ## Never
 
