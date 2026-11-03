@@ -54,14 +54,16 @@ unit: (_banner "test go" "unit") _prepare (_go-tool "gotestsum" "gotest.tools/go
 # "-race is not supported" refusal skips — loudly, and passes, since the other
 # legs run the detector natively; any other probe failure is real. No go.mod
 # at all: says so and passes, like fuzz, since CI runs this in every
-# repository.
-race: (_banner "test go" "race") _prepare (_go-tool "gotestsum" "gotest.tools/gotestsum")
+# repository; only then is gotestsum built, since limen fix declares it in Go
+# modules alone.
+race: (_banner "test go" "race") _prepare
     #!/usr/bin/env bash
     set -euo pipefail
     if [ ! -f go.mod ]; then
         echo "no go.mod — not a Go module, nothing to run under the detector (skipped, not failed)."
         exit 0
     fi
+    just -f '{{ source_file() }}' _go-tool gotestsum gotest.tools/gotestsum
     export CGO_ENABLED=1
     if ! probe="$(go build -race -o /dev/null unsafe 2>&1)"; then
         if printf '%s\n' "$probe" | grep -q -- '-race is not supported'; then
