@@ -91,9 +91,15 @@ apple-notarize bundle:
         [ -z "$id" ] || xcrun notarytool log "$id" "${key[@]}" >&2 || true
         exit 1
     fi
-    # staple validates what it writes; a second validate only asks the
-    # network again.
-    xcrun stapler staple "$bundle"
+    # staple fetches the ticket from Apple's ticket service and validates
+    # what it writes: a connection that drops on the runner fails it with the
+    # submission accepted, so it is tried five times, further apart each time,
+    # before the release stops.
+    for attempt in 1 2 3 4 5; do
+        xcrun stapler staple "$bundle" && break
+        [ "$attempt" -lt 5 ] || { echo "apple-notarize: the ticket for ${id:-the submission} could not be stapled" >&2; exit 1; }
+        sleep $((attempt * 15))
+    done
     echo "apple-notarize: $bundle notarized (submission ${id:-?}), ticket stapled"
 
 # ditto, not zip: the archiver that keeps a bundle's extended attributes and
