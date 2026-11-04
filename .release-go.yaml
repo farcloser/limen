@@ -137,17 +137,17 @@ sboms:
 # (GitHub build provenance), checked without cosign:
 #   gh attestation verify <asset> --repo <owner>/<repo>
 # A local run is `--local --dry-run`, which skips signing: there is no
-# key-based lane (book/releasing.md).
+# key-based lane (book/releasing.md). cosign runs through `just do
+# release-sign`, which retries what cosign itself does not.
 signs:
-  - cmd: cosign
+  - cmd: just
     artifacts: checksum
     signature: "${artifact}.sigstore.json"
     args:
-      - sign-blob
-      - --yes
-      - --bundle
-      - "${signature}"
+      - do
+      - release-sign
       - "${artifact}"
+      - "${signature}"
 
 release:
   # Any prerelease-suffixed tag (e.g. the disposable v0.0.0-test.N tags used to

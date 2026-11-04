@@ -231,6 +231,7 @@ Two roles close the enforcement loop:
   working tree is judged by its own enforcer rather than the always-older released pin.
 - **`just do release`** is shared; artifacts are opt-in. The recipe, its lane, the signing
   and provenance policy and the rules a release follows are [releasing](./releasing.md).
+  `just do release-sign` is goreleaser's sign command there, not a recipe a human runs.
 - **`just do apple-verify-signed`, `apple-verify-notarized`, `apple-notarize` and
   `apple-package`** are the shared halves of an Apple bundle's release: codesign's verdict
   (Developer ID and timestamped on a release run, the sign job's or the publish job's on the

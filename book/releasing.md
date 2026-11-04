@@ -43,6 +43,8 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     `checksums.txt`. A consumer verifies either: `cosign verify-blob` against the workflow
     identity, or `gh attestation verify <asset> --repo <owner>/<repo>`; hermetic verifies
     the checksums against the bundle on every install. Nothing fetched goes unattested.
+    goreleaser's `signs:` section runs `just do release-sign`, which retries the cosign
+    call a dropped connection to Fulcio fails, since cosign does not.
   - **Every release carries an SBOM per archive**, SPDX JSON by syft from the toolset
     (goreleaser's `sboms:`), listed in `checksums.txt` and attested like the archives. It
     names the modules the binaries were built from, read off Go's embedded build
