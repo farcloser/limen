@@ -210,6 +210,29 @@ the Windows one; callers that Stat a closed file are wrong either way.
 **Lifts when** `(*File).Stat` on Windows takes the poll descriptor's reference before
 touching the handle, as the other methods do. Not reported upstream yet.
 
+## go-toml names a multi-byte character by its first byte
+
+**Symptom.** A TOML error about a character outside ASCII names a character the file does
+not contain: `a = é` is refused with "unexpected character U+00C3 'Ã' at start of value",
+where the file has `U+00E9 'é'`.
+
+**Cause.** go-toml's parser formats the offending byte, not the character it starts:
+`NewParserError(b[:1], "unexpected character %#U at start of value", c)` with `c` a `byte`
+([unstable/parser.go](https://github.com/pelletier/go-toml/blob/071a36c2a57244f2e70369bfc69889fda2a1f60f/unstable/parser.go#L556)),
+and the same `%#U` of a byte at the twelve other call sites in `unstable/parser.go` and
+`decode_fused.go`. A `byte` printed with `%#U` is a code point below `U+0100`, so the first
+byte of `é` (`C3 A9`) reads as `Ã`.
+
+**Workaround.** forkcloser/go-toml corrects the message: the error's position is that byte,
+so `nameCharacter` ([errors.go](https://github.com/forkcloser/go-toml/blob/main/errors.go))
+replaces the lone byte's rendering with the character the source has there, and leaves a
+message about a single-byte character as it is; `TestParseNamesTheCharacter` fails without
+it.
+
+**Lifts when** go-toml decodes the character at those call sites (`utf8.DecodeRune(b)`) and
+the pinned release carries it: remove `nameCharacter`, keep the test. Not reported upstream
+yet.
+
 ## sigstore-go's TUF cache has no path override, so slsa-verifier always writes `$HOME/.sigstore`
 
 **Symptom.** An aqua install of a package with SLSA provenance fails wherever `~/.sigstore`
