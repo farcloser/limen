@@ -27,11 +27,25 @@ const sbomsBlock = "sboms:\n" +
 	"      - HERMETIC_ROOT_DIR={{ envOrDefault \"HERMETIC_ROOT_DIR\" \"\" }}\n" +
 	"      - HERMETIC_CONFIG={{ envOrDefault \"HERMETIC_CONFIG\" \"\" }}\n"
 
-// The top-level keys the two sections and the archives test are found by, a
+// signsBlock is the `signs:` section of .release-go.yaml, limen's the same
+// way: the keyless cosign signature over checksums.txt, made by the release
+// recipe that retries what cosign does not.
+const signsBlock = "signs:\n" +
+	"  - cmd: just\n" +
+	"    artifacts: checksum\n" +
+	"    signature: \"${artifact}.sigstore.json\"\n" +
+	"    args:\n" +
+	"      - do\n" +
+	"      - release-sign\n" +
+	"      - \"${artifact}\"\n" +
+	"      - \"${signature}\"\n"
+
+// The top-level keys the three sections and the archives test are found by, a
 // trailing comment allowed.
 var (
 	changelogKey = regexp.MustCompile(`^changelog:\s*(?:#.*)?$`)
 	sbomsKey     = regexp.MustCompile(`^sboms:\s*(?:#.*)?$`)
+	signsKey     = regexp.MustCompile(`^signs:\s*(?:#.*)?$`)
 	// noArchivesKey is an explicit `archives: []`: a release with no archive
 	// has nothing to catalog, and goreleaser makes archives by default
 	// otherwise.
@@ -140,6 +154,29 @@ func sbomsDrift(content string) (string, bool) {
 // the canonical one, or the canonical one appended.
 func withCanonicalSboms(content string) string {
 	return withCanonicalSection(content, sbomsKey, sbomsBlock)
+}
+
+// signsDrift reports whether a .release-go.yaml lacks the canonical `signs:`
+// section, and if so why.
+func signsDrift(content string) (string, bool) {
+	lines := strings.Split(content, "\n")
+
+	start, end, found := findSection(lines, signsKey)
+	if !found {
+		return "has no `signs:` section", true
+	}
+
+	if !sectionIsCanonical(lines, start, end, signsBlock) {
+		return "has a `signs:` section other than the canonical one", true
+	}
+
+	return "", false
+}
+
+// withCanonicalSigns returns content with its `signs:` section replaced by
+// the canonical one, or the canonical one appended.
+func withCanonicalSigns(content string) string {
+	return withCanonicalSection(content, signsKey, signsBlock)
 }
 
 // changelogDrift reports whether a .release-go.yaml lacks the canonical
