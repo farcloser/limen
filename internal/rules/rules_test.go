@@ -1374,8 +1374,8 @@ const (
 	testVersion  = "v9.9.9"
 )
 
-// changelogSection and sbomsSection are the two sections limen holds
-// .release-go.yaml to; a compliant fixture carries both.
+// changelogSection, sbomsSection and signsSection are the three sections limen
+// holds .release-go.yaml to; a compliant fixture carries all three.
 const (
 	changelogSection = "changelog:\n  use: github-native\n"
 	sbomsSection     = "sboms:\n" +
@@ -1385,8 +1385,28 @@ const (
 		"      - SYFT_CHECK_FOR_APP_UPDATE=false\n" +
 		"      - HERMETIC_ROOT_DIR={{ envOrDefault \"HERMETIC_ROOT_DIR\" \"\" }}\n" +
 		"      - HERMETIC_CONFIG={{ envOrDefault \"HERMETIC_CONFIG\" \"\" }}\n"
-	releaseSections = changelogSection + "\n" + sbomsSection
+	signsSection = "signs:\n" +
+		"  - cmd: just\n" +
+		"    artifacts: checksum\n" +
+		"    signature: \"${artifact}.sigstore.json\"\n" +
+		"    args:\n" +
+		"      - do\n" +
+		"      - release-sign\n" +
+		"      - \"${artifact}\"\n" +
+		"      - \"${signature}\"\n"
+	releaseSections = changelogSection + "\n" + sbomsSection + "\n" + signsSection
 )
+
+// releasingWith returns compliant files with a .release-go.yaml whose content
+// is the canonical signs section and then releaseGo, for the tests of the
+// other two sections.
+func releasingWith(releaseGo string) map[string]string {
+	files := compliantFiles()
+	files[".release-go.yaml"] = releaseGoHeader + "\n" + signsSection + "\n" + releaseGo
+	files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
+
+	return files
+}
 
 // TestReleaseSBOM: a release configuration that makes archives carries the
 // canonical `sboms:` section, comments allowed; fix appends or replaces it
@@ -1394,21 +1414,13 @@ const (
 func TestReleaseSBOM(t *testing.T) {
 	t.Parallel()
 
-	releasing := func(releaseGo string) map[string]string {
-		files := compliantFiles()
-		files[".release-go.yaml"] = releaseGoHeader + "\n" + releaseGo
-		files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
-
-		return files
-	}
-
 	for name, passing := range map[string]string{
 		"commented":           "version: 2\n\n" + changelogSection + "\nsboms: # per archive\n  - artifacts: archive # syft\n    env:\n      - SYFT_FILE_METADATA_CATALOGER_ENABLED=true\n      - SYFT_CHECK_FOR_APP_UPDATE=false\n      - HERMETIC_ROOT_DIR={{ envOrDefault \"HERMETIC_ROOT_DIR\" \"\" }}\n      - HERMETIC_CONFIG={{ envOrDefault \"HERMETIC_CONFIG\" \"\" }}\n",
 		"no archives":         "version: 2\n\narchives: []\n\n" + changelogSection,
 		"no archives, spaced": "version: 2\n\narchives: [ ]  # nothing shipped\n\n" + changelogSection,
 	} {
 		if f := findingByRule(
-			rules.Check(writeRepo(t, releasing(passing)), rules.DefaultPolicy()),
+			rules.Check(writeRepo(t, releasingWith(passing)), rules.DefaultPolicy()),
 			"workflows",
 		); !f.OK() {
 			t.Errorf("%s: should pass: %s", name, f.Message)
@@ -1434,11 +1446,77 @@ func TestReleaseSBOM(t *testing.T) {
 			names:  "changelog",
 		},
 	} {
-		dir := writeRepo(t, releasing(tc.before))
+		dir := writeRepo(t, releasingWith(tc.before))
 
 		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); f.OK() ||
 			!strings.Contains(f.Message, tc.names) {
 			t.Errorf("%s: should fail naming the %s section: %v %s", name, tc.names, f.OK(), f.Message)
+		}
+
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
+
+		if data, _ := os.ReadFile(
+			filepath.Join(dir, ".release-go.yaml"),
+		); string(
+			data,
+		) != releaseGoHeader+"\n"+signsSection+"\n"+tc.after {
+			t.Errorf("%s: after fix: %q", name, data)
+		}
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); !f.OK() {
+			t.Errorf("%s: after fix: %s", name, f.Message)
+		}
+	}
+}
+
+// TestReleaseSigns: a release configuration carries the canonical `signs:`
+// section, comments allowed; fix appends it, or replaces another one (a key
+// lane, a bare cosign call) with the rest of the file intact.
+func TestReleaseSigns(t *testing.T) {
+	t.Parallel()
+
+	const base = "version: 2\n\n" + changelogSection + "\n" + sbomsSection
+
+	releasing := func(releaseGo string) map[string]string {
+		files := compliantFiles()
+		files[".release-go.yaml"] = releaseGoHeader + "\n" + releaseGo
+		files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
+
+		return files
+	}
+
+	commented := base + "\nsigns: # keyless\n  - cmd: just # retried\n    artifacts: checksum\n" +
+		"    signature: \"${artifact}.sigstore.json\"\n    args:\n      # the recipe\n      - do\n" +
+		"      - release-sign\n      - \"${artifact}\"\n      - \"${signature}\"\n"
+	if f := findingByRule(
+		rules.Check(writeRepo(t, releasing(commented)), rules.DefaultPolicy()),
+		"workflows",
+	); !f.OK() {
+		t.Errorf("a canonical section with comments should pass: %s", f.Message)
+	}
+
+	for name, tc := range map[string]struct{ before, after string }{
+		"missing": {
+			before: base,
+			after:  base + "\n" + signsSection,
+		},
+		"bare cosign": {
+			before: base + "\nsigns:\n  - cmd: cosign\n    artifacts: checksum\n" +
+				"    signature: \"${artifact}.sigstore.json\"\n" +
+				"    args: [sign-blob, --yes, --bundle, \"${signature}\", \"${artifact}\"]\n\nrelease:\n  draft: true\n",
+			after: base + "\n" + signsSection + "\nrelease:\n  draft: true\n",
+		},
+		"key lane": {
+			before: base + "\nsigns:\n  - cmd: sh\n    artifacts: checksum\n    args:\n      - -c\n" +
+				"      - 'cosign sign-blob --yes --key \"${COSIGN_KEY}\" --bundle \"${signature}\" \"${artifact}\"'\n",
+			after: base + "\n" + signsSection,
+		},
+	} {
+		dir := writeRepo(t, releasing(tc.before))
+
+		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); f.OK() ||
+			!strings.Contains(f.Message, "signs") {
+			t.Errorf("%s: should fail naming the signs section: %v %s", name, f.OK(), f.Message)
 		}
 
 		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy()})
@@ -1464,18 +1542,10 @@ func TestReleaseSBOM(t *testing.T) {
 func TestReleaseNotes(t *testing.T) {
 	t.Parallel()
 
-	releasing := func(releaseGo string) map[string]string {
-		files := compliantFiles()
-		files[".release-go.yaml"] = releaseGoHeader + "\n" + releaseGo
-		files[".github/workflows/release.yaml"] = limen.CanonicalWorkflowRelease
-
-		return files
-	}
-
 	commented := "version: 2\n\nchangelog: # GitHub's\n  # from pull-request titles\n  use: github-native # grouped\n\n" +
 		sbomsSection
 	if f := findingByRule(
-		rules.Check(writeRepo(t, releasing(commented)), rules.DefaultPolicy()),
+		rules.Check(writeRepo(t, releasingWith(commented)), rules.DefaultPolicy()),
 		"workflows",
 	); !f.OK() {
 		t.Errorf("a canonical section with comments should pass: %s", f.Message)
@@ -1492,7 +1562,7 @@ func TestReleaseNotes(t *testing.T) {
 			after: "version: 2\n" + changelogSection + "\nrelease:\n  draft: true\n\n" + sbomsSection,
 		},
 	} {
-		dir := writeRepo(t, releasing(tc.before))
+		dir := writeRepo(t, releasingWith(tc.before))
 
 		if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "workflows"); f.OK() ||
 			!strings.Contains(f.Message, "changelog") {
@@ -1505,7 +1575,7 @@ func TestReleaseNotes(t *testing.T) {
 			filepath.Join(dir, ".release-go.yaml"),
 		); string(
 			data,
-		) != releaseGoHeader+"\n"+tc.after {
+		) != releaseGoHeader+"\n"+signsSection+"\n"+tc.after {
 			t.Errorf("%s: after fix: %q", name, data)
 		}
 
@@ -1514,7 +1584,7 @@ func TestReleaseNotes(t *testing.T) {
 		}
 	}
 
-	drifted := releasing("version: 2\n\n" + releaseSections)
+	drifted := releasingWith("version: 2\n\n" + changelogSection + "\n" + sbomsSection)
 	drifted[".github/release.yml"] = limen.CanonicalReleaseNotes + "# local edit\n"
 	dir := writeRepo(t, drifted)
 

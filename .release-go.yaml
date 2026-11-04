@@ -137,8 +137,9 @@ sboms:
 # (GitHub build provenance), checked without cosign:
 #   gh attestation verify <asset> --repo <owner>/<repo>
 # A local run is `--local --dry-run`, which skips signing: there is no
-# key-based lane (book/releasing.md). cosign runs through `just do
-# release-sign`, which retries what cosign itself does not.
+# key-based lane (book/releasing.md). The section is limen's (limen fix sets
+# it): cosign runs through `just do release-sign`, which retries what cosign
+# itself does not.
 signs:
   - cmd: just
     artifacts: checksum

@@ -715,8 +715,9 @@ const (
 	releaseGoHeader = "# yaml-language-server: $schema=https://goreleaser.com/static/schema.json"
 )
 
-// checkReleaseGo fails a .release-go.yaml without its schema header or the
-// canonical `changelog:` section; nil when none applies (releasing is opt-in).
+// checkReleaseGo fails a .release-go.yaml without its schema header or one of
+// the canonical `changelog:`, `sboms:` and `signs:` sections; nil when none
+// applies (releasing is opt-in).
 func checkReleaseGo(root, rule string) *Finding {
 	data, err := readRepoFile(root, releaseGoFile)
 	if err != nil {
@@ -740,6 +741,13 @@ func checkReleaseGo(root, rule string) *Finding {
 	if why, drifted := sbomsDrift(string(data)); drifted {
 		f := fail(rule, releaseGoFile, releaseGoFile+" "+why+": every release carries an SBOM per archive, "+
 			"by the toolset's syft, listed in checksums.txt and attested with the archives (limen fix sets it)")
+
+		return &f
+	}
+
+	if why, drifted := signsDrift(string(data)); drifted {
+		f := fail(rule, releaseGoFile, releaseGoFile+" "+why+": checksums.txt is signed keyless by "+
+			"`just do release-sign`, with no key and nothing else in its place (limen fix sets it)")
 
 		return &f
 	}
