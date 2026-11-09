@@ -553,23 +553,31 @@ two repositories created in one day.
    `limen:tags` ruleset. `limen:main` is the one thing it defers: the ruleset requires the
    `gate` check, an empty repository has no workflow to report it, and the fixer never
    requires a check nothing reports.
-3. **The human pushes the initial `main`**, signed, from the bootstrap tree. The first
-   commit is the human's, and whoever pushes first sets the default branch. Before the fixer
-   deferred `limen:main`, a ruleset created on the empty repository refused this very push
-   as a pull request into a `main` that did not exist; only the bypass actor could create
-   `main`.
-4. **Run the fixer again.** With the canonical `ci.yaml` on `main`, it now creates
+3. **The bot creates `main`: one empty, signed commit, pushed first.** `Birth` as its
+   subject, no tree, signed and signed off as the bot (`git commit-tree -S` on the empty
+   tree, or `git commit --allow-empty -S -s`), pushed as `<sha>:refs/heads/main`. Whoever
+   pushes first sets the default branch, so this push comes before any branch: a bot
+   branch pushed first becomes the default, has to be moved off with `gh repo edit
+   --default-branch main`, and cannot be deleted until it is. The commit carries nothing
+   because the content is the next step's pull request: a bootstrap pushed straight to
+   `main` would be the one change in the repository's history nobody reviewed. This is the
+   one push the bot ever makes to `main` ([coding agents as
+   contributors](./agents.md#the-workflow)): until `main` exists there is nothing to open a
+   pull request against. Before the fixer deferred `limen:main`, a ruleset created on the
+   empty repository refused this very push as a pull request into a `main` that did not
+   exist; only the bypass actor could create `main`.
+4. **The bootstrap is the first pull request.** The bot's branch, cut from that `main`,
+   carries the `limen bootstrap` tree moved to the current limen release (`just do tools
+   set farcloser/limen <version>`, then the pinned `just do fix limen`), the project's own
+   files, and `.lint-signers`. `limen bootstrap` does not seed that file, since the keys
+   are the human's to publish; the bot copies it from a sibling repository, where the same
+   human and the same bot sign ([identity and keys](./identity.md)), so `lint commits`
+   verifies the pull request's own commit. Reviewed and merged like any other.
+5. **Run the fixer again.** With the canonical `ci.yaml` on `main`, it now creates
    `limen:main`, and from then on everything is pull requests. Until this run `main` is
-   unprotected: do it right after the first push, before any branch is opened against it.
-5. **Push `main` before any other branch.** Whatever branch reaches GitHub first becomes the
-   default; a bot branch pushed first has to be moved off with `gh repo edit
-   --default-branch main`, and cannot be deleted until it is.
+   unprotected: do it right after the bootstrap merges.
 6. **Description and topics are the human's.** `gh repo edit` answers 404 to the bot (no
    admin), and the fixer reports them as advisories. Set them right after the first push.
-7. **`.lint-signers` is the human's enrollment commit.** `limen bootstrap` does not seed it:
-   the human's key is theirs to publish. It lands with the first push, with the bot's key
-   beside it ([identity and keys](./identity.md)), or is copied from a sibling repository at
-   the owner's instruction.
 
 Then the bot works as everywhere: its own branches, pull requests, the fixer's rulesets in
 force from the first one.

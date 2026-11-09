@@ -91,9 +91,12 @@ chapter; the procedure is limen's `skills/contribute`.
   manager merges it from the top once every layer is approved, never from the middle. A
   lower layer merged alone comes back rebased and signed by GitHub, which `lint commits`
   rejects.
-- **Not yours to do:** merge by hand, push to `main`, force-push a shared branch, tag a
-  release. A release waits for an empty queue: no tag while a pull request is open, a bot's
-  included, unless the human parks it by number for that tag (`PARKED_PRS`).
+- **Not yours to do:** merge by hand, push to `main` (but for the empty `Birth` commit that
+  creates it on a new repository, the book's
+  [creating a repository](https://github.com/farcloser/limen/blob/main/book/github.md#creating-a-repository)),
+  force-push a shared branch, tag a release. A release waits for an empty queue: no tag
+  while a pull request is open, a bot's included, unless the human parks it by number for
+  that tag (`PARKED_PRS`).
 
 ## Scope
 

@@ -47,6 +47,26 @@ the block above. It cuts the next branch in its own worktree instead, once
 the previous branch is pushed: `git fetch origin && git remote set-head origin
 --auto`, then `git checkout --no-track -b claudio/<date>-<topic> origin/HEAD`.
 
+An empty repository has no `origin/HEAD` to cut from and no `main` to open a pull
+request against, and the bot creates `main` itself (`book/github.md`, "Creating a
+repository"). The branch is an orphan worktree:
+
+```
+git -C <clone> worktree add --orphan -b claudio/$(date +%Y%m%d)-onboard .claude/worktrees/<date>-onboard
+```
+
+`main` is one empty commit, signed and signed off as the bot, pushed before anything
+else, since the first ref to reach GitHub becomes the default branch:
+
+```
+sha=$(git commit-tree -S "$(git hash-object -t tree /dev/null)" -m Birth -m "Signed-off-by: <bot> <email>")
+git push origin "$sha":refs/heads/main
+git fetch origin && git remote set-head origin --auto && git rebase --root --onto origin/main
+```
+
+The rebase puts the bootstrap commit on `main`, re-signed, and the pull request opens as
+everywhere (step 5). That push is the one the bot ever makes to `main`.
+
 ## 2. Commit
 
 The commit message is the record; the pull request description is derived
@@ -308,7 +328,8 @@ refuses the whole merge and nothing lands. So:
 
 ## Never
 
-Merge by hand or bypass a ruleset, push to `main`, force-push a shared
-branch, tag a release, comment a review onto a pull request, open a pull
-request at a head nobody reviewed. The rulesets, the release lane and the
+Merge by hand or bypass a ruleset, push to `main` (but for the `Birth` commit that
+creates it on an empty repository, step 1), force-push a shared branch, tag a
+release, comment a review onto a pull request, open a pull request at a head
+nobody reviewed. The rulesets, the release lane and the
 queue enforce these; the skill just says them out loud.
