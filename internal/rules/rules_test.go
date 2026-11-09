@@ -923,6 +923,26 @@ func TestAquaRejectsMovingRegistryRef(t *testing.T) {
 	}
 }
 
+// TestAquaRegistryRefShapes: a fork's rebuild tag (vX.Y.Z.N) is an exact
+// pin like any version tag; a fourth segment that is not a number is not.
+func TestAquaRegistryRefShapes(t *testing.T) {
+	t.Parallel()
+
+	for ref, exact := range map[string]bool{
+		"v4.500.0":   true,
+		"v4.500.0.2": true,
+		"v4.500.0.x": false,
+		"v4.500":     false,
+	} {
+		files := compliantFiles()
+		files[".hermetic/hermetic.yaml"] = replaceRef(t, limen.CanonicalAquaYAML, ref)
+
+		if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua"); f.OK() != exact {
+			t.Errorf("ref %s: passes %v, want %v: %s", ref, f.OK(), exact, f.Message)
+		}
+	}
+}
+
 func TestAquaRejectsExtraRegistry(t *testing.T) {
 	t.Parallel()
 

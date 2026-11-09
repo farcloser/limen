@@ -58,9 +58,10 @@ var (
 	aquaPkgImportRE = regexp.MustCompile(`^(\s*)-\s+import:\s*(.+)$`)
 	aquaRefKeyRE    = regexp.MustCompile(`^(\s*ref:).*$`)
 	aquaRefValRE    = regexp.MustCompile(`^(\s*ref:\s*)(\S+)(.*)$`)
-	// An exact pin: a plain semver tag or a full commit SHA. Branches and
-	// "latest" are moving targets and fail the rule.
-	aquaExactRefRE = regexp.MustCompile(`^(v\d+\.\d+\.\d+|[0-9a-f]{40})$`)
+	// An exact pin: a version tag, a fork's rebuild vX.Y.Z.N included, or a
+	// full commit SHA. Branches and "latest" are moving targets and fail the
+	// rule.
+	aquaExactRefRE = regexp.MustCompile(`^(v\d+\.\d+\.\d+(?:\.\d+)?|[0-9a-f]{40})$`)
 	// The canonical farcloser/limen package pin, version excluded — trailing
 	// content (a closing quote, the renovate comment) survives a rewrite. The
 	// optional quote mirrors parsePackages, which strips quotes when extracting
@@ -509,7 +510,7 @@ func checkAquaManifest(name string, manifest aquaManifest) *Finding {
 			rule,
 			name,
 			fmt.Sprintf(
-				"%s: the standard registry ref must be an exact version (vX.Y.Z) or a full commit SHA, got %q",
+				"%s: the standard registry ref must be an exact version (vX.Y.Z, or a fork's vX.Y.Z.N) or a full commit SHA, got %q",
 				name,
 				ref,
 			),
