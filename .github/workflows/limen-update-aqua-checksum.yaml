@@ -227,7 +227,12 @@ jobs:
         run: |
           # The ids approved are kept: a run just approved can still read
           # action_required on the next listing, and a second approval fails.
+          # A failed approval ends nothing: the run is tried again on the next
+          # listing, and one the call approved despite its error is not
+          # listed again. A rerun of this job skips the step (no new commit),
+          # so an approval the step gives up on is never given.
           approved=""
+          left=""
           quiet=0
           for _ in $(seq 1 18); do
             runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${OID}&per_page=50" \
@@ -239,11 +244,16 @@ jobs:
                 *) new="${new} ${id}" ;;
               esac
             done
+            left=""
             if [ -n "${new}" ]; then
               for id in ${new}; do
-                gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/approve" >/dev/null
-                echo "approved run ${id}"
-                approved="${approved} ${id}"
+                if gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/approve" >/dev/null; then
+                  echo "approved run ${id}"
+                  approved="${approved} ${id}"
+                else
+                  echo "approval of run ${id} failed; tried again on the next listing"
+                  left="${left} ${id}"
+                fi
               done
               quiet=0
             elif [ -n "${approved}" ]; then
@@ -255,6 +265,10 @@ jobs:
             sleep 10
           done
           if [ -z "${approved}" ]; then
-            echo "::error::no run awaiting approval on ${OID} after three minutes: the pull request's checks will not report"
+            echo "::error::no run approved on ${OID} after three minutes: the pull request's checks will not report"
+            exit 1
+          fi
+          if [ -n "${left}" ]; then
+            echo "::error::run(s)${left} on ${OID} still awaiting approval after three minutes: their checks will not report"
             exit 1
           fi
