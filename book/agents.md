@@ -38,7 +38,8 @@ branches in its own worktrees. The human's branches are the human's.
   sandbox](./identity.md#the-bots-sandbox)).
 - **Never on `work`.** The human's `work` branch is the human's, or the human's with the
   agent pairing interactively at their request. The agent never commits there on its own,
-  and never on `main`.
+  and never on `main`, but for the one empty commit that creates `main` on a new repository
+  ([creating a repository](./github.md#creating-a-repository)).
 - **Commits.** Signed as the bot, with a DCO sign-off as the bot; when the change is the
   human's work, the human is the author and the bot the committer. No scratchpads:
   `AUDIT.md` and its kind are notes under `_scratch/` whose surviving findings become code,
