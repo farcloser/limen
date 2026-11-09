@@ -241,15 +241,15 @@ git -C <clone> merge-base --is-ancestor claudio/<date>-<topic> origin/HEAD   # e
 Then the worktree goes, with this line as the whole Bash command:
 
 ```
-~/.claude/bin/farclauder worktree remove <clone>/.claude/worktrees/<date>-<topic>
+/Users/apostasie/.claude/bin/farclauder worktree remove <clone>/.claude/worktrees/<date>-<topic>
 ```
 
 `git worktree remove` cannot finish inside the sandbox: it deletes the
 checkout, then fails on the record's `commondir` and the worktree's
 `.claude` entries, which no setting makes writable. farclauder runs outside
-the sandbox through an exclusion that matches the call's text, so a pipe, a
-chain or a `cd` before it runs it sandboxed, where it fails
-(`book/identity.md`, "The bot's sandbox").
+the sandbox through an exclusion that matches the call's text, the absolute
+path included, so the `~` form, a pipe, a chain or a `cd` before it runs it
+sandboxed, where it fails (`book/identity.md`, "The bot's sandbox").
 
 ```
 git -C <clone> branch -d claudio/<date>-<topic>   # "could not write config file" is expected; the ref is deleted

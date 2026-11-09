@@ -408,10 +408,10 @@ Apple's URL loading, which honours the system proxy only, and the sandbox reache
 egress through its own proxy only, so no sandboxed process reaches Apple's ticket service
 and no sandbox setting says otherwise; the command is read-only, and it names the binary
 rather than the `xcrun` launcher, which resolves through `xcode-select`. The third,
-`farclauder worktree remove *` under Claude Code's own directory (`~/.claude/bin`, by that
-path and by its absolute one, 2026-10-31, https://github.com/farcloser/limen-install/pull/164
-and https://github.com/farcloser/limen-install/pull/167),
-was weighed so: inside a session `git worktree remove` fails on paths the sandbox protects
+`/Users/apostasie/.claude/bin/farclauder worktree remove *`, farclauder under Claude Code's
+own directory by its absolute path, the one text the exclusion matches: the `~` form runs
+sandboxed (2026-10-31, https://github.com/farcloser/limen-install/pull/164 and
+https://github.com/farcloser/limen-install/pull/167), was weighed so: inside a session `git worktree remove` fails on paths the sandbox protects
 against every write, which no `allowWrite` lifts and only switching the filesystem sandbox
 off would: the record's `commondir` in the session's repository, and `.claude/.cc-writes` in
 a worktree the session has been in; git deletes what it reaches before the first, fails
