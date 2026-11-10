@@ -188,6 +188,14 @@ func hashDownload(ctx context.Context, url string, verify func(file string) erro
 // pair, and only then read.
 func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []string) (string, error) {
 	sumsURL, bundleURL, identity, issuer := args[0], args[1], args[2], args[3]
+	// A reusable lane's certificate names the lane as its identity and the
+	// repository it ran for in an extension cosign checks only when asked.
+	verify := []string{
+		"verify-blob", "--bundle", "", "--certificate-identity-regexp", identity, "--certificate-oidc-issuer", issuer,
+	}
+	if len(args) > 4 {
+		verify = append(verify, "--certificate-github-workflow-repository", args[4])
+	}
 
 	dir, err := os.MkdirTemp("", tempPrefix)
 	if err != nil {
@@ -207,9 +215,9 @@ func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []st
 		return "", err
 	}
 
-	err = run(ctx, root, "cosign", "verify-blob", "--bundle", bundle,
-		"--certificate-identity-regexp", identity, "--certificate-oidc-issuer", issuer, sums)
-	if err != nil {
+	verify[2] = bundle
+
+	if err = run(ctx, root, "cosign", append(verify, sums)...); err != nil {
 		return "", err
 	}
 
