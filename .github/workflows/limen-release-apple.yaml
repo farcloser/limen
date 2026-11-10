@@ -1,9 +1,9 @@
 # DO NOT EDIT MANUALLY: content-pinned by limen, reset by `limen fix`.
-# The release lane for a project that ships a bundle macOS evaluates, called
-# from its own release.yaml at a commit of farcloser/limen (book/releasing.md,
-# the Apple policy). Two jobs: `sign` holds the Apple credentials and
-# publishes nothing; `publish` holds no Apple credential and publishes what
-# `sign` handed over.
+# The release lane for a project that ships what macOS or a peer evaluates,
+# called from its own release.yaml at a commit of farcloser/limen
+# (book/releasing.md, the Apple policy). Two jobs: `sign` holds the Apple
+# credentials and publishes nothing; `publish` holds no Apple credential and
+# publishes what `sign` handed over.
 #
 # What the project owes: `package <version>` (build, sign with the exported
 # identity, notarize where the policy says, and write every release asset
