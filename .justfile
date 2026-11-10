@@ -58,8 +58,11 @@ vm +args:
     share_root="$(dirname "$host_repo")"
     guest_dir="Z:/$(basename "$host_repo")"
     runid="__vm-$(date +%s)-$$"
-    "$utmctl" status "$vm_name" | grep -q started \
-        || { echo "vm '$vm_name' is not running (utmctl status)" >&2; exit 1; }
+    # Read first, searched after: utmctl piped into grep -q can be killed by
+    # SIGPIPE at the match, which pipefail reads as the vm not running.
+    status="$("$utmctl" status "$vm_name")"
+    printf '%s\n' "$status" | grep -q started \
+        || { echo "vm '$vm_name' is not running (utmctl status: $status)" >&2; exit 1; }
     # shellcheck disable=SC2016 # the template expands in the GUEST bash, by design
     "$utmctl" exec "$vm_name" --cmd "C:/Program Files/Git/bin/bash.exe" -l -c \
         'cd "$1" && just "${@:3}" > "Z:/$2.log" 2>&1; echo $? > "Z:/$2.exit"' \
