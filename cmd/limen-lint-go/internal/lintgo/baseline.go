@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // The baseline's sections, which an overlay shares: go-lint's own metadata,

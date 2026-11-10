@@ -23,4 +23,4 @@ golangci:
         rules:
           main:
             allow:
-              - go.yaml.in/yaml/v3
+              - go.yaml.in/yaml/v4
