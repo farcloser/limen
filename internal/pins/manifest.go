@@ -80,6 +80,10 @@ const (
 	// VerifyCosignSums fetches a SHA256SUMS file and its cosign bundle, has
 	// `cosign verify-blob` accept the pair for the given identity and issuer,
 	// and takes the artifact's line; the artifact itself is not downloaded.
+	// An optional fifth argument, the repository (owner/repo), is required of
+	// the certificate too: a release a reusable lane in limen signed carries
+	// the lane as its identity and the repository in an extension, so the
+	// identity alone binds no repository, and such an entry must give it.
 	VerifyCosignSums = "cosign-sha256sums"
 	// VerifyPGPSums fetches a PGP-clearsigned sums file and the signer's
 	// public key block, verifies the signature in-process against the key
@@ -102,6 +106,15 @@ const (
 // (which needs both) leaves the entry alone.
 const RenovateManual = "manual"
 
+// laneIdentity is what a certificate names as its identity when limen's
+// reusable release lane signed: the lane at a commit, not the repository
+// that ran it. An identity regexp that admits it binds no repository.
+const laneIdentity = "https://github.com/farcloser/limen/.github/workflows/limen-release-apple.yaml@" +
+	"0000000000000000000000000000000000000000"
+
+// repositoryRE is a repository named for cosign, owner/repo.
+var repositoryRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+$`)
+
 // arity is how many arguments a method takes after its name.
 type arity struct{ min, max int }
 
@@ -112,7 +125,7 @@ var verifyArity = map[string]arity{
 	VerifyDownload:           {0, 0},
 	VerifyGitHubAttestation:  {1, 1},
 	VerifyGitHubReleaseAsset: {1, 2},
-	VerifyCosignSums:         {4, 4},
+	VerifyCosignSums:         {4, 5},
 	VerifyPGPSums:            {3, 3},
 	VerifyCMS:                {4, 4},
 }
@@ -558,9 +571,29 @@ func (e Entry) validate() error {
 
 // validateMethodArguments holds a method's arguments to their shapes: the
 // PGP fingerprint; the cms signer regexp, which compiles, and its SHA-256
-// fingerprint.
+// fingerprint; the cosign repository where the identity is a lane's.
 func (e Entry) validateMethodArguments(label string) error {
 	switch e.Verify[0] {
+	case VerifyCosignSums:
+		// cosign's regexp syntax is Go's. A regexp that admits the lane's
+		// identity admits every repository's release through the lane:
+		// without the repository the entry would accept them all.
+		identity, err := regexp.Compile(e.Verify[3])
+		if err != nil {
+			return fmt.Errorf("%w: %s: verify %s: the identity regexp does not compile: %w",
+				ErrEntry, label, VerifyCosignSums, err)
+		}
+
+		if identity.MatchString(laneIdentity) && len(e.Verify) < 6 {
+			return fmt.Errorf("%w: %s: verify %s: the identity admits limen's reusable release lane, which signs"+
+				" every repository's release through it; name the repository (owner/repo) as the fifth argument",
+				ErrEntry, label, VerifyCosignSums)
+		}
+
+		if len(e.Verify) == 6 && !repositoryRE.MatchString(e.Verify[5]) {
+			return fmt.Errorf("%w: %s: verify %s: the repository must be owner/repo, got %q",
+				ErrEntry, label, VerifyCosignSums, e.Verify[5])
+		}
 	case VerifyPGPSums:
 		if !fingerprintRE.MatchString(e.Verify[3]) {
 			return fmt.Errorf("%w: %s: verify %s: the fingerprint must be 40 hex digits without spaces, got %q",

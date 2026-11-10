@@ -445,6 +445,27 @@ func TestParseRejects(t *testing.T) {
 		"bad indentation":   {strings.Replace(good, "    url:", "   url:", 1), pins.ErrSyntax},
 		"unknown field":     {strings.Replace(good, "    url:", "    where:", 1), pins.ErrEntry},
 		"bad name":          {strings.Replace(good, "name: a", "name: A_b", 1), pins.ErrEntry},
+		"lane identity without a repository": {
+			strings.Replace(
+				good,
+				"    verify: download\n",
+				"    verify: cosign-sha256sums https://h/sums https://h/bundle"+
+					" ^https://github\\.com/farcloser/limen/\\.github/workflows/limen-release-apple\\.yaml@"+
+					" https://token.actions.githubusercontent.com\n",
+				1,
+			),
+			pins.ErrEntry,
+		},
+		"cosign repository not owner/repo": {
+			strings.Replace(
+				good,
+				"    verify: download\n",
+				"    verify: cosign-sha256sums https://h/sums https://h/bundle"+
+					" ^https://github\\.com/example/ https://token.actions.githubusercontent.com example\n",
+				1,
+			),
+			pins.ErrEntry,
+		},
 		"short commit": {
 			strings.Replace(good, "    version: 1\n", "    version: 1\n    commit: abc\n", 1),
 			pins.ErrEntry,
@@ -649,11 +670,12 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
 	const (
 		llvm      = "clang, allegedly"
 		kernelSum = "2222222222222222222222222222222222222222222222222222222222222222"
+		bundleSum = "3333333333333333333333333333333333333333333333333333333333333333"
 	)
 
 	host := artifactHost(t, map[string]string{
 		"/releases/download/llvmorg-22.1.8/LLVM-22.1.8.tar.xz": llvm,
-		"/pub/v7.x/SHA256SUMS":                                 kernelSum + "  linux-7.2.6.tar.xz\n",
+		"/pub/v7.x/SHA256SUMS":                                 kernelSum + "  linux-7.2.6.tar.xz\n" + bundleSum + "  app-7.2.6.tar.xz\n",
 		"/pub/v7.x/SHA256SUMS.bundle":                          `{"bundle":true}`,
 	})
 
@@ -675,6 +697,14 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
     digest:
       version: 7.2.6
       sha256: ` + strings.Repeat("1", 64) + `
+  - name: bundle
+    renovate: github-releases example/app
+    version: 7.2.6
+    url: ` + host.URL + `/pub/v${major}.x/app-${version}.tar.xz
+    verify: cosign-sha256sums ` + host.URL + `/pub/v${major}.x/SHA256SUMS ` + host.URL + `/pub/v${major}.x/SHA256SUMS.bundle ^https://github\.com/farcloser/limen/\.github/workflows/limen-release-apple\.yaml@ https://token.actions.githubusercontent.com example/app
+    digest:
+      version: 7.2.6
+      sha256: ` + strings.Repeat("4", 64) + `
 `
 	root := writePins(t, text)
 	log := filepath.Join(t.TempDir(), "log")
@@ -685,8 +715,8 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
 		t.Fatalf("refresh -all: %v", err)
 	}
 
-	if !slices.Equal(changed, []string{"llvm", "kernel"}) {
-		t.Errorf("changed = %v, want both", changed)
+	if !slices.Equal(changed, []string{"llvm", "kernel", "bundle"}) {
+		t.Errorf("changed = %v, want all three", changed)
 	}
 
 	manifest, err := pins.Parse(mustRead(t, filepath.Join(root, pins.File)))
@@ -702,10 +732,15 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
 		t.Errorf("kernel sha256 = %s, want the signed sums' line %s", got, kernelSum)
 	}
 
+	if got, _ := manifest.Get("bundle", "sha256"); got != bundleSum {
+		t.Errorf("bundle sha256 = %s, want the signed sums' line %s", got, bundleSum)
+	}
+
 	calls := string(mustRead(t, log))
 	for _, want := range []string{
 		"gh attestation verify ", "LLVM-22.1.8.tar.xz --owner llvm",
 		"cosign verify-blob --bundle ", "--certificate-identity-regexp ^https://github.com/example/ --certificate-oidc-issuer https://token.actions.githubusercontent.com ",
+		"--certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-github-workflow-repository example/app ",
 	} {
 		if !strings.Contains(calls, want) {
 			t.Errorf("verifier calls lack %q:\n%s", want, calls)
