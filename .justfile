@@ -12,26 +12,20 @@ export LIMEN_LINT_GO_BIN := LIMEN_BUILD / 'tools/limen-lint-go'
 default:
     @just --list
 
-lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode lint-lint-go
+lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode
 fix: build-lint-go do::fix::default do::fix::go::default
 test: do::test::go::default test-lint-go
 security: do::security::default
 
 # limen-lint-go is the second binary of limen's release (see .release-go.yaml),
 # a nested module so its YAML parser never enters limen's own go.mod. The
-# shared Go lanes stop at the root module, so this repository builds, lints
-# and tests it itself: the lint runs on the baseline rendered for that module
-# with its own .lint-go.yaml, using the golangci-lint the lint go lane built,
-# and the tests through the gotestsum the test go lane built.
+# shared Go lint lanes enter it as they enter every command that is a module
+# of its own, on the baseline rendered with its own .lint-go.yaml; this
+# repository builds it first, since the lanes render through it, and runs its
+# tests itself, through the gotestsum the test go lane built, which stops at
+# the root module.
 build-lint-go:
     mkdir -p "$LIMEN_BUILD/tools" && GOOS='' GOARCH='' go -C cmd/limen-lint-go build -o "$LIMEN_BUILD/tools/" .
-
-lint-lint-go:
-    go -C cmd/limen-lint-go mod tidy -diff
-    go -C cmd/limen-lint-go vet ./...
-    "$LIMEN_BUILD/tools/limen-lint-go" -C cmd/limen-lint-go render -o "$LIMEN_BUILD/golangci-lint-go.yml"
-    cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/golangci-lint" run -c "$LIMEN_BUILD/golangci-lint-go.yml" ./...
-    cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/golangci-lint" fmt --diff -c "$LIMEN_BUILD/golangci-lint-go.yml"
 
 test-lint-go:
     cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/gotestsum" -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...

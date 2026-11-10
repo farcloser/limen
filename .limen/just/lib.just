@@ -50,9 +50,26 @@ _per-platform +cmd:
         platforms=(darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64)
         for platform in "${platforms[@]}"; do
             echo "→ GOOS=${platform%/*} GOARCH=${platform#*/}"
-            CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}" {{ cmd }}
+            # Exported, not prefixed: a prefix binds to a simple command alone,
+            # and a leg's command may be a loop over modules. The recipe is its
+            # own process, so nothing outlives the loop.
+            export CGO_ENABLED=0 GOOS="${platform%/*}" GOARCH="${platform#*/}"
+            {{ cmd }}
         done
     fi
+
+# The Go modules the Go lanes analyze, built into the array `modules` by this
+# statement: the root, then every command that is a module of its own
+# (cmd/<name>/go.mod, the shape build-go.just builds from inside). A tool
+# module under .limen/tools/ is not project code and is not on it. For a
+# command a lane hands _per-platform; a recipe body writes the statement
+# out instead, since the shell lane lints a body with its interpolations
+# opaque and must see the assignment the loop reads.
+go_modules_init := 'modules=(.); for d in cmd/*/; do [ -f "${d}go.mod" ] || continue; modules+=("${d%/}"); done'
+
+# The rendered golangci configuration of the module `$module` names in such a
+# loop: the root's at golangci.yml, as before; a command's beside it by name.
+golangci_config := '"$LIMEN_BUILD/golangci$([ "$module" = . ] || echo "-${module##*/}").yml"'
 
 # The native build of one .limen/tools/go.mod tool into .build/tools/, shared by
 # _go-tool and the tools recipes (`{{ go_tool_build }} <pkg>`). GOOS/GOARCH
@@ -172,5 +189,13 @@ _vulndb:
 # LIMEN_LINT_GO_BIN is for the limen repository itself, which builds it from
 # its own tree (same idea as LIMEN_BIN in lint.just).
 _golangci-config:
+    #!/usr/bin/env bash
+    set -euo pipefail
     ${LIMEN_LINT_GO_BIN:-limen-lint-go} check "$LIMEN_BUILD/tools/golangci-lint"
-    ${LIMEN_LINT_GO_BIN:-limen-lint-go} render -o "$LIMEN_BUILD/golangci.yml"
+    # One configuration per module: the baseline with that module's own
+    # .lint-go.yaml, so a command that is a module of its own carries its
+    # own carve-outs.
+    modules=(.); for d in cmd/*/; do [ -f "${d}go.mod" ] || continue; modules+=("${d%/}"); done
+    for module in "${modules[@]}"; do
+        ${LIMEN_LINT_GO_BIN:-limen-lint-go} -C "$module" render -o {{ golangci_config }}
+    done

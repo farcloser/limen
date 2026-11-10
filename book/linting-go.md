@@ -76,6 +76,15 @@ recipe asks `limen-lint-go disabled revive` for the rules the rendered configura
 and fails on a directive naming one: remove it, or move the finding to the linter that owns
 the check now.
 
+**Every module, from inside it.** Each Go lint lane runs on the root module and on every
+command that is a module of its own (`cmd/<name>/go.mod`, the shape `build go` builds from
+inside), because golangci-lint, vet and the analyzers stop at a nested `go.mod`: a module
+not entered is a module not linted. The configuration is rendered per module, the baseline
+with that module's own `.lint-go.yaml` when it has one, so a command's carve-outs are its
+own; the tidiness, license and NilAway lanes, the vulnerability scan of `just security` and
+`just do fix go` follow the same list. A tool module under `.limen/tools/` is not project
+code and is not on it; the test lane still runs the root module alone.
+
 **What limen enforces** (the `lintgo` rule, Go modules only): `.limen/lint-go.yaml` is
 content-pinned, created when missing and overwritten when drifted; a missing root `.lint-go.yaml`
 is seeded; a root golangci-lint configuration fails the check and is an advisory on fix, since
@@ -103,9 +112,8 @@ One warning is not a verdict: golangci-lint's "Skipped 0 issues by rules" for a
 *formatter* exclusion (gci, gofumpt, golines, goimports on a generated file) says only
 that the lint pass found nothing there, since formatters report through the separate
 format pass. The exclusion is live when removing it makes `just do lint go` rewrite the
-file; a generated file in a nested module, which the lint pass never enters, shows the
-same warning for the same reason. Test by removal before calling one dead (seen on
-go-graphviz's `bind.go` and `nori.pb.go`).
+file. Test by removal before calling one dead (seen on go-graphviz's `bind.go` and
+`nori.pb.go`).
 
 A dead silence is reported by nolintlint for a linter that runs, and by `just do lint go`
 for a disabled linter, a disabled revive rule, and a `#nosec` in a test file, which gosec

@@ -54,8 +54,10 @@ unwraps to the old one (`ErrCorrupt` in erofs matches `ErrInvalid` too), so ever
 reverse, moving faults out from under a sentinel consumers test, is.
 
 **Where the lint does not reach, the rule still does.** golangci-lint skips generated
-files and the lint lane does not enter a nested module, so a bare `fmt.Errorf` there is
-never reported: the binding's errors above were 59 such sites. The fix goes in the
+files, and the lint lane enters a nested module only when it is a command under `cmd/`
+([linting Go](./linting-go.md), "Every module, from inside it"), so a bare `fmt.Errorf` in a
+generated file or in a module elsewhere is never reported: the binding's errors above were
+59 such sites. The fix goes in the
 template or the generator, then `just bindings`, and the nested tool gets the same
 sentinels by hand. A dynamic error is right in one place only: a test fixture, where the
 error is the fake's own and compared by identity; err113 stays on in tests in the
