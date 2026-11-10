@@ -41,8 +41,11 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     Sigstore bundle over `checksums.txt`, keyless, the workflow's identity, Rekor-logged;
     and GitHub's build provenance attestation over every archive, every SBOM and
     `checksums.txt`. A consumer verifies either: `cosign verify-blob` against the workflow
-    identity, or `gh attestation verify <asset> --repo <owner>/<repo>`; hermetic verifies
-    the checksums against the bundle on every install. Nothing fetched goes unattested.
+    identity, or `gh attestation verify <asset> --repo <owner>/<repo>`, plus
+    `--signer-workflow farcloser/limen/.github/workflows/limen-release-apple.yaml` for a
+    release through the Apple lane, whose attestation a reusable workflow in limen signs
+    where gh expects a signer in the repository itself; hermetic verifies the checksums
+    against the bundle on every install. Nothing fetched goes unattested.
     The signature is goreleaser's `signs:` section, limen's inside `.release-go.yaml`: it
     runs `just do release-sign`, which retries the cosign call a dropped connection to
     Fulcio fails, since cosign does not; `limen check` fails any other section, `limen fix`
@@ -123,6 +126,11 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     artifact.
   - **The `publish` job** holds no Apple secret: it runs `just do release --ci` on macOS, where
     `verify-assets` has `codesign` and `stapler`, and attests `.build/assets/*` and `checksums.txt`.
+    The attestation's signer is the lane, a workflow in limen, not the project's own: a
+    consumer names it, `gh attestation verify <asset> --repo <owner>/<repo> --signer-workflow
+    farcloser/limen/.github/workflows/limen-release-apple.yaml`, since gh expects the signer
+    in the repository it verifies otherwise and refuses the asset. The default lane's seeded
+    `release.yaml` attests from the repository itself, and the plain command holds there.
   - **What the project owes**: `package <version>`, which builds, signs with the exported identity,
     notarizes where the policy says and writes every release asset under `.build/assets/`; and
     `verify-assets <version>`, goreleaser's before hook, asserting what `.build/assets/` holds. Both
