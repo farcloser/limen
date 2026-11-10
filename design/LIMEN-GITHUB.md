@@ -8,8 +8,8 @@ where the two differ. This document is kept for the catalog: the R and O numberi
 the key the code's check identifiers and the open issues use. The issues: what the
 catalog names and the code does not have,
 https://github.com/farcloser/limen/issues/508; the scheduled drift audit and the org
-rulesets migration, https://github.com/farcloser/limen/issues/507; the exact fine-grained
-permission set, https://github.com/farcloser/limen/issues/509.
+rulesets migration, https://github.com/farcloser/limen/issues/507; the permission table
+for `check` and `fix` is book/github.md's "Authentication" section.
 
 ## Why
 
@@ -351,7 +351,7 @@ point 3, the workflow templates.
 |---|---|---|
 | `check --repo` (public) | none-to-minimal | much of R3/R4/R5 is public-readable; R1/R2 need repository administration read — below that, findings degrade to `unverifiable`, never `ok` |
 | `check --org` | `read:org` + admin-read equivalents | 2FA/member-privilege fields require org owner tokens |
-| `fix --repo` | fine-grained: administration write on the repository | the exact per-check permission set is https://github.com/farcloser/limen/issues/509 |
+| `fix --repo` | fine-grained: administration write on the repository | the table per permission, for `check` and `fix`, is book/github.md's "Authentication" section, derived from the endpoints the code calls and held to them by `TestAuditEndpointFamilies` |
 | `fix --org` | org owner | rare, deliberate, never in CI |
 
 The scheduled audit (issue 507) cannot run on the default `GITHUB_TOKEN`, which reads

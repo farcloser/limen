@@ -470,6 +470,36 @@ not be verified plans nothing and says so; "nothing to fix" is said only when ev
 answered. A run with no token fails up front naming the two ways in, instead of reporting every
 check unverifiable; a rate limit is waited out once, for as long as GitHub asks, bounded.
 
+The fine-grained permissions, by what the code calls (`internal/github`; a full audit's reads are
+held to this table by `TestAuditEndpointFamilies`, so a new read moves it): `check` needs the read
+column, `fix` the write column, each on the repositories audited or the organization. A permission
+the token lacks fails nothing up front: the checks it serves answer `unverifiable`.
+
+| Scope | Permission | `check` | `fix` | What it serves |
+|---|---|---|---|---|
+| repository | Metadata | read | read | the repository object, its rulesets, outside collaborators, the private vulnerability reporting flag; every repository permission grants it |
+| repository | Administration | read | write | Actions permissions and allow-list, vulnerability alerts and automated fixes, code scanning default setup, teams, deploy keys; `fix` writes the repository's settings, its rulesets, the `release` environment and its deployment branch policies, and the agents team's grant |
+| repository | Actions | read | read | the environments list |
+| repository | Environments | read | read | an environment's secrets |
+| repository | Secrets | read | read | the repository's Actions secrets |
+| repository | Webhooks | read | read | the webhooks |
+| repository | Pages | read | read | the Pages site |
+| repository | Contents | read | write | the workflow files; `fix` renames the default branch |
+| repository | Issues | read | read | Renovate's open issues, the dashboard |
+| organization | Administration | read | write | the Actions policy, code security configurations, app installations; `fix` writes the organization's settings, its Actions policy and its configurations |
+| organization | Members | read | read | members, teams, a team's members and repositories; the agents team's grant is the repository's Administration write with this |
+| organization | Secrets | read | read | the organization's Actions secrets |
+| organization | Self-hosted runners | read | read | the runners |
+| organization | Webhooks | read | read | the webhooks |
+| organization | Personal access tokens | read | read | the fine-grained tokens granted access, an App token's only: GitHub serves this endpoint to no fine-grained personal access token, so under one the check is `unverifiable` |
+
+`GET /orgs/{org}` and `GET /users/{login}` need no permission; the organization's governed
+fields are in the response for an owner's token only (below). A classic token's scope is each
+endpoint's own, not one per row: the organization's webhooks need `admin:org_hook`, the
+collaborators list `read:org` beside `repo`, and the token inventory is read by no classic
+token. `gh auth login`'s minimum scopes, `repo`, `read:org` and `gist`, read the repository
+rows and leave the organization's governed fields unread.
+
 ## Organization level
 
 `limen github check -org <name>` (and `fix -org <name>`) audits the organization's own
