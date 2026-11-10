@@ -74,9 +74,13 @@ keyed on that file and every `Cargo.lock` ([github](./github.md)); nothing to co
 
 Every cargo call carries `--locked`: `Cargo.lock` is the crate pin, committed, and a lane
 never rewrites it; a dependency moves by a pull request that changes the lock, from Renovate's
-`cargo` manager (on by default; the shared preset restricts no manager). A lock the tree does
-not have yet is made once, by hand, with `cargo generate-lockfile` from the lane's cargo
+`cargo` manager, which moves the exact pin in `Cargo.toml` and the lock together. The shared
+preset groups the minor and patch bumps in one pull request per repository (`rust crates`, as
+`go modules` is for Go) and leaves a major alone, since code may have to move. A lock the tree
+does not have yet is made once, by hand, with `cargo generate-lockfile` from the lane's cargo
 (`.build/cargo/bin`). The transitive crates in the lock move too: the shared preset's lock
 file maintenance regenerates every lock in the repository weekly, in one pull request the
 lanes prove like any other; between those, a transitive crate moves only with a direct bump or
-a vulnerability alert.
+a vulnerability alert. The toolchain moves as Go's does: Renovate's `rust-toolchain` manager
+bumps `channel` to the exact new version, alone and with no cooldown, since a point release is
+the compiler and standard-library fix the pin exists to receive without delay.
