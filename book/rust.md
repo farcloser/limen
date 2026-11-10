@@ -33,13 +33,14 @@ story. The toolchain is pinned in two halves:
 On Windows the host triple is the GNU one, `x86_64-pc-windows-gnu` and
 `aarch64-pc-windows-gnullvm`, set on rustup by the lane: rustup's own default there is the
 msvc triple, whose host builds (build scripts, proc-macros, the tests `cargo test` runs) link
-through the runner image's Visual Studio, which nothing pins. The GNU hosts link through
-pinned tools, so the pinned toolchain is the whole build on every leg: x64 through the
-toolchain's own `rust-mingw` component; arm64, whose gnullvm host ships no linker of its own
-and expects a MinGW clang on PATH, through the pinned zig by way of cargo-zigbuild's `zig cc`,
-the linker the cross builds use, pointed at by cargo's linker variable for that target (it
-maps the C runtime rustc asks for, `msvcrt`, to zig's; a bare `zig cc` does not). The cross
-builds link through zig either way.
+through the runner image's Visual Studio, which nothing pins. The GNU hosts link with the
+toolchain's own `rust-mingw` component, its linker and C runtime, so the pinned toolchain
+is the whole build on every leg and no runner-image tool and no zig is in a host build. On
+x64 that is rustc's default for the triple; on arm64 the gnullvm host's default linker is a
+MinGW clang it expects on PATH and does not ship, and rustc does not fall back to its own,
+so the lane names `rust-lld` in cargo's linker variable for that target, which links with
+`rust-mingw`'s runtime (rustc's platform-support page for the windows-gnullvm targets). The
+cross builds link through zig either way.
 
 ## What a lane does
 
