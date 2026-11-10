@@ -60,19 +60,37 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   - **No long-lived signing key exists.** No cosign key pair, no key-based lane, no
     `cosign.pub`: a key is a thing to leak and rotate, and the keyless identity is the
     workflow at the tag, which is what a consumer wants to know.
-  - **Apple: sign what macOS evaluates, notarize what a human installs.** A bundle a human
-    installs through the Finder or a System Settings pane (a screen saver, an app) is signed
-    with the team's Developer ID Application identity, hardened runtime on, notarized and
-    stapled: Gatekeeper evaluates it, and without notarization a current macOS refuses it
-    outright, or an installer strips the quarantine attribute, which is a workaround and not
-    a release. A bundle launched by path and never through Launch Services (Taciturn.app,
-    run by its LaunchAgent) is signed with the same identity and not notarized: Gatekeeper
-    is not in its path. A command-line binary hermetic installs is neither: hermetic's
-    download carries no quarantine attribute, so Gatekeeper never consults a notarization
-    for it, and a long-lived Apple certificate does not belong in lanes that are keyless
-    otherwise. One exception by necessity: a binary that needs an Apple entitlement to run
-    at all (ossein and Virtualization.framework) is signed ad hoc with that entitlement at
-    build, which grants the entitlement and claims no identity.
+  - **Apple: sign what something evaluates, notarize what a human installs.** A signature
+    is worth its long-lived certificate only where a check reads it: Gatekeeper, or a peer
+    that pins a code requirement on the binary it talks to. A bundle a human installs
+    through the Finder or a System Settings pane (a screen saver, an app) is signed with the
+    team's Developer ID Application identity, hardened runtime on, notarized and stapled:
+    Gatekeeper evaluates it, and without notarization a current macOS refuses it outright,
+    or an installer strips the quarantine attribute, which is a workaround and not a
+    release. A bundle launched by path and never through Launch Services (Taciturn.app, run
+    by its LaunchAgent) is signed with the same identity and not notarized: Gatekeeper is
+    not in its path. A command-line binary a peer evaluates is signed the same way and not
+    notarized: Taciturn's agent admits the bot key's clients by a code requirement anchored
+    on the team's Developer ID and the binary's identifier (path globs until
+    https://github.com/forkcloser/taciturn/issues/38), so forkcloser/openssh's `ssh` and
+    `ssh-keygen` carry that identity (https://github.com/forkcloser/openssh/issues/61), and
+    an ad hoc signature would give the requirement nothing to anchor on. Hardened runtime
+    goes on with the identity, since it is what keeps another process from injecting code
+    into the binary or attaching to it, the attack the requirement is there to stop. Its
+    library validation also refuses a library signed by another team, so a binary that loads
+    a library its user names (a PKCS#11 provider, a security-key middleware: a YubiKey is
+    what forkcloser/openssh is for) carries one exception, named in its entitlements,
+    `com.apple.security.cs.disable-library-validation`, and keeps the rest of the hardened
+    runtime; the cost is that a library planted by the same user runs inside a process the
+    requirement admits. A release that carries a peer-evaluated binary signs every binary in
+    it with the identity, one signing loop in the one job that holds the credential
+    (forkcloser/openssh's `scp` and `ssh-add` with its `ssh`). A command-line binary in a
+    release with none is neither signed nor notarized: hermetic's download carries no
+    quarantine attribute, so Gatekeeper never consults a notarization for it, nothing reads
+    its identity, and a long-lived Apple certificate does not belong in lanes that are
+    keyless otherwise. One exception by necessity: a binary that needs an Apple entitlement
+    to run at all (ossein and Virtualization.framework) is signed ad hoc with that
+    entitlement at build, which grants the entitlement and claims no identity.
   - **A signing credential is an environment secret, held by one job that publishes
     nothing.** The Developer ID `.p12` and its password, the App Store Connect API key, a
     provisioning profile: each is a secret of a `release` environment, never of the
@@ -101,9 +119,9 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   - **What is deliberately not done**: no notarization of command-line binaries, no SBOM for
     a repository without artifacts (its release is the signed tag), no signature of the
     source archive GitHub generates (it is not a release asset of ours).
-- **The Apple release lane.** A project that ships a bundle macOS evaluates releases through
-  `limen-release-apple.yaml`, a reusable workflow in limen, called at a commit like the other
-  lanes.
+- **The Apple release lane.** A project that ships what macOS or a peer evaluates releases
+  through `limen-release-apple.yaml`, a reusable workflow in limen, called at a commit like the
+  other lanes.
   - **Declaring it.** The project points its `release.yaml` at the lane, a `uses:` reference of the
     form `farcloser/limen/.github/workflows/limen-release-apple.yaml@<commit>` that Renovate moves,
     and runs `limen fix`: the file is a thin caller from then on, reset around its reference like
