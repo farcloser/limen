@@ -210,6 +210,29 @@ the Windows one; callers that Stat a closed file are wrong either way.
 **Lifts when** `(*File).Stat` on Windows takes the poll descriptor's reference before
 touching the handle, as the other methods do. Not reported upstream yet.
 
+## Go's `os/exec` fails with ETXTBSY on a file another goroutine's fork still holds open
+
+**Symptom.** A test writes an executable (`os.WriteFile`, closed before use) and runs it, in
+a package whose other tests run child processes in parallel; now and then the run fails with
+"text file busy" (ETXTBSY), and a rerun passes. Seen on forkcloser/compress, `tar -I` on a
+filter script the test had just written
+([run 42761685321](https://github.com/forkcloser/compress/actions/runs/42761685321/job/129648982339)).
+
+**Cause.** `fork` copies every descriptor into the child, close-on-exec ones included, and
+they close only at the child's `exec`. A child forked by another goroutine between the
+script's open and close holds the write descriptor for that window, and the kernel refuses to
+exec a file open for writing. Go closes nothing between fork and exec on purpose, and
+`os/exec` does not retry ([golang/go#22315](https://github.com/golang/go/issues/22315), open
+since 2017).
+
+**Workaround.** Write executables before any test can fork: once, in `TestMain` (or `init`),
+and have the tests run them; never write-then-exec inside a parallel test. A retry on
+ETXTBSY is the other way (cmd/go does it internally) and papers over the window instead of
+closing it.
+
+**Lifts when** Go closes inherited descriptors between fork and exec, or `os/exec` retries
+ETXTBSY; neither is planned.
+
 ## go-toml names a multi-byte character by its first byte
 
 **Symptom.** A TOML error about a character outside ASCII names a character the file does
