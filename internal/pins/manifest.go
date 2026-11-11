@@ -69,7 +69,13 @@ const (
 	// VerifyDownload hashes the bytes at url; TLS is the whole guarantee.
 	VerifyDownload = "download"
 	// VerifyGitHubAttestation downloads the artifact and has `gh attestation
-	// verify --owner <owner>` accept it before hashing it.
+	// verify` accept it before hashing it: `--owner <owner>` for an owner,
+	// `--repo <owner/repo>` for a repository; an optional second argument,
+	// the workflow that attested, goes as `--signer-workflow`, which a
+	// release a reusable lane made needs, since gh expects the signer in the
+	// repository verified otherwise. A lane in limen as the signer requires
+	// the repository scope: the owner scope would admit every repository of
+	// the owner that releases through it.
 	VerifyGitHubAttestation = "github-attestation"
 	// VerifyGitHubReleaseAsset downloads the artifact and has `gh release
 	// verify-asset <tag> --repo <owner/repo>` accept it before hashing it
@@ -115,6 +121,20 @@ const laneIdentity = "https://github.com/farcloser/limen/.github/workflows/limen
 // repositoryRE is a repository named for cosign, owner/repo.
 var repositoryRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+$`)
 
+// signerWorkflowRE is a workflow named for gh as an attestation's signer,
+// owner/repo/.github/workflows/<file>.yaml with an optional @ref, the form
+// gh matches; the ref holds the signer to a commit or a tag of it.
+var signerWorkflowRE = regexp.MustCompile(
+	`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+/\.github/workflows/[A-Za-z0-9._-]+\.ya?ml(@[A-Za-z0-9._/-]+)?$`,
+)
+
+// scopeRE is what gh attestation verify is given: an owner, or owner/repo.
+var scopeRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9._-]+)?$`)
+
+// laneWorkflowPrefix is where limen's reusable release lanes live; a signer
+// under it signs for every repository that calls the lane.
+const laneWorkflowPrefix = "farcloser/limen/.github/workflows/"
+
 // arity is how many arguments a method takes after its name.
 type arity struct{ min, max int }
 
@@ -123,7 +143,7 @@ type arity struct{ min, max int }
 //nolint:gochecknoglobals // immutable table.
 var verifyArity = map[string]arity{
 	VerifyDownload:           {0, 0},
-	VerifyGitHubAttestation:  {1, 1},
+	VerifyGitHubAttestation:  {1, 2},
 	VerifyGitHubReleaseAsset: {1, 2},
 	VerifyCosignSums:         {4, 5},
 	VerifyPGPSums:            {3, 3},
@@ -574,6 +594,8 @@ func (e Entry) validate() error {
 // fingerprint; the cosign repository where the identity is a lane's.
 func (e Entry) validateMethodArguments(label string) error {
 	switch e.Verify[0] {
+	case VerifyGitHubAttestation:
+		return e.validateAttestation(label)
 	case VerifyCosignSums:
 		// cosign's regexp syntax is Go's. A regexp that admits the lane's
 		// identity admits every repository's release through the lane:
@@ -601,6 +623,37 @@ func (e Entry) validateMethodArguments(label string) error {
 		}
 	case VerifyCMS:
 		return e.validateCMS(label)
+	}
+
+	return nil
+}
+
+// validateAttestation holds github-attestation's arguments to gh's shapes:
+// the scope an owner or owner/repo, the signer a workflow path, and a lane in
+// limen as the signer scoped to a repository.
+func (e Entry) validateAttestation(label string) error {
+	if !scopeRE.MatchString(e.Verify[1]) {
+		return fmt.Errorf("%w: %s: verify %s: the scope must be an owner or owner/repo, got %q",
+			ErrEntry, label, VerifyGitHubAttestation, e.Verify[1])
+	}
+
+	if len(e.Verify) == 3 && !signerWorkflowRE.MatchString(e.Verify[2]) {
+		return fmt.Errorf("%w: %s: verify %s: the signer workflow must be owner/repo/.github/workflows/<file>.yaml"+
+			" (an @ref may follow), got %q", ErrEntry, label, VerifyGitHubAttestation, e.Verify[2])
+	}
+
+	// A lane in limen signs every repository's release through it, and
+	// --owner binds the owner alone: with the lane as signer, an owner
+	// scope admits every repository of that owner.
+	if len(e.Verify) == 3 && strings.HasPrefix(e.Verify[2], laneWorkflowPrefix) &&
+		!strings.Contains(e.Verify[1], "/") {
+		return fmt.Errorf(
+			"%w: %s: verify %s: the signer is a reusable lane in limen, which signs every repository's"+
+				" release through it; name the repository (owner/repo), not the owner",
+			ErrEntry,
+			label,
+			VerifyGitHubAttestation,
+		)
 	}
 
 	return nil
