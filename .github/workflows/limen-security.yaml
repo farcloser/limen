@@ -30,8 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The token is not left behind in .git/config: nothing in this
-          # workflow talks to GitHub after checkout.
+          # The token is not left behind in .git/config: what talks to
+          # GitHub after checkout is the scan, read-only, through GH_TOKEN.
           persist-credentials: false
 
       - name: Install hermetic (pinned, verified)
@@ -51,6 +51,12 @@ jobs:
       # the packages the native leg cannot load). The shared scans pass on a
       # tree with no Go module, so this job is safe in every repository.
       - name: Scan
+        # The links lane asks api.github.com whether each github.com commit
+        # link exists and hands lychee the token for its own API fallback:
+        # both read-only, both to api.github.com and nowhere else. The job's
+        # token, within contents: read.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: just security
 
       # Saved on the default branch only, on a miss (the cache budget:

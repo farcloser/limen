@@ -67,6 +67,29 @@ the minute still reddens the lane, and is rerun by the author, named as this fla
 **Lifts when** lychee retries server errors under its own retry settings. Whether upstream
 tracks it is unverified.
 
+## lychee's GitHub token rescues a repository URL and nothing below it
+
+**Symptom.** The `links` lane fails with a GitHub `429` on a
+`github.com/<owner>/<repo>/commit/<sha>` page from an Actions runner, lychee prints
+"GitHub seems to be rate limiting us. You could try setting a GitHub token with
+`--github-token`", and a token changes nothing.
+
+**Cause.** The token is not sent with the page request. After a page fails, lychee makes
+one API call with it, `GET /repos/<owner>/<repo>`
+([lychee-lib/src/checker/website.rs](https://github.com/lycheeverse/lychee/blob/lychee-v0.24.2/lychee-lib/src/checker/website.rs),
+`check_github`): any URL under a private repository the token reads passes, a bare public
+repository URL passes, and under a public repository a URL with any path past the
+repository returns the page's own failure. github.com answers a commit page from a runner
+with `429` past lychee's six retries.
+
+**Workaround.** `.limen/lychee.toml` excludes the commit pages and the `links` recipe asks
+the API for each one, authenticated, through `gh`
+([link checking](./mandatory-files.md#link-checking--limenlycheetoml)); lychee gets the
+token for what it does rescue.
+
+**Lifts when** lychee checks a GitHub resource below the repository through the API.
+Whether upstream tracks it is unverified.
+
 ## aqua records an http package's posix checksums under one wrong environment
 
 **Symptom.** `hermetic install` (or `just do tools add`) of `rust-lang/rustup` from the
