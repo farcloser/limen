@@ -456,6 +456,24 @@ func TestParseRejects(t *testing.T) {
 			),
 			pins.ErrEntry,
 		},
+		"attestation lane signer with an owner scope": {
+			strings.Replace(good, "    verify: download\n", "    verify: github-attestation example"+
+				" farcloser/limen/.github/workflows/limen-release-apple.yaml\n", 1),
+			pins.ErrEntry,
+		},
+		"attestation scope not an owner or a repository": {
+			strings.Replace(good, "    verify: download\n", "    verify: github-attestation fork/closer/app\n", 1),
+			pins.ErrEntry,
+		},
+		"attestation signer not a workflow path": {
+			strings.Replace(
+				good,
+				"    verify: download\n",
+				"    verify: github-attestation example/app farcloser/limen\n",
+				1,
+			),
+			pins.ErrEntry,
+		},
 		"cosign repository not owner/repo": {
 			strings.Replace(
 				good,
@@ -697,6 +715,14 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
     digest:
       version: 7.2.6
       sha256: ` + strings.Repeat("1", 64) + `
+  - name: attested
+    renovate: github-releases example/app
+    version: 22.1.8
+    url: ` + host.URL + `/releases/download/llvmorg-${version}/LLVM-${version}.tar.xz
+    verify: github-attestation example/app farcloser/limen/.github/workflows/limen-release-apple.yaml
+    digest:
+      version: 22.1.8
+      sha256: ` + strings.Repeat("5", 64) + `
   - name: bundle
     renovate: github-releases example/app
     version: 7.2.6
@@ -715,8 +741,8 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
 		t.Fatalf("refresh -all: %v", err)
 	}
 
-	if !slices.Equal(changed, []string{"llvm", "kernel", "bundle"}) {
-		t.Errorf("changed = %v, want all three", changed)
+	if !slices.Equal(changed, []string{"llvm", "kernel", "attested", "bundle"}) {
+		t.Errorf("changed = %v, want all four", changed)
 	}
 
 	manifest, err := pins.Parse(mustRead(t, filepath.Join(root, pins.File)))
@@ -739,6 +765,7 @@ func TestRefreshAllThroughVerifiers(t *testing.T) { // Serial by design: t.Seten
 	calls := string(mustRead(t, log))
 	for _, want := range []string{
 		"gh attestation verify ", "LLVM-22.1.8.tar.xz --owner llvm",
+		"LLVM-22.1.8.tar.xz --repo example/app --signer-workflow farcloser/limen/.github/workflows/limen-release-apple.yaml",
 		"cosign verify-blob --bundle ", "--certificate-identity-regexp ^https://github.com/example/ --certificate-oidc-issuer https://token.actions.githubusercontent.com ",
 		"--certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-github-workflow-repository example/app ",
 	} {

@@ -130,7 +130,20 @@ func digest(ctx context.Context, root string, entry Entry) (string, error) {
 		return hashDownload(ctx, entry.ResolvedURL(), nil)
 	case VerifyGitHubAttestation:
 		return hashDownload(ctx, entry.ResolvedURL(), func(file string) error {
-			return run(ctx, root, "gh", "attestation", "verify", file, "--owner", args[0])
+			// owner/repo binds the source repository, an owner alone its
+			// owner; a release a reusable lane attested names the lane too,
+			// since gh expects the signer in the repository verified otherwise.
+			scope := "--owner"
+			if strings.Contains(args[0], "/") {
+				scope = "--repo"
+			}
+
+			verify := []string{"attestation", "verify", file, scope, args[0]}
+			if len(args) > 1 {
+				verify = append(verify, "--signer-workflow", args[1])
+			}
+
+			return run(ctx, root, "gh", verify...)
 		})
 	case VerifyGitHubReleaseAsset:
 		tag := entry.Version
