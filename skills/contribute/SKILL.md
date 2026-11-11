@@ -272,7 +272,7 @@ path included, so the `~` form, a pipe, a chain or a `cd` before it runs it
 sandboxed, where it fails (`book/identity.md`, "The bot's sandbox").
 
 ```
-git -C <clone> branch -d claudio/<date>-<topic>   # "could not write config file" is expected; the ref is deleted
+git -C <clone> branch -d claudio/<date>-<topic>   # may print "could not lock config file .git/config" and "update of config-file failed"; the ref is deleted either way
 ```
 
 Rebase every open branch of yours onto the fresh `main`, so the human and you
