@@ -479,6 +479,22 @@ It keeps its `.lint-links.toml` name from the lane's lint days, in the tool's ow
 Both configs are passed explicitly: any `--config` disables lychee's discovery of
 `./lychee.toml`.
 
+**github.com's commit pages are asked of the API, authenticated.** github.com answers a
+page fetched from an Actions runner with `429` past lychee's retries, a commit page first,
+and lychee's `--github-token` never reaches a page: after a page fails, lychee spends the
+token on one call, `GET /repos/<owner>/<repo>`, which rescues a bare repository URL, and
+any URL under a private repository the token reads; under a public repository a path past
+the repository gets the page's own failure
+([lychee-lib/src/checker/website.rs](https://github.com/lycheeverse/lychee/blob/lychee-v0.24.2/lychee-lib/src/checker/website.rs),
+`check_github`). So the baseline excludes `github.com/<owner>/<repo>/commit/` from lychee,
+and the recipe lists those links (`lychee --dump --include`) and asks `gh api
+repos/<owner>/<repo>/commits/<sha>` for each: a commit the API does not know is a finding,
+named with its file and the API's answer; an answer that is not the API's verdict (a
+`5xx`, a cut connection) is asked again twice. lychee gets the same token, through its
+environment, for what it does rescue. The token is `GH_TOKEN` in CI (the job's, within
+`contents: read`), the laptop's own `gh` login otherwise, and reaches api.github.com and
+nowhere else; with neither, a tree with a commit link fails the lane and says so.
+
 **A link resolves at lint time, not at release time.** The checker fetches every URL in the
 tree as it is, so a link to something the change itself is preparing is a 404 until that
 thing exists: a changelog section's `compare/v1.0.1...v1.0.2` written before the tag failed
