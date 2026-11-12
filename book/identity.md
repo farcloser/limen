@@ -257,9 +257,10 @@ glob at any depth beneath it; `.git/config` is on the list too unless the harnes
 `macos-sandbox-utils.ts`). No entry in the write configuration lifts them; only a session
 with no write configuration at all is without them. For a bot that runs git, `.git/config`
 is the one that bites first: `git push -u`, `git remote add` and `git config` in a
-repository under the working directory fail with "could not write config file …: Operation
-not permitted" while the push itself succeeds, so a branch is pushed and never tracked,
-and nothing else is wrong. `git worktree add` of a repository that tracks one of those
+repository under the working directory fail with "could not lock config file …: Operation
+not permitted" (an upstream adds "unable to write upstream branch configuration") while the
+push itself succeeds, so a branch is pushed and never tracked, and nothing else is wrong.
+`git worktree add` of a repository that tracks one of those
 paths fails at checkout, "unable to create file … Operation not permitted" then "Could not
 reset index file" (farcloser/onboarding, which tracks
 `home/.zshrc` and three siblings, 2026-10-18); a repository with submodules fails the same
