@@ -197,7 +197,7 @@ The human sets the priorities; the agent measures scope before it moves.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged; what survives
   becomes code, tests or book prose. They live under `_scratch/` at the repository root,
   which every `.gitignore` ignores (`/_scratch` is a required pattern), nowhere else, and
-  are never committed. A follow-up is not scratch: what a change leaves for later is a
+  are never committed. Tabled work is not scratch either: what the human has deferred is a
   GitHub issue in the repository it belongs to, one per real item
   ([communicating](./communicating.md)), since a note in a scratch file is found by nobody
   and dies with the session.

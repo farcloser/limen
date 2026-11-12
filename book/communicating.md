@@ -13,12 +13,17 @@ and what goes where.
   or when the agent next checks its open pull requests. What reaches GitHub is the change
   and its technical reasons, written for a reader who was not in the session; the exchange
   that produced it stays here.
-- **A follow-up is a GitHub issue; a defect in another repository is a message.** What a
-  change leaves for later, a follow-up or parked work, is filed as an issue in the
-  repository it belongs to: one per real item, written so its owner can act on it without
-  the session that filed it, never a scratch, `TODO` or notes file, where it is found by
-  nobody and dies with the session; and never an issue for a passing note, which is noise
-  in the human's tracker. A defect or a request in a repository another session owns goes
+- **An issue is work the human has tabled; a defect in another repository is a message.**
+  A GitHub issue records work the human has decided on and deferred, typically on their
+  word ("table it for later"), in the repository it belongs to: one per real item, written
+  so its owner can act on it without the session that filed it, never a scratch, `TODO` or
+  notes file, where it is found by nobody and dies with the session; and never an issue
+  for a passing note, which is noise in the human's tracker. An issue is not where a
+  session parks what it does not do now. A suggestion that needs a scope or product
+  decision, a reviewer's 💡 included, is put to the human then and there (the human is
+  asked for exactly that, below) and settled in the current change or dropped: filed as an
+  issue, it becomes a decision deferred in public, in the human's name, that the human
+  never made. A defect or a request in a repository another session owns goes
   to that session as a message — what, why, where, the run or pull request URL — and the
   owning session confirms, fixes and opens the pull request, which is how the human hears of
   it. A limen defect goes to the limen session the same way.

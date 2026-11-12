@@ -214,7 +214,7 @@ with the same marker every time, so the eye finds it without reading:
 | ✅ / ❌ | **Verdict**, the first line | `✅ Ready` or `❌ Not ready`, the head it was read at, and the one-line reason. Nothing above it. An open 🛑 or ⚠️ makes it ❌ until fixed or decided; ✅ is what the `reviewed:` line to the project manager follows. |
 | 🛑 | **Blocking** | What must change before merge: the defect, the evidence, the fix. One bullet per item. |
 | ⚠️ | **Decision** | Not a defect: a call the owner or @apostasie has to make, with the options and the recommendation. |
-| 💡 | **Non-blocking** | A suggestion or a follow-up. Never requests a change on its own. |
+| 💡 | **Non-blocking** | A suggestion or a follow-up. Never requests a change on its own. One that needs a scope or product decision is a ⚠️, decided now, never an issue filed to decide later. |
 | 📝 | **Note** | A fact the reader should know and nothing to do about it here. |
 | 🔍 | **Verified** | What was checked and where, one line each, last. Not the diff restated, not the reasoning narrated. |
 

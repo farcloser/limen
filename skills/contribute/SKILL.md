@@ -318,10 +318,13 @@ refuses the whole merge and nothing lands. So:
   it; a file the human is editing on `work` is left alone.
 - Keep a queue of the human's instructions across the session; none is
   dropped because another arrived.
-- A follow-up is a GitHub issue: anything left for later, a follow-up or
-  parked work, is filed in the repository it belongs to, one per real item,
-  written so its owner can act on it; never a scratch, `TODO` or notes file,
-  and never an issue for a passing note. A defect or a request in a
+- An issue is work the human has tabled: what the human has decided on and
+  deferred ("table it for later") is filed in the repository it belongs to,
+  one per real item, written so its owner can act on it; never a scratch,
+  `TODO` or notes file, and never an issue for a passing note. An issue is
+  not where a session parks what it does not do now: a suggestion that needs
+  a scope or product decision, a reviewer's 💡 included, is put to the human
+  then and there and settled in the current change or dropped. A defect or a
   repository another session owns goes to that session as a message (what,
   why, where, the run or pull request URL); it fixes and opens the pull
   request. A limen defect goes to the limen session the same way.
