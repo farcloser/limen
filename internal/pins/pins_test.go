@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/farcloser/limen/internal/pins"
+	"github.com/farcloser/limen/internal/pins/pinstest"
 	"github.com/farcloser/limen/internal/verify/cms"
 	"github.com/farcloser/limen/internal/verify/cms/cmstest"
 	"github.com/farcloser/limen/internal/verify/openpgp/openpgptest"
@@ -186,7 +187,9 @@ pins:
 func TestParseAndGet(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := pins.Parse([]byte(fmt.Sprintf(fixture, "https://h", "https://h", "https://h", "https://h")))
+	text := pinstest.Recorded(t, fmt.Sprintf(fixture, "https://h", "https://h", "https://h", "https://h"), "kernel")
+
+	manifest, err := pins.Parse([]byte(text))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,8 +286,8 @@ func TestCommitPin(t *testing.T) {
 	}
 
 	after, _ := os.ReadFile(filepath.Join(root, pins.File))
-	want := strings.Replace(strings.Replace(text, "commit: "+old, "commit: "+current, 1),
-		strings.Repeat("0", 64), sha256Of(tarball), 1)
+	want := pinstest.Recorded(t, strings.Replace(strings.Replace(text, "commit: "+old, "commit: "+current, 1),
+		strings.Repeat("0", 64), sha256Of(tarball), 1), "fox")
 
 	if string(after) != want {
 		t.Errorf("after refresh:\n%s\nwant:\n%s", after, want)
@@ -578,13 +581,14 @@ func TestParseRejects(t *testing.T) {
 }
 
 // TestRefreshDownload: a stale download-verified pin gets the sha256 of the
-// bytes at its url, in place — the two digest lines change, comments and
-// spacing included nothing else does — and a current pin is left alone.
+// bytes at its url, in place — the two digest lines change and the source
+// line is written, comments and spacing included nothing else does — and a
+// current pin is left alone.
 func TestRefreshDownload(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
 	const tarball = "the tool, version 2"
 
 	host := artifactHost(t, map[string]string{"/releases/tool-2.0.0.tar.gz": tarball})
-	text := fmt.Sprintf(fixture, host.URL, host.URL, host.URL, host.URL)
+	text := pinstest.Recorded(t, fmt.Sprintf(fixture, host.URL, host.URL, host.URL, host.URL), "kernel")
 	root := writePins(t, text)
 
 	t.Setenv(verifierEnv, filepath.Join(t.TempDir(), "log")) // kernel is current: cosign must not even be asked
@@ -605,11 +609,12 @@ func TestRefreshDownload(t *testing.T) { // Serial by design: t.Setenv forbids t
 	want := strings.Replace(
 		text,
 		"      version: 1.0.0\n      sha256: "+strings.Repeat("0", 64)+" # computed for 1.0.0",
-		"      version: 2.0.0\n      sha256: "+sha256Of(tarball)+" # computed for 1.0.0",
+		"      version: 2.0.0\n      source: "+pinstest.Source(t, text, "tool")+
+			"\n      sha256: "+sha256Of(tarball)+" # computed for 1.0.0",
 		1,
 	)
 	if string(after) != want {
-		t.Errorf("refresh rewrote more than the two digest lines:\n%s", after)
+		t.Errorf("refresh did more than rewrite the two digest lines and write the source:\n%s", after)
 	}
 
 	manifest, err := pins.Parse(after)
@@ -637,6 +642,180 @@ func TestRefreshDownload(t *testing.T) { // Serial by design: t.Setenv forbids t
 	}
 }
 
+// TestRefreshAfterAnEdit: the digest stands for the url and the verification
+// it was computed through. An entry whose url or verify line was edited at
+// the same version is stale, and a refresh recomputes it through the entry
+// as it now reads, so a new verify line is exercised and never taken on
+// trust; a digest written before the source was recorded is recomputed the
+// same way. An edit that resolves to the same url leaves the digest current.
+func TestRefreshAfterAnEdit(t *testing.T) {
+	t.Parallel()
+
+	const (
+		archive = "the tag archive"
+		tarball = "the signed release tarball"
+	)
+
+	signer, err := openpgptest.NewEd25519()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other, err := openpgptest.NewEd25519()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signature, err := signer.SignDetached([]byte(tarball), crypto.SHA512, openpgptest.Detached{Armored: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	host := artifactHost(t, map[string]string{
+		"/archive/R_2_10_0.tar.gz":          archive,
+		"/releases/expat-2.10.0.tar.xz":     tarball,
+		"/releases/expat-2.10.0.tar.xz.asc": string(signature),
+		"/keys/signer.asc":                  string(signer.PublicKeyBlock()),
+		"/keys/other.asc":                   string(other.PublicKeyBlock()),
+	})
+
+	// The entry as it was: the tag archive, TLS alone, its digest current.
+	legacy := `pins:
+  - name: expat
+    renovate: github-releases libexpat/libexpat
+    version: 2.10.0
+    url: ` + host.URL + `/archive/R_2_10_0.tar.gz
+    verify: download
+    digest:
+      version: 2.10.0
+      sha256: ` + sha256Of(archive) + ` # the tag archive
+`
+	before := pinstest.Recorded(t, legacy, "expat")
+
+	if stale := mustParse(t, before).Stale(); len(stale) != 0 {
+		t.Fatalf("the entry as recorded must be current, stale = %v", stale)
+	}
+
+	release := strings.Replace(before, "/archive/R_2_10_0.tar.gz", "/releases/expat-${version}.tar.xz", 1)
+	detached := func(key, fingerprint string) string {
+		return strings.Replace(release, "verify: download", "verify: pgp-detached "+host.URL+
+			"/releases/expat-${version}.tar.xz.asc "+host.URL+"/keys/"+key+" "+fingerprint, 1)
+	}
+
+	for name, tc := range map[string]struct{ edited, sum string }{
+		"another url":                  {release, sha256Of(tarball)},
+		"another url and verification": {detached("signer.asc", signer.Fingerprint()), sha256Of(tarball)},
+		"no source recorded":           {legacy, sha256Of(archive)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if stale := mustParse(t, tc.edited).Stale(); !slices.Equal(stale, []string{"expat"}) {
+				t.Fatalf("stale = %v, want [expat]", stale)
+			}
+
+			root := writePins(t, tc.edited)
+
+			changed, err := pins.Refresh(t.Context(), root, io.Discard)
+			if err != nil || !slices.Equal(changed, []string{"expat"}) {
+				t.Fatalf("refresh = %v, %v; want [expat]", changed, err)
+			}
+
+			after := string(mustRead(t, filepath.Join(root, pins.File)))
+
+			// The digest of the bytes at the url as it now reads, the source
+			// of the entry as it now reads, and not a line more.
+			want := pinstest.Recorded(t, strings.Replace(tc.edited, sha256Of(archive), tc.sum, 1), "expat")
+			if after != want {
+				t.Errorf("after refresh:\n%s\nwant:\n%s", after, want)
+			}
+
+			if stale := mustParse(t, after).Stale(); len(stale) != 0 {
+				t.Errorf("still stale after refresh: %v", stale)
+			}
+		})
+	}
+
+	t.Run("the new verification is exercised", func(t *testing.T) {
+		t.Parallel()
+
+		// The same edit with a key that did not sign: the refresh refuses,
+		// where a digest judged by its version alone was left as current.
+		root := writePins(t, detached("other.asc", other.Fingerprint()))
+
+		if _, err := pins.Refresh(t.Context(), root, io.Discard); !errors.Is(err, pins.ErrVerify) {
+			t.Fatalf("err = %v, want ErrVerify", err)
+		}
+	})
+
+	t.Run("the same url, spelled otherwise", func(t *testing.T) {
+		t.Parallel()
+
+		spelled := strings.Replace(before, "/archive/R_2_10_0.tar.gz", "/archive/R_${major}_10_0.tar.gz", 1)
+		if stale := mustParse(t, spelled).Stale(); len(stale) != 0 {
+			t.Errorf("a template that resolves to the url the digest was computed from is current, stale = %v", stale)
+		}
+	})
+
+	t.Run("a source that is no fingerprint", func(t *testing.T) {
+		t.Parallel()
+
+		broken := strings.Replace(before, "      source: ", "      source: abc", 1)
+		if _, err := pins.Parse([]byte(broken)); !errors.Is(err, pins.ErrEntry) {
+			t.Errorf("err = %v, want ErrEntry", err)
+		}
+	})
+}
+
+// TestSourceIsWhatTheManifestsCarry holds the fingerprint to a value computed
+// outside limen: every pins.yaml persists it, so a change of its form (the
+// separator, the join, the templates taken as written) would leave every
+// digest of every repository stale. The entry is forkcloser/go-graphviz's
+// expat pin, a templated url and a templated verify argument; the hex is
+//
+//	printf '%s\n%s' <resolved url> '<method and resolved arguments>' | shasum -a 256
+func TestSourceIsWhatTheManifestsCarry(t *testing.T) {
+	t.Parallel()
+
+	const text = `pins:
+  - name: expat
+    renovate: github-tags libexpat/libexpat
+    versioning: regex:^R_(?<major>\d+)_(?<minor>\d+)_(?<patch>\d+)$
+    version: R_2_10_0
+    url: https://github.com/libexpat/libexpat/releases/download/${version}/expat-${major}.${minor}.${patch}.tar.gz
+    verify: pgp-detached https://github.com/libexpat/libexpat/releases/download/${version}/expat-${major}.${minor}.${patch}.tar.gz.asc https://github.com/hartwork.gpg CB8DE70A90CFBF6C3BF5CC5696262ACFFBD3AEC6
+`
+
+	const (
+		resolved = "https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.gz\n" +
+			"pgp-detached https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.gz.asc" +
+			" https://github.com/hartwork.gpg CB8DE70A90CFBF6C3BF5CC5696262ACFFBD3AEC6"
+		want = "6829130ac4fc17b95e20e1b74f3653ec572205e2cd357f51b8ddc16fd13a1695"
+	)
+
+	// The literal is the sha256 of the resolved lines, by this package's own
+	// hash and by the hex written down: a typo in either shows.
+	if got := sha256Of(resolved); got != want {
+		t.Fatalf("the test's own literal: sha256 of the resolved lines = %s, want %s", got, want)
+	}
+
+	if got := mustParse(t, text).Entries[0].Source(); got != want {
+		t.Errorf("Source() = %s, want %s", got, want)
+	}
+}
+
+// mustParse parses a manifest the test wrote.
+func mustParse(t *testing.T, text string) pins.Manifest {
+	t.Helper()
+
+	manifest, err := pins.Parse([]byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return manifest
+}
+
 // TestRefreshWritesAMissingDigest: an entry written without a digest (the
 // way a new pin starts) parses as unpinned, which get sha256 refuses; a
 // refresh writes its digest block, after its last line or under a bare
@@ -647,7 +826,7 @@ func TestRefreshWritesAMissingDigest(t *testing.T) {
 	const tarball = "the tool, version 2"
 
 	host := artifactHost(t, map[string]string{"/releases/tool-2.0.0.tar.gz": tarball})
-	pinned := fmt.Sprintf(fixture, host.URL, host.URL, host.URL, host.URL)
+	pinned := pinstest.Recorded(t, fmt.Sprintf(fixture, host.URL, host.URL, host.URL, host.URL), "kernel")
 	toolDigest := "    digest:\n      version: 1.0.0\n      sha256: " + strings.Repeat(
 		"0",
 		64,
@@ -679,7 +858,8 @@ func TestRefreshWritesAMissingDigest(t *testing.T) {
 
 		after, _ := os.ReadFile(filepath.Join(root, pins.File))
 		want := strings.Replace(pinned, toolDigest,
-			"    digest:\n      version: 2.0.0\n      sha256: "+sha256Of(tarball)+"\n", 1)
+			"    digest:\n      version: 2.0.0\n      source: "+pinstest.Source(t, pinned, "tool")+
+				"\n      sha256: "+sha256Of(tarball)+"\n", 1)
 
 		if string(after) != want {
 			t.Errorf("%s: after refresh:\n%s\nwant:\n%s", name, after, want)
