@@ -89,4 +89,5 @@ vm +args:
 
 # validation scaffolding
 converge:
-    echo "converged, scenario c" > validate/derived.lock
+    echo "converged, scenario d" > validate/derived.lock
+    echo "planted" > validate/stray.sh
