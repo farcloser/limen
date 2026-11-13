@@ -10,23 +10,44 @@
 # regenerate .hermetic/aqua-checksums.json (a bumped pin with a stale checksum breaks
 # every install) and, when the branch bumps farcloser/limen, run the branch's
 # own pinned `limen fix` so the canonical files move with the pin. One fix-up
-# commit.
+# commit. Then, in a repository that declares files derived from its pins
+# (.converge, book/tooling.md), the project's `converge` recipe regenerates
+# them in a job that can write nothing, and a second commit carries what it
+# changed there.
 #
-# A WRITE workflow, hardened: `push:` on the branch prefix, never
-# pull_request_target; no credential kept by checkout and no secrets in the
-# update steps' environment beyond the job's own token where a verifier must
-# read from GitHub; nothing runs through `just` (a write job does not execute
-# recipe code the branch controls — what runs is aqua, and the limen release
-# the branch selects by checksum); the commit step uses runner tools only,
-# the branch name reaches the shell via env; no loop, since a commit made
-# with the job's own token triggers no workflows.
+# A WRITE workflow, hardened:
+# - `push:` on the branch prefix, never pull_request_target, and Renovate's
+#   own pushes alone: a push by anyone else to a renovate/ branch runs
+#   nothing here, so nobody is handed a commit signed as the bot over a tree
+#   of their choosing.
+# - No credential kept by checkout and no secrets in the update steps'
+#   environment beyond the job's own token where a verifier must read from
+#   GitHub.
+# - A job that holds a write token runs no recipe code the branch controls:
+#   nothing runs through `just` in `update` or `finish`. What runs in
+#   `update` is aqua, and the limen release the branch selects by checksum;
+#   `finish` runs nothing the branch declares, not even its pins: the
+#   runner's own tools and this file. `converge`, the one job that runs a
+#   recipe, holds contents: read and nothing else.
+# - What `converge` produced reaches the branch as file contents, never as
+#   code: its archive is read entry by entry and never unpacked, for the
+#   paths .converge names alone, read by `finish` from the head it checks
+#   out itself: tracked regular files, each under git's own name for it,
+#   outside .git, .github, .limen and .hermetic. Anything else the recipe
+#   touched fails the job, and nothing of that run is committed: code a
+#   bumped artifact runs cannot write where the project did not say a
+#   derived file lives.
+# - The commit steps use runner tools only, the branch name reaches the
+#   shell via env; no loop, since a commit made with the job's own token
+#   triggers no workflows.
 #
-# The commit goes through GraphQL createCommitOnBranch because GitHub signs
-# those and the main ruleset requires signatures (see the commit step). Its
+# The commits go through GraphQL createCommitOnBranch because GitHub signs
+# those and the main ruleset requires signatures (see the commit step). Their
 # author is github-actions[bot], the job's own token, which renovate.json's
-# gitIgnoredAuthors names or Renovate stops rebasing. That push starts no
+# gitIgnoredAuthors names or Renovate stops rebasing. Such a push starts no
 # run by itself: the pull request's runs are created awaiting approval, and
-# the last step approves them with the same token (no App, no secret).
+# `finish` approves them on the last head with the same token (no App, no
+# secret).
 name: limen-update-aqua-checksum
 
 on:
@@ -41,18 +62,31 @@ defaults:
 
 jobs:
   update:
+    # The actor of a push is who pushed, and a rerun keeps it: the hosted
+    # Renovate App alone.
+    if: github.actor == 'renovate[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
-      # To approve the pull request's runs on the head this job pushes: a
-      # called job's token gets what its own block names, within the
-      # caller's grant.
-      actions: write
+    outputs:
+      # The commit this job pushed, empty when the tree was already in sync.
+      oid: ${{ steps.commit.outputs.oid }}
+      # The head the next jobs read: that commit, or the one that fired the run.
+      head: ${{ steps.head.outputs.head }}
+      # Whether the project declares derived files.
+      converge: ${{ steps.declared.outputs.converge }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Does the project declare derived files
+        id: declared
+        run: |
+          if [ -f .converge ]; then
+            echo "converge=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Recompute hermetic's digest for the version Renovate moved
         # Before setup-hermetic, which verifies the release's checksums.txt
@@ -211,7 +245,215 @@ jobs:
           echo "pushed ${oid}"
           echo "oid=${oid}" >> "$GITHUB_OUTPUT"
 
-      - name: Approve the pull request's runs on the new head
+      - name: Name the head the next jobs read
+        id: head
+        env:
+          OID: ${{ steps.commit.outputs.oid }}
+        run: echo "head=${OID:-$(git rev-parse HEAD)}" >> "$GITHUB_OUTPUT"
+
+  converge:
+    # The project's own recipe for the files a pin leaves stale (a lock file
+    # an SDK bump moves): branch-controlled code, and whatever a bumped
+    # artifact runs inside it, so the job reads the repository and writes
+    # nothing; what it changed leaves as an artifact `finish` judges.
+    needs: update
+    if: needs.update.outputs.converge == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.update.outputs.head }}
+          persist-credentials: false
+
+      - name: Install hermetic (pinned, verified)
+        uses: ./.github/actions/setup-hermetic
+
+      - name: Run the project's converge recipe
+        run: just converge
+
+      - name: Collect what it changed
+        run: |
+          out="${RUNNER_TEMP}/converge"
+          mkdir -p "${out}/files"
+          git status --porcelain -z --untracked-files=all > "${out}/status"
+          while IFS= read -r -d '' entry; do
+            path="${entry:3}"
+            if [ -f "${path}" ] && [ ! -L "${path}" ]; then
+              mkdir -p "${out}/files/$(dirname "${path}")"
+              cp "${path}" "${out}/files/${path}"
+            fi
+          done < "${out}/status"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: converge
+          path: ${{ runner.temp }}/converge
+          # A derived file under a dot directory is a file like another.
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+          # A rerun of the job finds the name taken on the run.
+          overwrite: true
+
+  finish:
+    # Runs when there is a head to approve or a converge to judge, whatever
+    # became of `converge` itself. No hermetic here: the job needs git, jq,
+    # curl, python3 and gh, which the runner has, and a job that links no
+    # pin runs nothing the branch chose.
+    needs: [update, converge]
+    if: ${{ !cancelled() && needs.update.result == 'success' && (needs.update.outputs.oid != '' || needs.update.outputs.converge == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      # To approve the pull request's runs on the head pushed here or by
+      # `update`: a called job's token gets what its own block names, within
+      # the caller's grant.
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.update.outputs.head }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.converge.result == 'success'
+        with:
+          name: converge
+          path: ${{ runner.temp }}/converge
+          # The archive as it was uploaded: the step below reads entries by
+          # name and unpacks nothing, so no extractor writes anything in a
+          # job that holds a write token.
+          skip-decompress: true
+
+      - name: Commit what converge changed, within what the project declares
+        id: commit
+        if: needs.converge.result == 'success'
+        env:
+          BRANCH: ${{ github.ref_name }}
+          TOKEN: ${{ github.token }}
+        run: |
+          work="$(mktemp -d)"
+          trap 'rm -rf "${work}"' EXIT
+          # The declaration is read from this job's own checkout, never from
+          # the artifact: one path a line, `#` lines and empty ones skipped.
+          # A path is one tracked file under git's own name for it (`./x`,
+          # `a//x` and a pathspec all name files the patterns below would
+          # not see), regular, outside the directories that are git's,
+          # GitHub's or limen's: the recipe's run can change a file the
+          # project named, and create or reach nothing.
+          : > "${work}/declared"
+          while IFS= read -r line || [ -n "${line}" ]; do
+            path="${line%$'\r'}"
+            case "${path}" in
+              '' | '#'*) continue ;;
+            esac
+            if [ "$(git ls-files -- "${path}")" != "${path}" ] || [ ! -f "${path}" ] || [ -L "${path}" ]; then
+              echo "::error::.converge: ${path} is not a tracked regular file under that exact name"
+              exit 1
+            fi
+            case "${path}" in
+              .git/* | .github/* | .limen/* | .hermetic/*)
+                echo "::error::.converge: ${path} is not a path a derived file may have"
+                exit 1
+                ;;
+            esac
+            printf '%s\n' "${path}" >> "${work}/declared"
+          done < .converge
+          # One archive, whatever the action named it, read one entry at a
+          # time by its exact name and never unpacked: a link or a path in
+          # it goes nowhere, and a name is no pattern. 3 is "no such entry".
+          archive="$(find "${RUNNER_TEMP}/converge" -maxdepth 1 -type f)"
+          if [ ! -f "${archive}" ]; then
+            echo "::error::the converge artifact is not one archive: ${archive}"
+            exit 1
+          fi
+          entry() {
+            python3 -I -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); n = sys.argv[2]; sys.exit(3) if n not in z.namelist() else sys.stdout.buffer.write(z.read(n))' "${archive}" "$1"
+          }
+          if ! entry status > "${work}/status"; then
+            echo "::error::the converge artifact carries no status"
+            exit 1
+          fi
+          # All of the run or none of it: a recipe that touched a file the
+          # project did not declare is not committed in part. This refusal
+          # is the status's one use. It is the recipe's job's word: it can
+          # leave a change out, which only withholds it, and it names no
+          # path that is committed. A name holding a newline is undeclared,
+          # no declared path being one, and would read as two to grep.
+          undeclared=""
+          while IFS= read -r -d '' entry; do
+            path="${entry:3}"
+            case "${path}" in
+              *$'\n'*)
+                undeclared="${undeclared} (a name holding a newline)"
+                continue
+                ;;
+            esac
+            if ! grep -Fxq -- "${path}" "${work}/declared"; then
+              undeclared="${undeclared} ${path}"
+            fi
+          done < "${work}/status"
+          if [ -n "${undeclared}" ]; then
+            echo "::error::converge changed what .converge does not declare:${undeclared}"
+            exit 1
+          fi
+          # The paths committed are the declaration's, this checkout's word,
+          # and never the archive's or the status's: each declared file
+          # whose entry the archive carries and whose bytes differ.
+          printf '[]' > "${work}/additions.json"
+          while IFS= read -r path; do
+            found=0
+            entry "files/${path}" > "${work}/file" || found=$?
+            if [ "${found}" = 3 ]; then
+              continue
+            fi
+            if [ "${found}" != 0 ]; then
+              echo "::error::converge: ${path} could not be read out of the artifact"
+              exit 1
+            fi
+            cmp -s "${work}/file" "${path}" && continue
+            base64 -w0 "${work}/file" > "${work}/blob"
+            jq --arg path "${path}" --rawfile contents "${work}/blob" \
+              '. + [{path: $path, contents: ($contents | rtrimstr("\n"))}]' \
+              "${work}/additions.json" > "${work}/next"
+            mv "${work}/next" "${work}/additions.json"
+          done < "${work}/declared"
+          if [ "$(jq length "${work}/additions.json")" = 0 ]; then
+            echo "the derived files are already in sync"
+            exit 0
+          fi
+          # As in `update`: GitHub-signed, the payload from files, success
+          # read from the oid, no retry and no redirect on a mutation.
+          jq -n \
+            --arg query 'mutation ($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }' \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg branch "${BRANCH}" \
+            --arg head "$(git rev-parse HEAD)" \
+            --slurpfile additions "${work}/additions.json" \
+            '{query: $query, variables: {input: {
+              branch: {repositoryNameWithOwner: $repository, branchName: $branch},
+              expectedHeadOid: $head,
+              message: {
+                headline: "chore: converge the files derived from the pins",
+                body: "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+              },
+              fileChanges: {additions: $additions[0]}}}}' \
+            > "${work}/payload.json"
+          response="$(curl --proto '=https' --tlsv1.2 -fsS -X POST -H "Authorization: bearer ${TOKEN}" \
+            --data-binary "@${work}/payload.json" https://api.github.com/graphql)"
+          oid="$(jq -r '.data.createCommitOnBranch.commit.oid // empty' <<<"${response}")"
+          if [ -z "${oid}" ]; then
+            echo "${response}" >&2
+            exit 1
+          fi
+          echo "pushed ${oid}"
+          echo "oid=${oid}" >> "$GITHUB_OUTPUT"
+
+      - name: Approve the pull request's runs on the last head
         # A push made with the job's token starts no run by itself: the
         # pull_request runs for the new head are created awaiting approval,
         # which a token with actions: write may give — this one. A dispatch
@@ -219,18 +461,28 @@ jobs:
         # their checks for the pull request. Runs appear within seconds of
         # the push, one workflow at a time, not together: the loop goes on
         # approving until thirty seconds pass with none new, since the first
-        # run seen is not the set.
-        if: steps.commit.outputs.oid != ''
+        # run seen is not the set. Whatever the steps above did, so the first
+        # commit's runs report when the second was refused; and only while
+        # that head is the branch's: the runs of a head another commit
+        # followed are not the pull request's, and a rerun of this job, or a
+        # push that came meanwhile, finds the branch elsewhere.
+        if: ${{ !cancelled() && (steps.commit.outputs.oid != '' || needs.update.outputs.oid != '') }}
         env:
           GH_TOKEN: ${{ github.token }}
-          OID: ${{ steps.commit.outputs.oid }}
+          BRANCH: ${{ github.ref_name }}
+          OID: ${{ steps.commit.outputs.oid || needs.update.outputs.oid }}
         run: |
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${BRANCH}" --jq .object.sha)"
+          if [ "${head}" != "${OID}" ]; then
+            echo "the branch is at ${head}, no longer at ${OID}: the runs to approve are that head's, and its own run's to approve"
+            exit 0
+          fi
           # The ids approved are kept: a run just approved can still read
           # action_required on the next listing, and a second approval fails.
           # A failed approval ends nothing: the run is tried again on the next
           # listing, and one the call approved despite its error is not
-          # listed again. A rerun of this job skips the step (no new commit),
-          # so an approval the step gives up on is never given.
+          # listed again. A rerun of this job approves what is still awaiting
+          # on that head, while it is the branch's.
           approved=""
           left=""
           quiet=0
@@ -272,3 +524,12 @@ jobs:
             echo "::error::run(s)${left} on ${OID} still awaiting approval after three minutes: their checks will not report"
             exit 1
           fi
+
+      - name: Say that converge failed
+        # The recipe's own failure: nothing of it was committed, the runs of
+        # the head above are approved, and this run is red for it.
+        # Timed out counts: such a job is not reported as failed.
+        if: ${{ !cancelled() && needs.converge.result != 'success' && needs.converge.result != 'skipped' }}
+        run: |
+          echo "::error::the project's converge recipe did not finish: the derived files were left as they were"
+          exit 1
