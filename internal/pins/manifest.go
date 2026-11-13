@@ -97,6 +97,13 @@ const (
 	// signed text; the artifact itself is not downloaded. The key's URL is
 	// transport, the fingerprint is the trust.
 	VerifyPGPSums = "pgp-sha256sums"
+	// VerifyPGPDetached downloads the artifact, the detached OpenPGP
+	// signature an upstream publishes beside it (armored or binary) and the
+	// signer's public key block, verifies the signature in-process over the
+	// downloaded bytes against the key whose fingerprint the entry pins, and
+	// hashes the bytes it verified. The key's URL is transport, the
+	// fingerprint is the trust.
+	VerifyPGPDetached = "pgp-detached"
 	// VerifyCMS downloads the artifact, the detached CMS signature a vendor
 	// publishes beside it and the CA's root certificate, verifies the
 	// signature in-process over the downloaded bytes (limen's own reader of
@@ -147,6 +154,7 @@ var verifyArity = map[string]arity{
 	VerifyGitHubReleaseAsset: {1, 2},
 	VerifyCosignSums:         {4, 5},
 	VerifyPGPSums:            {3, 3},
+	VerifyPGPDetached:        {3, 3},
 	VerifyCMS:                {4, 4},
 }
 
@@ -616,10 +624,10 @@ func (e Entry) validateMethodArguments(label string) error {
 			return fmt.Errorf("%w: %s: verify %s: the repository must be owner/repo, got %q",
 				ErrEntry, label, VerifyCosignSums, e.Verify[5])
 		}
-	case VerifyPGPSums:
+	case VerifyPGPSums, VerifyPGPDetached:
 		if !fingerprintRE.MatchString(e.Verify[3]) {
 			return fmt.Errorf("%w: %s: verify %s: the fingerprint must be 40 hex digits without spaces, got %q",
-				ErrEntry, label, VerifyPGPSums, e.Verify[3])
+				ErrEntry, label, e.Verify[0], e.Verify[3])
 		}
 	case VerifyCMS:
 		return e.validateCMS(label)

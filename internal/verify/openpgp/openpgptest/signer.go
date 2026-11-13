@@ -1,5 +1,6 @@
 // Package openpgptest produces the material the openpgp verifier reads —
-// an armored public key block, a clearsigned message — from a key it
+// an armored public key block, a clearsigned message, a detached
+// signature — from a key it
 // generates, so a test owns both sides of a signature without a PGP tool
 // on the machine. It writes the packets by hand and shares no code with the
 // verifier: a misreading of the format on one side fails against the other.
@@ -42,7 +43,8 @@ const (
 
 	version4 = 4
 
-	sigTypeText = 0x01
+	sigTypeBinary = 0x00
+	sigTypeText   = 0x01
 
 	subpacketCreation          = 2
 	subpacketIssuerKeyID       = 16
@@ -58,6 +60,9 @@ const (
 	crcTop          = 0x1000000
 	crcShiftHigh    = 16
 	newHeader       = 0xC0
+	oldHeader       = 0x80
+	oldTagShift     = 2
+	oldLengthTwo    = 1
 	lengthTwoBase   = 192
 	lengthTwoShift  = 8
 	lengthOneMax    = 191
@@ -133,6 +138,19 @@ func (s *Signer) PublicKeyBlock() []byte {
 	return armor("PUBLIC KEY BLOCK", body)
 }
 
+// KeyBlock is one armored public key block carrying every signer's key,
+// the file a project with several release keys publishes.
+func KeyBlock(signers ...*Signer) []byte {
+	var body []byte
+
+	for _, signer := range signers {
+		body = append(body, packet(tagPublicKey, signer.keyBody)...)
+		body = append(body, packet(tagUserID, []byte(userID))...)
+	}
+
+	return armor("PUBLIC KEY BLOCK", body)
+}
+
 // Clearsign signs text as a clearsigned message with the given digest.
 func (s *Signer) Clearsign(text string, hash crypto.Hash) ([]byte, error) {
 	hashID, known := hashIDs[hash]
@@ -155,7 +173,7 @@ func (s *Signer) Clearsign(text string, hash crypto.Hash) ([]byte, error) {
 		escaped = append(escaped, line)
 	}
 
-	sig, err := s.sign([]byte(strings.Join(canonical, "\r\n")), hash, hashID)
+	sig, err := s.sign([]byte(strings.Join(canonical, "\r\n")), sigTypeText, hash, hashID)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +187,43 @@ func (s *Signer) Clearsign(text string, hash crypto.Hash) ([]byte, error) {
 	return []byte(out.String()), nil
 }
 
-// sign builds a v4 canonical text signature packet body over data.
-func (s *Signer) sign(data []byte, hash crypto.Hash, hashID byte) ([]byte, error) {
+// Detached is the shape of a detached signature.
+type Detached struct {
+	// Armored frames the signature as an armored block, the `.asc` an
+	// upstream publishes; otherwise it is the bare packet, the `.sig`.
+	Armored bool
+	// OldHeader frames the packet in the old header format, the one GnuPG
+	// writes for a signature packet.
+	OldHeader bool
+}
+
+// SignDetached signs data as a binary document, the detached signature an
+// upstream publishes beside its tarball.
+func (s *Signer) SignDetached(data []byte, hash crypto.Hash, shape Detached) ([]byte, error) {
+	hashID, known := hashIDs[hash]
+	if !known {
+		return nil, fmt.Errorf("%w: %v", errNoHashNumber, hash)
+	}
+
+	sig, err := s.sign(data, sigTypeBinary, hash, hashID)
+	if err != nil {
+		return nil, err
+	}
+
+	pkt := packet(tagSignature, sig)
+	if shape.OldHeader {
+		pkt = oldPacket(tagSignature, sig)
+	}
+
+	if shape.Armored {
+		return armor("SIGNATURE", pkt), nil
+	}
+
+	return pkt, nil
+}
+
+// sign builds a v4 signature packet body of the given type over data.
+func (s *Signer) sign(data []byte, sigType byte, hash crypto.Hash, hashID byte) ([]byte, error) {
 	fingerprint, err := hex.DecodeString(s.Fingerprint())
 	if err != nil {
 		return nil, fmt.Errorf("decoding the fingerprint: %w", err)
@@ -180,7 +233,7 @@ func (s *Signer) sign(data []byte, hash crypto.Hash, hashID byte) ([]byte, error
 	hashed = append(hashed, subpacket(subpacketIssuerFingerprint, append([]byte{version4}, fingerprint...))...)
 	unhashed := subpacket(subpacketIssuerKeyID, fingerprint[len(fingerprint)-keyIDLen:])
 
-	header := append([]byte{version4, sigTypeText, s.algorithm(), hashID}, twoOctets(len(hashed))...)
+	header := append([]byte{version4, sigType, s.algorithm(), hashID}, twoOctets(len(hashed))...)
 	header = append(header, hashed...)
 
 	trailer := binary.BigEndian.AppendUint32(
@@ -263,6 +316,11 @@ func mpi(value []byte) []byte {
 // packet frames a body as a new-format packet.
 func packet(tag byte, body []byte) []byte {
 	return append(append([]byte{newHeader | tag}, length(len(body))...), body...)
+}
+
+// oldPacket frames a body as an old-format packet with a two-octet length.
+func oldPacket(tag byte, body []byte) []byte {
+	return append(append([]byte{oldHeader | tag<<oldTagShift | oldLengthTwo}, twoOctets(len(body))...), body...)
 }
 
 // subpacket frames a subpacket: its length covers the type octet.

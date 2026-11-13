@@ -1,8 +1,9 @@
-// Package openpgp verifies OpenPGP clearsigned messages against public keys
-// the caller pins by fingerprint, with nothing but the standard library. It
-// reads exactly what that takes — an armored public key block, a clearsigned
-// document, v4 keys and v4 signatures over RSA or Ed25519 with a SHA-2
-// digest — and refuses the rest by name. It is a verifier, not an OpenPGP
+// Package openpgp verifies OpenPGP clearsigned messages and detached
+// signatures against public keys the caller pins by fingerprint, with
+// nothing but the standard library. It reads exactly what that takes — an
+// armored public key block, a clearsigned document, a detached signature
+// armored or binary, v4 keys and v4 signatures over RSA or Ed25519 with a
+// SHA-2 digest — and refuses the rest by name. It is a verifier, not an OpenPGP
 // implementation: no encryption, no signing, no web of trust, no key
 // expiry or revocation (the caller's pin is the trust decision).
 package openpgp

@@ -8,8 +8,8 @@ import (
 )
 
 // verifierPackages maps each verification method that shells out to the
-// aqua package of its tool; a method verified in-process (pgp-sha256sums)
-// has no entry. Unpinned, aqua's proxy falls through to whatever gh or
+// aqua package of its tool; a method verified in-process (the PGP methods,
+// cms) has no entry. Unpinned, aqua's proxy falls through to whatever gh or
 // cosign the machine has, and a digest would be vouched for by a binary
 // nobody chose; the rule requires the pin, offline.
 //
