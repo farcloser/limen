@@ -1,6 +1,11 @@
 {
   "checksums": [
     {
+      "id": "github_release/github.com/anchore/syft/v1.57.1/syft_1.57.1_darwin_arm64.tar.gz",
+      "checksum": "E0A74A5D2688D1254B4E17B71F068A83215E3625F846265BF6614C7BA06F3A96",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/anchore/syft/v1.57.1/syft_1.57.1_linux_amd64.tar.gz",
       "checksum": "BF52519EB57F675D47C07D43213CB6DFF6449F3D6D1147FF6701ED91F44EEF0C",
       "algorithm": "sha256"
