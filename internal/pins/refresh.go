@@ -249,10 +249,11 @@ func hashFromSignedSums(ctx context.Context, root string, entry Entry, args []st
 
 // hashFromClearsignedSums takes the artifact's line from a PGP-clearsigned
 // sums file: the file and the signer's public key block are fetched, the
-// signature is verified in-process, the signing key must be the one the
-// entry pins by fingerprint, and only the text the signature vouches for is
-// read. The key's URL is transport — a key from anywhere is accepted if and
-// only if it is the pinned one.
+// signature is verified in-process against the block's key the entry pins
+// by fingerprint, and no other, so a file several keys signed verifies when
+// the pinned one is among them, wherever its signature stands; and only the
+// text the signature vouches for is read. The key's URL is transport — a
+// key from anywhere is accepted if and only if it is the pinned one.
 func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (string, error) {
 	sumsURL, keyURL, fingerprint := args[0], args[1], strings.ToUpper(args[2])
 
@@ -289,17 +290,39 @@ func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (s
 		return "", fmt.Errorf("reading the signed sums: %w", err)
 	}
 
-	verified, err := openpgp.VerifyClearsigned(sumsData, keys)
-	if err != nil {
-		return "", fmt.Errorf(errAt, ErrVerify, sumsURL, err)
+	pinned := pinnedKeys(keys, fingerprint)
+
+	verified, err := openpgp.VerifyClearsigned(sumsData, pinned)
+	if err == nil {
+		return sumFor(verified.Text, path.Base(entry.ResolvedURL()), sumsURL)
 	}
 
-	if string(verified.Signer) != fingerprint {
-		return "", fmt.Errorf("%w: %s is signed by %s, not by the pinned key %s",
-			ErrVerify, sumsURL, verified.Signer, fingerprint)
+	// Refused: say who did sign when the block knows them, and that the
+	// block lacks the pinned key when that is why.
+	if other, otherErr := openpgp.VerifyClearsigned(sumsData, keys); otherErr == nil {
+		return "", fmt.Errorf(errOtherSigner, ErrVerify, sumsURL, other.Signer, fingerprint)
 	}
 
-	return sumFor(verified.Text, path.Base(entry.ResolvedURL()), sumsURL)
+	if len(pinned) == 0 {
+		return "", fmt.Errorf(errNoPinnedKey, ErrVerify, keyURL, fingerprint)
+	}
+
+	return "", fmt.Errorf(errAt, ErrVerify, sumsURL, err)
+}
+
+// The two refusals a pinned key gives beside the signature's own.
+const (
+	errOtherSigner = "%w: %s is signed by %s, not by the pinned key %s"
+	errNoPinnedKey = "%w: %s carries no key with the pinned fingerprint %s"
+)
+
+// pinnedKeys is the keys of a block that have the pinned fingerprint: the
+// only ones a signature is checked against, so the pin picks the signer
+// and the order of a file's signatures does not.
+func pinnedKeys(keys []openpgp.Key, fingerprint string) []openpgp.Key {
+	return slices.DeleteFunc(slices.Clone(keys), func(key openpgp.Key) bool {
+		return string(key.Fingerprint) != fingerprint
+	})
 }
 
 // verifyPGPDetached fetches the detached OpenPGP signature published beside
@@ -350,9 +373,7 @@ func verifyPGPDetached(ctx context.Context, file string, args []string) error {
 		return fmt.Errorf("reading the signature: %w", err)
 	}
 
-	pinned := slices.DeleteFunc(slices.Clone(keys), func(key openpgp.Key) bool {
-		return string(key.Fingerprint) != fingerprint
-	})
+	pinned := pinnedKeys(keys, fingerprint)
 
 	_, err = openpgp.VerifyDetached(content, signature, pinned)
 	if err == nil {
@@ -362,11 +383,11 @@ func verifyPGPDetached(ctx context.Context, file string, args []string) error {
 	// Refused: say who did sign when the block knows them, and that the
 	// block lacks the pinned key when that is why.
 	if signer, other := openpgp.VerifyDetached(content, signature, keys); other == nil {
-		return fmt.Errorf("%w: %s is signed by %s, not by the pinned key %s", ErrVerify, sigURL, signer, fingerprint)
+		return fmt.Errorf(errOtherSigner, ErrVerify, sigURL, signer, fingerprint)
 	}
 
 	if len(pinned) == 0 {
-		return fmt.Errorf("%w: %s carries no key with the pinned fingerprint %s", ErrVerify, keyURL, fingerprint)
+		return fmt.Errorf(errNoPinnedKey, ErrVerify, keyURL, fingerprint)
 	}
 
 	return fmt.Errorf(errAt, ErrVerify, sigURL, err)

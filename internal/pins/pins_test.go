@@ -891,11 +891,20 @@ func TestRefreshThroughClearsignedSums(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A sums file two keys signed, the pinned signer second, with every
+	// release key in one block.
+	both, err := openpgptest.ClearsignBy(kernelSum+"  linux-7.2.6.tar.xz\n", crypto.SHA256, other, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	host := artifactHost(t, map[string]string{
 		"/pub/v7.x/sha256sums.asc": string(signed),
+		"/pub/v7.x/both.asc":       string(both),
 		"/pub/v7.x/tampered.asc":   strings.Replace(string(signed), "3333", "4444", 1),
 		"/keys/signer.asc":         string(signer.PublicKeyBlock()),
 		"/keys/other.asc":          string(other.PublicKeyBlock()),
+		"/keys/both.asc":           string(openpgptest.KeyBlock(other, signer)),
 	})
 
 	manifest := func(sums, key, fingerprint string) string {
@@ -911,37 +920,63 @@ func TestRefreshThroughClearsignedSums(t *testing.T) {
 `
 	}
 
-	root := writePins(t, manifest("sha256sums.asc", "signer.asc", strings.ToLower(signer.Fingerprint())))
-
-	changed, err := pins.Refresh(t.Context(), root, io.Discard)
-	if err != nil {
-		t.Fatalf("refresh: %v", err)
-	}
-
-	if !slices.Equal(changed, []string{"kernel"}) {
-		t.Errorf("changed = %v, want kernel", changed)
-	}
-
-	parsed, err := pins.Parse(mustRead(t, filepath.Join(root, pins.File)))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got, _ := parsed.Get("kernel", "sha256"); got != kernelSum {
-		t.Errorf("kernel sha256 = %s, want the signed line %s", got, kernelSum)
-	}
-
-	for name, text := range map[string]string{
-		"key other than the pinned one": manifest("sha256sums.asc", "signer.asc", other.Fingerprint()),
-		"block without the signer":      manifest("sha256sums.asc", "other.asc", signer.Fingerprint()),
-		"tampered listing":              manifest("tampered.asc", "signer.asc", signer.Fingerprint()),
+	for name, published := range map[string][2]string{
+		"one signer":                {"sha256sums.asc", "signer.asc"},
+		"pinned signer second":      {"both.asc", "both.asc"},
+		"pinned key alone in block": {"both.asc", "signer.asc"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := pins.Refresh(t.Context(), writePins(t, text), io.Discard)
+			root := writePins(t, manifest(published[0], published[1], strings.ToLower(signer.Fingerprint())))
+
+			changed, err := pins.Refresh(t.Context(), root, io.Discard)
+			if err != nil {
+				t.Fatalf("refresh: %v", err)
+			}
+
+			if !slices.Equal(changed, []string{"kernel"}) {
+				t.Errorf("changed = %v, want kernel", changed)
+			}
+
+			parsed, err := pins.Parse(mustRead(t, filepath.Join(root, pins.File)))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got, _ := parsed.Get("kernel", "sha256"); got != kernelSum {
+				t.Errorf("kernel sha256 = %s, want the signed line %s", got, kernelSum)
+			}
+		})
+	}
+
+	// Each refusal says why: the reader of a red refresh has the URL and the
+	// fingerprints, not the code.
+	for name, refused := range map[string]struct{ text, says string }{
+		"tampered listing": {manifest("tampered.asc", "signer.asc", signer.Fingerprint()), "does not verify"},
+		"block's other key pinned": {
+			manifest("sha256sums.asc", "both.asc", other.Fingerprint()),
+			"is signed by " + signer.Fingerprint() + ", not by the pinned key " + other.Fingerprint(),
+		},
+		"two signers, pin not in block": {
+			manifest("both.asc", "other.asc", signer.Fingerprint()),
+			"is signed by " + other.Fingerprint() + ", not by the pinned key " + signer.Fingerprint(),
+		},
+		"block without the signer": {
+			manifest("sha256sums.asc", "other.asc", signer.Fingerprint()),
+			"/keys/other.asc carries no key with the pinned fingerprint " + signer.Fingerprint(),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := pins.Refresh(t.Context(), writePins(t, refused.text), io.Discard)
 			if !errors.Is(err, pins.ErrVerify) {
 				t.Fatalf("err = %v, want ErrVerify", err)
+			}
+
+			if !strings.Contains(err.Error(), refused.says) {
+				t.Errorf("err = %v, want it to say %q", err, refused.says)
 			}
 		})
 	}

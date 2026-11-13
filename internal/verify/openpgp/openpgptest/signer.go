@@ -153,6 +153,13 @@ func KeyBlock(signers ...*Signer) []byte {
 
 // Clearsign signs text as a clearsigned message with the given digest.
 func (s *Signer) Clearsign(text string, hash crypto.Hash) ([]byte, error) {
+	return ClearsignBy(text, hash, s)
+}
+
+// ClearsignBy signs text as one clearsigned message carrying a signature of
+// each signer, in that order: the sums file of a project with several
+// release keys.
+func ClearsignBy(text string, hash crypto.Hash, signers ...*Signer) ([]byte, error) {
 	hashID, known := hashIDs[hash]
 	if !known {
 		return nil, fmt.Errorf("%w: %v", errNoHashNumber, hash)
@@ -173,16 +180,22 @@ func (s *Signer) Clearsign(text string, hash crypto.Hash) ([]byte, error) {
 		escaped = append(escaped, line)
 	}
 
-	sig, err := s.sign([]byte(strings.Join(canonical, "\r\n")), sigTypeText, hash, hashID)
-	if err != nil {
-		return nil, err
+	var packets []byte
+
+	for _, signer := range signers {
+		sig, err := signer.sign([]byte(strings.Join(canonical, "\r\n")), sigTypeText, hash, hashID)
+		if err != nil {
+			return nil, err
+		}
+
+		packets = append(packets, packet(tagSignature, sig)...)
 	}
 
 	var out strings.Builder
 
 	_, _ = out.WriteString("-----BEGIN PGP SIGNED MESSAGE-----\nHash: " + hashName(hash) + "\n\n")
 	_, _ = out.WriteString(strings.Join(escaped, "\n") + "\n")
-	_, _ = out.Write(armor("SIGNATURE", packet(tagSignature, sig)))
+	_, _ = out.Write(armor("SIGNATURE", packets))
 
 	return []byte(out.String()), nil
 }
