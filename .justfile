@@ -43,7 +43,10 @@ test-lint-converge:
     export HERMETIC_CONFIG="${HERMETIC_CONFIG:-$PWD/.hermetic/hermetic.yaml}"
     scratch=$(mktemp -d "${TMPDIR:-/tmp}/lint-converge.XXXXXX")
     out="$scratch.out"
-    trap 'rm -rf "$scratch" "$out"' EXIT
+    # Out of the scratch before it goes: Windows does not remove a directory
+    # a process still stands in.
+    here="$PWD"
+    trap 'cd "$here" && rm -rf "$scratch" "$out"' EXIT
     mkdir -p "$scratch/.limen"
     cp -R .limen/just "$scratch/.limen/just"
     cd "$scratch"
