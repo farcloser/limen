@@ -525,3 +525,27 @@ once the tag's push date on the registry is older than the cooldown.
 
 **Lifts when** Renovate reports the release age of a Docker digest update as met once the
 tag's push is older than the cooldown. Not reported upstream yet.
+
+## GitHub's filtered run listings leave out a run that awaits approval
+
+**Symptom.** A Renovate pull request sits at its converged head with one workflow's checks
+missing: the fix-up commit was pushed, one of the head's two runs was approved and went
+green, and the other never started. The checksum workflow's approve step found nothing more
+to approve and ended green. On https://github.com/farcloser/limen-install/pull/200 the `ci`
+run of the fix-up's head stayed at `action_required` beside an approved `security` run
+created the same second.
+
+**Cause.** `GET /repos/{owner}/{repo}/actions/runs` answers differently with and without a
+filter. The run was in the unfiltered listing from the start; filtered by `head_sha`, by
+`branch`, by `status=action_required`, or listed under its own workflow with `head_sha`, it
+was absent, and still was fifty minutes later, while its sibling was returned by the same
+filter within ten seconds. Why the filtered listings left it out is not known.
+
+**Workaround.** The approve step lists the repository's hundred newest runs unfiltered and
+picks the head out itself (`limen-update-aqua-checksum.yaml`). That hundred is all it sees:
+a repository that starts more runs than that in the three minutes the step polls can push
+one of the head's out of view. A run the step does not see is approved by hand, from the
+pull request's checks or with `gh api -X POST repos/<owner>/<repo>/actions/runs/<id>/approve`.
+
+**Lifts when** a filtered listing returns every run of a head as soon as the unfiltered one
+does. Not reported upstream yet.
