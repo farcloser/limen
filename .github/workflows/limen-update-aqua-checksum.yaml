@@ -13,9 +13,12 @@
 # commit.
 #
 # A WRITE workflow, hardened: `push:` on the branch prefix, never
-# pull_request_target; no credential kept by checkout and no secrets in the
-# update steps' environment beyond the job's own token where a verifier must
-# read from GitHub; nothing runs through `just` (a write job does not execute
+# pull_request_target, and Renovate's own pushes alone (a push by anyone else
+# to a renovate/ branch runs nothing here, so nobody is handed a commit
+# signed as the bot over a tree of their choosing); no credential kept by
+# checkout and no secrets in the update steps' environment beyond the job's
+# own token where a verifier must read from GitHub; nothing runs through
+# `just` (a write job does not execute
 # recipe code the branch controls — what runs is aqua, and the limen release
 # the branch selects by checksum); the commit step uses runner tools only,
 # the branch name reaches the shell via env; no loop, since a commit made
@@ -41,6 +44,9 @@ defaults:
 
 jobs:
   update:
+    # The actor of a push is who pushed, and a rerun keeps it: the hosted
+    # Renovate App alone.
+    if: github.actor == 'renovate[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

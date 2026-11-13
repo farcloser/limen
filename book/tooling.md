@@ -659,6 +659,11 @@ what a clearsigned checksum file takes and refuses the rest by name (another key
 weak digest, an algorithm it does not carry). Downloads retry transient failures the way
 every `curl` in the rig does; a verifier's refusal ends the run with the file as it was.
 
+The workflow answers Renovate's pushes alone. A push by anyone else to a `renovate/` branch
+(the fix a bump needs, made by hand) runs nothing of it, and that tree is converged by hand,
+`just fix`, as on any other branch: a commit signed as the bot over a
+tree someone else pushed is not something the workflow gives out.
+
 <a id="two-runs-per-renovate-bump"></a>
 **Two runs per bump, the first one red — by design.** Renovate's push is a bare commit: the
 pin has moved, the checksum has not. CI fires on it and `lint aqua` fails, truthfully, and
