@@ -320,8 +320,7 @@ converge: (_banner "lint" "converge")
     trap 'rm -rf "$tmpdir"' EXIT
     # The declaration, held to what the checksum workflow accepts: one tracked
     # regular file under git's own name for it, outside the directories that
-    # are git's, GitHub's or limen's, free of the characters unzip reads as a
-    # pattern.
+    # are git's, GitHub's or limen's.
     : > "$tmpdir/declared"
     while IFS= read -r line || [ -n "$line" ]; do
         path="${line%$'\r'}"
@@ -333,7 +332,7 @@ converge: (_banner "lint" "converge")
             exit 1
         fi
         case "$path" in
-            .git/* | .github/* | .limen/* | .hermetic/* | *[\*\?\[\]\\]*)
+            .git/* | .github/* | .limen/* | .hermetic/*)
                 echo ".converge: $path is not a path a derived file may have." >&2
                 exit 1
                 ;;

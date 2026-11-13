@@ -301,8 +301,8 @@ jobs:
   finish:
     # Runs when there is a head to approve or a converge to judge, whatever
     # became of `converge` itself. No hermetic here: the job needs git, jq,
-    # curl, unzip and gh, which the runner has, and a job that links no pin
-    # runs nothing the branch chose.
+    # curl, python3 and gh, which the runner has, and a job that links no
+    # pin runs nothing the branch chose.
     needs: [update, converge]
     if: ${{ !cancelled() && needs.update.result == 'success' && (needs.update.outputs.oid != '' || needs.update.outputs.converge == 'true') }}
     runs-on: ubuntu-24.04
@@ -343,9 +343,8 @@ jobs:
           # A path is one tracked file under git's own name for it (`./x`,
           # `a//x` and a pathspec all name files the patterns below would
           # not see), regular, outside the directories that are git's,
-          # GitHub's or limen's, and free of the characters unzip reads as a
-          # pattern: the recipe's run can change a file the project named,
-          # and create or reach nothing.
+          # GitHub's or limen's: the recipe's run can change a file the
+          # project named, and create or reach nothing.
           : > "${work}/declared"
           while IFS= read -r line || [ -n "${line}" ]; do
             path="${line%$'\r'}"
@@ -357,30 +356,43 @@ jobs:
               exit 1
             fi
             case "${path}" in
-              .git/* | .github/* | .limen/* | .hermetic/* | *[\*\?\[\]\\]*)
+              .git/* | .github/* | .limen/* | .hermetic/*)
                 echo "::error::.converge: ${path} is not a path a derived file may have"
                 exit 1
                 ;;
             esac
             printf '%s\n' "${path}" >> "${work}/declared"
           done < .converge
-          # One archive, whatever the action named it.
+          # One archive, whatever the action named it, read one entry at a
+          # time by its exact name and never unpacked: a link or a path in
+          # it goes nowhere, and a name is no pattern. 3 is "no such entry".
           archive="$(find "${RUNNER_TEMP}/converge" -maxdepth 1 -type f)"
           if [ ! -f "${archive}" ]; then
             echo "::error::the converge artifact is not one archive: ${archive}"
             exit 1
           fi
-          if ! unzip -p "${archive}" status > "${work}/status"; then
+          entry() {
+            python3 -I -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); n = sys.argv[2]; sys.exit(3) if n not in z.namelist() else sys.stdout.buffer.write(z.read(n))' "${archive}" "$1"
+          }
+          if ! entry status > "${work}/status"; then
             echo "::error::the converge artifact carries no status"
             exit 1
           fi
           # All of the run or none of it: a recipe that touched a file the
-          # project did not declare is not committed in part. The status is
-          # the recipe's job's word, so it can leave a change out, which
-          # only withholds it; it cannot bring one in.
+          # project did not declare is not committed in part. This refusal
+          # is the status's one use. It is the recipe's job's word: it can
+          # leave a change out, which only withholds it, and it names no
+          # path that is committed. A name holding a newline is undeclared,
+          # no declared path being one, and would read as two to grep.
           undeclared=""
           while IFS= read -r -d '' entry; do
             path="${entry:3}"
+            case "${path}" in
+              *$'\n'*)
+                undeclared="${undeclared} (a name holding a newline)"
+                continue
+                ;;
+            esac
             if ! grep -Fxq -- "${path}" "${work}/declared"; then
               undeclared="${undeclared} ${path}"
             fi
@@ -389,13 +401,18 @@ jobs:
             echo "::error::converge changed what .converge does not declare:${undeclared}"
             exit 1
           fi
+          # The paths committed are the declaration's, this checkout's word,
+          # and never the archive's or the status's: each declared file
+          # whose entry the archive carries and whose bytes differ.
           printf '[]' > "${work}/additions.json"
-          while IFS= read -r -d '' entry; do
-            path="${entry:3}"
-            # The entry's bytes, to a file of this job's: nothing is
-            # unpacked, so a link or a path in the archive goes nowhere.
-            if ! unzip -p "${archive}" "files/${path}" > "${work}/file"; then
-              echo "::error::converge: ${path} changed and its contents are not in the artifact"
+          while IFS= read -r path; do
+            found=0
+            entry "files/${path}" > "${work}/file" || found=$?
+            if [ "${found}" = 3 ]; then
+              continue
+            fi
+            if [ "${found}" != 0 ]; then
+              echo "::error::converge: ${path} could not be read out of the artifact"
               exit 1
             fi
             cmp -s "${work}/file" "${path}" && continue
@@ -404,7 +421,7 @@ jobs:
               '. + [{path: $path, contents: ($contents | rtrimstr("\n"))}]' \
               "${work}/additions.json" > "${work}/next"
             mv "${work}/next" "${work}/additions.json"
-          done < "${work}/status"
+          done < "${work}/declared"
           if [ "$(jq length "${work}/additions.json")" = 0 ]; then
             echo "the derived files are already in sync"
             exit 0

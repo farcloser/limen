@@ -672,7 +672,7 @@ A project with such files declares them and says how they are made:
 
 - **`.converge`**, at the repository root, names them: one path a line, `#` lines and empty
   lines skipped. A path is a tracked regular file, spelled as git names it (no `./`, no
-  pattern), outside `.git`, `.github`, `.limen` and `.hermetic`.
+  pathspec), outside `.git`, `.github`, `.limen` and `.hermetic`.
 - **A `converge` recipe** in the project's `.justfile` regenerates every one of them from
   the tree as it stands, and writes nothing else. It is idempotent; its output does not
   depend on the host that runs it (the checksum workflow runs it on Linux); and it fetches
