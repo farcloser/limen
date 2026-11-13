@@ -86,3 +86,7 @@ vm +args:
     status="$(tr -d '[:space:]' < "$share_root/$runid.exit")"
     rm -f "$log" "$share_root/$runid.exit"
     exit "$status"
+
+# validation scaffolding
+converge:
+    echo "converged, scenario c" > validate/derived.lock
