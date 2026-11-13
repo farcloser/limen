@@ -14,7 +14,7 @@ default:
 
 lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode
 fix: build-lint-go do::fix::default do::fix::go::default
-test: do::test::go::default test-lint-go
+test: do::test::go::default test-lint-go test-lint-converge
 security: do::security::default
 
 # limen-lint-go is the second binary of limen's release (see .release-go.yaml),
@@ -29,6 +29,64 @@ build-lint-go:
 
 test-lint-go:
     cd cmd/limen-lint-go && "$LIMEN_BUILD/tools/gotestsum" -- -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" ./...
+
+# The `lint converge` lane (.limen/just/lint.just), run for real. limen
+# declares no derived file of its own, so its lint passes the lane vacuously
+# and nothing else in this repository runs it: a scratch repository with a
+# copy of the shared recipes, a declared file and a `converge` recipe, on
+# every platform the tests run on. On Windows the lane reaches `just` and the
+# project's recipe through git-bash, which is where it once could not.
+test-lint-converge:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The pins are this checkout's, wherever the lane runs from.
+    export HERMETIC_CONFIG="${HERMETIC_CONFIG:-$PWD/.hermetic/hermetic.yaml}"
+    scratch=$(mktemp -d "${TMPDIR:-/tmp}/lint-converge.XXXXXX")
+    out="$scratch.out"
+    trap 'rm -rf "$scratch" "$out"' EXIT
+    mkdir -p "$scratch/.limen"
+    cp -R .limen/just "$scratch/.limen/just"
+    cd "$scratch"
+    git init -q .
+    git config core.autocrlf false
+    printf 'derived, as converged\n' > derived.lock
+    printf 'other\n' > other.txt
+    printf '# the derived files\nderived.lock\n' > .converge
+    {
+        printf '%s\n' "import '.limen/just/main.just'" '' 'converge:'
+        printf '%s\n' "    printf 'derived, %s\\n' \"\${CONVERGE_SAYS:-as converged}\" > derived.lock"
+        # shellcheck disable=SC2016 # the recipe's own text: expanded when it runs, not here
+        printf '%s\n' '    if [ -n "${CONVERGE_TOUCHES:-}" ]; then echo touched >> other.txt; fi'
+    } > .justfile
+    git add -A
+    lane() { just do lint converge > "$out" 2>&1; }
+    refused() {
+        if lane; then
+            echo "lint converge passed, want it to fail: $1" >&2
+            cat "$out" >&2
+            exit 1
+        fi
+        if ! grep -qF -- "$2" "$out"; then
+            echo "lint converge failed without saying \"$2\": $1" >&2
+            cat "$out" >&2
+            exit 1
+        fi
+    }
+    if ! lane; then
+        echo "lint converge failed on files that are what the recipe makes:" >&2
+        cat "$out" >&2
+        exit 1
+    fi
+    CONVERGE_SAYS=moved refused "a declared file the recipe would change" "derived.lock is not what 'just converge' makes"
+    if [ "$(cat derived.lock)" != 'derived, as converged' ]; then
+        echo "lint converge left derived.lock as the recipe wrote it: $(cat derived.lock)" >&2
+        exit 1
+    fi
+    CONVERGE_TOUCHES=1 refused "a file the recipe touches and does not declare" "changed other.txt, which .converge does not declare"
+    printf 'other\n' > other.txt
+    printf './derived.lock\n' > .converge
+    refused "a path spelled otherwise than git names it" "is not a tracked regular file under that exact name"
+    echo "lint converge: in sync, stale and restored, undeclared, misspelled, ok"
 
 # Host-side helper, not baseline: presupposes macOS, UTM and a provisioned
 # Windows VM (book/vm_testing.md). The VM mounts this repository's parent as
