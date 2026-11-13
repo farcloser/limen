@@ -27,8 +27,9 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   cosign, the artifacts signed by the workflow's short-lived Fulcio identity (no key exists
   anywhere) and logged in Rekor, then GitHub's build provenance attestation over every
   archive, every SBOM and `checksums.txt`, which `gh attestation verify <asset> --repo
-  <owner>/<repo>` checks wherever `gh` is, no cosign needed: what a bootstrap verifies a
-  binary with before any tool exists (a public repository; GitHub stores attestations for a
+  <owner>/<repo> --signer-workflow <owner>/<repo>/.github/workflows/release.yaml@refs/tags/<tag>`
+  checks wherever `gh` is, no cosign needed: what a bootstrap verifies a binary with before
+  any tool exists (a public repository; GitHub stores attestations for a
   private one on Enterprise Cloud only, and the lane skips the step there). `just do release
   --local --dry-run` builds an unsigned snapshot into `.build/release/`, SBOMs included, so
   the whole lane is proved on a laptop short of the signature. There is no key-based lane:
@@ -41,10 +42,13 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     Sigstore bundle over `checksums.txt`, keyless, the workflow's identity, Rekor-logged;
     and GitHub's build provenance attestation over every archive, every SBOM and
     `checksums.txt`. A consumer verifies either: `cosign verify-blob` against the workflow
-    identity, or `gh attestation verify <asset> --repo <owner>/<repo>`, plus
-    `--signer-workflow farcloser/limen/.github/workflows/limen-release-apple.yaml` for a
-    release through the Apple lane, whose attestation a reusable workflow in limen signs
-    where gh expects a signer in the repository itself; hermetic verifies the checksums
+    identity, or `gh attestation verify <asset> --repo <owner>/<repo> --signer-workflow
+    <workflow>`. The signer is always named: `--repo` alone admits any workflow of the
+    repository, at any ref, where the release is one workflow at one tag. It is
+    `<owner>/<repo>/.github/workflows/release.yaml@refs/tags/<tag>` for the default lane, and
+    `farcloser/limen/.github/workflows/limen-release-apple.yaml` for a release through the
+    Apple lane, whose attestation a reusable workflow in limen signs where gh expects a
+    signer in the repository itself; hermetic verifies the checksums
     against the bundle on every install. Nothing fetched goes unattested.
     The signature is goreleaser's `signs:` section, limen's inside `.release-go.yaml`: it
     runs `just do release-sign`, which retries the cosign call a dropped connection to
@@ -148,7 +152,8 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     consumer names it, `gh attestation verify <asset> --repo <owner>/<repo> --signer-workflow
     farcloser/limen/.github/workflows/limen-release-apple.yaml`, since gh expects the signer
     in the repository it verifies otherwise and refuses the asset. The default lane's seeded
-    `release.yaml` attests from the repository itself, and the plain command holds there.
+    `release.yaml` attests from the repository itself, and is the signer named there, at the
+    tag (the signing and provenance policy, above).
   - **What the project owes**: `package <version>`, which builds, signs with the exported identity,
     notarizes where the policy says and writes every release asset under `.build/assets/`; and
     `verify-assets <version>`, goreleaser's before hook, asserting what `.build/assets/` holds. Both
