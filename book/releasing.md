@@ -50,6 +50,17 @@ the interface (`just do release`); this chapter is its rules and its lanes.
     Apple lane, whose attestation a reusable workflow in limen signs where gh expects a
     signer in the repository itself; hermetic verifies the checksums
     against the bundle on every install. Nothing fetched goes unattested.
+  - **A verification names the release, not the repository's releases.** Whatever is left
+    open is accepted: a check that admits any tag takes an earlier release's files, validly
+    signed, in place of the one asked for. For the default lane the cosign identity is exact,
+    `--certificate-identity https://github.com/<owner>/<repo>/.github/workflows/release.yaml@refs/tags/<tag>`,
+    never a pattern over the tags, and the attestation's signer carries the same ref. A lane
+    in limen signs for every repository that releases through it, from one ref of its own:
+    its identity names neither the repository nor the tag, so cosign is given the lane as
+    `--certificate-identity-regexp` together with `--certificate-github-workflow-repository
+    <owner>/<repo>` and `--certificate-github-workflow-ref refs/tags/<tag>`, and gh is given
+    `--source-ref refs/tags/<tag>` beside the repository and the signer. The commands are
+    written out above `signs:` in [.release-go.yaml](../.release-go.yaml).
     The signature is goreleaser's `signs:` section, limen's inside `.release-go.yaml`: it
     runs `just do release-sign`, which retries the cosign call a dropped connection to
     Fulcio fails, since cosign does not; `limen check` fails any other section, `limen fix`
@@ -149,9 +160,12 @@ the interface (`just do release`); this chapter is its rules and its lanes.
   - **The `publish` job** holds no Apple secret: it runs `just do release --ci` on macOS, where
     `verify-assets` has `codesign` and `stapler`, and attests `.build/assets/*` and `checksums.txt`.
     The attestation's signer is the lane, a workflow in limen, not the project's own: a
-    consumer names it, `gh attestation verify <asset> --repo <owner>/<repo> --signer-workflow
-    farcloser/limen/.github/workflows/limen-release-apple.yaml`, since gh expects the signer
-    in the repository it verifies otherwise and refuses the asset. The default lane's seeded
+    consumer names it, `gh attestation verify <asset> --repo <owner>/<repo> --source-ref
+    refs/tags/<tag> --signer-workflow farcloser/limen/.github/workflows/limen-release-apple.yaml`,
+    since gh expects the signer in the repository it verifies otherwise and refuses the
+    asset, and holds it to its tag by the source ref, the signer's ref being the lane's. The
+    cosign bundle is the lane's too: its identity is given as a pattern with the repository
+    and the tag beside it (the policy, above). The default lane's seeded
     `release.yaml` attests from the repository itself, and is the signer named there, at the
     tag (the signing and provenance policy, above).
   - **What the project owes**: `package <version>`, which builds, signs with the exported identity,

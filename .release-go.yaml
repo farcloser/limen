@@ -127,16 +127,32 @@ sboms:
 # (the release workflow runs `just do release --ci`): no key exists anywhere.
 # cosign exchanges the workflow's OIDC token (id-token: write) for a
 # short-lived Fulcio certificate whose identity IS the workflow@tag, and the
-# signature is logged in Rekor. Verify against that identity:
+# signature is logged in Rekor. Verify against that identity, exactly: a
+# pattern over the tags accepts an earlier release's checksums.txt and bundle
+# in place of this one's.
+#   cosign verify-blob --bundle checksums.txt.sigstore.json \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --certificate-identity \
+#       https://github.com/<owner>/<repo>/.github/workflows/release.yaml@refs/tags/<tag> \
+#     checksums.txt
+# A release through limen's Apple lane is signed by the lane, a workflow in
+# farcloser/limen every repository on the lane shares: its identity names no
+# repository and no tag, so the certificate's own fields are held to both.
 #   cosign verify-blob --bundle checksums.txt.sigstore.json \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
 #     --certificate-identity-regexp \
-#       'https://github.com/<owner>/<repo>/\.github/workflows/release\.yaml@refs/tags/v.*' \
+#       '^https://github\.com/farcloser/limen/\.github/workflows/limen-release-apple\.yaml@' \
+#     --certificate-github-workflow-repository <owner>/<repo> \
+#     --certificate-github-workflow-ref refs/tags/<tag> \
 #     checksums.txt
 # The release workflow then attests every archive, SBOM and checksums.txt
 # (GitHub build provenance), checked without cosign:
 #   gh attestation verify <asset> --repo <owner>/<repo> \
 #     --signer-workflow <owner>/<repo>/.github/workflows/release.yaml@refs/tags/<tag>
+# and, through the Apple lane, where the signer's ref is limen's and the tag
+# is the source's:
+#   gh attestation verify <asset> --repo <owner>/<repo> --source-ref refs/tags/<tag> \
+#     --signer-workflow farcloser/limen/.github/workflows/limen-release-apple.yaml
 # A local run is `--local --dry-run`, which skips signing: there is no
 # key-based lane (book/releasing.md). The section is limen's (limen fix sets
 # it): cosign runs through `just do release-sign`, which retries what cosign
