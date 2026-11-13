@@ -528,7 +528,8 @@ git commit --message "tooling: bump golangci-lint"
    it regenerates `.hermetic/aqua-checksums.json`, and, when the bumped tool is `limen` itself,
    runs the newly pinned `limen fix` so the canonical files move with the pin (a repo is
    coherent only when the limen that wrote its files is the limen it pins; either half alone
-   leaves the repo red).
+   leaves the repo red). In a repository that declares files derived from its pins, it
+   regenerates those too ([below](#files-derived-from-a-pin-converge)).
 3. You review the changelog and merge, or don't. Each tool is bumped independently.
 
 > **Critical:** Renovate can update versions but **cannot** update `.hermetic/aqua-checksums.json`
@@ -659,9 +660,44 @@ what a clearsigned checksum file takes and refuses the rest by name (another key
 weak digest, an algorithm it does not carry). Downloads retry transient failures the way
 every `curl` in the rig does; a verifier's refusal ends the run with the file as it was.
 
+### Files derived from a pin: `.converge`
+
+A pin can leave a committed file stale that nothing in Renovate knows follows it. A .NET SDK
+patch moves the version of a package the SDK references implicitly; the project's
+`packages.lock.json`, restored in locked mode, then refuses the build (`NU1004`) until it is
+re-locked. Hosted Renovate runs no post-upgrade task, so such a bump arrived red and stayed
+red until a hand re-locked it.
+
+A project with such files declares them and says how they are made:
+
+- **`.converge`**, at the repository root, names them: one path a line, `#` lines and empty
+  lines skipped. A path is a tracked regular file, spelled as git names it (no `./`, no
+  pathspec), outside `.git`, `.github`, `.limen` and `.hermetic`.
+- **A `converge` recipe** in the project's `.justfile` regenerates every one of them from
+  the tree as it stands, and writes nothing else. It is idempotent; its output does not
+  depend on the host that runs it (the checksum workflow runs it on Linux); and it fetches
+  through the pinned tools alone (`limen pins get` for an archive, as the build does).
+- **`just do lint converge`**, named in the project's own `lint`, runs the recipe and fails
+  when a declared file differs afterwards or an undeclared one was touched, and puts the
+  declared files back as it found them. A stale derived file on any branch is then red by
+  its name, not by whatever breaks downstream of it.
+
+On a Renovate branch the checksum workflow brings them along. After its own commit, a job
+whose token can read the repository and nothing more runs `just converge` at that head; a
+last job commits what the recipe changed, as file contents, for the declared paths alone,
+and approves the runs of the final head. The recipe is the project's code, and what it runs
+includes the artifact the branch has just bumped, so the job that executes it writes
+nothing, and what it hands over is held to the declaration as a clean checkout reads it: a
+path changed outside `.converge` fails that job, and nothing of the run is committed. That
+last job runs nothing the branch declares, not even its pins: the runner's own tools read
+the recipe's archive entry by entry and never unpack it. What
+the workflow does not judge is the content of a declared file: a lock file a compromised SDK
+wrote is in the pull request's diff like any other change, and the defence against that SDK
+is its pin's `verify:` method.
+
 The workflow answers Renovate's pushes alone. A push by anyone else to a `renovate/` branch
 (the fix a bump needs, made by hand) runs nothing of it, and that tree is converged by hand,
-`just fix`, as on any other branch: a commit signed as the bot over a
+`just fix` and `just converge`, as on any other branch: a commit signed as the bot over a
 tree someone else pushed is not something the workflow gives out.
 
 <a id="two-runs-per-renovate-bump"></a>
@@ -670,7 +706,9 @@ pin has moved, the checksum has not. CI fires on it and `lint aqua` fails, truth
 every tool that needs the new pin refuses to install. Minutes later the checksum workflow's
 fix-up commit lands and its run is the green one. A red run on a Renovate commit that touches
 `.hermetic/hermetic.yaml`, followed by a green run on the bot's fix-up, is the expected shape of such
-a pull request, and the red says what it is. It is not made to look otherwise: a job that
+a pull request, and the red says what it is (with derived files, one more: green comes with
+the commit that converges them). The fix-up's own runs start once the workflow's last job
+has approved them, a second runner after the push. It is not made to look otherwise: a job that
 skipped the run as "neutral" would add a checkout to every run of every repository and a run
 that ends without linting, worse than a true red; and hosted Renovate cannot refresh the
 checksum inside its own commit (post-upgrade tasks are self-hosted only). **Cancelled runs**
