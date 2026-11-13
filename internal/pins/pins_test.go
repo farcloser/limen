@@ -533,6 +533,13 @@ func TestParseRejects(t *testing.T) {
 			strings.Replace(good, "verify: download",
 				"verify: pgp-sha256sums https://x/s.asc https://x/k.asc 632D3A06589DA6B1", 1), pins.ErrEntry,
 		},
+		"pgp-detached with a key id, not a fingerprint": {
+			strings.Replace(good, "verify: download",
+				"verify: pgp-detached https://x/t.sig https://x/k.asc 632D3A06589DA6B1", 1), pins.ErrEntry,
+		},
+		"pgp-detached without the key": {
+			strings.Replace(good, "verify: download", "verify: pgp-detached https://x/t.sig", 1), pins.ErrEntry,
+		},
 		"half a digest":  {strings.Replace(good, "      version: 1\n", "", 1), pins.ErrEntry},
 		"duplicate name": {good + strings.TrimPrefix(good, "pins:\n"), pins.ErrEntry},
 		"unknown variable in url": {
@@ -935,6 +942,135 @@ func TestRefreshThroughClearsignedSums(t *testing.T) {
 			_, err := pins.Refresh(t.Context(), writePins(t, text), io.Discard)
 			if !errors.Is(err, pins.ErrVerify) {
 				t.Fatalf("err = %v, want ErrVerify", err)
+			}
+		})
+	}
+}
+
+func TestRefreshThroughDetachedSignature(t *testing.T) {
+	t.Parallel()
+
+	tarball := []byte("\x1f\x8b the xz tarball\n")
+
+	signer, err := openpgptest.NewRSA()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other, err := openpgptest.NewEd25519()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The two files upstreams publish: an armored .asc, a binary .sig in
+	// GnuPG's old packet format.
+	armored, err := signer.SignDetached(tarball, crypto.SHA256, openpgptest.Detached{Armored: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	binary, err := signer.SignDetached(tarball, crypto.SHA512, openpgptest.Detached{OldHeader: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A file two keys signed, the pinned signer second, as GnuPG's own
+	// tarballs are: two packets in one .sig, every release key in one block.
+	otherFirst, err := other.SignDetached(tarball, crypto.SHA512, openpgptest.Detached{OldHeader: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	host := artifactHost(t, map[string]string{
+		"/releases/v5.8.4/xz-5.8.4.tar.xz":      string(tarball),
+		"/releases/v5.8.4/xz-5.8.4.tar.xz.asc":  string(armored),
+		"/releases/v5.8.4/xz-5.8.4.tar.xz.sig":  string(binary),
+		"/releases/v5.8.4/xz-5.8.4.tar.xz.both": string(otherFirst) + string(binary),
+		"/releases/v5.8.4/tampered.tar.xz":      string(tarball) + "!",
+		"/keys/signer.asc":                      string(signer.PublicKeyBlock()),
+		"/keys/other.asc":                       string(other.PublicKeyBlock()),
+		"/keys/both.asc":                        string(openpgptest.KeyBlock(other, signer)),
+	})
+
+	manifest := func(name, sig, key, fingerprint string) string {
+		return `pins:
+  - name: xz
+    renovate: github-releases tukaani-project/xz
+    extract-version: ^v(?<version>.*)$
+    version: 5.8.4
+    url: ` + host.URL + `/releases/v${version}/` + name + `
+    verify: pgp-detached ` + host.URL + `/releases/v${version}/xz-${version}.tar.xz` + sig + ` ` + host.URL + `/keys/` + key + ` ` + fingerprint + `
+    digest:
+      version: 5.8.3
+      sha256: ` + strings.Repeat("1", 64) + `
+`
+	}
+
+	sum := sha256.Sum256(tarball)
+
+	for name, published := range map[string][2]string{
+		"armored":                   {".asc", "signer.asc"},
+		"binary":                    {".sig", "signer.asc"},
+		"pinned signer second":      {".both", "both.asc"},
+		"pinned key alone in block": {".both", "signer.asc"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			root := writePins(
+				t,
+				manifest("xz-${version}.tar.xz", published[0], published[1], strings.ToLower(signer.Fingerprint())),
+			)
+
+			changed, err := pins.Refresh(t.Context(), root, io.Discard)
+			if err != nil {
+				t.Fatalf("refresh: %v", err)
+			}
+
+			if !slices.Equal(changed, []string{"xz"}) {
+				t.Errorf("changed = %v, want xz", changed)
+			}
+
+			parsed, err := pins.Parse(mustRead(t, filepath.Join(root, pins.File)))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got, _ := parsed.Get("xz", "sha256"); got != hex.EncodeToString(sum[:]) {
+				t.Errorf("xz sha256 = %s, want the artifact's %x", got, sum)
+			}
+		})
+	}
+
+	// Each refusal says why: the reader of a red refresh has the URL and the
+	// fingerprints, not the code.
+	for name, refused := range map[string]struct{ text, says string }{
+		"tampered artifact": {
+			manifest("tampered.tar.xz", ".asc", "signer.asc", signer.Fingerprint()), "does not verify",
+		},
+		"block's other key pinned": {
+			manifest("xz-${version}.tar.xz", ".sig", "both.asc", other.Fingerprint()),
+			"is signed by " + signer.Fingerprint() + ", not by the pinned key " + other.Fingerprint(),
+		},
+		"two signers, pin not in block": {
+			manifest("xz-${version}.tar.xz", ".both", "other.asc", signer.Fingerprint()),
+			"is signed by " + other.Fingerprint() + ", not by the pinned key " + signer.Fingerprint(),
+		},
+		"block without the signer": {
+			manifest("xz-${version}.tar.xz", ".asc", "other.asc", signer.Fingerprint()),
+			"/keys/other.asc carries no key with the pinned fingerprint " + signer.Fingerprint(),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := pins.Refresh(t.Context(), writePins(t, refused.text), io.Discard)
+			if !errors.Is(err, pins.ErrVerify) {
+				t.Fatalf("err = %v, want ErrVerify", err)
+			}
+
+			if !strings.Contains(err.Error(), refused.says) {
+				t.Errorf("err = %v, want it to say %q", err, refused.says)
 			}
 		})
 	}

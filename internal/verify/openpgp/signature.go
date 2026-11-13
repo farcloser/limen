@@ -12,10 +12,12 @@ import (
 	"strings"
 )
 
-// Signature types (RFC 4880 §5.2.1): a clearsigned document carries a
-// canonical text signature.
+// Signature types (RFC 4880 §5.2.1): a detached signature over a file is
+// one of a binary document, a clearsigned document carries a canonical
+// text signature.
 const (
-	sigTypeText = 0x01
+	sigTypeBinary = 0x00
+	sigTypeText   = 0x01
 )
 
 // Hash algorithms (RFC 4880 §9.4). The weak ones — MD5, SHA-1, RIPEMD-160 —
@@ -198,6 +200,24 @@ func (s *signature) trailer() []byte {
 	) // #nosec G115 -- a two-octet length plus six.
 }
 
+// signer finds, among the keys the signature names (every key when it
+// names none), the one it verifies against over data.
+func (s *signature) signer(keys []Key, data []byte) (Fingerprint, error) {
+	err := ErrNoKey
+
+	for _, key := range keys {
+		if !s.names(key) {
+			continue
+		}
+
+		if err = s.verify(key, data); err == nil {
+			return key.Fingerprint, nil
+		}
+	}
+
+	return "", err
+}
+
 // verify checks the signature over data with key.
 func (s *signature) verify(key Key, data []byte) error {
 	if key.public == nil || !sameFamily(key.algorithm, s.pubAlg) {
@@ -234,7 +254,13 @@ func (s *signature) verify(key Key, data []byte) error {
 
 		half := ed25519.SignatureSize / 2
 
-		sig := append(leftPad(s.integers[0], half), leftPad(s.integers[1], half)...)
+		// A slice of its own: the integers are views of the caller's
+		// signature, and appending to the first would write the second over
+		// the octets that follow it there.
+		sig := make([]byte, 0, ed25519.SignatureSize)
+		sig = append(sig, leftPad(s.integers[0], half)...)
+		sig = append(sig, leftPad(s.integers[1], half)...)
+
 		if !ed25519.Verify(public, digest, sig) {
 			return ErrSignature
 		}

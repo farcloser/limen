@@ -82,19 +82,7 @@ func verifyOne(body, hashes []byte, keys []Key, canonical []byte) (Fingerprint, 
 		return "", fmt.Errorf("%w: hash algorithm %d is not among the Hash headers", ErrSignature, sig.hashAlg)
 	}
 
-	err = ErrNoKey
-
-	for _, key := range keys {
-		if !sig.names(key) {
-			continue
-		}
-
-		if err = sig.verify(key, canonical); err == nil {
-			return key.Fingerprint, nil
-		}
-	}
-
-	return "", err
+	return sig.signer(keys, canonical)
 }
 
 // clearsigned is a clearsigned message taken apart.

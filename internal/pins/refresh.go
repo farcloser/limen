@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -158,6 +159,10 @@ func digest(ctx context.Context, root string, entry Entry) (string, error) {
 		return hashFromSignedSums(ctx, root, entry, args)
 	case VerifyPGPSums:
 		return hashFromClearsignedSums(ctx, entry, args)
+	case VerifyPGPDetached:
+		return hashDownload(ctx, entry.ResolvedURL(), func(file string) error {
+			return verifyPGPDetached(ctx, file, args)
+		})
 	case VerifyCMS:
 		return hashDownload(ctx, entry.ResolvedURL(), func(file string) error {
 			return verifyCMS(ctx, file, args)
@@ -295,6 +300,76 @@ func hashFromClearsignedSums(ctx context.Context, entry Entry, args []string) (s
 	}
 
 	return sumFor(verified.Text, path.Base(entry.ResolvedURL()), sumsURL)
+}
+
+// verifyPGPDetached fetches the detached OpenPGP signature published beside
+// the artifact and the signer's public key block, and verifies the signature
+// in-process over the downloaded bytes against the block's key the entry
+// pins by fingerprint, and no other: a file several keys signed verifies
+// when the pinned one is among them, wherever its signature stands. The
+// key's URL is transport — a key from anywhere is accepted if and only if
+// it is the pinned one. The bytes verified are the bytes hashed.
+func verifyPGPDetached(ctx context.Context, file string, args []string) error {
+	sigURL, keyURL, fingerprint := args[0], args[1], strings.ToUpper(args[2])
+
+	dir, err := os.MkdirTemp("", tempPrefix)
+	if err != nil {
+		return fmt.Errorf(errTempDir, err)
+	}
+
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	sig := filepath.Join(dir, "signature")
+	key := filepath.Join(dir, "key.asc")
+
+	if _, err = download(ctx, sigURL, sig); err != nil {
+		return err
+	}
+
+	if _, err = download(ctx, keyURL, key); err != nil {
+		return err
+	}
+
+	keyData, err := os.ReadFile(key) // #nosec G304 -- a file this function just wrote.
+	if err != nil {
+		return fmt.Errorf("reading the key: %w", err)
+	}
+
+	keys, err := openpgp.ParseKeys(keyData)
+	if err != nil {
+		return fmt.Errorf(errAt, ErrVerify, keyURL, err)
+	}
+
+	content, err := os.ReadFile(file) // #nosec G304 -- the download this refresh just made.
+	if err != nil {
+		return fmt.Errorf("reading the artifact: %w", err)
+	}
+
+	signature, err := os.ReadFile(sig) // #nosec G304 -- a file this function just wrote.
+	if err != nil {
+		return fmt.Errorf("reading the signature: %w", err)
+	}
+
+	pinned := slices.DeleteFunc(slices.Clone(keys), func(key openpgp.Key) bool {
+		return string(key.Fingerprint) != fingerprint
+	})
+
+	_, err = openpgp.VerifyDetached(content, signature, pinned)
+	if err == nil {
+		return nil
+	}
+
+	// Refused: say who did sign when the block knows them, and that the
+	// block lacks the pinned key when that is why.
+	if signer, other := openpgp.VerifyDetached(content, signature, keys); other == nil {
+		return fmt.Errorf("%w: %s is signed by %s, not by the pinned key %s", ErrVerify, sigURL, signer, fingerprint)
+	}
+
+	if len(pinned) == 0 {
+		return fmt.Errorf("%w: %s carries no key with the pinned fingerprint %s", ErrVerify, keyURL, fingerprint)
+	}
+
+	return fmt.Errorf(errAt, ErrVerify, sigURL, err)
 }
 
 // verifyCMS fetches the detached signature published beside the artifact

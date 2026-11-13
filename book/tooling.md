@@ -621,6 +621,7 @@ The methods, each a way to obtain a sha256 the entry can stand behind:
 | `github-release-asset <owner/repo> [<tag>]` | downloads, has `gh release verify-asset <tag> --repo <owner/repo>` accept it, hashes it; the tag is `${version}` unless templated (`v${version}`) | GitHub's own attestation of an immutable release, which `gh attestation verify` does not see (Kata) |
 | `cosign-sha256sums <sums-url> <bundle-url> <identity-regexp> <issuer> [<owner/repo>]` | fetches the SHA256SUMS and its cosign bundle, has `cosign verify-blob` accept the pair, takes the artifact's line; the artifact is not downloaded. The repository, when given, is required of the certificate too, and it is required of an entry whose identity names a reusable lane in limen (`limen-release-apple.yaml`): that certificate's identity is the lane, not the repository that ran it, so the regexp alone would accept any repository's release through the lane | a release that ships a cosign-signed sums file (ossein-kernel; a bundle macOS evaluates, through the Apple lane) |
 | `pgp-sha256sums <sums-url> <key-url> <fingerprint>` | fetches the clearsigned sums and the signer's public key block, verifies the signature in-process (limen's own OpenPGP reader: v4 keys and signatures, RSA or Ed25519, SHA-2), requires the signing key to be the one the fingerprint pins, takes the artifact's line from the signed text; the artifact is not downloaded | a source that clearsigns its checksums (kernel.org's `sha256sums.asc`) |
+| `pgp-detached <sig-url> <key-url> <fingerprint>` | downloads the artifact, the detached signature beside it (an armored `.asc` or a binary `.sig`) and the signer's public key block, verifies the signature in-process over the downloaded bytes (the same reader; the signature is one of a binary document), requires the signing key to be the one the fingerprint pins, hashes the bytes it verified | an upstream that signs the tarball itself (xz, OpenSSH, expat) |
 | `cms <sig-url> <signer-subject-regexp> <root-url> <root-sha256-fingerprint>` | downloads the artifact and the detached CMS signature beside it, verifies the signature in-process over the downloaded bytes against a code-signing certificate that matches the subject and chains to the pinned root, hashes them (below) | a vendor download signed with a public-CA code-signing certificate (Intel's SDE) |
 
 The `cms` method reads RFC 5652 SignedData, the PKCS#7 file a vendor publishes beside a
@@ -653,10 +654,13 @@ when the file is read, never sent to a host. The arguments are split on whitespa
 identity regexp carries none and a fingerprint is forty hex digits unbroken. The tool a
 method shells out to, `gh` or `cosign`, must be pinned in `.hermetic/hermetic.yaml`, and the `pins`
 rule says so when it is not: unpinned, the name falls through to whatever binary the
-machine has. The PGP method shells out to nothing: the fingerprint is the whole trust
+machine has. The PGP methods shell out to nothing: the fingerprint is the whole trust
 decision, the key URL only fetches the block that must hash to it, and limen reads exactly
-what a clearsigned checksum file takes and refuses the rest by name (another key version, a
-weak digest, an algorithm it does not carry). Downloads retry transient failures the way
+what a clearsigned checksum file or a detached signature takes and refuses the rest by name
+(another key version, a weak digest, an algorithm it does not carry). The fingerprint is
+that of the key that made the signature, which is a signing subkey's when the upstream signs
+with one, not the primary's a key page leads with: `gpg --verify` names it as "using … key".
+Downloads retry transient failures the way
 every `curl` in the rig does; a verifier's refusal ends the run with the file as it was.
 
 <a id="two-runs-per-renovate-bump"></a>
