@@ -27,6 +27,11 @@ const (
 // errTransient is a failure worth another attempt: no answer, or a 5xx.
 var errTransient = errors.New("retryable")
 
+// userAgent names the client and where it comes from. Go's default
+// ("Go-http-client/…") is refused outright by hosts that screen automated
+// clients by that name: tukaani.org answers it with a 403.
+const userAgent = "limen (https://github.com/farcloser/limen)"
+
 // File fetches url into file and returns the sha256 of what it wrote,
 // retrying transient failures with a growing pause. No whole-request timeout:
 // an artifact can be gigabytes; ctx is the bound.
@@ -64,6 +69,8 @@ func once(ctx context.Context, url, file string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %s: %w", ErrFetch, url, err)
 	}
+
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
