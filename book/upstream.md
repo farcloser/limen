@@ -492,3 +492,36 @@ output to the frame count STREAMINFO declares.
 
 **Lifts when** a CSCore release bounds that read, or testbin stops building `cscoreflac`. Not
 reported upstream yet.
+
+## Renovate's release-age check stays pending on a Docker digest update
+
+**Symptom.** A pull request that moves an image pinned as `<tag>@sha256:…` to the tag's new
+digest ("update … docker digest to …") carries `renovate/stability-days` pending, "Updates
+have not met minimum release age requirement", on every head, however long ago the tag was
+pushed. Every other check on it is green, and GitHub's auto-merge does not wait for the
+status, which no ruleset requires: what it stalls is the approval, withheld from a pull
+request that shows a pending check. In farcloser/ossein the `alpine` minor tag was last
+pushed on 2026-11-08, and https://github.com/farcloser/ossein/pull/231 was still pending five
+days later against a three-day cooldown; the one before it,
+https://github.com/farcloser/ossein/pull/199, was pending six days after its digest was
+pushed, and merged that way on approval.
+
+**Cause.** Not established past what GitHub and the registry show. Renovate ages a digest
+update against the push time of the tag it follows, Docker Hub's `tag_last_pushed`
+([minimum release age, digest updates](https://github.com/renovatebot/renovate/blob/bb2bb00947df84eda0627b08618bf4d1921eaaf0/docs/usage/key-concepts/minimum-release-age.md#digest-updates)),
+and the first of those pull requests was opened seven hours after that time turned three
+days old. The status set on the branch never reports the age met all the same. It has two
+pending paths, a timestamp judged too young and an update that carries none, held under
+`minimumReleaseAgeBehaviour=timestamp-required`
+([status-checks.ts](https://github.com/renovatebot/renovate/blob/bb2bb00947df84eda0627b08618bf4d1921eaaf0/lib/workers/repository/update/branch/status-checks.ts#L245));
+which one a Docker digest update takes is in Renovate's job log, not in what GitHub shows.
+
+**Workaround.** Pin the image by a tag that is never pushed again, a patch tag, with its
+digest: `<image>:<patch tag>@sha256:…`. Its next release is then a version update, which the
+check does pass: farcloser/ossein's BuildKit image is pinned that way, and
+https://github.com/farcloser/ossein/pull/222 carried `renovate/stability-days` success. A
+digest pin left on a minor or a floating tag is approved by hand with the status pending,
+once the tag's push date on the registry is older than the cooldown.
+
+**Lifts when** Renovate reports the release age of a Docker digest update as met once the
+tag's push is older than the cooldown. Not reported upstream yet.
