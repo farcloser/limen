@@ -64,7 +64,7 @@ jobs:
   update:
     # The actor of a push is who pushed, and a rerun keeps it: the hosted
     # Renovate App alone.
-    if: github.actor == 'renovate[bot]'
+    if: github.actor == 'renovate[bot]' || github.actor == 'closer-claudio'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
