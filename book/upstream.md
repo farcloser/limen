@@ -467,3 +467,28 @@ the binary (a required-ISA check), not from SDE's instruction mix.
 
 **Lifts when** an SDE or Pin release preserves AVX-512 state across signals for natively
 executed code, or Go stops preempting with signals on amd64. Not reported upstream yet.
+
+## CSCore's FLAC decoder reads past its buffer on a stream cut off inside a frame
+
+**Symptom.** `cscoreflac`, forkcloser/testbin's program around
+[CSCore](https://github.com/filoe/cscore)'s FLAC decoder, dies on a stream that ends inside a
+frame: no message of its own, a nonzero exit status, and the .NET runtime's report of an
+`AccessViolationException` in `FlacPartitionedRice.ReadFlacRiceBlock`. A stream that merely
+comes up short is refused in the ordinary way, by the program's own message and exit status 1.
+
+**Cause.** The residual decoder is `unsafe` code:
+[`ReadFlacRiceBlock`](https://github.com/filoe/cscore/blob/03dd25106f2cae3a55bccdf1b7b5206cf52c23a9/CSCore/Codecs/FLAC/FlacPartitionedRice.cs#L54)
+reads the Rice-coded residuals through raw pointers, and on a frame the stream does not finish
+it reads past the end of its buffer. The runtime raises `AccessViolationException`, which .NET
+does not deliver to a `catch`: the process is terminated.
+
+**Workaround.** None inside the program, since the failure cannot be caught: `cscoreflac` lets
+the process die, and its nonzero exit status is the refusal
+([its README](https://github.com/forkcloser/testbin/blob/main/cscoreflac/README.md),
+https://github.com/forkcloser/testbin/pull/26). A caller reads the status, never the message,
+which on this path is the runtime's. What CSCore gets wrong quietly the program does make up
+for: a frame it skips and a 32-bit stream it returns nothing for are caught by holding the
+output to the frame count STREAMINFO declares.
+
+**Lifts when** a CSCore release bounds that read, or testbin stops building `cscoreflac`. Not
+reported upstream yet.
