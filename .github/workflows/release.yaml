@@ -63,9 +63,11 @@ jobs:
       # Build provenance for what goreleaser published: every archive, every
       # SBOM and checksums.txt a subject (the cosign bundle beside them is a
       # signature, not a subject), so nothing fetched goes unattested: verifiable with
-      # `gh attestation verify <asset> --repo <owner>/<repo>` wherever gh is,
-      # no cosign needed, which is how a bootstrap verifies the binary it
-      # fetches before any tool exists. The cosign bundle over checksums.txt
+      # `gh attestation verify <asset> --repo <owner>/<repo> --signer-workflow
+      # <owner>/<repo>/.github/workflows/release.yaml@refs/tags/<tag>` wherever
+      # gh is, no cosign needed, which is how a bootstrap verifies the binary
+      # it fetches before any tool exists (the signer named: --repo alone
+      # admits any workflow of the repository, at any ref). The cosign bundle over checksums.txt
       # stays the signature. The paths are goreleaser's dist (.release-go.yaml;
       # limen's model is .build/release) and its archive format. GitHub serves
       # attestations for public repositories on every plan and for private

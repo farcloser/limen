@@ -135,7 +135,8 @@ sboms:
 #     checksums.txt
 # The release workflow then attests every archive, SBOM and checksums.txt
 # (GitHub build provenance), checked without cosign:
-#   gh attestation verify <asset> --repo <owner>/<repo>
+#   gh attestation verify <asset> --repo <owner>/<repo> \
+#     --signer-workflow <owner>/<repo>/.github/workflows/release.yaml@refs/tags/<tag>
 # A local run is `--local --dry-run`, which skips signing: there is no
 # key-based lane (book/releasing.md). The section is limen's (limen fix sets
 # it): cosign runs through `just do release-sign`, which retries what cosign
