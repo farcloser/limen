@@ -24,7 +24,9 @@ var verifierPackages = map[string]string{
 // the shape, every entry is complete with a known verification method, the
 // tool each method shells out to is pinned in aqua.yaml, and no digest is
 // stale — computed for a version or commit other than the one pinned, which is what a
-// Renovate bump leaves until `limen pins refresh` runs. A repository without
+// Renovate bump leaves until `limen pins refresh` runs, or from another url
+// or through another verification than the entry declares, which is what an
+// edit of either leaves. A repository without
 // the file has no pins, and no finding. Offline, like every check: whether a
 // digest is right is the refresh's job, whether it is current is this rule's.
 func checkPins(root string) (Finding, bool) {
@@ -52,7 +54,8 @@ func checkPins(root string) (Finding, bool) {
 
 	if stale := manifest.Stale(); len(stale) > 0 {
 		return fail(rule, pins.File,
-			"digest computed for another version or commit than the one pinned: "+strings.Join(stale, ", ")+
+			"digest not computed for the entry as it stands (another version or commit, another url or verify"+
+				" line, or no source recorded): "+strings.Join(stale, ", ")+
 				" — run `limen pins refresh` (the checksum workflow does, on Renovate branches)"), true
 	}
 

@@ -19,11 +19,15 @@
 //	    verify: github-attestation llvm
 //	    digest:
 //	      version: 22.1.8
+//	      source: <64 hex>
 //	      sha256: 805efad2bb91cb4967fa569e0881d10c0f69c04461cf671cccbae19f547acc34
 //
 // Two-space indentation, one scalar per line, comments and blank lines
 // anywhere. `version` is what moves; `digest.version` records what the
-// sha256 was computed for, so a stale digest is visible without the network.
+// sha256 was computed for, and `digest.source` what it was computed from, a
+// fingerprint of the url and the verify line as they resolved, so a stale
+// digest is visible without the network: one left behind by a bump, and one
+// left behind by an edit of the url or of the verification.
 // A new entry leaves `digest:` out: `limen pins refresh` writes it.
 // The `renovate` line, the optional `extract-version` and `versioning` lines,
 // the `version` line and the optional `commit` line come in that order with
@@ -39,6 +43,8 @@
 package pins
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -61,6 +67,7 @@ const (
 	fieldURL            = "url"
 	fieldVerify         = "verify"
 	fieldDigest         = "digest"
+	fieldSource         = "source"
 	fieldSHA256         = "sha256"
 )
 
@@ -200,9 +207,11 @@ type Entry struct {
 	// Verify is the method followed by its arguments, templates unexpanded.
 	Verify []string
 	// DigestVersion and DigestCommit are the version and the commit the
-	// SHA256 was computed for.
+	// SHA256 was computed for, DigestSource the fingerprint of what it was
+	// computed from (see Source).
 	DigestVersion string
 	DigestCommit  string
+	DigestSource  string
 	SHA256        string
 
 	// Line indexes into the manifest: the digest's, for the in-place
@@ -213,6 +222,7 @@ type Entry struct {
 	lastLine           int
 	digestVersionLine  int
 	digestCommitLine   int
+	digestSourceLine   int
 	sha256Line         int
 	renovateLine       int
 	extractVersionLine int
@@ -225,10 +235,26 @@ type Entry struct {
 // renovate line is the one word manual, which the preset's regex never reads.
 func (e Entry) ManualBump() bool { return len(e.Renovate) == 1 && e.Renovate[0] == RenovateManual }
 
-// Stale reports whether the digest was computed for another version or
-// commit than the one pinned now — the state a Renovate bump leaves behind
-// until a refresh — or was never computed.
-func (e Entry) Stale() bool { return e.DigestVersion != e.Version || e.DigestCommit != e.Commit }
+// Stale reports whether the digest is not the entry's as it stands: computed
+// for another version or commit than the one pinned now — the state a
+// Renovate bump leaves behind until a refresh — or from another url or
+// through another verification than the entry declares now, or never
+// computed. A digest that records no source is stale: nothing says which
+// url and which verification it stands for.
+func (e Entry) Stale() bool {
+	return e.DigestVersion != e.Version || e.DigestCommit != e.Commit || e.DigestSource != e.Source()
+}
+
+// Source fingerprints what the entry's digest is computed from: the sha256
+// of the resolved url and, on a second line, the verify method and its
+// resolved arguments. The digest block records it, so an edit of either
+// shows as a stale digest. It names inputs, it secures nothing.
+func (e Entry) Source() string {
+	verify := strings.Join(append([]string{e.Method()}, e.VerifyArgs()...), " ")
+	sum := sha256.Sum256([]byte(e.ResolvedURL() + "\n" + verify))
+
+	return hex.EncodeToString(sum[:])
+}
 
 // Pinned reports whether the entry carries a digest at all.
 func (e Entry) Pinned() bool { return e.sha256Line >= 0 }
@@ -451,7 +477,7 @@ func (p *parser) top(index int, trimmed string) error {
 // newEntry is an entry with every line index unset.
 func newEntry() Entry {
 	return Entry{
-		digestLine: -1, lastLine: -1, digestVersionLine: -1, digestCommitLine: -1, sha256Line: -1,
+		digestLine: -1, lastLine: -1, digestVersionLine: -1, digestCommitLine: -1, digestSourceLine: -1, sha256Line: -1,
 		renovateLine: -1, extractVersionLine: -1, versioningLine: -1, versionLine: -1, commitLine: -1,
 	}
 }
@@ -506,6 +532,9 @@ func setDigestField(entry *Entry, field string, line int) error {
 	case fieldCommit:
 		entry.DigestCommit = value
 		entry.digestCommitLine = line
+	case fieldSource:
+		entry.DigestSource = value
+		entry.digestSourceLine = line
 	case fieldSHA256:
 		entry.SHA256 = value
 		entry.sha256Line = line
@@ -572,6 +601,9 @@ func (e Entry) validate() error {
 		return fmt.Errorf("%w: %s: commit must be 40 hex characters", ErrEntry, label)
 	case e.digestCommitLine >= 0 && e.commitLine < 0:
 		return fmt.Errorf("%w: %s: digest.commit without a commit line", ErrEntry, label)
+	case e.digestSourceLine >= 0 && !sha256RE.MatchString(e.DigestSource):
+		return fmt.Errorf("%w: %s: digest.source must be 64 hex characters (`limen pins refresh` writes it)",
+			ErrEntry, label)
 	}
 
 	want, known := verifyArity[e.Verify[0]]
@@ -753,8 +785,9 @@ func (m Manifest) Get(name, field string) (string, error) {
 	return "", fmt.Errorf("%w: %q", ErrNoSuchPin, name)
 }
 
-// Stale lists the entries whose digest was computed for another version,
-// or never.
+// Stale lists the entries whose digest is not theirs as they stand: computed
+// for another version or commit, from another url or through another
+// verification, or never.
 func (m Manifest) Stale() []string {
 	var names []string
 
@@ -790,12 +823,15 @@ func (m Manifest) String() string { return strconv.Itoa(len(m.Entries)) + " pin(
 // place: its lines change, everything else is byte for byte the file the
 // project wrote. An entry without one gets its digest block after its last
 // line (or under its bare `digest:`), a commit pin whose digest has no
-// `commit` line yet gets that line, and the manifest is then parsed again,
+// `commit` line yet gets that line, a digest written before the source was
+// recorded gets its `source` line, and the manifest is then parsed again,
 // since every later line moved.
-func (m Manifest) withDigest(index int, sha256 string) (Manifest, error) {
+func (m Manifest) withDigest(index int, sum string) (Manifest, error) {
 	entry := m.Entries[index]
 	lines := slices.Clone(m.lines)
 	indent := strings.Repeat(" ", digestIndent)
+
+	source := indent + fieldSource + ": " + entry.Source()
 
 	if !entry.Pinned() {
 		block := []string{indent + fieldVersion + ": " + entry.Version}
@@ -803,7 +839,7 @@ func (m Manifest) withDigest(index int, sha256 string) (Manifest, error) {
 			block = append(block, indent+fieldCommit+": "+entry.Commit)
 		}
 
-		block = append(block, indent+fieldSHA256+": "+sha256)
+		block = append(block, source, indent+fieldSHA256+": "+sum)
 
 		insertAt := entry.digestLine + 1
 		if entry.digestLine < 0 {
@@ -815,21 +851,36 @@ func (m Manifest) withDigest(index int, sha256 string) (Manifest, error) {
 	}
 
 	lines[entry.digestVersionLine] = rewriteScalar(lines[entry.digestVersionLine], entry.Version)
-	lines[entry.sha256Line] = rewriteScalar(lines[entry.sha256Line], sha256)
+	lines[entry.sha256Line] = rewriteScalar(lines[entry.sha256Line], sum)
+
+	// The lines the block lacks go after the ones it has: a commit pin's
+	// `commit`, and the `source` of a digest written before it was recorded.
+	var missing []string
 
 	switch {
 	case entry.Commit != "" && entry.digestCommitLine < 0:
-		commit := indent + fieldCommit + ": " + entry.Commit
-
-		return Parse([]byte(strings.Join(slices.Insert(lines, entry.digestVersionLine+1, commit), "\n") + "\n"))
+		missing = append(missing, indent+fieldCommit+": "+entry.Commit)
 	case entry.Commit != "":
 		lines[entry.digestCommitLine] = rewriteScalar(lines[entry.digestCommitLine], entry.Commit)
+	}
+
+	if entry.digestSourceLine < 0 {
+		missing = append(missing, source)
+	} else {
+		lines[entry.digestSourceLine] = rewriteScalar(lines[entry.digestSourceLine], entry.Source())
+	}
+
+	if len(missing) > 0 {
+		after := max(entry.digestVersionLine, entry.digestCommitLine) + 1
+
+		return Parse([]byte(strings.Join(slices.Insert(lines, after, missing...), "\n") + "\n"))
 	}
 
 	out := Manifest{lines: lines, Entries: slices.Clone(m.Entries)}
 	out.Entries[index].DigestVersion = entry.Version
 	out.Entries[index].DigestCommit = entry.Commit
-	out.Entries[index].SHA256 = sha256
+	out.Entries[index].DigestSource = entry.Source()
+	out.Entries[index].SHA256 = sum
 
 	return out, nil
 }

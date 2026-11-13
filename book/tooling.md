@@ -558,6 +558,7 @@ pins:
     verify: github-attestation llvm/llvm-project llvm/llvm-project/.github/workflows/release-binaries.yml
     digest:
       version: 22.1.8
+      source: <64 hex>
       sha256: <64 hex>
   - name: guest-kernel
     renovate: github-releases farcloser/ossein-kernel
@@ -567,6 +568,7 @@ pins:
     verify: cosign-sha256sums https://github.com/farcloser/ossein-kernel/releases/download/${version}/SHA256SUMS https://github.com/farcloser/ossein-kernel/releases/download/${version}/SHA256SUMS.cosign.bundle ^(142371135\+[^@]+@users\.noreply\.github\.com|apostasie@farcloser\.world)$ https://github.com/login/oauth
     digest:
       version: 7.1.5-ossein.2
+      source: <64 hex>
       sha256: <64 hex>
   - name: foxenflac
     renovate: git-refs https://github.com/astoeckel/libfoxenflac
@@ -577,6 +579,7 @@ pins:
     digest:
       version: master
       commit: e491d2ec76709975f09d1820367a92a1772ccfb1
+      source: <64 hex>
       sha256: <64 hex>
 ```
 
@@ -597,8 +600,13 @@ pins:
   and the `pins` rule refuses another order. One custom manager in `.limen/renovate.json`
   watches every `pins.yaml`.
 - **limen owns the digest.** `digest.version` (and `digest.commit` for a commit pin) records
-  what the sha256 was computed for, so a digest left behind by a bump is visible offline:
-  the `pins` rule fails it, naming the pin and the command. `limen pins refresh` recomputes
+  what the sha256 was computed for, and `digest.source` what it was computed from: a
+  fingerprint of the url and of the verify line, as they resolved. A digest left behind is
+  then visible offline, whether a bump left it or an edit of the entry did: moving a pin to
+  another url, or to a stronger `verify:`, at the same version leaves a digest that stands
+  for the old bytes and a verification that never ran, and judged by its version alone that
+  digest read as current. The `pins` rule fails it, naming the pin and the command, as it
+  fails a digest that records no source. `limen pins refresh` recomputes
   every stale digest through the method the entry declares and rewrites the digest block in
   place; the checksum workflow runs it on every Renovate branch, in the same step as `limen
   fix`, from the same checksummed release — data the branch can change only in ways the

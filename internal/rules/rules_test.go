@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/farcloser/limen"
+	"github.com/farcloser/limen/internal/pins/pinstest"
 	"github.com/farcloser/limen/internal/rules"
 )
 
@@ -1257,7 +1258,8 @@ func TestDirectoryNamedLikeFileIsNotAccepted(t *testing.T) {
 func TestPinsRule(t *testing.T) {
 	t.Parallel()
 
-	const current = `pins:
+	// Written by a limen that recorded no source, then as a refresh leaves it.
+	const legacy = `pins:
   - name: tool
     renovate: github-releases example/tool
     version: 2.0.0
@@ -1267,6 +1269,8 @@ func TestPinsRule(t *testing.T) {
       version: 2.0.0
       sha256: 0000000000000000000000000000000000000000000000000000000000000000
 `
+
+	current := pinstest.Recorded(t, legacy, "tool")
 
 	if f := findingByRule(
 		rules.Check(writeRepo(t, compliantFiles()), rules.DefaultPolicy()),
@@ -1289,6 +1293,22 @@ func TestPinsRule(t *testing.T) {
 		t.Errorf("a stale digest must fail naming the pin and the refresh, got: %+v", f)
 	}
 
+	// The digest stands for the entry as it was when computed: an edit of
+	// the url or of the verification leaves it stale, and so does a digest
+	// that never recorded what it was computed from.
+	for name, edited := range map[string]string{
+		"another url":         strings.Replace(current, "/tool-${version}.tgz", "/signed/tool-${version}.tgz", 1),
+		"another verify line": strings.Replace(current, "verify: download", "verify: github-release-asset example/tool", 1),
+		"no source recorded":  legacy,
+	} {
+		files["pins.yaml"] = edited
+
+		f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins")
+		if f.OK() || !strings.Contains(f.Message, "tool") || !strings.Contains(f.Message, "limen pins refresh") {
+			t.Errorf("%s: the digest must be stale, naming the pin and the refresh, got: %+v", name, f)
+		}
+	}
+
 	files["pins.yaml"], _, _ = strings.Cut(current, "    digest:")
 
 	f = findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins")
@@ -1306,8 +1326,8 @@ func TestPinsRule(t *testing.T) {
 	// A method that shells out needs its tool pinned through aqua: the
 	// canonical tool set pins gh and cosign, one without cosign fails naming
 	// the package.
-	files["pins.yaml"] = strings.Replace(current, "verify: download",
-		"verify: cosign-sha256sums https://e.invalid/S https://e.invalid/B ^x$ https://e.invalid", 1)
+	files["pins.yaml"] = pinstest.Recorded(t, strings.Replace(current, "verify: download",
+		"verify: cosign-sha256sums https://e.invalid/S https://e.invalid/B ^x$ https://e.invalid", 1), "tool")
 
 	if f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "pins"); !f.OK() {
 		t.Errorf("a pinned verifier must pass: %s", f.Message)
