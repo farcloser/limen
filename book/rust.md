@@ -40,7 +40,10 @@ x64 that is rustc's default for the triple; on arm64 the gnullvm host's default 
 MinGW clang it expects on PATH and does not ship, and rustc does not fall back to its own,
 so the lane names `rust-lld` in cargo's linker variable for that target, which links with
 `rust-mingw`'s runtime (rustc's platform-support page for the windows-gnullvm targets). The
-cross builds link through zig either way.
+cross builds link through zig either way, the host's own triple included: there that
+variable goes to cargo's `[host]` table for the build scripts and leaves the target, since
+cargo-zigbuild sets a target's linker only where none is set, and a product linked by
+`rust-lld` on one host and by zig on the others is not one product.
 
 ## What a lane does
 
