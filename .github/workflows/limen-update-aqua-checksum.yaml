@@ -487,8 +487,16 @@ jobs:
           left=""
           quiet=0
           for _ in $(seq 1 18); do
-            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${OID}&per_page=50" \
-              --jq '.workflow_runs[] | select(.status == "action_required" or .conclusion == "action_required") | .id')" || runs=""
+            # The repository's newest runs, unfiltered, and the head picked
+            # out here: GitHub's filtered listings (by head_sha, by branch,
+            # by status, by workflow) can leave out a run that awaits
+            # approval, for an hour at least, and a run this step does not
+            # see is a check that never reports (book/upstream.md). The
+            # hundred newest are the step's whole view: a run of the head
+            # that a hundred later ones pushed out of it, in the three
+            # minutes the loop lives, is not seen either.
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+              --jq '.workflow_runs[] | select(.head_sha == env.OID) | select(.status == "action_required" or .conclusion == "action_required") | .id')" || runs=""
             new=""
             for id in $runs; do
               case " ${approved} " in
