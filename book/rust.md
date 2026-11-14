@@ -68,8 +68,11 @@ project's default.
   Windows target links from any host (zig ships the libSystem stubs and the MinGW-w64 CRT).
   cargo-zigbuild maps the triple to a zig target and keeps the list of linker arguments
   rustc means for GNU ld that zig's lld refuses, a list that moves with rustc and zig; the
-  lane carries no wrapper of its own, which would be a copy of that list, behind. Both pins
-  are the Rust repository's, next to rustup's.
+  lane carries no wrapper of its own, which would be a copy of that list, behind. The one
+  thing it adds is the unwind library's name for the `*-windows-gnullvm` targets, which
+  rustc stopped naming and neither zig nor cargo-zigbuild supplies
+  ([known upstream bugs](./upstream.md#zig-cc-and-cargo-zigbuild-drop-rustcs---unwindliblibunwind-windows-gnullvm-targets)).
+  Both pins are the Rust repository's, next to rustup's.
 
 In CI the canonical cache action keeps what the lanes install under `.build/` (rustup with
 the toolchain, cargo's caches, zig's) when the repository carries a `rust-toolchain.toml`,
