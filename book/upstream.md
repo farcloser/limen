@@ -525,3 +525,44 @@ once the tag's push date on the registry is older than the cooldown.
 
 **Lifts when** Renovate reports the release age of a Docker digest update as met once the
 tag's push is older than the cooldown. Not reported upstream yet.
+
+## zig cc and cargo-zigbuild drop rustc's `--unwindlib=libunwind` (windows-gnullvm targets)
+
+**Symptom.** From Rust 1.100.0, `just do build rust targets <arch>-pc-windows-gnullvm` fails
+at the link, whatever the host: `lld-link: error: undefined symbol: _Unwind_Resume`, and the
+same for `_Unwind_RaiseException`, `_GCC_specific_handler` and the other `_Unwind_*`
+symbols. The other targets build, `x86_64-pc-windows-gnu` among them. Met on
+forkcloser/testbin's toolchain bump, on its one gnullvm target
+(https://github.com/forkcloser/testbin/actions/runs/43596391530/job/132451692363).
+
+**Cause.** Three parts, none of them wrong alone. rustc stopped naming the unwind library
+for these targets and left it to the C driver: the target's pre-link arguments went from
+`--unwindlib=none` to `--unwindlib=libunwind -static-libgcc`
+([6a7a8d1](https://github.com/rust-lang/rust/commit/6a7a8d1c7e74d34dadaa1172245cf5d09a852605)),
+and `library/unwind` lost its `#[link(name = "unwind")]` for them
+([9acbf04](https://github.com/rust-lang/rust/commit/9acbf04101f842031d8076705722a3c2539a5636)).
+`zig cc` accepts `--unwindlib=` and does nothing with it; it links its own libunwind when a
+library is asked for by the name `unwind`, `gcc_eh` or `gcc_s`
+([src/target.zig, `classifyCompilerRtLibName`](https://github.com/ziglang/zig/blob/0.15.2/src/target.zig#L302)).
+cargo-zigbuild, which rewrites what rustc means for another driver, turns `-lgcc_s` into
+`-lunwind` and has no rule for the flag
+([src/zig/linker_args.rs](https://github.com/rust-cross/cargo-zigbuild/blob/v0.24.1/src/zig/linker_args.rs#L109)).
+So nothing on the link line names the library any more.
+
+**Workaround.** The `targets` recipe names it, for every `*-windows-gnullvm` triple:
+`-Clink-arg=-lunwind`, added to the source cargo will read for that target. There are four,
+and each shadows the ones after it, so a flag put in a shadowed one is dropped without a
+word: `CARGO_ENCODED_RUSTFLAGS` and `RUSTFLAGS` as soon as they are set, empty included; the
+target's own flags, `CARGO_TARGET_<TRIPLE>_RUSTFLAGS` and the matching `[target.…]` tables,
+when they hold any; `build.rustflags` last. The recipe appends to the first of the two
+variables that is set, else to the target's variable when it is not empty, else to
+`CARGO_BUILD_RUSTFLAGS`, so that a project's `[build] rustflags` keep applying. One project
+it does not cover, since it cannot see a config file: one that gives these targets flags of
+their own in `.cargo/config.toml`, a `[target.<triple>]` or a matching `[target.'cfg(…)']`
+table, and none in the environment. Its link fails on the symbols above, and it names the
+library in that table itself. On an earlier Rust the library is named twice, which links
+the same. The host's own builds are not concerned: they link with `rust-lld` and
+`rust-mingw`, which ships the `libunwind.a` rustc now asks of it.
+
+**Lifts when** cargo-zigbuild translates `--unwindlib=libunwind`, or `zig cc` acts on it.
+Not reported upstream yet.
