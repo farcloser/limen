@@ -37,7 +37,7 @@ packages:
   # The SBOM generator the release lane runs over every archive (book/releasing.md).
   - name: anchore/syft@v1.57.1
   - name: jqlang/jq@jq-1.8.2
-  - name: cli/cli@v2.103.3
+  - name: cli/cli@v2.104.0
   # --- spec tooling (local registry; see .limen/hermetic-registry.yaml) ---
   - name: quint-co/quint@v0.33.1
     registry: local
