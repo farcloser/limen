@@ -695,12 +695,17 @@ A project with such files declares them and says how they are made:
   output does not depend on the host that runs it (the checksum workflow runs it on Linux);
   and it fetches through the pinned tools alone (`limen pins get` for an archive, as the
   build does).
-- **`just do lint converge`**, named in the project's own `lint`, runs the recipe and fails
-  when a declared file differs afterwards or an undeclared one was touched, and puts the
-  declared files back as it found them. A declared directory is compared whole, by the
-  regular files git sees in it: one changed, one the recipe makes that the tree lacks, one
-  the tree has that the recipe no longer makes. A stale derived file on any branch is then
-  red by its name, not by whatever breaks downstream of it.
+- **`just do lint converge`** runs the recipe and fails when a declared file differs
+  afterwards or an undeclared one was touched, and puts the declared files back as it found
+  them. A declared directory is compared whole, by the regular files git sees in it: one
+  changed, one the recipe makes that the tree lacks, one the tree has that the recipe no
+  longer makes. A stale derived file on any branch is then red by its name, not by whatever
+  breaks downstream of it. The lane is never in the shared default set: the project names
+  it, and it runs where the recipe runs. That is the project's own `lint` when the recipe is
+  light and runs on every platform; when it needs a toolchain that is heavy, or that some
+  platform lacks, it is the job that already builds with that toolchain, on the platforms
+  that have it. A recipe made to do nothing on a platform, so that the lane passes there,
+  proves nothing there.
 
 On a Renovate branch the checksum workflow brings them along. After its own commit, a job
 whose token can read the repository and nothing more runs `just converge` at that head; a
