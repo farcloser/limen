@@ -666,6 +666,89 @@ file is the same from any host.
 
 **Lifts when** NuGet writes one line ending whatever the host. Not reported upstream yet.
 
+## ulikunitz/xz's reader goes on after an error
+
+**Symptom.** A `Read` that follows a failed one returns data. With a block header whose
+CRC is wrong placed before a valid file, `Read` returns "xz: checksum error for block
+header", and the next calls return the valid file's bytes and a clean `io.EOF`: a retry
+loop, or a second `io.Copy`, is handed the content of a file the reader has just refused.
+
+**Cause.** `Reader.Read` returns the error and records nothing: the next call asks the
+stream reader for a block header from wherever the input now stands
+([reader.go](https://github.com/ulikunitz/xz/blob/6ead826b4d3c7c9856f2daa905cf06403b9daddc/reader.go)).
+
+**Workaround.** forkcloser/xz keeps the first error and returns it from every later call
+(https://github.com/forkcloser/xz/pull/201). Against upstream, a caller stops at the first
+error for good and never reads again.
+
+**Lifts when** the reader keeps its first error. Not reported upstream, by decision.
+
+## ulikunitz/xz's LZMA2 reader holds back a flushed chunk
+
+**Symptom.** After the writer has flushed a chunk, a `Read` with room to spare does not
+return it: it waits for the next chunk. A request and its answer exchanged over a flushed
+LZMA2 stream stall, each side waiting for the other.
+
+**Cause.** `Reader2.Read` loops until its buffer is full, across chunks: when a chunk
+ends it reads the next chunk's header from the input, which blocks, instead of returning
+what it has ([lzma/reader2.go](https://github.com/ulikunitz/xz/blob/6ead826b4d3c7c9856f2daa905cf06403b9daddc/lzma/reader2.go)).
+
+**Workaround.** forkcloser/xz returns what a chunk gave before it asks for the next
+(https://github.com/forkcloser/xz/pull/203). Against upstream there is none on the reading
+side: the caller cannot ask for less than a chunk without knowing its size.
+
+**Lifts when** `Reader2.Read` returns at a chunk's end once it holds data. Not reported
+upstream, by decision.
+
+## ulikunitz/xz reads stream padding four bytes a call
+
+**Symptom.** A file with padding between two streams, which the format allows, costs one
+`Read` on the input for every four bytes of it: a megabyte of padding is 262,175 calls,
+each a system call when the input is a file.
+
+**Cause.** The reader takes padding for a failed attempt at a stream header: it reads four
+bytes, finds them zero, gives up and starts again, with no buffer of its own
+([reader.go](https://github.com/ulikunitz/xz/blob/6ead826b4d3c7c9856f2daa905cf06403b9daddc/reader.go)).
+
+**Workaround.** forkcloser/xz reads padding in blocks
+(https://github.com/forkcloser/xz/pull/204). Against upstream, wrap the input in a
+`bufio.Reader`.
+
+**Lifts when** the reader skips padding through a buffer. Not reported upstream, by
+decision.
+
+## ulikunitz/xz's writer trusts the count of the writer under it
+
+**Symptom.** An underlying writer that takes one byte fewer than it was given and returns
+no error leaves a corrupt file that `Write` and `Close` report as written: with one such
+write among thirty positions tried, twenty-four end with no error.
+
+**Cause.** The xz writer checks the error of each write to the underlying writer and
+discards the count ([writer.go](https://github.com/ulikunitz/xz/blob/6ead826b4d3c7c9856f2daa905cf06403b9daddc/writer.go)). `io.Writer` asks for an error when the
+count is short; a writer that breaks that contract is not caught.
+
+**Workaround.** forkcloser/xz is to answer a short count with `io.ErrShortWrite`
+(https://github.com/forkcloser/xz/pull/206). Against upstream, the underlying writer has
+to be one that honours the contract, or be wrapped in one that checks.
+
+**Lifts when** the writer compares each count with what it gave. Not reported upstream, by
+decision.
+
+## ulikunitz/xz writes a `.lzma` header XZ Utils does not recognize
+
+**Symptom.** A classic `.lzma` file written with a dictionary capacity that is neither a
+power of two nor one and a half times one (5000, say) is refused by XZ Utils: "File format
+not recognized". The library reads its own file back.
+
+**Cause.** The writer puts the capacity in the header as it was given
+([lzma/header.go](https://github.com/ulikunitz/xz/blob/6ead826b4d3c7c9856f2daa905cf06403b9daddc/lzma/header.go)). XZ Utils takes a `.lzma` file for one only when
+the header's dictionary size is 2^n or 2^n + 2^(n-1), the sizes its own encoder writes.
+
+**Workaround.** Give the writer a capacity of one of those two forms. forkcloser/xz is to
+round the header's size up to one itself.
+
+**Lifts when** the writer rounds the size it states. Not reported upstream, by decision.
+
 ## hadolint's DL3006 fails on two adjacent variables in an image name
 
 **Symptom.** Not run: read from the sources. A `FROM` whose image name holds two variables
