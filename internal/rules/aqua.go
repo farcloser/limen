@@ -409,16 +409,10 @@ func (m *aquaManifest) missingCanonicalPkgs() []string {
 // branch over the checksum workflow's fix (book/tooling.md).
 //
 // The set is the gotools rule's own tables read from the other side — every
-// tool it requires, every directive it has retired, and the aqua packages
-// its isolated modules replaced — so the two rules enforce one doctrine from
-// one source and cannot drift apart.
+// tool it requires and the aqua packages its isolated modules replaced — so
+// the two rules enforce one doctrine from one source and cannot drift apart.
 func retiredCanonicalPkgs() []string {
-	pkgs := slices.Concat(goToolsEverywhere, goSourceAnalyzers, goTestTools, goToolsAquaRetired)
-	for pkg := range retiredGoTools {
-		pkgs = append(pkgs, pkg)
-	}
-
-	return pkgs
+	return slices.Concat(goToolsEverywhere, goSourceAnalyzers, goTestTools, goToolsAquaRetired)
 }
 
 // retiredPkgs returns the retired canonical packages the manifest still
