@@ -42,7 +42,7 @@ just: (_banner "lint" "just")
     # The list goes through a file, never a process substitution: on the
     # windows-11-arm runners, bash runs emulated, and a `< <(...)` whose child
     # runs a program intermittently crashes it mid-recipe — exit 4 or 127, no
-    # output. A pipeline does not. Same in every shared recipe
+    # output. A pipeline has not been seen to. Same in every shared recipe
     # (design/WINDOWS-ARM-EXIT-4.md).
     list=$(mktemp "${TMPDIR:-/tmp}/lint-just.XXXXXX")
     trap 'rm -f "$list"' EXIT

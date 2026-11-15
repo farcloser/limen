@@ -169,8 +169,18 @@ shape of every early failure; command substitutions stay, since rewriting them a
 runner is not worth it, and a silent `4` or `127` on that leg is re-run
 ([windows: bash dies under emulation](./windows.md#bash-dies-under-emulation)).
 
-**Lifts when** Git for Windows ships its MSYS2 runtime native on arm64
-(https://github.com/msys2/msys2-runtime/pull/356, open).
+**Lifts when** Git for Windows ships its MSYS2 runtime native on arm64. Three upstream
+events lead there, and any one of them is the signal to rerun the record's reproduction on
+the guest (its section 6) and, if the deaths are gone, to lift the re-run exception wherever
+it is stated:
+
+- the AArch64 enablement merging in msys2-runtime
+  (https://github.com/msys2/msys2-runtime/pull/356, open). Its earlier draft
+  (https://github.com/msys2/msys2-runtime/pull/348, open) carries a prebuilt `msys-2.0.dll`
+  that can be dropped onto the guest as a cheap probe; whether the probe runs is untried;
+- a Cygwin release with an aarch64 build, whose runtime the next MSYS2 carries;
+- the `usr\bin\msys-2.0.dll` of Git for Windows' arm64 asset turning native, read off a
+  release (https://github.com/git-for-windows/git/releases).
 
 ## macOS awk fails on bytes that are not UTF-8
 
