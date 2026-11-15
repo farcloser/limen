@@ -768,6 +768,28 @@ which is an error on an empty needle
 
 **Lifts when** hadolint skips an empty literal part. Not reported upstream yet.
 
+## hadolint's DL3026 takes a stage named by its number for an image
+
+**Symptom.** Not run: read from the sources. With a list of trusted registries that leaves
+Docker Hub out, a multi-stage file that copies from a stage by its number
+(`COPY --from=0 /a /b`, or the `from=` of a bind or cache mount) is reported by DL3026,
+"Use only an allowed registry in the FROM image", although no image is pulled.
+
+**Cause.** The rule turns the `from` value into an image and looks it up among the stage
+aliases it has seen
+([DL3026.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3026.hs)).
+A number is no alias, so `0` becomes an image named `0` with no registry
+([Syntax.hs](https://github.com/hadolint/language-docker/blob/6b63b5426a22d5f8558a5af2497b4ea66240e938/src/Language/Docker/Syntax.hs)),
+and an image with no registry passes only when it is `scratch` or Docker Hub is trusted. In
+Docker's grammar a number after `--from=` names a build stage, never an image.
+
+**Workaround.** Name the stage (`FROM … AS build`, `--from=build`): the rule finds an alias.
+godolint's port of the rule reads `FROM` alone today, so it does not meet the case; a port
+that reads `--from` is to take a number for a stage.
+
+**Lifts when** hadolint resolves a number to the stage of that index. Not reported
+upstream yet.
+
 ## go-fabric's mDNS needs a socket option x/net does not have on Windows
 
 **Symptom.** On Windows, a Matter controller built on `github.com/SukramJ/go-fabric` cannot
