@@ -600,3 +600,87 @@ pull request's checks or with `gh api -X POST repos/<owner>/<repo>/actions/runs/
 
 **Lifts when** a filtered listing returns every run of a head as soon as the unfiltered one
 does. Not reported upstream yet.
+
+## cargo relinks nothing when only `SOURCE_DATE_EPOCH` changes
+
+**Symptom.** A Windows executable built in a target directory kept from an earlier commit is
+not the one a build from nothing makes. In forkcloser/testbin a rebuild of the commit failed
+on the four Windows archives of its two Rust tools and on nothing else
+(https://github.com/forkcloser/testbin/pull/76).
+
+**Cause.** lld stamps a PE file's time from `SOURCE_DATE_EPOCH`, which a reproducible build
+sets to the commit's time. cargo does not count that variable among a link's inputs: with
+nothing else changed it relinks nothing, and the executable keeps the time of the commit it
+was last linked at.
+
+**Workaround.** A Windows link takes lld's `/Brepro`, spelled `-Wl,-Brepro` (`-Clink-arg=`
+for rustc): the stamp is then a hash of what was linked, the same from any target directory.
+
+**Lifts when** cargo relinks on a change of the variable; the hash stays the better stamp
+either way. Not reported upstream yet.
+
+## rustc strips an Apple binary after the link that computed its UUID
+
+**Symptom.** Two builds of one Rust tool for `aarch64-apple-darwin`, from two directories on
+one host, differ by 48 bytes: the `LC_UUID` load command and the code signature over it
+(https://github.com/forkcloser/testbin/pull/76).
+
+**Cause.** With `strip = true`, rustc strips an Apple target's binary with an external
+utility once the link is done, where on other targets the linker strips
+([compiler/rustc_codegen_ssa/src/back/link.rs](https://github.com/rust-lang/rust/blob/1.100.0/compiler/rustc_codegen_ssa/src/back/link.rs),
+`strip_with_external_utility`). The linker computes the Mach-O UUID over the image it writes,
+which still holds the debug map and its paths, the build's directory among them.
+
+**Workaround.** `-Clink-arg=-s`: the linker strips, the UUID is computed over the stripped
+image, and the two builds are the same bytes.
+
+**Lifts when** rustc has the linker strip on Apple targets. Not reported upstream yet.
+
+## zig cc compiles with debug information and links what its own runtime libraries carry
+
+**Symptom.** A binary built with `zig cc` and no debug flag is not the same bytes twice. A
+Linux binary names the checkout and zig's own library directory, 460 paths in one of
+forkcloser/testbin's tools; Darwin and Windows binaries differ from one run to the next in
+one directory (https://github.com/forkcloser/testbin/pull/76).
+
+**Cause.** `zig cc` compiles with debug information unless told otherwise, and links the
+debug information of the runtime libraries it builds on the machine.
+
+**Workaround.** `-g0` on every compile and `-s` on every link.
+
+**Lifts when** zig's output for the same inputs is the same bytes with its defaults. Not
+reported upstream yet.
+
+## NuGet writes `packages.lock.json` with the host's line ending
+
+**Symptom.** On the Windows runners `just do lint converge` reports every NuGet lock file as
+not what the recipe makes: the recipe's output ends its lines CRLF and the tree holds LF
+(https://github.com/forkcloser/testbin/pull/69).
+
+**Cause.** NuGet writes the lock file as indented JSON through a `StreamWriter`
+([PackagesLockFileFormat.cs](https://github.com/NuGet/NuGet.Client/blob/aa539166b2ff5abf970ee44281d73c96e3dbaa1a/src/NuGet.Core/NuGet.ProjectModel/ProjectLockFile/PackagesLockFileFormat.cs)),
+so each line ends as the host's lines do.
+
+**Workaround.** A recipe that writes a lock file strips the carriage returns from it, so the
+file is the same from any host.
+
+**Lifts when** NuGet writes one line ending whatever the host. Not reported upstream yet.
+
+## hadolint's DL3006 fails on two adjacent variables in an image name
+
+**Symptom.** Not run: read from the sources. A `FROM` whose image name holds two variables
+side by side after a literal, where an earlier stage's alias starts with that literal, ends
+hadolint with `Data.Text.breakOn: empty input`: `FROM debian:12 AS base-amd64-slim`, then
+`FROM base-${ARCH}${LIBC}-slim`.
+
+**Cause.** Since the rule matches the variables of an image name against the stage aliases
+(https://github.com/hadolint/hadolint/commit/a415cb134fdbbee8e1355d47a4f3ebc7614e5d82), it
+splits the name into its literal parts, here `base-`, an empty one and `-slim`, and looks
+for each in the alias with `Text.breakOn`
+([DL3006.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3006.hs)),
+which is an error on an empty needle
+([Data/Text.hs](https://github.com/haskell/text/blob/2962b874c192bc3fb15b51c6c8a89fb1bb57e428/src/Data/Text.hs)).
+
+**Workaround.** godolint's port of the rule matches an empty literal anywhere.
+
+**Lifts when** hadolint skips an empty literal part. Not reported upstream yet.
