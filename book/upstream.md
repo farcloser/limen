@@ -684,3 +684,32 @@ which is an error on an empty needle
 **Workaround.** godolint's port of the rule matches an empty literal anywhere.
 
 **Lifts when** hadolint skips an empty literal part. Not reported upstream yet.
+
+## go-fabric's mDNS needs a socket option x/net does not have on Windows
+
+**Symptom.** On Windows, a Matter controller built on `github.com/SukramJ/go-fabric` cannot
+open its discovery: "discovery: open: join mDNS groups: not implemented on windows/amd64".
+Seen on duncanite/go-matter, both Windows legs
+([run 43689662484](https://github.com/duncanite/go-matter/actions/runs/43689662484/job/132737415700)).
+
+**Cause.** go-fabric's `bindMcast4` and `bindMcast6` ask for the receiving interface of each
+packet, `pc.SetControlMessage(ipv4.FlagInterface, true)` and its `ipv6` twin, and return the
+error before they join a group
+([socket.go](https://github.com/SukramJ/go-fabric/blob/9abb2e9e4e2f2f33fa5d1f58c25cb42440d95e83/mdns/socket.go#L576-L587)).
+`golang.org/x/net` implements no control message on Windows: `setControlMessage` there is
+one line, `return errNotImplemented`, in
+[ipv4](https://github.com/golang/net/blob/3de643db506517b3e652a13cc0b56034cea6b8e6/ipv4/control_windows.go)
+and in
+[ipv6](https://github.com/golang/net/blob/3de643db506517b3e652a13cc0b56034cea6b8e6/ipv6/control_windows.go).
+Joining a group is implemented there; the failure is the option, which the error's text
+("join mDNS groups") hides. The query side fails when both families do
+([operational_resolver.go](https://github.com/SukramJ/go-fabric/blob/9abb2e9e4e2f2f33fa5d1f58c25cb42440d95e83/mdns/operational_resolver.go#L280-L294)),
+and on Windows both do. The responder opens its sockets through the same two functions;
+what a device does there was read, not run.
+
+**Workaround.** None that makes discovery work. duncanite/go-matter's `controller.Open`
+returns `errors.ErrUnsupported` on Windows, says so in its design document, and its test
+asserts that error there.
+
+**Lifts when** x/net implements the interface control message on Windows, or go-fabric
+does without it there. Not reported upstream yet.
