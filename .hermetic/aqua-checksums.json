@@ -121,28 +121,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_darwin_arm64.tar.gz",
-      "checksum": "4BC0577E21BD937DD0E6D3BE1075C86025FD4DF63BB61F12B5FEF9BC841C6ED9",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.1/curl_8.23.0.1_darwin_arm64.tar.gz",
+      "checksum": "FD7748B21B294E2E4207197CC24CDAA50BB9A3B7224EDF4A11ABB9B17B6B9FAC",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_linux_amd64.tar.gz",
-      "checksum": "70A243D9895B84C95410B61867A115CA9A6132704A1B376FA1F0565EB7A6B328",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.1/curl_8.23.0.1_linux_amd64.tar.gz",
+      "checksum": "22BEF5E98189CB8FE60EB4F53BB1DFEB51820BB455CCEBEB5563CECE3E77035F",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_linux_arm64.tar.gz",
-      "checksum": "C68ACE1458E6BF11F8E63E963E4753A76970E8A60FFF3D5CEE368A59186DE449",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.1/curl_8.23.0.1_linux_arm64.tar.gz",
+      "checksum": "118EAED6EB6364C7C7FF9E19B5E268E030484368A9C1850241C389FE1832A0DC",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_windows_amd64.tar.gz",
-      "checksum": "9C391B70E577D0C4AC8B2B9B90958432AE72F96400043D720ACED2C5811216FA",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.1/curl_8.23.0.1_windows_amd64.tar.gz",
+      "checksum": "FB5AB7FC8BBA3C9B8AE645896109AA481686221D0C2C072BD549DA3768CC4364",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0/curl_8.23.0_windows_arm64.tar.gz",
-      "checksum": "1098AA1A16D737FD7075583013A75B8BAB52C0530A79B6127254C4AE0DFE4220",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.1/curl_8.23.0.1_windows_arm64.tar.gz",
+      "checksum": "750184BEF85096EFD7DE0AE4D403E1ED62A56C4D57468B6D62D88CAFB57F7DC9",
       "algorithm": "sha256"
     },
     {
