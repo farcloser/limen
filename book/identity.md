@@ -53,6 +53,19 @@ only a commit signed with the removed key and pushed *after* the removal shows a
 unverified. Locally, verification reads `.lint-signers`, so the old key's entry stays as the
 record, with the new key beside it.
 
+**A rotation is two edits to `.lint-signers`, and each is a command.** Every entry carries
+the window its key signs in. `limen signers add -valid-after <time> <principal>
+<public-key-file>` lists the new key from that time on; `limen signers retire -valid-before
+<time> <fingerprint>` ends the old key's window, so what it signed before that time keeps
+verifying and anything it signs later is refused, which a deleted line could not say: it
+would fail the old commits with the new ones. Neither command deletes a line, each run
+twice changes nothing, and the file is rewritten sorted, so the two in either order give
+the same file. A time is UTC and ends in `Z`: without it `ssh-keygen` reads the time in the
+zone of whoever verifies
+([ALLOWED SIGNERS](https://man7.org/linux/man-pages/man1/ssh-keygen.1.html#ALLOWED_SIGNERS)),
+and one file would mean two windows on two machines, so the commands refuse it. The
+fingerprint is the one `ssh-keygen -l -f <public-key-file>` prints.
+
 **Changing the passphrase** rewrites the key file's protection, not the key:
 `ssh-keygen -p -f ~/.ssh/id_ed25519_sk`.
 
@@ -461,4 +474,5 @@ The bot's public key belongs in `.lint-signers`, next to the human's, so `just l
 commit check verifies its signatures exactly as the human's and fails a commit neither key
 signed. The file is the same in every repository and hand-copied today; it has the shape of
 a canonical, content-pinned file, and making it one is the planned next step. Until then
-the script prints the line to add.
+the script prints the line to add, and `limen signers add` writes it
+([a rotation](#the-humans-key-one-hardware-bound-ssh-key-for-both-uses)).
