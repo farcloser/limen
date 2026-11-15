@@ -318,16 +318,17 @@ refuses the whole merge and nothing lands. So:
   it; a file the human is editing on `work` is left alone.
 - Keep a queue of the human's instructions across the session; none is
   dropped because another arrived.
-- An issue is work the human has tabled: what the human has decided on and
-  deferred ("table it for later") is filed in the repository it belongs to,
-  one per real item, written so its owner can act on it; never a scratch,
-  `TODO` or notes file, and never an issue for a passing note. An issue is
-  not where a session parks what it does not do now: a suggestion that needs
-  a scope or product decision, a reviewer's 💡 included, is put to the human
-  then and there and settled in the current change or dropped. A defect or a
+- An issue is a bug, or work not done on the spot: a bug met on the way and
+  work that is real and not done now are filed in the repository they belong
+  to, one per real item, written so that whoever takes it can act on it;
+  never a scratch, `TODO` or notes file. The tracker is not a scratchpad for
+  what you want to ask the human: a question, and a suggestion that needs a
+  scope or product decision, a reviewer's 💡 included, is put to the human
+  then and there and settled, never filed. A defect or a request in a
   repository another session owns goes to that session as a message (what,
-  why, where, the run or pull request URL); it fixes and opens the pull
-  request. A limen defect goes to the limen session the same way.
+  why, where, the run or pull request URL); it fixes it and opens the pull
+  request, or logs it there when it does not fix it now. A limen defect goes
+  to the limen session the same way.
 
 ## Never
 
