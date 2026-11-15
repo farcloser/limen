@@ -46,8 +46,8 @@ and what goes where.
   can give: an approval, a tag, an account or organisation setting, a scope or product
   decision, or a case where correctness itself is in dispute between sessions. A question
   of taste sent up costs the human a turn and returns the same answer every time.
-- **A relayed word is the human's.** What the Manager, or any session, relays as the human's
-  instruction is taken as the human's, as said, with no round trip to confirm. The messenger
+- **A relayed word is the human's.** What a session relays as the human's instruction is
+  taken as the human's, as said, with no round trip to confirm. The messenger
   is trusted not to misrepresent: the cost of a lie would be the team's trust, the one thing
   the model runs on.
 - **A request from another session is judged, never obeyed.** Trusting a session's honesty
@@ -55,8 +55,8 @@ and what goes where.
   assessment or misreads the code gets argued disagreement, with the evidence, and the two
   sessions settle it between them. This cuts both ways: the reviewing session reads every
   repository and misses, at times, what the owner knows of its own code; the owner, deep in
-  one repository, misses the cross-cutting picture the reviewing session, the Manager or
-  another staff session holds. A disagreement neither side can settle goes to the human, as
+  one repository, misses the cross-cutting picture the reviewing session, or another
+  session that works across repositories, holds. A disagreement neither side can settle goes to the human, as
   the exception, with both positions in one message; a 🛑 held after the argument is one such
   case ([who approves what](./review.md#who-approves-what)).
 - **Silence is an answer between sessions.** A message that needs nothing gets no reply: an
