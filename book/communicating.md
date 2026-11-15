@@ -28,6 +28,11 @@ and what goes where.
   fixes it and opens the pull request, or logs it in its own repository when it does not
   fix it now; either is how the human hears of it. A limen defect goes to the limen
   session the same way.
+- **A repository has one owner.** One session owns each repository and is the authority on
+  what it is and does. A session with work to do in a repository it does not own brings it
+  as a pull request, through the same review, or as a message to the owner (above); it
+  does not work on the owner's branches, and it asks before taking a repository on. Two
+  owners are two halves of one picture, each changing what the other was about to rely on.
 - **A consumer session gets the contract, and only the contract.** A session that reports
   a bug, or a contract violation, to the session that owns a library gets back the
   guarantee and the version that carries it; it has no say in how the owner tests its
