@@ -291,6 +291,81 @@ func TestBootstrapProducesCompliantRepo(t *testing.T) { // Serial by design: t.S
 	}
 }
 
+// TestBootstrapKnowsItsRepository: a target that already has an origin, a
+// clone of an empty repository or a worktree of one, is bootstrapped as that
+// repository, as fix would treat it: renovate.json refers to its own shared
+// configuration, the README is titled with its name and not the directory's,
+// and no workflow is written that calls limen's lanes by a local path, which
+// only limen carries. The fix of the same build then finds nothing to write.
+// A development build seeds no caller at all for a repository that is not
+// limen, and says so: that is its exit 1 here, at both commands.
+func TestBootstrapKnowsItsRepository(t *testing.T) { // Serial by design: t.Setenv forbids t.Parallel.
+	stubs := stubDir(t)
+	t.Setenv("PATH", stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	dir := toolsSeededDir(t)
+
+	for _, args := range [][]string{
+		{"init", "--quiet"},
+		{"remote", "add", "origin", "git@github.com:acme/widget.git"},
+	} {
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = dir
+
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	var out, errOut strings.Builder
+
+	code := run([]string{"bootstrap", "-force", dir}, &out, &errOut)
+	said := out.String() + errOut.String()
+
+	if strings.Contains(said, "repository unknown") {
+		t.Errorf("bootstrap did not read the origin the target has:\n%s", said)
+	}
+
+	if code != 1 || !strings.Contains(said, "a development build seeds no workflow caller") {
+		t.Errorf("bootstrap = %d, want 1 for the callers a development build cannot seed:\n%s", code, said)
+	}
+
+	renovate, err := os.ReadFile(filepath.Join(dir, "renovate.json"))
+	if err != nil || !strings.Contains(string(renovate), `"local>acme/widget//.limen/renovate"`) {
+		t.Errorf("renovate.json does not extend the repository's own shared configuration (%v):\n%s", err, renovate)
+	}
+
+	readme, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	if err != nil || !strings.HasPrefix(string(readme), "# widget\n") {
+		t.Errorf("README.md is not titled with the repository's name (%v):\n%s", err, readme)
+	}
+
+	workflows, _ := filepath.Glob(filepath.Join(dir, ".github", "workflows", "*.yaml"))
+	for _, workflow := range workflows {
+		content, err := os.ReadFile(workflow)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if strings.Contains(string(content), "uses: ./.github/workflows/limen-") {
+			t.Errorf(
+				"%s calls limen's lanes by a local path, in a repository that is not limen",
+				filepath.Base(workflow),
+			)
+		}
+	}
+
+	var fixed strings.Builder
+
+	_ = run([]string{"fix", "-json", dir}, &fixed, io.Discard)
+
+	for _, action := range []string{"created", "overwrote", "merged", "deleted", "failed"} {
+		if strings.Contains(fixed.String(), `"action": "`+action+`"`) {
+			t.Errorf("fix after bootstrap %s something:\n%s", action, fixed.String())
+		}
+	}
+}
+
 // TestReleaseStampPinsOnlyExactReleases: only an exact release stamp may
 // rewrite the seeded limen pin — every ambiguous form (dev, bare sha,
 // describe suffixes, dirty trees, goreleaser snapshots) is a dev build, whose
