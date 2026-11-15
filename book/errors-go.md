@@ -64,6 +64,19 @@ error is the fake's own and compared by identity; err113 stays on in tests in th
 baseline, and a project that wants that carve-out states it in its own `.lint-go.yaml`,
 as xz does.
 
+**A constructor is not an error received.** wrapcheck asks that an error received from
+another package gets context before it leaves, and it takes every call into another package
+that returns an error type for one, a constructor's included; it exempts the constructors it
+knows by signature (`errors.New`, `.Errorf`, `.Wrap`). A library's typed-error constructor is
+the same thing: Connect's `NewError`, and `WithCause` and `WithDetail` chained on it, make
+the coded error a handler returns, and nothing was received. The baseline lists those three
+(wrapcheck's `extra-ignore-sigs`), and not `WithRemote`, which marks an error a peer sent:
+that one was received. The exemption is by signature, so it has a cost: an error that was
+received and leaves through one of the listed builders is no finding either, since wrapcheck
+never looks at the receiver. Such an exemption is a property of the library, true in every
+repository that imports it and inert in the others, so it is raised with limen and listed
+once, never restated in each project's `.lint-go.yaml`.
+
 **Not a fault class: a limit.** A refusal that protects the caller from itself, a path
 over 4096 bytes, `ReadFile` on a file over the cap, is the caller's argument, not the
 input's fault: it stays on the bad-argument sentinel even when the value came off disk.
