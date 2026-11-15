@@ -5,6 +5,10 @@ chapter of its own holds it; the links say where.
 
 - **Absolute correctness.** No spaghetti, no half-baked abstraction, no warning tolerated, no
   "should work for now". It just works.
+- **Modern and correct.** Code is written in the idiom of the toolchain the project pins,
+  and takes from the standard library first: nothing is hand-rolled that the current
+  standard library covers. Its contract, the failure and security paths included, is proven
+  by tests ([what a package's tests establish](./testing.md#what-a-packages-tests-establish)).
 - **KISS.** Never over-engineer for a hypothetical future. Either the use case is generic
   now, by design, or the thing stays simple.
 - **Architecture and modularization.** Interfaces are *client-defined*, to cut hard
