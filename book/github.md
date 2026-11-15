@@ -77,6 +77,7 @@ Every declarable identifier, grouped (a test pins this list to the live check ca
 # --- Repository: rulesets ---
 # ruleset-default-branch: <reason>
 # ruleset-version-tags: <reason>
+# legacy-branch-protection: <reason>
 # --- Repository: hygiene & surface ---
 # description: <reason>
 # topics: <reason>
@@ -86,6 +87,7 @@ Every declarable identifier, grouped (a test pins this list to the live check ca
 # discussions: <reason>
 # forking: <reason>
 # pages: <reason>
+# community-health-files: <reason>  # a fork keeping upstream's security policy, say
 # outside-collaborators: <reason>
 # webhooks: <reason>
 # deploy-keys: <reason>
@@ -211,6 +213,20 @@ declaring only where the code is on that list.
   place that says it: everything else, the lanes included, works on whatever the default
   branch is called, and a repository that drifts loses only what the three filters gate until
   the next `limen github check`.
+- **One mechanism protects the default branch.** The rulesets are it. Classic branch
+  protection left on the same branch is a second set of rules that nothing reconciles, and
+  the two drift apart: a required check renamed in the ruleset and not in the classic rule
+  blocks every merge with nothing in the ruleset to explain it. An advisory verdict: deleting
+  protection is a human's act, done once `limen:main` is active. The audit reads the default
+  branch alone.
+- **The owner's security policy and contribution terms apply.** They live once, in the
+  owner's `.github` repository (below), and GitHub serves a repository's own copy in their
+  place. A repository carrying its own `SECURITY` or `CONTRIBUTING` file (at the root, under
+  `.github/` or under `docs/`, whatever its extension and case: GitHub reads
+  `CONTRIBUTING.rst` and `contributing.md` alike) therefore answers a reporter with something
+  else, and a fork with upstream's: upstream's contacts, upstream's terms. A directory GitHub
+  lists only in part, at its ceiling of a thousand entries, is `unverifiable`. An advisory verdict: the file goes
+  in a pull request, or the check is exempted when the copy is deliberate.
 - **The merge doctrine and the rulesets**, below.
 
 ## Mainline doctrine: pull requests always
@@ -484,7 +500,7 @@ the token lacks fails nothing up front: the checks it serves answer `unverifiabl
 | repository | Secrets | read | read | the repository's Actions secrets |
 | repository | Webhooks | read | read | the webhooks |
 | repository | Pages | read | read | the Pages site |
-| repository | Contents | read | write | the workflow files; `fix` renames the default branch |
+| repository | Contents | read | write | the workflow files, the default branch's object, the community-health files in the tree; `fix` renames the default branch |
 | repository | Issues | read | read | Renovate's open issues, the dashboard |
 | organization | Administration | read | write | the Actions policy, code security configurations, app installations; `fix` writes the organization's settings, its Actions policy and its configurations |
 | organization | Members | read | read | members, teams, a team's members and repositories; the agents team's grant is the repository's Administration write with this |

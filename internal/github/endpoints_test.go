@@ -78,10 +78,12 @@ func TestAuditEndpointFamilies(t *testing.T) {
 
 	// Sorted. Each maps to a row of the permission table in book/github.md
 	// ("Authentication"); a family added here is a row there, or a permission
-	// a row already grants. Two reads run off the compliant path and are not
-	// held here: the code scanning default setup, read when the override
-	// opts a repository in, and the Actions access level; both are repository
-	// Administration read, the row the table gives them.
+	// a row already grants. Three reads run off the compliant path and are
+	// not held here: the code scanning default setup, read when the override
+	// opts a repository in, and the Actions access level, both repository
+	// Administration read; and the default branch's object, read once the
+	// repository object named the branch, repository Contents read. Each is
+	// the row the table gives it.
 	want := []string{
 		"GET /orgs/{org}",
 		"GET /orgs/{org}/actions/permissions",

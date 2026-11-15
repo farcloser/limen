@@ -5,11 +5,10 @@ fix` audit a repository (R1–R7) and an organisation (O1–O7) against the embe
 with the override file, the four verdict classes and plan-then-apply consent; the
 human-facing statement is the book's [GitHub chapter](../book/github.md), which wins
 where the two differ. This document is kept for the catalog: the R and O numbering is
-the key the code's check identifiers and the open issues use. The issues: what the
-catalog names and the code does not have,
-https://github.com/farcloser/limen/issues/508; the scheduled drift audit and the org
-rulesets migration, https://github.com/farcloser/limen/issues/507; the permission table
-for `check` and `fix` is book/github.md's "Authentication" section.
+the key the code's check identifiers and the open issues use. Every row is either built
+or dropped with its reason, section by section below. The one open issue is the scheduled
+drift audit and the org rulesets migration, https://github.com/farcloser/limen/issues/507;
+the permission table for `check` and `fix` is book/github.md's "Authentication" section.
 
 ## Why
 
@@ -124,7 +123,7 @@ exist for all). Endpoints verified reachable 2026-07-03 (`/rulesets` public-read
 `/actions/permissions` auth-gated, `security_and_analysis` on the repo object).
 
 Each section ends with what the code has, by check identifier (`internal/github`), and
-what it does not, which https://github.com/farcloser/limen/issues/508 decides row by row.
+what was dropped from the catalog, with the reason (decided 2026-11-14).
 
 ### R1 — Security & analysis
 
@@ -153,8 +152,26 @@ Built: `secret-scanning`, `secret-scanning-push-protection`, `dependabot-alerts`
 | Workflow content sanity (extra, scorecard-inspired) | no `pull_request_target` + checkout-of-head, no unpinned third-party `uses:`, no `permissions:` absent at workflow level | — (**decided**: these are tree checks — they go into the existing file-rule engine, not limen github) | tree scan |
 
 Built: `actions-workflow-permissions`, `actions-approve-pull-requests`, `actions-allowed`,
-`actions-fork-pr-approval`, `actions-access-level`. Not built: retention; the
-workflow-content checks are tree checks for the file-rule engine, not this command.
+`actions-fork-pr-approval`, `actions-access-level`.
+
+Dropped: retention. The default is 90 days, a public repository cannot be set above it, and a
+longer period on a private one (up to 400 days) costs storage, not exposure: there is nothing
+for a floor to hold.
+
+Dropped as a row of its own: workflow content. Each of its three parts is held elsewhere. An
+unpinned `uses:` is refused at run time by the organization's policy
+(`org-actions-sha-pinning`). A workflow without `permissions:` gets the read-only default
+token (`actions-workflow-permissions`), and one that raises it does so on a line a reviewer
+reads. `pull_request_target` adds three things over `pull_request` (GitHub's page for the
+event: "cache poisoning and granting unintended access to write privileges or secrets"). The
+write token is the sentence above. Secrets within reach of a fork's code are the `secrets`
+file rule: a job that reads a secret on an open trigger, this one included, sits behind an
+environment or fails `limen check`. The cache is held by GitHub's own default: a run
+started by `pull_request_target` reads the default branch's cache scope and cannot create
+or overwrite a cache in it (GitHub's dependency caching reference, "Cache access for
+low-trust workflow triggers"), and what lifts that is a write-capable `cache-mode` in the
+workflow, a line a reviewer reads, as with `permissions:`. No workflow in the fleet uses
+the event.
 
 ### R3 — Merge & branch workflow
 
@@ -182,8 +199,11 @@ Built: every row (`merge-methods`, `squash-commit-defaults`, `delete-branch-on-m
 | Legacy branch-protection absent | rulesets are the one mechanism (no drift between two systems) | adv | `GET /repos/{o}/{r}/branches/{b}/protection` |
 | Bypass lists | empty or named-in-baseline only | ✓ | ruleset payload |
 
-Built: `ruleset-default-branch`, `ruleset-version-tags`, bypass actors included. Not
-built: legacy branch protection absent.
+Built: `ruleset-default-branch`, `ruleset-version-tags`, bypass actors included, and
+`legacy-branch-protection`: an advisory, for the default branch, read off the branch object
+(`GET /repos/{o}/{r}/branches/{b}`, whose `protection.enabled` is the classic mechanism
+alone), since the protection endpoint in the table answers a non-admin and an unprotected
+branch with the same 404.
 
 ### R5 — Features & metadata
 
@@ -198,7 +218,12 @@ built: legacy branch protection absent.
 | Forking allowed (private repos) | false | ✓ | `PATCH /repos/{o}/{r}` (`allow_forking`) |
 
 Built: `description`, `topics`, `issues`, `wiki`, `projects`, `discussions`, `pages`,
-`forking`. Not built: template flag, archived state, visibility as declared.
+`forking`.
+
+Dropped: template flag, archived state, visibility as declared. None has a floor. Visibility
+is the owner's decision and is read only to scope the checks that depend on it; an archived
+repository takes no write, so nothing in it drifts, and the fleet audit leaves it out; the
+template flag adds a button and changes nothing the baseline governs.
 
 ### R6 — Access & credential surface (audit-only)
 
@@ -214,7 +239,12 @@ All advisory: these are people and credentials.
 | App installations touching this repo | subset of org-approved list | `GET /repos/{o}/{r}/installation` (app-scoped) / org view |
 
 Built: `outside-collaborators`, `deploy-keys`, `webhooks`, `actions-secrets`,
-`environments`. Not built: app installations.
+`environments`.
+
+Dropped: app installations touching this repository. `org-installed-apps` makes every app's
+grant reviewable, with the repositories it selects, and the per-repository view
+(`GET /repos/{o}/{r}/installation`) is served to an App's own token only, not to the one an
+audit runs under.
 
 ### R7 — Community health (mostly existing limen file rules)
 
@@ -223,8 +253,14 @@ belong to the existing rule engine (candidate new mandatory-file rules), not the
 API — with one twist: GitHub falls back to the **org `.github` repository** for all of
 them. Decided (O7): per-repo `README`/`LICENSE` stay mandatory, SECURITY.md,
 CONTRIBUTING and the templates live in the org `.github` fallback once. Built at the org
-(`org-community-health-repo`, `org-community-health-content`). Not built: the
-*effective* value per repository through `GET /repos/{o}/{r}/community/profile`.
+(`org-community-health-repo`, `org-community-health-content`), and per repository as
+`community-health-files`: an advisory when the repository carries a security policy or
+contribution terms of its own, which GitHub serves in place of the owner's: a `SECURITY` or
+`CONTRIBUTING` file at the root, under `.github/` or under `docs/`, whatever its extension
+and case. It lists those three directories, not `GET /repos/{o}/{r}/community/profile`: that
+endpoint answers 404 for a fork, where the copy is upstream's and matters most, reports no
+security policy, and names the effective contributing file, not whether it is the
+repository's own.
 
 ---
 
@@ -274,7 +310,10 @@ Built: every row (`org-actions-enabled-repositories`, `org-actions-allowed`,
 | Security manager team | defined if org grows beyond one human | adv | `PUT /orgs/{o}/security-managers/teams/{t}` |
 
 Built: `org-code-security-configuration` (advisory: creating one is a human act),
-`org-dependabot-security-updates` (with its fix). Not built: the security-manager team.
+`org-dependabot-security-updates` (with its fix).
+
+Dropped: the security-manager team. The row's own condition, an organization beyond one
+human, holds in none of the organizations audited; it returns with a second owner.
 
 ### O4 — Org surface audits (advisory)
 
@@ -289,8 +328,10 @@ Built: `org-code-security-configuration` (advisory: creating one is a human act)
 | Custom properties schema | reserved for future repo classification (safe-settings uses these well) | `/orgs/{o}/properties/schema` |
 
 Built: `org-installed-apps`, `org-renovate-installed`, `org-webhooks`,
-`org-actions-secrets`, `org-personal-access-tokens`, `org-teams`, `org-agents-team`. Not
-built: the custom properties schema.
+`org-actions-secrets`, `org-personal-access-tokens`, `org-teams`, `org-agents-team`.
+
+Dropped: the custom properties schema, reserved for a repository classification nothing
+uses.
 
 ### O5 — Org rulesets
 
@@ -308,8 +349,10 @@ Not built: https://github.com/farcloser/limen/issues/507, with the scheduled aud
 Display name, description, email, URL, verified domains (adv), sponsor settings (adv) —
 `PATCH /orgs/{o}` for the fixable subset; mostly advisory prose.
 
-Built: `org-profile-description`, `org-web-commit-signoff`. Not built: email, URL,
-verified domains, sponsorship.
+Built: `org-profile-description`, `org-web-commit-signoff`.
+
+Dropped: email, URL, verified domains, sponsorship. Presentation, with no value the baseline
+could call below the floor.
 
 ### O7 — The org `.github` repository (the fallback mechanism, explicitly in scope)
 
@@ -340,8 +383,11 @@ Proposed use — high leverage, pure limen-shape:
 carries the canonical fallback set.
 
 Built: points 1 and 2 (`org-community-health-repo`, `org-community-health-content`;
-`farcloser/.github` and `forkcloser/.github` exist and pass `limen check`). Not built:
-point 3, the workflow templates.
+`farcloser/.github` and `forkcloser/.github` exist and pass `limen check`).
+
+Dropped: point 3, the workflow templates. A repository is created by `limen bootstrap`, never
+from a starter workflow in the Actions UI (book/github.md, "Creating a repository"), and a
+published template would be a second, unpinned copy of the canonical workflows.
 
 ---
 

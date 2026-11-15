@@ -64,6 +64,8 @@ const (
 	checkRenovateProcessing   = "renovate-processing"
 	checkActionsSecrets       = "actions-secrets"
 	checkEnvironments         = "environments"
+	checkLegacyProtection     = "legacy-branch-protection"
+	checkCommunityHealthFiles = "community-health-files"
 )
 
 // knownChecks is every check identifier — repository and organization level
@@ -106,6 +108,8 @@ func knownChecks() map[string]bool {
 		checkDeployKeys:           true,
 		checkAgentsTeam:           true,
 		checkRenovateProcessing:   true,
+		checkLegacyProtection:     true,
+		checkCommunityHealthFiles: true,
 	})
 
 	return checks
@@ -209,6 +213,9 @@ type auditor struct {
 	// read receive. It is the admin probe the Dependabot-alerts check needs:
 	// that endpoint reports "off" and "you may not ask" with the same 404.
 	securityVisible bool
+	// defaultBranch is the repository's, from auditRepoObject; empty when the
+	// repository object was not read.
+	defaultBranch string
 }
 
 // Audit checks the repository's settings against the baseline. overrides maps
@@ -230,7 +237,9 @@ func Audit(ctx context.Context, repo string, overrides map[string]string) ([]Fin
 	aud.auditActions()
 	aud.auditCodeScanning()
 	aud.auditRulesets()
+	aud.auditLegacyProtection()
 	aud.auditSurface()
+	aud.auditCommunityHealthFiles(name)
 	aud.auditActionsSecrets()
 	aud.auditEnvironments()
 	aud.auditRenovateProcessing()
@@ -365,6 +374,7 @@ func (a *auditor) auditRepoObject() { //nolint:gocognit // a linear catalog of i
 
 	a.private = settings.Private
 	a.privateKnown = true
+	a.defaultBranch = settings.DefaultBranch
 
 	// R3 — merge & branch workflow: all three methods enabled, squash messages
 	// from the PR. The repository setting is a second gate in front of the
@@ -1943,6 +1953,181 @@ func (a *auditor) auditOutsideCollaborators() {
 	a.flag(checkOutsideCollaborators, StatusAdvisory,
 		strings.Join(elevated, listSeparator), "read-only or organization members",
 		"outside collaborator(s) with elevated access — people are never auto-fixed, review by hand", nil)
+}
+
+// branchObject is the subset of a branch the audit reads.
+type branchObject struct {
+	Protection classicProtection `json:"protection"`
+}
+
+// classicProtection is the branch object's summary of classic branch
+// protection; rulesets do not move it.
+type classicProtection struct {
+	Enabled bool `json:"enabled"`
+}
+
+// errNoDefaultBranch is a default branch the audit cannot name or GitHub does
+// not have: an unread repository object, or a repository with no commit yet.
+var errNoDefaultBranch = errors.New("the default branch does not exist or was not read")
+
+// auditLegacyProtection is R4's last row: classic branch protection on the
+// default branch, beside the rulesets. Two mechanisms on one branch drift
+// apart, and the ruleset is the one limen reconciles. The branch object
+// answers any reader, and its protection.enabled is the classic mechanism
+// alone: a branch only rulesets protect says protected true and enabled
+// false. The protection endpoint itself answers a non-admin and an
+// unprotected branch with the same 404. Advisory: deleting protection is a
+// human's act, once the ruleset is active. Other branches are not read.
+func (a *auditor) auditLegacyProtection() {
+	if a.defaultBranch == "" {
+		a.unverifiable(errNoDefaultBranch, checkLegacyProtection)
+
+		return
+	}
+
+	var branch branchObject
+
+	outcome := a.client.getJSON(a.ctx, "/branches/"+url.PathEscape(a.defaultBranch), &branch)
+
+	switch {
+	case outcome.notFound:
+		a.unverifiable(errNoDefaultBranch, checkLegacyProtection)
+	case outcome.err != nil:
+		a.unverifiable(outcome.err, checkLegacyProtection)
+	case branch.Protection.Enabled:
+		a.flag(checkLegacyProtection, StatusAdvisory, enabledValue, "absent",
+			"classic branch protection on "+a.defaultBranch+" beside the rulesets: two mechanisms on one branch "+
+				"drift apart — delete it under Settings, Branches once the "+rulesetMainName+" ruleset is active", nil)
+	default:
+		a.flag(checkLegacyProtection, StatusOK, "", "", "no classic branch protection on "+a.defaultBranch, nil)
+	}
+}
+
+// healthRepoName is the repository an owner's community-health fallbacks are
+// read from.
+const healthRepoName = ".github"
+
+// auditCommunityHealthFiles is R7 for one repository: a security policy or
+// contribution terms of its own shadow the owner's .github repository, where
+// the canonical ones live once (auditOrgCommunityHealth), and GitHub serves
+// the repository's copy. A fork carries upstream's, which name upstream's
+// contacts and terms. GitHub resolves such a file at the root, under .github/
+// and under docs/, whatever its extension and its case (CONTRIBUTING.rst,
+// contributing.md), so the three directories are listed and the names matched
+// that way. Advisory: deleting a file is a pull request, and a deliberate
+// copy is an exemption.
+func (a *auditor) auditCommunityHealthFiles(name string) {
+	if name == healthRepoName {
+		a.flag(checkCommunityHealthFiles, StatusOK, "", "",
+			"this is the repository the community-health files are served from", nil)
+
+		return
+	}
+
+	// A repository the token cannot see answers every listing with the 404
+	// an absent directory gives: without the repository object, nothing here
+	// can be told from "no such file".
+	if !a.privateKnown {
+		a.unverifiable(errEndpointNotFound, checkCommunityHealthFiles)
+
+		return
+	}
+
+	own, err := a.ownCommunityHealthFiles()
+	if err != nil {
+		a.unverifiable(err, checkCommunityHealthFiles)
+
+		return
+	}
+
+	if len(own) == 0 {
+		a.flag(checkCommunityHealthFiles, StatusOK, "", "",
+			"no security policy or contribution terms of its own", nil)
+
+		return
+	}
+
+	a.flag(checkCommunityHealthFiles, StatusAdvisory, strings.Join(own, listSeparator), "none",
+		"the repository's own file(s) shadow "+a.owner+"/"+healthRepoName+
+			"'s: GitHub serves these — delete them, or exempt the check when the copy is deliberate", nil)
+}
+
+// ownCommunityHealthFiles is the community-health files the repository
+// carries itself, by path, at the three places GitHub resolves them from;
+// the error is the first listing that failed for another reason than
+// absence, or one GitHub may have cut short.
+func (a *auditor) ownCommunityHealthFiles() ([]string, error) {
+	var own []string
+
+	for _, dir := range []string{"", ".github", "docs"} {
+		var entries []contentsEntry
+
+		outcome := a.client.getJSON(a.ctx, strings.TrimSuffix("/contents/"+dir, "/"), &entries)
+		if outcome.notFound {
+			continue
+		}
+
+		if outcome.err != nil {
+			return nil, outcome.err
+		}
+
+		// GitHub lists a directory up to a ceiling and says nothing of the
+		// rest: at the ceiling, "none here" is not known.
+		if len(entries) >= contentsListingCeiling {
+			return nil, errListingTruncated
+		}
+
+		for _, entry := range entries {
+			if entry.Type != contentsTypeDir && isCommunityHealthName(entry.Name) {
+				own = append(own, strings.TrimPrefix(dir+"/"+entry.Name, "/"))
+			}
+		}
+	}
+
+	return own, nil
+}
+
+// contentsEntry is one entry of a directory listing.
+type contentsEntry struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+const (
+	contentsTypeDir = "dir"
+	// contentsListingCeiling is the number of entries the contents API
+	// returns for a directory at most.
+	contentsListingCeiling = 1000
+)
+
+// errListingTruncated is a directory listing at the API's ceiling.
+var errListingTruncated = errors.New("the directory listing is at the API's ceiling of entries and may be cut short")
+
+// isCommunityHealthName reports whether GitHub would read a file of this
+// name as one of the canonical community-health files: the same name before
+// its extension, in any case.
+func isCommunityHealthName(name string) bool {
+	for _, file := range communityHealthFiles() {
+		if strings.Contains(file, "/") {
+			continue // the profile README is read from the .github repository alone
+		}
+
+		if strings.EqualFold(withoutExtension(name), withoutExtension(file)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// withoutExtension is a file name up to its last dot; a name that starts
+// with its only dot has no extension.
+func withoutExtension(name string) string {
+	if dot := strings.LastIndexByte(name, '.'); dot > 0 {
+		return name[:dot]
+	}
+
+	return name
 }
 
 // auditSurface covers the advisory-only credential surface of R6 (webhooks,

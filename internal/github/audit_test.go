@@ -337,6 +337,17 @@ func compliantResponses() map[string]stubResponse {
 			Body: `{"total_count":0,"environments":[]}`,
 		},
 		"GET repos/test/repo/contents/.github/workflows": {Body: `[]`},
+		// Rulesets alone protect the branch: protected, and no classic protection.
+		"GET repos/test/repo/branches/main": {
+			Body: `{"name":"main","protected":true,"protection":{"enabled":false}}`,
+		},
+		// The three places GitHub resolves a community-health file from, none
+		// holding one: a directory named as such a file is not one.
+		"GET repos/test/repo/contents": {
+			Body: `[{"name":"README.md","type":"file"},{"name":"security","type":"dir"},{"name":".github","type":"dir"}]`,
+		},
+		"GET repos/test/repo/contents/.github": {Body: `[{"name":"workflows","type":"dir"}]`},
+		"GET repos/test/repo/contents/docs":    {NotFound: true},
 		// The dashboard beside one of Renovate's own pull requests, which the
 		// issues listing returns too: only the issue counts.
 		"GET repos/test/repo/issues?state=open&creator=app%2Frenovate&per_page=100": {
@@ -445,6 +456,140 @@ func TestAuditNonCompliant(t *testing.T) { //nolint:paralleltest // serial by de
 
 	if len(changes) == 0 {
 		t.Fatal("non-compliant repository planned no changes")
+	}
+}
+
+// TestLegacyBranchProtection: classic protection on the default branch is an
+// advisory naming the branch, read off the branch object; rulesets alone are
+// not it; the override exempts it; a branch GitHub does not have, and a read
+// that fails, are unverifiable, never a pass.
+func TestLegacyBranchProtection(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
+	const key = "GET repos/test/repo/branches/main"
+
+	responses := compliantResponses()
+	responses[key] = stubResponse{Body: `{"name":"main","protected":true,"protection":{"enabled":true}}`}
+	stubGH(t, responses)
+
+	findings, changes := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "legacy-branch-protection")
+	if finding.Status != github.StatusAdvisory || !strings.Contains(finding.Message, "main") {
+		t.Errorf("classic protection: %v (%s), want an advisory naming the branch", finding.Status, finding.Message)
+	}
+
+	if len(changes) != 0 {
+		t.Errorf("an advisory planned %d change(s)", len(changes))
+	}
+
+	findings, _ = github.Audit(t.Context(), testRepo, map[string]string{"legacy-branch-protection": "migrating"})
+	if finding, _ := findingByCheck(findings, "legacy-branch-protection"); finding.Status != github.StatusOK {
+		t.Errorf("exempted: %v, want ok", finding.Status)
+	}
+
+	for name, unread := range map[string]stubResponse{"no such branch": {NotFound: true}, "a failed read": {Fail: true}} {
+		responses[key] = unread
+		stubGH(t, responses)
+
+		findings, _ = github.Audit(t.Context(), testRepo, nil)
+		if finding, _ := findingByCheck(
+			findings,
+			"legacy-branch-protection",
+		); finding.Status != github.StatusUnverifiable {
+			t.Errorf("%s: %v, want unverifiable", name, finding.Status)
+		}
+	}
+}
+
+// TestCommunityHealthFiles: a security policy or contribution terms of the
+// repository's own are an advisory naming each path, at each place GitHub
+// resolves them from and under each spelling it reads (another extension,
+// another case); the owner's .github repository is their source and passes
+// unread; a listing that fails, and a repository whose object was not read,
+// are unverifiable.
+func TestCommunityHealthFiles(t *testing.T) { //nolint:paralleltest // serial by design: sets the process environment.
+	responses := compliantResponses()
+	responses["GET repos/test/repo/contents"] = stubResponse{
+		Body: `[{"name":"SECURITY.md","type":"file"},{"name":"README.md","type":"file"},{"name":"contributing","type":"dir"}]`,
+	}
+	responses["GET repos/test/repo/contents/.github"] = stubResponse{
+		Body: `[{"name":"CONTRIBUTING.rst","type":"file"},{"name":"workflows","type":"dir"}]`,
+	}
+	responses["GET repos/test/repo/contents/docs"] = stubResponse{
+		Body: `[{"name":"contributing.md","type":"file"},{"name":"security-notes.md","type":"file"}]`,
+	}
+	stubGH(t, responses)
+
+	findings, _ := github.Audit(t.Context(), testRepo, nil)
+
+	finding, _ := findingByCheck(findings, "community-health-files")
+	if finding.Status != github.StatusAdvisory ||
+		finding.Current != "SECURITY.md, .github/CONTRIBUTING.rst, docs/contributing.md" ||
+		!strings.Contains(finding.Message, "test/.github") {
+		t.Errorf("own files: %v, current %q (%s), want an advisory naming the three paths and the owner's repository",
+			finding.Status, finding.Current, finding.Message)
+	}
+
+	findings, _ = github.Audit(t.Context(), testRepo, map[string]string{"community-health-files": "upstream's"})
+	if finding, _ := findingByCheck(findings, "community-health-files"); finding.Status != github.StatusOK {
+		t.Errorf("exempted: %v, want ok", finding.Status)
+	}
+
+	responses["GET repos/test/repo/contents/.github"] = stubResponse{Fail: true}
+	stubGH(t, responses)
+
+	findings, _ = github.Audit(t.Context(), testRepo, nil)
+	if finding, _ := findingByCheck(findings, "community-health-files"); finding.Status != github.StatusUnverifiable {
+		t.Errorf("a failed listing: %v, want unverifiable", finding.Status)
+	}
+
+	// A name is matched up to its last dot: one with a second extension is
+	// not the canonical file's name. And a listing at the API's ceiling may
+	// be cut short, so "none" there is not known.
+	responses = compliantResponses()
+	responses["GET repos/test/repo/contents"] = stubResponse{
+		Body: `[{"name":"SECURITY.en.md","type":"file"},{"name":"CONTRIBUTING.md.orig","type":"file"}]`,
+	}
+	stubGH(t, responses)
+
+	findings, _ = github.Audit(t.Context(), testRepo, nil)
+	if finding, _ := findingByCheck(findings, "community-health-files"); finding.Status != github.StatusOK {
+		t.Errorf("names with a second extension: %v (%s), want ok", finding.Status, finding.Current)
+	}
+
+	responses["GET repos/test/repo/contents/docs"] = stubResponse{
+		Body: "[" + strings.Repeat(`{"name":"page.md","type":"file"},`, 999) + `{"name":"page.md","type":"file"}]`,
+	}
+	stubGH(t, responses)
+
+	findings, _ = github.Audit(t.Context(), testRepo, nil)
+	if finding, _ := findingByCheck(findings, "community-health-files"); finding.Status != github.StatusUnverifiable {
+		t.Errorf("a listing at the ceiling: %v, want unverifiable", finding.Status)
+	}
+
+	// A repository the token cannot see: every listing would answer 404, as
+	// an absent directory does.
+	unseen := map[string]stubResponse{
+		"GET repos/test/repo":               {NotFound: true},
+		"GET repos/test/repo/contents":      {NotFound: true},
+		"GET repos/test/repo/contents/docs": {NotFound: true},
+	}
+	stubGH(t, unseen)
+
+	findings, _ = github.Audit(t.Context(), testRepo, nil)
+	if finding, _ := findingByCheck(findings, "community-health-files"); finding.Status != github.StatusUnverifiable {
+		t.Errorf("an unread repository: %v, want unverifiable", finding.Status)
+	}
+
+	// The source repository carries the files by definition: none is read.
+	log := stubGH(t, map[string]stubResponse{})
+
+	findings, _ = github.Audit(t.Context(), "test/.github", nil)
+	if finding, _ := findingByCheck(findings, "community-health-files"); finding.Status != github.StatusOK {
+		t.Errorf("the .github repository: %v, want ok", finding.Status)
+	}
+
+	if calls, _ := os.ReadFile(log); strings.Contains(string(calls), "/contents") {
+		t.Error("the .github repository's own files were read as shadows")
 	}
 }
 
