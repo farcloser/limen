@@ -67,16 +67,21 @@ chapter; the procedure is limen's `skills/contribute`.
   message, round after round, until settled, and then tells the project-manager session
   `reviewed: <org/repo> <branch> <head sha>`. A commit after that is a new review: the same
   exchange, a new sha. Review discussion lives in the sessions, never on the pull request.
-  A trivial documentation-only change (a typo, a wrap, a stale link, prose with nothing
-  decided in it), and a pull request that only bumps dependencies, go to the project-manager
-  session instead, which reviews, logs and arms them; anything else touching code,
-  configuration, workflows or tests, and any documentation change that is not trivial, goes
-  to the reviewing session. In doubt, the reviewing session.
+- **Who reviews goes by what a mistake would cost and what it takes to verify, never by the
+  change's label.** The project-manager session takes a change it can verify itself, or one
+  in which a mistake would cost little: documentation it can check against the tree, a small
+  mechanical change, comments, a pull request that only bumps dependencies. It reads it in
+  the same exchange, to the same bar, logs it and arms it. The reviewing session is kept for
+  what is both hard to establish and costly when wrong: deep code, an optimization, an API
+  change with wide ramifications. These are examples, not the bar: you and the project
+  manager judge. A line that states a fact about an artifact or a mechanism (a release, a
+  signature, a command's behaviour) is a claim the project manager verifies; one it cannot
+  verify itself goes to the reviewing session.
 - **Open the pull request at the reviewed head, bind it, babysit it.** Push, open the pull
   request, bind it in your own PR pane, and own it to green: a red that needs a redesign
-  goes back to the reviewing session; an environmental red (a links 503, a known flake) gets
-  the reviewing session's `bypass-safe: <org/repo> <branch> <sha> <run URL>` line to the
-  project manager. You message nobody about the pull request: the project manager finds it
+  is a new head and a new review, routed as any change; an environmental red (a links 503,
+  a known flake) gets a `bypass-safe: <org/repo> <branch> <sha> <run URL>` line from the
+  session that reviewed the head, the project manager's own when it did. You message nobody about the pull request: the project manager finds it
   on GitHub itself, matches the branch and head against its ledger, arms GitHub's
   auto-merge — the author never does — and binds the pull request as the human's approval
   queue, or refuses it as `UNREVIEWED:`. The human approves on GitHub; auto-merge merges. A
