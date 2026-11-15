@@ -298,6 +298,7 @@ func runFix(ctx context.Context, version string, args []string, stdout, stderr i
 func policyFor(ctx context.Context, root string) rules.Policy {
 	policy := rules.DefaultPolicy()
 	policy.Repository = repositoryOf(ctx, root)
+	policy.ToolPins = releaseToolPins()
 
 	return policy
 }

@@ -100,8 +100,10 @@ func runGoStub() int {
 		pkg, version, _ := strings.Cut(arg, "@")
 
 		// The version rides along as a comment, which the directive parser
-		// ignores, so a test can tell what fix seeded.
-		lines = append(lines, "tool "+pkg+" // @"+version)
+		// ignores, so a test can tell what fix seeded; and as the requirement
+		// go would record, on the package's own path, which reads as the
+		// module that provides it and wins over an earlier line.
+		lines = append(lines, "tool "+pkg+" // @"+version, "require "+pkg+" "+version)
 	}
 
 	if len(lines) == 0 {
@@ -632,4 +634,175 @@ func canonicalGoVersion(t *testing.T) string {
 	_, version := canonicalPin(t, "golang/go")
 
 	return strings.TrimPrefix(version, "go")
+}
+
+// floorPins are this limen's tool versions as a test names them: godolint in
+// the shared tools module, golangci-lint in its own.
+func floorPins(godolint, golangci string) rules.ToolPins {
+	return rules.NewToolPins(
+		"module tools\n\nrequire (\n\tgithub.com/forkcloser/godolint "+godolint+"\n)\n",
+		map[string]string{
+			"golangci-lint": "module tools/golangci-lint\n\nrequire github.com/golangci/golangci-lint/v2 " + golangci + "\n",
+		},
+	)
+}
+
+// TestGoToolsBelowThisLimenFail: a tool the repository declares at a version
+// older than this limen's own fails the check, naming the file, the tool and
+// both versions; fix raises it with `go get -tool pkg@version` (the fake go)
+// and the check then passes. A development build, which pins nothing, judges
+// no floor.
+func TestGoToolsBelowThisLimenFail(t *testing.T) {
+	t.Parallel()
+
+	const godolint = "github.com/forkcloser/godolint/cmd/godolint"
+
+	policy := rules.DefaultPolicy()
+	policy.ToolPins = floorPins("v0.5.1", "v2.15.0")
+
+	files := compliantFiles()
+	files[".limen/tools/go.mod"] = goModToolsEverywhere + "\nrequire github.com/forkcloser/godolint v0.4.0\n"
+	dir := writeRepo(t, files)
+
+	f := findingByRule(rules.Check(dir, policy), "gotools")
+	if f.OK() || f.Path != ".limen/tools/go.mod" {
+		t.Fatalf("a tool below this limen's version should fail on the tools module, got: %+v", f)
+	}
+
+	for _, want := range []string{godolint, "v0.4.0", "v0.5.1"} {
+		if !strings.Contains(f.Message, want) {
+			t.Errorf("the finding does not say %q: %s", want, f.Message)
+		}
+	}
+
+	if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {
+		t.Errorf("a build that pins nothing judged a floor: %s", f.Message)
+	}
+
+	outcome := outcomeFor(
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: policy, ToolPins: policy.ToolPins}),
+		"gotools",
+	)
+	if outcome.Action != rules.ActionMerged ||
+		!strings.Contains(outcome.Message, "raised to this limen's pins: "+godolint+"@v0.5.1") {
+		t.Fatalf("got %s (%s), want merged with the tool raised to the pin", outcome.Action, outcome.Message)
+	}
+
+	if f := findingByRule(rules.Check(dir, policy), "gotools"); !f.OK() {
+		t.Fatalf("the rule does not pass after fix: %s", f.Message)
+	}
+
+	outcome = outcomeFor(
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: policy, ToolPins: policy.ToolPins}),
+		"gotools",
+	)
+	if outcome.Action != rules.ActionNone {
+		t.Errorf("a second fix did %s (%s), want nothing", outcome.Action, outcome.Message)
+	}
+}
+
+// TestGoToolsFloorOrder: the floor is this limen's version by the order Go
+// gives module versions. Older fails; the same version, a newer one, and a
+// version either side cannot read as one, pass.
+func TestGoToolsFloorOrder(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		have, pin string
+		behind    bool
+	}{
+		{"v0.4.0", "v0.5.1", true},
+		{"v0.5.1", "v0.5.1", false},
+		{"v0.6.0", "v0.5.1", false},
+		{"v0.9.0", "v0.10.0", true},
+		{"v0.10.0", "v0.9.0", false},
+		{"v1.0.0", "v0.99.99", false},
+		// Pseudo-versions order by their timestamp, and one comes before the
+		// release it leads to.
+		{"v0.0.0-20260101000000-aaaaaaaaaaaa", "v0.0.0-20260201000000-bbbbbbbbbbbb", true},
+		{"v0.0.0-20260201000000-bbbbbbbbbbbb", "v0.0.0-20260101000000-aaaaaaaaaaaa", false},
+		{"v1.2.3-0.20260101000000-aaaaaaaaaaaa", "v1.2.3", true},
+		{"v1.2.3", "v1.2.3-rc.1", false},
+		{"v1.2.3-rc.1", "v1.2.3", true},
+		{"v1.2.3-rc.2", "v1.2.3-rc.10", true},
+		{"v1.2.3-rc.10", "v1.2.3-rc.2", false},
+		{"v1.2.3-rc", "v1.2.3-rc.1", true},
+		{"v1.2.3-1", "v1.2.3-rc", true},
+		// Build metadata does not order.
+		{"v2.0.0+incompatible", "v2.0.0", false},
+		{"v1.9.0+incompatible", "v2.0.0", true},
+		// Not a version: not judged.
+		{"v1.2", "v1.3.0", false},
+		{"1.2.0", "v1.3.0", false},
+		{"v1.2.x", "v1.3.0", false},
+		{"v1.2.0-", "v1.3.0", false},
+		{"v1.2.0", "latest", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.have+" against "+tc.pin, func(t *testing.T) {
+			t.Parallel()
+
+			policy := rules.DefaultPolicy()
+			policy.ToolPins = floorPins(tc.pin, "v2.15.0")
+
+			files := compliantFiles()
+			files[".limen/tools/go.mod"] = goModToolsEverywhere + "\nrequire github.com/forkcloser/godolint " + tc.have + "\n"
+
+			f := findingByRule(rules.Check(writeRepo(t, files), policy), "gotools")
+			if f.OK() == tc.behind {
+				t.Errorf(
+					"%s against this limen's %s: ok=%v, want behind=%v (%s)",
+					tc.have,
+					tc.pin,
+					f.OK(),
+					tc.behind,
+					f.Message,
+				)
+			}
+		})
+	}
+}
+
+// TestGoToolsIsolatedBelowThisLimen: a tool in a module of its own is held to
+// this limen's version of it there, and fix raises it in that module.
+func TestGoToolsIsolatedBelowThisLimen(t *testing.T) {
+	t.Parallel()
+
+	const (
+		modFile = ".limen/tools/golangci-lint/go.mod"
+		pkg     = "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
+	)
+
+	policy := rules.DefaultPolicy()
+	policy.ToolPins = floorPins("v0.5.1", "v2.15.0")
+
+	files := compliantFiles()
+	files["go.mod"] = goModBare
+	files[".limen/tools/go.mod"] = goModWithTools
+	files[modFile] = goModGolangci + "\nrequire github.com/golangci/golangci-lint/v2 v2.14.0\n"
+	files[".limen/tools/nilaway/go.mod"] = goModNilaway
+	dir := writeRepo(t, files)
+
+	f := findingByRule(rules.Check(dir, policy), "gotools")
+	if f.OK() || f.Path != modFile || !strings.Contains(f.Message, "v2.14.0") ||
+		!strings.Contains(f.Message, "v2.15.0") {
+		t.Fatalf(
+			"an isolated tool below this limen's version should fail on its module with both versions, got: %+v",
+			f,
+		)
+	}
+
+	outcome := outcomeFor(
+		rules.Fix(t.Context(), dir, rules.FixOptions{Policy: policy, ToolPins: policy.ToolPins}),
+		"gotools",
+	)
+	if outcome.Action != rules.ActionMerged ||
+		!strings.Contains(outcome.Message, "raised "+pkg+" in "+modFile+" from v2.14.0 to v2.15.0") {
+		t.Fatalf("got %s (%s), want merged with the tool raised in its module", outcome.Action, outcome.Message)
+	}
+
+	if f := findingByRule(rules.Check(dir, policy), "gotools"); !f.OK() {
+		t.Fatalf("the rule does not pass after fix: %s", f.Message)
+	}
 }

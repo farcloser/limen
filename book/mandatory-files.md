@@ -405,7 +405,9 @@ rule ends as an advisory naming it and the root keeps every directive. When the 
 the network is unavailable, the rule ends as an advisory carrying the exact command. The version is the one
 limen's own `.limen/tools/go.mod` (or `.limen/tools/<name>/go.mod`, for an isolated tool)
 requires in the running release, never `@latest`, which would make what a repository receives
-depend on the day `fix` ran; Renovate bumps it from there. A release carries those `go.mod`
+depend on the day `fix` ran; Renovate bumps it from there. That version is also a floor: a
+required tool declared below it fails the rule, and `fix` raises it
+([tooling](./tooling.md#go-built-tools-are-gomod-tools)). A release carries those `go.mod`
 files because its build copies them in first; a development build carries none and refuses to
 seed. The modules sit under `.limen/`, beside the canonical files, and are the project's own all
 the same: `fix` seeds a missing one and never overwrites what is there. The directory is
