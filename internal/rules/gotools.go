@@ -66,22 +66,6 @@ var goToolsEverywhere = []string{
 	"github.com/forkcloser/yamlfmt/cmd/yamlfmt",
 }
 
-// retiredGoTools are tool directives a repository must no longer carry, each
-// with the package that replaced it. A directive that stays beside its
-// replacement builds nothing the recipes run but keeps its dependency graph
-// in .limen/tools/go.mod and go.sum. Check fails while one is declared; fix removes
-// it with `go get -tool <pkg>@none`, which go accepts even when the package's
-// module no longer provides it.
-//
-//nolint:gochecknoglobals // immutable baseline data.
-var retiredGoTools = map[string]string{
-	// Forked: the recipes run forkcloser's, whose main packages live under
-	// cmd/; upstream's directive beside them builds nothing the recipes run.
-	// An entry leaves once no repository carries the directive it names.
-	"github.com/vbatts/git-validation": "github.com/forkcloser/git-validation/cmd/git-validation",
-	"github.com/google/go-licenses/v2": "github.com/forkcloser/go-licenses/cmd/go-licenses",
-}
-
 // goSourceAnalyzers are the tool packages a Go module must declare on top:
 // the analyzers that load the project's source.
 //
@@ -255,10 +239,6 @@ func checkGoTools(root string) Finding {
 		return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+missingGoModToolsMessage(missing))
 	}
 
-	if retired := retiredGoModTools(string(toolsMod)); len(retired) > 0 {
-		return fail(ruleGoTools, goToolsModFile, goToolsModFile+": "+retiredGoModToolsMessage(retired))
-	}
-
 	if rootMod != nil {
 		if missing := missingIsolatedGoTools(root); len(missing) > 0 {
 			return fail(ruleGoTools, isolatedGoModFile(missing[0]), isolatedGoToolsMessage(missing))
@@ -306,37 +286,8 @@ func isolatedGoToolsMessage(missing []string) string {
 		" — each is built by the pinned toolchain from a module of its own (limen fix creates it)"
 }
 
-// retiredGoModTools returns the retired tool packages the go.mod text still
-// declares, sorted.
-func retiredGoModTools(gomod string) []string {
-	declared := goModToolDirectives(gomod)
-
-	var retired []string
-
-	for pkg := range retiredGoTools {
-		if declared[pkg] {
-			retired = append(retired, pkg)
-		}
-	}
-
-	slices.Sort(retired)
-
-	return retired
-}
-
 // listSeparator joins package lists in messages.
 const listSeparator = ", "
-
-// retiredGoModToolsMessage names each retired directive and its replacement.
-func retiredGoModToolsMessage(retired []string) string {
-	pairs := make([]string, 0, len(retired))
-	for _, pkg := range retired {
-		pairs = append(pairs, pkg+" (replaced by "+retiredGoTools[pkg]+")")
-	}
-
-	return "retired tool directive(s) for " + strings.Join(pairs, listSeparator) +
-		"; remove with go -C " + goToolsDir + " get -tool <pkg>@none && go -C " + goToolsDir + " mod tidy"
-}
 
 // goGetThenTidy runs one `go get` in the tools module followed by `go mod
 // tidy`, and returns the first failure's output, or "" when both succeeded.
@@ -444,7 +395,6 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 	}
 
 	missing := missingGoModTools(string(toolsMod), requiredGoTools(rootMod))
-	retired := retiredGoModTools(string(toolsMod))
 
 	// The isolated modules count toward "nothing to do": a complete
 	// .limen/tools/go.mod says nothing about them.
@@ -453,7 +403,7 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 		isolated = missingIsolatedGoTools(root)
 	}
 
-	if len(missing) == 0 && len(retired) == 0 && len(isolated) == 0 && len(done) == 0 {
+	if len(missing) == 0 && len(isolated) == 0 && len(done) == 0 {
 		return Outcome{
 			Rule:    ruleGoTools,
 			Action:  ActionNone,
@@ -464,22 +414,6 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 
 	if len(missing) > 0 {
 		step, advisory := addPinnedGoTools(ctx, toolsRoot, pins, missing)
-		if advisory != nil {
-			return *advisory
-		}
-
-		done = append(done, step)
-	}
-
-	if len(retired) > 0 {
-		step, advisory := goToolsGet(
-			ctx,
-			toolsRoot,
-			atVersion(retired, "none"),
-			retiredGoModToolsMessage(retired),
-			"removed retired tool directive(s) for ",
-			" (go -C "+goToolsDir+" get -tool <pkg>@none, then go -C "+goToolsDir+" mod tidy)",
-		)
 		if advisory != nil {
 			return *advisory
 		}
@@ -541,7 +475,7 @@ func seedIsolatedGoTools(ctx context.Context, root string, rootMod []byte, pins 
 }
 
 // goToolsGet moves the tool directives in the tools module to specs
-// (`pkg@version` adds or moves one, `pkg@none` removes it), then tidies. The
+// (`pkg@version` adds or moves one), then tidies. The
 // step done reads prefix, the specs, suffix; when a go step fails the
 // advisory carries failure (the check's wording) and the command to run by
 // hand.
@@ -597,16 +531,6 @@ func pinnedSpecs(pins ToolPins, pkgs []string) (specs []string, unpinned string)
 	}
 
 	return specs, ""
-}
-
-// atVersion are pkgs as `go get` specs all at version.
-func atVersion(pkgs []string, version string) []string {
-	specs := make([]string, 0, len(pkgs))
-	for _, pkg := range pkgs {
-		specs = append(specs, pkg+"@"+version)
-	}
-
-	return specs
 }
 
 // unpinnedGoToolAdvisory is the outcome when this limen pins no version for

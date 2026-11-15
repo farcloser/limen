@@ -12,9 +12,8 @@ import (
 )
 
 // The fake go (see TestMain and installGoStub): `go get -tool a@v1
-// b@v2` appends the directives, each with its version in a comment, to the go.mod in the working directory,
-// `go get -tool a@none` strips them, `go mod tidy` and anything else succeed
-// silently.
+// b@v2` appends the directives, each with its version in a comment, to the go.mod in the working directory;
+// `go mod tidy` and anything else succeed silently.
 
 const goModBare = "module example.com/proj\n\ngo 1.26\n"
 
@@ -99,13 +98,6 @@ func runGoStub() int {
 
 	for _, arg := range args[2:] {
 		pkg, version, _ := strings.Cut(arg, "@")
-		if version == "none" {
-			if !stripGoModToolDirective(pkg) {
-				return 1
-			}
-
-			continue
-		}
 
 		// The version rides along as a comment, which the directive parser
 		// ignores, so a test can tell what fix seeded.
@@ -128,29 +120,6 @@ func runGoStub() int {
 	}
 
 	return 0
-}
-
-// stripGoModToolDirective removes one package's directive lines from the
-// go.mod in the working directory, both forms, the way `go get -tool
-// pkg@none` does.
-func stripGoModToolDirective(pkg string) bool {
-	data, err := os.ReadFile("go.mod")
-	if err != nil {
-		return false
-	}
-
-	var kept []string
-
-	for line := range strings.SplitSeq(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == pkg || trimmed == "tool "+pkg {
-			continue
-		}
-
-		kept = append(kept, line)
-	}
-
-	return os.WriteFile("go.mod", []byte(strings.Join(kept, "\n")), 0o600) == nil
 }
 
 // TestGoModToolDirectives: the directive forms a .limen/tools/go.mod may carry —
@@ -302,63 +271,23 @@ func TestGoToolsRequiresDirectives(t *testing.T) {
 	}
 }
 
-// TestGoToolsRetiredDirective: a .limen/tools/go.mod that still carries a retired
-// directive beside its replacement fails naming both, and fix removes it
-// through `go get -tool pkg@none` (the fake go) and then passes.
-// TestGoToolsRetiredDirective: each directive limen retired, beside the
-// everywhere set, fails the check naming it and its replacement; fix removes
-// it; the check then passes. The table is the retired set as seen from
-// outside: a directive missing here is one fix would leave in every
-// repository's tools module.
-func TestGoToolsRetiredDirective(t *testing.T) {
-	t.Parallel()
-
-	for retired, replacement := range map[string]string{
-		"github.com/vbatts/git-validation": "github.com/forkcloser/git-validation/cmd/git-validation",
-		"github.com/google/go-licenses/v2": "github.com/forkcloser/go-licenses/cmd/go-licenses",
-	} {
-		t.Run(retired, func(t *testing.T) {
-			t.Parallel()
-
-			files := compliantFiles()
-			files[".limen/tools/go.mod"] = goModToolsEverywhere + "\ntool " + retired + "\n"
-			dir := writeRepo(t, files)
-
-			f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools")
-			if f.OK() || !strings.Contains(f.Message, retired) || !strings.Contains(f.Message, replacement) {
-				t.Fatalf("a retired directive should fail naming it and its replacement: ok=%v %s", f.OK(), f.Message)
-			}
-
-			outcome := outcomeFor(
-				rules.Fix(t.Context(), dir, rules.FixOptions{Policy: rules.DefaultPolicy(), ToolPins: limenToolPins()}),
-				"gotools",
-			)
-
-			removed := strings.Contains(outcome.Message, "removed retired tool directive(s) for "+retired)
-			if outcome.Action != rules.ActionMerged || !removed {
-				t.Fatalf("got %s (%s), want merged with the directive removed", outcome.Action, outcome.Message)
-			}
-
-			if f := findingByRule(rules.Check(dir, rules.DefaultPolicy()), "gotools"); !f.OK() {
-				t.Fatalf("rule does not pass after fix: %s", f.Message)
-			}
-		})
-	}
-}
-
 func TestAquaRejectsRetiredPackage(t *testing.T) {
 	t.Parallel()
 
 	files := compliantFiles()
+
+	// A Go-built tool pinned as a package: the tools module declares it now,
+	// and the message says the entry is retired and names it.
 	files[".hermetic/hermetic.yaml"] = canonicalAquaWith(t, "packages:\n",
-		"packages:\n  - name: github.com/vbatts/git-validation@v1.2.2\n    registry: local\n")
+		"packages:\n  - name: github.com/forkcloser/git-validation/cmd/git-validation@v0.1.1\n    registry: local\n")
 
 	f := findingByRule(rules.Check(writeRepo(t, files), rules.DefaultPolicy()), "aqua")
 	if f.OK() {
 		t.Fatal("a retired canonical package should fail")
 	}
 
-	if !strings.Contains(f.Message, "retired") || !strings.Contains(f.Message, "github.com/vbatts/git-validation") {
+	if !strings.Contains(f.Message, "retired") ||
+		!strings.Contains(f.Message, "github.com/forkcloser/git-validation/cmd/git-validation") {
 		t.Errorf("message did not explain the retirement: %s", f.Message)
 	}
 
