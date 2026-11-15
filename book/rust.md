@@ -81,8 +81,12 @@ keyed on that file and every `Cargo.lock` ([github](./github.md)); nothing to co
 Every cargo call carries `--locked`: `Cargo.lock` is the crate pin, committed, and a lane
 never rewrites it; a dependency moves by a pull request that changes the lock, from Renovate's
 `cargo` manager, which moves the exact pin in `Cargo.toml` and the lock together. The shared
-preset groups the minor and patch bumps in one pull request per repository (`rust crates`, as
-`go modules` is for Go) and leaves a major alone, since code may have to move. A lock the tree
+preset groups the compatible bumps in one pull request per repository (`rust crates`, as
+`go modules` is for Go) and leaves a breaking one alone, since code may have to move. Breaking
+is Cargo's reading, a change of the left-most non-zero component: a `0.Y.Z` crate breaks when
+`Y` moves and a `0.0.Z` crate on every release, as `X.Y.Z` does when `X` moves. The group is
+selected on that and never on the update type, which calls the first a minor and the second a
+patch. A lock the tree
 does not have yet is made once, by hand, with `cargo generate-lockfile` from the lane's cargo
 (`.build/cargo/bin`). The transitive crates in the lock move too: the shared preset's lock
 file maintenance regenerates every lock in the repository weekly, in one pull request the
