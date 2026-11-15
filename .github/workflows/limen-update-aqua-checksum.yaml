@@ -30,13 +30,17 @@
 #   runner's own tools and this file. `converge`, the one job that runs a
 #   recipe, holds contents: read and nothing else.
 # - What `converge` produced reaches the branch as file contents, never as
-#   code: its archive is read entry by entry and never unpacked, for the
-#   paths .converge names alone, read by `finish` from the head it checks
-#   out itself: tracked regular files, each under git's own name for it,
-#   outside .git, .github, .limen and .hermetic. Anything else the recipe
-#   touched fails the job, and nothing of that run is committed: code a
-#   bumped artifact runs cannot write where the project did not say a
-#   derived file lives.
+#   code: its archive is read entry by entry and never unpacked, for what
+#   .converge names alone, read by `finish` from the head it checks out
+#   itself: tracked regular files, and directories of tracked files, each
+#   under git's own name for it, outside .git, .github, .limen and
+#   .hermetic. A file is committed under its declared name. Under a
+#   declared directory the names are the run's, since a generator makes
+#   files nobody listed: each is held to plain segments below that
+#   directory, and a file there is changed, created or deleted. Anything
+#   else the recipe touched fails the job, and nothing of that run is
+#   committed: code a bumped artifact runs cannot write where the project
+#   did not say a derived file lives.
 # - The commit steps use runner tools only, the branch name reaches the
 #   shell via env; no loop, since a commit made with the job's own token
 #   triggers no workflows.
@@ -342,27 +346,75 @@ jobs:
           # the artifact: one path a line, `#` lines and empty ones skipped.
           # A path is one tracked file under git's own name for it (`./x`,
           # `a//x` and a pathspec all name files the patterns below would
-          # not see), regular, outside the directories that are git's,
-          # GitHub's or limen's: the recipe's run can change a file the
-          # project named, and create or reach nothing.
+          # not see), regular, or, ending in a slash, a directory that holds
+          # tracked files, under git's own name too; either outside the
+          # directories that are git's, GitHub's or limen's. The recipe's
+          # run can change a file the project named, and change, create or
+          # delete files under a directory it named; it reaches nothing
+          # else.
+          # Whether git tracks exactly this name: literal, so a name is no
+          # pattern, and NUL-ended, so a name git would quote (a non-ASCII
+          # one, a backslash) is compared as it is.
+          tracked_as() {
+            printf '%s\0' "$1" > "${work}/want"
+            git --literal-pathspecs ls-files -z -- "$1" > "${work}/got" 2> /dev/null || return 1
+            cmp -s "${work}/want" "${work}/got"
+          }
           : > "${work}/declared"
+          : > "${work}/declared-dirs"
           while IFS= read -r line || [ -n "${line}" ]; do
             path="${line%$'\r'}"
             case "${path}" in
               '' | '#'*) continue ;;
             esac
-            if [ "$(git ls-files -- "${path}")" != "${path}" ] || [ ! -f "${path}" ] || [ -L "${path}" ]; then
-              echo "::error::.converge: ${path} is not a tracked regular file under that exact name"
-              exit 1
-            fi
             case "${path}" in
-              .git/* | .github/* | .limen/* | .hermetic/*)
+              .git | .git/* | .github | .github/* | .limen | .limen/* | .hermetic | .hermetic/*)
                 echo "::error::.converge: ${path} is not a path a derived file may have"
                 exit 1
                 ;;
             esac
+            case "${path}" in
+              */)
+                # Literal, so a name is no pattern; to a file, since a
+                # pipeline cut short by `head` fails under pipefail; NUL-
+                # ended, so a first name git would quote reads as it is. The
+                # first path git lists carries the directory's own spelling
+                # or the entry was not it; a path git refuses outright (one
+                # outside the repository) lists nothing.
+                git --literal-pathspecs ls-files -z -- "${path}" > "${work}/under" 2> /dev/null || : > "${work}/under"
+                first=""
+                IFS= read -r -d '' first < "${work}/under" || true
+                if [ -z "${first}" ] || [ "${first#"${path}"}" = "${first}" ] || [ ! -d "${path}" ] || [ -L "${path%/}" ]; then
+                  echo "::error::.converge: ${path} is not a directory of tracked files under that exact name"
+                  exit 1
+                fi
+                printf '%s\n' "${path}" >> "${work}/declared-dirs"
+                continue
+                ;;
+            esac
+            if ! tracked_as "${path}" || [ ! -f "${path}" ] || [ -L "${path}" ]; then
+              echo "::error::.converge: ${path} is not a tracked regular file under that exact name"
+              exit 1
+            fi
             printf '%s\n' "${path}" >> "${work}/declared"
           done < .converge
+          # A name the run gave, under a declared directory: plain segments
+          # (none empty, `.`, `..` or git's own, no control character), so
+          # the name is the path it reads as and stays below the directory.
+          under_declared_dir() {
+            case "/$1/" in
+              // | *//* | */./* | */../* | *[[:cntrl:]]*) return 1 ;;
+            esac
+            case "/$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')/" in
+              */.git/*) return 1 ;;
+            esac
+            while IFS= read -r dir; do
+              case "$1" in
+                "${dir}"?*) return 0 ;;
+              esac
+            done < "${work}/declared-dirs"
+            return 1
+          }
           # One archive, whatever the action named it, read one entry at a
           # time by its exact name and never unpacked: a link or a path in
           # it goes nowhere, and a name is no pattern. 3 is "no such entry".
@@ -379,31 +431,51 @@ jobs:
             exit 1
           fi
           # All of the run or none of it: a recipe that touched a file the
-          # project did not declare is not committed in part. This refusal
-          # is the status's one use. It is the recipe's job's word: it can
-          # leave a change out, which only withholds it, and it names no
-          # path that is committed. A name holding a newline is undeclared,
-          # no declared path being one, and would read as two to grep.
+          # project did not declare is not committed in part. The status is
+          # the recipe's job's word: it can leave a change out, which only
+          # withholds it. It names no declared file that is committed; under
+          # a declared directory it names the files, each held to that
+          # directory. A name holding a newline is undeclared, no declared
+          # path being one, and would read as two to grep.
+          # An entry is two status letters, a space and a name, and holds
+          # no newline anywhere: the entries kept for the directories are
+          # read back by lines below, so a newline among the first three
+          # characters would make another name of what follows it.
           undeclared=""
+          : > "${work}/in-dirs"
           while IFS= read -r -d '' entry; do
             path="${entry:3}"
-            case "${path}" in
+            case "${entry}" in
               *$'\n'*)
                 undeclared="${undeclared} (a name holding a newline)"
                 continue
                 ;;
             esac
-            if ! grep -Fxq -- "${path}" "${work}/declared"; then
-              undeclared="${undeclared} ${path}"
+            case "${entry}" in
+              [MADRCUT?!\ ][MADRCUT?!\ ]\ ?*) ;;
+              *)
+                undeclared="${undeclared} (an entry that is no status line)"
+                continue
+                ;;
+            esac
+            if grep -Fxq -- "${path}" "${work}/declared"; then
+              continue
             fi
+            if under_declared_dir "${path}"; then
+              printf '%s\n' "${entry}" >> "${work}/in-dirs"
+              continue
+            fi
+            undeclared="${undeclared} ${path}"
           done < "${work}/status"
           if [ -n "${undeclared}" ]; then
-            echo "::error::converge changed what .converge does not declare:${undeclared}"
+            # The names are the run's: no control character of theirs
+            # reaches the log, where a line is a command to the runner.
+            echo "::error::converge changed what .converge does not declare:${undeclared//[[:cntrl:]]/?}"
             exit 1
           fi
-          # The paths committed are the declaration's, this checkout's word,
-          # and never the archive's or the status's: each declared file
-          # whose entry the archive carries and whose bytes differ.
+          # A declared file is committed under the declaration's name, this
+          # checkout's word, and never the archive's or the status's: each
+          # one whose entry the archive carries and whose bytes differ.
           printf '[]' > "${work}/additions.json"
           while IFS= read -r path; do
             found=0
@@ -422,7 +494,48 @@ jobs:
               "${work}/additions.json" > "${work}/next"
             mv "${work}/next" "${work}/additions.json"
           done < "${work}/declared"
-          if [ "$(jq length "${work}/additions.json")" = 0 ]; then
+          # Under a declared directory the names are the status's, each held
+          # to that directory above: a file the archive carries is written,
+          # changed or new; one it does not carry is a deletion when the
+          # status says so of a file this checkout tracks, and anything else
+          # (a link, say, which the collecting step leaves out) fails the
+          # job.
+          printf '[]' > "${work}/deletions.json"
+          while IFS= read -r entry; do
+            code="${entry:0:2}"
+            path="${entry:3}"
+            found=0
+            entry "files/${path}" > "${work}/file" || found=$?
+            if [ "${found}" = 0 ]; then
+              if [ -f "${path}" ] && [ ! -L "${path}" ] && cmp -s "${work}/file" "${path}"; then
+                continue
+              fi
+              base64 -w0 "${work}/file" > "${work}/blob"
+              jq --arg path "${path}" --rawfile contents "${work}/blob" \
+                '. + [{path: $path, contents: ($contents | rtrimstr("\n"))}]' \
+                "${work}/additions.json" > "${work}/next"
+              mv "${work}/next" "${work}/additions.json"
+              continue
+            fi
+            if [ "${found}" != 3 ]; then
+              echo "::error::converge: ${path} could not be read out of the artifact"
+              exit 1
+            fi
+            case "${code}" in
+              *D*) ;;
+              *)
+                echo "::error::converge: ${path} is in the status as neither a file the artifact carries nor a deletion"
+                exit 1
+                ;;
+            esac
+            if ! tracked_as "${path}"; then
+              echo "::error::converge: ${path} is deleted by the run and not a file this branch tracks"
+              exit 1
+            fi
+            jq --arg path "${path}" '. + [{path: $path}]' "${work}/deletions.json" > "${work}/next"
+            mv "${work}/next" "${work}/deletions.json"
+          done < "${work}/in-dirs"
+          if [ "$(jq length "${work}/additions.json")" = 0 ] && [ "$(jq length "${work}/deletions.json")" = 0 ]; then
             echo "the derived files are already in sync"
             exit 0
           fi
@@ -434,6 +547,7 @@ jobs:
             --arg branch "${BRANCH}" \
             --arg head "$(git rev-parse HEAD)" \
             --slurpfile additions "${work}/additions.json" \
+            --slurpfile deletions "${work}/deletions.json" \
             '{query: $query, variables: {input: {
               branch: {repositoryNameWithOwner: $repository, branchName: $branch},
               expectedHeadOid: $head,
@@ -441,7 +555,7 @@ jobs:
                 headline: "chore: converge the files derived from the pins",
                 body: "Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
               },
-              fileChanges: {additions: $additions[0]}}}}' \
+              fileChanges: {additions: $additions[0], deletions: $deletions[0]}}}}' \
             > "${work}/payload.json"
           response="$(curl --proto '=https' --tlsv1.2 -fsS -X POST -H "Authorization: bearer ${TOKEN}" \
             --data-binary "@${work}/payload.json" https://api.github.com/graphql)"
