@@ -684,15 +684,23 @@ A project with such files declares them and says how they are made:
 
 - **`.converge`**, at the repository root, names them: one path a line, `#` lines and empty
   lines skipped. A path is a tracked regular file, spelled as git names it (no `./`, no
-  pathspec), outside `.git`, `.github`, `.limen` and `.hermetic`.
+  pathspec), outside `.git`, `.github`, `.limen` and `.hermetic`. A path that ends in a
+  slash is a directory, held to the same spelling and the same places, with tracked files
+  in it: for a generator whose set of outputs moves with the pin (one file a rule, say), which
+  nobody can list ahead of the bump that adds one. Everything under a declared directory is
+  derived, so nothing a hand keeps lives there.
 - **A `converge` recipe** in the project's `.justfile` regenerates every one of them from
-  the tree as it stands, and writes nothing else. It is idempotent; its output does not
-  depend on the host that runs it (the checksum workflow runs it on Linux); and it fetches
-  through the pinned tools alone (`limen pins get` for an archive, as the build does).
+  the tree as it stands, and writes nothing else. Under a declared directory it leaves
+  exactly what it makes: a file it no longer makes, it removes. It is idempotent; its
+  output does not depend on the host that runs it (the checksum workflow runs it on Linux);
+  and it fetches through the pinned tools alone (`limen pins get` for an archive, as the
+  build does).
 - **`just do lint converge`**, named in the project's own `lint`, runs the recipe and fails
   when a declared file differs afterwards or an undeclared one was touched, and puts the
-  declared files back as it found them. A stale derived file on any branch is then red by
-  its name, not by whatever breaks downstream of it.
+  declared files back as it found them. A declared directory is compared whole, by the
+  regular files git sees in it: one changed, one the recipe makes that the tree lacks, one
+  the tree has that the recipe no longer makes. A stale derived file on any branch is then
+  red by its name, not by whatever breaks downstream of it.
 
 On a Renovate branch the checksum workflow brings them along. After its own commit, a job
 whose token can read the repository and nothing more runs `just converge` at that head; a
@@ -702,10 +710,15 @@ includes the artifact the branch has just bumped, so the job that executes it wr
 nothing, and what it hands over is held to the declaration as a clean checkout reads it: a
 path changed outside `.converge` fails that job, and nothing of the run is committed. That
 last job runs nothing the branch declares, not even its pins: the runner's own tools read
-the recipe's archive entry by entry and never unpack it. What
-the workflow does not judge is the content of a declared file: a lock file a compromised SDK
-wrote is in the pull request's diff like any other change, and the defence against that SDK
-is its pin's `verify:` method.
+the recipe's archive entry by entry and never unpack it. A declared file is committed under
+the name the declaration gives it. Under a declared directory the names are the run's own,
+which is what a directory entry grants: each is held to plain path segments below that
+directory (none empty, `.`, `..` or `.git`, no control character), a file is written whether
+it changed or is new, and a tracked file the run deleted is deleted. A link there, or
+anything else that is not a regular file, fails the job. What
+the workflow does not judge is the content of a declared file, or of a file under a declared
+directory, a new one included: a lock file a compromised SDK wrote is in the pull request's
+diff like any other change, and the defence against that SDK is its pin's `verify:` method.
 
 The workflow answers Renovate's pushes alone. A push by anyone else to a `renovate/` branch
 (the fix a bump needs, made by hand) runs nothing of it, and that tree is converged by hand,
