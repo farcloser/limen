@@ -645,8 +645,8 @@ packages:
   # install: the committed checksum, and GitHub's artifact attestation for the
   # release workflow — a plain checksum pin would discard the guarantee this
   # build exists to give. The binary sits in a versioned directory inside the
-  # archive; on windows it is curl.exe with curl-ca-bundle.crt beside it. No
-  # darwin/amd64: Intel Mac support was dropped upstream.
+  # archive; on windows it is curl.exe. No darwin/amd64: Intel Mac support was
+  # dropped upstream.
   - type: github_release
     repo_owner: forkcloser
     repo_name: curl
