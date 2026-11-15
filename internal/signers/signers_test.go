@@ -271,6 +271,37 @@ func TestRetireRefuses(t *testing.T) {
 	}
 }
 
+// TestRetireNotListed: a fingerprint no entry has is ErrNotListed, and an
+// argument still. A time that is not one is refused first, so ErrNotListed
+// is never said of it, of an empty file either: what a caller with many
+// files reads the two answers for.
+func TestRetireNotListed(t *testing.T) {
+	t.Parallel()
+
+	const unknown = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+	for name, text := range map[string]string{
+		"a file that lists other keys": bot + ` namespaces="git" ` + newType + " " + newKey + "\n",
+		"an empty file":                "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			list := mustParse(t, text)
+
+			_, err := list.Retire(unknown, "20270101Z")
+			if !errors.Is(err, signers.ErrNotListed) || !errors.Is(err, signers.ErrArgument) {
+				t.Errorf("err=%v, want ErrNotListed and ErrArgument", err)
+			}
+
+			_, err = list.Retire(unknown, "20270101")
+			if errors.Is(err, signers.ErrNotListed) || !errors.Is(err, signers.ErrArgument) {
+				t.Errorf("a local time: err=%v, want ErrArgument and not ErrNotListed", err)
+			}
+		})
+	}
+}
+
 // TestParseKeepsWhatItWillWrite: a line's fields survive a parse and a
 // write; a file is refused when rewriting it would lose something.
 func TestParseKeepsWhatItWillWrite(t *testing.T) {

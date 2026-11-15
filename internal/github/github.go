@@ -594,3 +594,28 @@ func (c client) writeJSON(ctx context.Context, method, path string, payload any)
 
 	return outcome.err
 }
+
+// createJSON posts payload to a repo-relative path and decodes into out what
+// GitHub answers: for the writes that create something, whose answer is the
+// only place its number and its URL are said.
+func (c client) createJSON(ctx context.Context, path string, payload, out any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encoding POST %s payload: %w", path, err)
+	}
+
+	outcome := c.api(ctx, http.MethodPost, path, body)
+
+	switch {
+	case outcome.notFound:
+		return fmt.Errorf("POST %s: %w", path, errEndpointNotFound)
+	case outcome.err != nil:
+		return outcome.err
+	}
+
+	if err := json.Unmarshal(outcome.body, out); err != nil {
+		return fmt.Errorf("POST %s: decoding response: %w", path, err)
+	}
+
+	return nil
+}

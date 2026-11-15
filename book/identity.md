@@ -66,6 +66,26 @@ zone of whoever verifies
 and one file would mean two windows on two machines, so the commands refuse it. The
 fingerprint is the one `ssh-keygen -l -f <public-key-file>` prints.
 
+**A compromised key is retired everywhere at once, by pull request.** The file is each
+repository's own, so a key that must stop signing now has as many files to edit as there
+are repositories. `limen github signers rollout -org <organization> -valid-before <time>
+<fingerprint>` makes the retire edit in every repository of the organization whose file
+lists the key (`-repo <owner>/<name>` for one): one commit on a branch named after the key
+and the time, and one pull request with the same title everywhere. It merges nothing:
+review is the normal flow, and the window ends at the time given, not at the merge. The
+commit is made by the git of whoever runs the command, signed with their key and signed
+off as them, and it is pushed only when the repository's own file accepts that signature,
+which is what its commit lint will ask; so a key whose window has ended cannot sign its
+own retirement, and someone the repository does not list cannot make it. A repository that
+does not list the key, or has it retired already, is passed over, and a run that was
+stopped is finished by the next: it opens the pull request of the branch it finds, and
+passes over a repository whose pull request is open. The branch's name is one anyone who
+may push can write, so a branch found under it is held to what a run pushes before it
+counts: one commit over the default branch, that edit and nothing else, with a signature
+the file it carries accepts. Anything else is an error that names the branch, never a
+pull request under the rollout's title. Retire only: adding the successor is the `add`
+above, in each repository's own time.
+
 **Changing the passphrase** rewrites the key file's protection, not the key:
 `ssh-keygen -p -f ~/.ssh/id_ed25519_sk`.
 

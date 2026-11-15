@@ -11,7 +11,10 @@ import (
 
 // sshKeygen is the program that reads the file the signers commands write.
 // Nothing else can say a window means what the command was told, so the
-// test does not run without it.
+// test does not run without it. What it returns is ssh-keygen's standard
+// output alone, which is where a fingerprint is printed: a line something
+// writes beside it, a warning or a shim's, is no part of one. A run that
+// failed answers with what it complained of as well.
 func sshKeygen(t *testing.T, stdin []byte, args ...string) (string, error) {
 	t.Helper()
 
@@ -20,12 +23,18 @@ func sshKeygen(t *testing.T, stdin []byte, args ...string) (string, error) {
 		t.Fatalf("ssh-keygen is not on PATH, and it is what reads an allowed-signers file: %v", err)
 	}
 
+	var stdout, stderr bytes.Buffer
+
 	cmd := exec.CommandContext(t.Context(), path, args...)
 	cmd.Stdin = bytes.NewReader(stdin)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	out, err := cmd.CombinedOutput()
+	if err := cmd.Run(); err != nil {
+		return stdout.String() + stderr.String(), err
+	}
 
-	return string(out), err
+	return stdout.String(), nil
 }
 
 // signedWith makes a key pair named name in dir and signs message with it,

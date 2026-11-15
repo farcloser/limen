@@ -597,6 +597,7 @@ Usage:
   limen bootstrap [flags] <path>          Create a new compliant repository at path
   limen github check [-repo owner/name] [-org name]   Audit GitHub repository or organization settings (via gh)
   limen github fix [-repo] [-org] [-yes]  Repair the fixable GitHub settings
+  limen github signers rollout <fingerprint>   Retire a signing key by pull request, in every repository that lists it
   limen pins get <name> <field>           Print a pinned artifact's version, url, or sha256
   limen pins refresh [-all] [path]        Recompute stale digests in pins.yaml, verified
   limen signers add <principal> <key>     List a signing key in .lint-signers
