@@ -38,6 +38,12 @@ and what goes where.
   guarantee and the version that carries it; it has no say in how the owner tests its
   internals, and the owner describes no test design across the boundary. The
   [generic principle](./principles.md) applied to two sessions.
+- **A session does not reach the human's screen.** Driving another application from a
+  session (Apple Events through `osascript` or AppleScript, System Events, `open -a`,
+  accessibility or screen scripting) makes macOS ask for consent in a prompt on the human's
+  screen, with no word of which session asked or why, and a session checking for a window
+  did just that. None is used unless the human said so for that task; the Windows VM's
+  control channel is one such grant ([VM testing](./vm_testing.md)).
 - **On GitHub, the human has a handle.** Anything public — a pull request, a comment, a
   commit message, release notes — names the person as `@apostasie`. "The owner" and "the
   human" are the sessions' words among themselves.

@@ -137,6 +137,9 @@ chapter; the procedure is limen's `skills/contribute`.
 - **Read what the work needs, never the whole disk.** A targeted read outside the
   repositories is fine when the work calls for it; a filesystem-wide walk is not: no
   `find /`, `find ~`, disk-wide `mdfind`, or recursive grep over `/` or `~`.
+- **Never drive another application.** No Apple Events from a session (`osascript`,
+  AppleScript, System Events, `open -a`, accessibility or screen scripting) unless the
+  human said so for that task: the consent prompt lands on the human's screen.
 
 ## Communication
 
