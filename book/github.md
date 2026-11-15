@@ -597,9 +597,18 @@ two repositories created in one day.
    empty repository refused this very push as a pull request into a `main` that did not
    exist; only the bypass actor could create `main`.
 4. **The bootstrap is the first pull request.** The bot's branch, cut from that `main`,
-   carries the `limen bootstrap` tree moved to the current limen release (`just do tools
-   set farcloser/limen <version>`, then the pinned `just do fix limen`), the project's own
-   files, and `.lint-signers`. `limen bootstrap` does not seed that file, since the keys
+   carries the `limen bootstrap` tree, the project's own files, and `.lint-signers`. **The
+   bootstrap is run by the current limen release**, checked first with `limen version`:
+   outside a repository `limen` is the machine's toolset, as old as its last
+   `limen-install` ([project tooling](./tooling.md)), and what a bootstrap seeds once is the
+   bootstrapping release's own, the Go toolchain pin and the registry ref among it. Moving
+   the tree to a newer release afterwards (`just do tools set farcloser/limen <version>`,
+   then the pinned `just do fix limen`) brings the limen pin and the content-pinned files
+   forward and leaves those seeds where the older release put them: a repository
+   bootstrapped by an old limen starts on that limen's Go, security advisories included.
+   The shim resolves `limen` from the working directory, so standing in a repository that
+   pins the current release runs it without touching the machine; reinstalling the toolset
+   is the other way. `limen bootstrap` does not seed `.lint-signers`, since the keys
    are the human's to publish; the bot copies it from a sibling repository, where the same
    human and the same bot sign ([identity and keys](./identity.md)), so `lint commits`
    verifies the pull request's own commit. Reviewed and merged like any other.
