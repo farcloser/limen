@@ -164,6 +164,11 @@ type Policy struct {
 	// by that name. Empty means unknown, and the renovate rule then does not
 	// enforce the reference.
 	Repository string
+	// ToolPins are the versions this limen's own tools modules require, the
+	// floor of the Go-built tools: a repository's copy of one is never older
+	// than the version this limen's recipes were tested with. The zero value,
+	// a development build's, pins nothing and the floor is not judged.
+	ToolPins ToolPins
 }
 
 // DefaultPolicy returns the policy described in book/mandatory-files.md: the
@@ -213,7 +218,7 @@ func Check(root string, policy Policy) []Finding {
 		checkShellcheck(root),
 	}
 
-	findings = append(findings, checkGoTools(root), checkBareTools(root))
+	findings = append(findings, checkGoTools(root, policy.ToolPins), checkBareTools(root))
 
 	if f, ok := checkLintGo(root); ok {
 		findings = append(findings, f)

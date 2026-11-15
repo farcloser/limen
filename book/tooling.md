@@ -174,6 +174,20 @@ creates the module and adds them), and the `aqua` rule retires the old `go_insta
 (`limen fix` removes them). The local registry carries no `go_install` entry, and never will
 again.
 
+**A tool the recipes run is never older than the one limen ran them with.** The recipes of a
+limen release are proven, in limen's own lanes, with the versions its own tools modules
+require, and with no older: a recipe that starts passing a flag a tool learned in its last
+release is green there and breaks, at the recipe, in every repository a version behind. So
+those versions are a floor. The `gotools` rule fails a required tool declared below this
+limen's version of it, in `.limen/tools/go.mod` or in an isolated tool's module, naming the
+tool and both versions, and `limen fix` raises it with `go get -tool <pkg>@<version>`; on a
+Renovate bump of limen the checksum workflow's fix does it on that branch, so a tool moves
+with the release that needs it. Above the floor the version stays the project's: Renovate
+moves it ahead as before, and fix never lowers one. Only the tools limen requires are held;
+one the project added is its own. This narrows what "the project's own module" meant: the
+project still owns the file and may run ahead, but not behind. A development build of limen
+pins nothing and judges no floor.
+
 Adding, pinning, bumping or removing one goes through the same recipes as an aqua package,
 never by hand: `just do tools add|set|remove` take the package path as it stands in
 `.limen/tools/go.mod`, `just do tools update` the command it builds as (or nothing, to move every

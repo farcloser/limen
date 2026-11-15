@@ -119,10 +119,12 @@ var aquaGoPin = regexp.MustCompile(
 
 // ToolPins are the module versions limen's own tools modules require, read
 // from their go.mod files: what fix seeds a missing tool directive at, so a
-// seeded tool is the version this limen release was tested with. Each tools
-// module resolves on its own, so an isolated tool's versions are kept apart
-// from the shared module's. The zero value is a development build's: it pins
-// nothing, and fix refuses to seed.
+// seeded tool is the version this limen release was tested with, and the
+// floor of a tool a repository already declares, since the recipes of this
+// release are proven with these versions and no older. Each tools module
+// resolves on its own, so an isolated tool's versions are kept apart from
+// the shared module's. The zero value is a development build's: it pins
+// nothing, fix refuses to seed, and no floor is judged.
 type ToolPins struct {
 	shared   map[string]string
 	isolated map[string]map[string]string
@@ -221,7 +223,7 @@ func rootGoMod(root string) []byte {
 }
 
 // checkGoTools evaluates the rule.
-func checkGoTools(root string) Finding {
+func checkGoTools(root string, pins ToolPins) Finding {
 	rootMod := rootGoMod(root)
 	required := requiredGoTools(rootMod)
 
@@ -245,12 +247,85 @@ func checkGoTools(root string) Finding {
 		}
 	}
 
+	if behind := behindGoTools(root, rootMod, string(toolsMod), pins); len(behind) > 0 {
+		return fail(ruleGoTools, behind[0].file, behindGoToolsMessage(behind))
+	}
+
 	return Finding{
 		Rule:    ruleGoTools,
 		Status:  StatusOK,
 		Path:    goToolsModFile,
 		Message: goToolsPassMessage,
 	}
+}
+
+// A toolBehind is a Go-built tool a repository declares at a version older
+// than this limen's own: the recipes of this release were proven with want,
+// and nothing says they work with have.
+type toolBehind struct {
+	// file is the go.mod that declares it; isolated is the tool's name when
+	// that is a module of its own, empty for the shared tools module.
+	file, isolated string
+	pkg            string
+	have, want     string
+}
+
+// behindGoTools lists the required tools the repository declares below this
+// limen's pins: in the shared tools module, then, for a Go module, in each
+// isolated tool's own. A tool ahead of the pin is the project's choice and
+// is left alone; one whose version either side cannot name is not judged.
+func behindGoTools(root string, rootMod []byte, toolsMod string, pins ToolPins) []toolBehind {
+	var behind []toolBehind
+
+	requires := goModRequires(toolsMod)
+
+	for _, pkg := range requiredGoTools(rootMod) {
+		have, want := moduleVersion(requires, pkg), pins.version(pkg)
+		if moduleVersionOlder(have, want) {
+			behind = append(behind, toolBehind{file: goToolsModFile, pkg: pkg, have: have, want: want})
+		}
+	}
+
+	if rootMod == nil {
+		return behind
+	}
+
+	names := make([]string, 0, len(isolatedGoTools))
+	for name := range isolatedGoTools {
+		names = append(names, name)
+	}
+
+	slices.Sort(names)
+
+	for _, name := range names {
+		gomod, err := readRepoFile(root, isolatedGoModFile(name))
+		if err != nil {
+			continue
+		}
+
+		pkg := isolatedGoTools[name]
+
+		have, want := moduleVersion(goModRequires(string(gomod)), pkg), pins.isolatedVersion(name, pkg)
+		if moduleVersionOlder(have, want) {
+			behind = append(
+				behind,
+				toolBehind{file: isolatedGoModFile(name), isolated: name, pkg: pkg, have: have, want: want},
+			)
+		}
+	}
+
+	return behind
+}
+
+// behindGoToolsMessage names each tool below its floor with both versions.
+func behindGoToolsMessage(behind []toolBehind) string {
+	parts := make([]string, 0, len(behind))
+	for _, tool := range behind {
+		parts = append(parts, tool.file+" has "+tool.pkg+" at "+tool.have+", older than "+tool.want)
+	}
+
+	return strings.Join(parts, listSeparator) +
+		" — the recipes of this limen were proven with its own versions of the tools and no older; limen fix raises them"
 }
 
 // isolatedGoModFile is the go.mod of an isolated tool's module.
@@ -403,7 +478,9 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 		isolated = missingIsolatedGoTools(root)
 	}
 
-	if len(missing) == 0 && len(isolated) == 0 && len(done) == 0 {
+	behind := behindGoTools(root, rootMod, string(toolsMod), pins)
+
+	if len(missing) == 0 && len(isolated) == 0 && len(behind) == 0 && len(done) == 0 {
 		return Outcome{
 			Rule:    ruleGoTools,
 			Action:  ActionNone,
@@ -426,12 +503,70 @@ func remediateGoTools(ctx context.Context, root string, pins ToolPins) Outcome {
 		return *advisory
 	}
 
+	raised, advisory := raiseGoTools(ctx, root, rootMod, behind, pins)
+	if advisory != nil {
+		return *advisory
+	}
+
 	return Outcome{
 		Rule:    ruleGoTools,
 		Action:  ActionMerged,
 		Path:    goToolsModFile,
-		Message: strings.Join(append(done, steps...), "; "),
+		Message: strings.Join(slices.Concat(done, steps, raised), "; "),
 	}
+}
+
+// raiseGoTools moves each tool below its floor up to this limen's pin: one
+// `go get -tool` for those of the shared module, one in each isolated
+// module. It never lowers a version: behind holds only what is older.
+func raiseGoTools(
+	ctx context.Context,
+	root string,
+	rootMod []byte,
+	behind []toolBehind,
+	pins ToolPins,
+) ([]string, *Outcome) {
+	var (
+		done   []string
+		shared []toolBehind
+	)
+
+	for _, tool := range behind {
+		if tool.isolated == "" {
+			shared = append(shared, tool)
+
+			continue
+		}
+
+		if outcome := remediateIsolatedGoTool(ctx, root, rootMod, tool.isolated, pins); outcome != nil {
+			return nil, outcome
+		}
+
+		done = append(done, "raised "+tool.pkg+" in "+tool.file+" from "+tool.have+" to "+tool.want)
+	}
+
+	if len(shared) == 0 {
+		return done, nil
+	}
+
+	specs := make([]string, 0, len(shared))
+	for _, tool := range shared {
+		specs = append(specs, tool.pkg+"@"+tool.want)
+	}
+
+	step, advisory := goToolsGet(
+		ctx,
+		filepath.Join(root, goToolsDir),
+		specs,
+		behindGoToolsMessage(shared),
+		"raised to this limen's pins: ",
+		" (go -C "+goToolsDir+" get -tool, then go -C "+goToolsDir+" mod tidy)",
+	)
+	if advisory != nil {
+		return nil, advisory
+	}
+
+	return append(done, step), nil
 }
 
 // ensureGoToolsModule writes a bare .limen/tools/go.mod when there is none:
