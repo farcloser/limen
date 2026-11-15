@@ -34,8 +34,9 @@ and what goes where.
   internals, and the owner describes no test design across the boundary. The
   [generic principle](./principles.md) applied to two sessions.
 - **On GitHub, the human has a handle.** Anything public — a pull request, a comment, a
-  commit message, release notes — names the person as `@apostasie`. "The owner" and "the
-  human" are the sessions' words among themselves.
+  commit message, release notes — names the person as `@apostasie`. "The human" is the
+  sessions' word among themselves, where "the owner" is the session that owns a repository,
+  never the person.
 - **Answers, not menus.** Lead with the conclusion; one recommendation, not a survey. A fix
   that cuts against recorded doctrine is named as such and argued, never slipped in. When
   something is either the right call or not, say which.
