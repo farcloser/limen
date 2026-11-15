@@ -784,8 +784,8 @@ and an image with no registry passes only when it is `scratch` or Docker Hub is 
 Docker's grammar a number after `--from=` names a build stage, never an image.
 
 **Workaround.** Name the stage (`FROM … AS build`, `--from=build`): the rule finds an alias.
-godolint's port of the rule reads `FROM` alone today, so it does not meet the case; a port
-that reads `--from` is to take a number for a stage.
+forkcloser/godolint's port of the rule takes a number after `--from=`, and in the `from=`
+of a mount, for a stage (https://github.com/forkcloser/godolint/pull/181).
 
 **Lifts when** hadolint resolves a number to the stage of that index. Not reported
 upstream yet.
