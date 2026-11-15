@@ -131,6 +131,20 @@ What a program sees as `argv[0]` depends on its parent. The runner and .NET's
 separators; cmd passes what was typed. A reproduction of a name-handling bug uses a parent
 that preserves the spelling under test.
 
+## An argument that begins with a slash
+
+Git for Windows' shell is MSYS2's, and before a native program starts it rewrites every
+argument that looks like a Unix path into a Windows one
+([MSYS2: filesystem paths](https://www.msys2.org/docs/filesystem-paths/), "Process
+Arguments"). A linker option spelled with a slash is such an argument: lld's `/Brepro`,
+passed as `-Wl,/Brepro`, reached zig on both Windows legs as
+`C:/Program Files/Git/Brepro`
+(https://github.com/forkcloser/testbin/actions/runs/43678015614). This is the shell doing
+what it documents, not a defect, so the rule is ours: **no value a recipe hands to a native
+program begins with a slash.** Where the tool has another spelling, that one is used
+(`-Brepro`); where it has none, `MSYS2_ARG_CONV_EXCL` names the argument the shell leaves
+alone.
+
 ## Architecture on windows-11-arm
 
 Git for Windows' arm64 build pairs a native arm64 `git.exe` with an **x86-64** MSYS2
