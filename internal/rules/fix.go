@@ -96,7 +96,7 @@ func Fix(ctx context.Context, root string, opts FixOptions) []Outcome {
 	add := func(entries ...Outcome) { outcomes = append(outcomes, entries...) }
 
 	add(remediateGit(ctx, root))
-	add(remediateReadme(root))
+	add(remediateReadme(root, opts.Policy.Repository))
 	add(remediateLicense(root, opts))
 	add(remediateEditorconfig(root))
 	add(remediateGitignore(root))
@@ -155,7 +155,10 @@ func remediateGit(ctx context.Context, root string) Outcome {
 	return Outcome{Rule: rule, Action: ActionCreated, Path: gitDirName, Message: "git init"}
 }
 
-func remediateReadme(root string) Outcome {
+// remediateReadme scaffolds a README titled with the repository's name when
+// it is known ("owner/name"), and with the directory's otherwise: a worktree's
+// directory is named after its branch, not after the project.
+func remediateReadme(root, repository string) Outcome {
 	const rule = "readme"
 	if checkReadme(root).OK() {
 		return Outcome{Rule: rule, Action: ActionNone, Message: "README present"}
@@ -164,6 +167,10 @@ func remediateReadme(root string) Outcome {
 	name := filepath.Base(root)
 	if abs, err := filepath.Abs(root); err == nil {
 		name = filepath.Base(abs)
+	}
+
+	if _, project, known := strings.Cut(repository, "/"); known && project != "" {
+		name = project
 	}
 
 	body := fmt.Sprintf("# %s\n\nTODO: describe this project.\n", name)

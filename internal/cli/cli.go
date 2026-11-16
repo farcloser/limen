@@ -401,8 +401,11 @@ func runBootstrap(ctx context.Context, version string, args []string, stdout, st
 		)
 	}
 
+	// The same policy as fix, the repository's own name included: a target
+	// that already has an origin (a clone of an empty repository, a worktree
+	// of one) is bootstrapped as that repository, not as an unknown one.
 	outcomes := rules.Fix(ctx, root, rules.FixOptions{
-		Policy:      rules.DefaultPolicy(),
+		Policy:      policyFor(ctx, root),
 		License:     opts.licenseID,
 		Holder:      opts.holder,
 		Year:        time.Now().Year(),
