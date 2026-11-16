@@ -30,6 +30,8 @@ func runGithub(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return runGithubFix(ctx, args[1:], stdout, stderr)
 	case cmdSigners:
 		return runGithubSigners(ctx, args[1:], stdout, stderr)
+	case cmdWatch:
+		return runGithubWatch(ctx, args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "limen: unknown github command %q\n\n", args[0])
 		githubUsage(stderr)
@@ -43,6 +45,7 @@ func githubUsage(writer io.Writer) {
   limen github check [-repo owner/name] [-org name] [-all-repos] [-json]
   limen github fix   [-repo owner/name] [-org name] [-all-repos] [-yes] [-json]
   limen github signers rollout (-org name | -repo owner/name) -valid-before time [-yes] <fingerprint>
+  limen github watch -org name [-org name ...] [-as login] [-yes]
 
 Without -org, the target is a repository (-repo, or inferred from the origin
 remote). With -org, the organization's own settings are audited instead
@@ -62,7 +65,8 @@ Verdicts: ok · fail (auto-fixable) · advisory (never auto-fixed) · unverifiab
 
 signers rollout is another kind of command: it retires a signing key in the
 repositories that list it, by pull request (limen github signers for its own
-help).
+help). So is watch: it subscribes the token's account to every repository of
+an organization (limen github watch -h).
 `)
 }
 
