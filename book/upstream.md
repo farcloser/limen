@@ -266,6 +266,34 @@ closing it.
 **Lifts when** Go closes inherited descriptors between fork and exec, or `os/exec` retries
 ETXTBSY; neither is planned.
 
+## Go's coverage runtime renames one meta-data file from every process at once (Windows)
+
+**Symptom.** Under `go test -cover`, a suite that runs its own binary as child processes,
+several at a time, fails now and then on Windows: a child ends with `error: coverage
+meta-data emit failed: writing …\gocoverdir\covmeta.<hash>: rename from
+…\tmp.covmeta.<hash><time> failed: … The process cannot access the file because it is being
+used by another process.` on its standard error, and a test that reads that stream fails. It
+failed on windows-11-arm and passed on windows-2025 in one run
+(https://github.com/forkcloser/hermetic/actions/runs/43772695262/job/132991929553).
+
+**Cause.** A process built for coverage writes its meta-data file into `GOCOVERDIR` as it
+exits, unless one of the expected size is already there: a temporary file, then a rename
+onto `covmeta.<hash>`
+([emit.go](https://github.com/golang/go/blob/7b2881024c95a11ddb86663a616340aa3a88b67f/src/internal/coverage/cfile/emit.go#L347-L363),
+[emit.go](https://github.com/golang/go/blob/7b2881024c95a11ddb86663a616340aa3a88b67f/src/internal/coverage/cfile/emit.go#L417-L432)).
+The name is the same for every process of one binary, so children that exit together each
+find the file absent, and each renames onto it. On Windows a rename that meets another
+process's fails with a sharing violation, where a POSIX rename replaces the file.
+
+**Workaround.** A suite whose tests run the binary in parallel runs one child alone first
+when it is under coverage, so the file is there before any other child exits: a process that
+finds it at the expected size writes nothing
+(https://github.com/forkcloser/hermetic/pull/87).
+
+**Lifts when** Go's runtime takes a rename lost to another process for the file written. The
+same function's other race, two temporary files of one name, is
+https://github.com/golang/go/issues/82911; the Windows one is not reported upstream yet.
+
 ## go-toml names a multi-byte character by its first byte
 
 **Symptom.** A TOML error about a character outside ASCII names a character the file does
