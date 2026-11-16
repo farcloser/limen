@@ -790,6 +790,271 @@ of a mount, for a stage (https://github.com/forkcloser/godolint/pull/181).
 **Lifts when** hadolint resolves a number to the stage of that index. Not reported
 upstream yet.
 
+## hadolint's DL3000 stops on a `WORKDIR` of one letter
+
+**Symptom.** Not run: read from the sources. `WORKDIR a`, or `WORKDIR ""`, ends hadolint
+with an index error where it should report DL3000, "Use absolute WORKDIR".
+
+**Cause.** A path that starts with neither `$` nor `/` is asked whether it is an absolute
+Windows one, and the rule takes its first character and then, when that is a letter, its
+second
+([DL3000.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3000.hs#L22-L25)),
+with `Text.index`, which is an error past the end of the text.
+
+**Workaround.** godolint's port reports DL3000 on `WORKDIR a`.
+
+**Lifts when** hadolint looks at the length of the path first. Not reported upstream yet.
+
+## hadolint's DL3028 skips the argument after every option
+
+**Symptom.** Not run: read from the sources. `RUN gem install --source=https://example.com
+rails` passes DL3028, "Pin versions in gem install", the gem unpinned.
+
+**Cause.** The rule drops each option together with the argument after it
+([DL3028.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3028.hs#L44-L48)),
+as if every option took its value as a word of its own. Written `--option=value`, the option
+carries its value, and the argument dropped is the gem.
+
+**Workaround.** godolint's port reports DL3028 on that line.
+
+**Lifts when** hadolint keeps the argument after an option written with `=`. Not reported
+upstream yet.
+
+## hadolint's DL3032 knows `yum install` alone
+
+**Symptom.** Not run: read from the sources. `RUN yum groupinstall -y tools`, with no `yum
+clean all` after it, passes DL3032, "`yum clean all` missing after yum command"; so does a
+`yum localinstall`.
+
+**Cause.** DL3032 looks for `yum install`
+([DL3032.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3032.hs#L27)),
+where DL3030, which asks the same commands for `-y`, names `install`, `groupinstall` and
+`localinstall`
+([DL3030.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3030.hs#L23)).
+
+**Workaround.** godolint's port reports DL3032 on the `yum groupinstall`.
+
+**Lifts when** DL3032 names the three. Not reported upstream yet.
+
+## hadolint's DL3016 misses an `npm install` behind an option that takes a value
+
+**Symptom.** Not run: read from the sources. `RUN npm --prefix /app install express` passes
+DL3016, "Pin versions in npm", the package unpinned.
+
+**Cause.** The rule applies when `install` is the first argument that is not a flag, once
+the values of the two options it knows, `--loglevel` and `--registry`, are dropped
+([DL3016.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3016.hs#L44-L46),
+[DL3016.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3016.hs#L83-L84)).
+The value of any other option, here `/app`, is taken for that first argument.
+
+**Workaround.** godolint's port reports DL3016 on that line.
+
+**Lifts when** hadolint finds `install` where npm does. Not reported upstream yet.
+
+## hadolint's pip rules want `-m pip install` side by side
+
+**Symptom.** Not run: read from the sources. `RUN python -m pip --quiet install requests`
+passes DL3013, "Pin versions in pip", and DL3042, which asks for `--no-cache-dir`.
+
+**Cause.** For a command named `python…`, a pip install is the three arguments `-m`, `pip`,
+`install` in a row
+([Shell.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Shell.hs#L317-L326)):
+an option of pip's between them hides the install from both rules.
+
+**Workaround.** godolint's port of DL3013 reports that line.
+
+**Lifts when** hadolint finds `install` after `-m pip` with options between. Not reported
+upstream yet.
+
+## hadolint drops a command whose name is not a literal
+
+**Symptom.** Not run: read from the sources. A command of a `RUN` whose name holds a
+variable (`python${V} -m pip install requests`, `$VENV/bin/pip install requests`) is seen by
+no rule that looks for a command: the pip above passes DL3013, and DL3059, which counts the
+commands of consecutive `RUN` lines, counts without it.
+
+**Cause.** hadolint lists a `RUN`'s commands by the name ShellCheck gives each, and drops
+one that has none
+([Shell.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Shell.hs#L152-L156));
+ShellCheck names a command only when its first word is a literal
+([ASTLib.hs](https://github.com/koalaman/shellcheck/blob/b12c2a6a0834a5b8c12b1c0eb36704f698de5bac/src/ShellCheck/ASTLib.hs#L530-L533)).
+
+**Workaround.** godolint's port reports DL3013 on `python${V} -m pip install requests`. A
+name that is a variable from its first character (`$VENV/bin/pip`) it does not see either.
+
+**Lifts when** hadolint keeps a command it cannot name. Not reported upstream yet.
+
+## language-docker keeps the blanks that end a `USER` line
+
+**Symptom.** Not run: read from the sources. `USER root ` with a blank after it, as the last
+`USER` of a stage, passes DL3002, "Last USER should not be root"; `USER 1000 ` is reported
+by DL3066 as a user that is not a number.
+
+**Cause.** The parser takes the user as everything up to the end of the line
+([Instruction.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/Instruction.hs#L58-L62),
+[Prelude.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/Prelude.hs#L296-L308)),
+the blanks included. DL3002 compares it with `root` and `0`
+([DL3002.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3002.hs#L31-L32)),
+and DL3066 asks that every character be a digit
+([DL3066.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3066.hs#L29)).
+
+**Workaround.** godolint reads the user without those blanks: DL3002 on `USER root `,
+nothing on `USER 1000 `.
+
+**Lifts when** language-docker ends the user at its last character that is not a blank. Not
+reported upstream yet.
+
+## hadolint's DL3066 passes a named user beside a variable
+
+**Symptom.** Not run: read from the sources. After `ARG GID=1000`, `USER app:$GID` passes
+DL3066, "Non-numeric user-id may not be resolvable by host system", though `app` is a name.
+
+**Cause.** A `USER` that is not a number passes when any variable an `ARG` or an `ENV`
+declared appears anywhere in its text
+([DL3066.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3066.hs#L62-L69)),
+the group included, though only the part before the colon is the user.
+
+**Workaround.** godolint's port reports DL3066 on that line.
+
+**Lifts when** hadolint looks for the variable in the user's part. Not reported upstream
+yet.
+
+## hadolint's DL3065 misses a quoted `$TARGETPLATFORM`
+
+**Symptom.** Not run: read from the sources. `FROM --platform="$TARGETPLATFORM" debian:12`
+passes DL3065, which reports a platform set to what it already is.
+
+**Cause.** The parser keeps the platform as it is written up to the next blank, quotes
+included
+([From.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/From.hs#L18-L23)),
+and the rule compares it with the two bare spellings
+([DL3065.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3065.hs#L15-L16)).
+
+**Workaround.** godolint's port reports DL3065 on that line.
+
+**Lifts when** the quotes are gone before the comparison. Not reported upstream yet.
+
+## language-docker takes a `CMD` with a lone backslash for the exec form
+
+**Symptom.** Not run: read from the sources. `CMD ["C:\app\server.exe"]` passes DL3025, "Use
+arguments JSON notation for CMD and ENTRYPOINT arguments", though the build runs it in the
+shell form.
+
+**Cause.** In language-docker a quoted element takes a backslash that is not before a quote
+as itself
+([Prelude.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/Prelude.hs#L319-L338)),
+so the line parses as a list
+([Arguments.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/Arguments.hs#L11-L14)).
+The build reads the brackets as JSON, where `\a` is no escape, and on that error takes the
+whole text for a shell command
+([line_parsers.go](https://github.com/moby/buildkit/blob/38b0e2ab2e9bc5fd3f622759ac92ad4b649f3bf4/frontend/dockerfile/parser/line_parsers.go#L311-L328)).
+
+**Workaround.** godolint's port reports DL3025 on that line.
+
+**Lifts when** language-docker reads the list as JSON. Not reported upstream yet.
+
+## hadolint's DL4006 knows a shell with no pipefail only at the start of `SHELL`
+
+**Symptom.** Not run: read from the sources. After `SHELL ["/usr/bin/pwsh", "-Command"]`, a
+`RUN` with a pipe is reported by DL4006, which asks for `-o pipefail`, an option PowerShell
+does not have; the same after a `SHELL` that is fish.
+
+**Cause.** The rule spares a `SHELL` whose text starts with `pwsh`, `powershell` or `cmd`
+([DL4006.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL4006.hs#L38-L39),
+[Shell.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Shell.hs#L113-L114)):
+a path before the name defeats it, and no other shell is in the list.
+
+**Workaround.** godolint's port reports no DL4006 after either `SHELL`.
+
+**Lifts when** hadolint compares the shell's own name, and knows fish. Not reported upstream
+yet.
+
+## hadolint's list of archives has no zstd
+
+**Symptom.** Not run: read from the sources. `ADD rootfs.tar.zst /` is reported by DL3020,
+"Use COPY instead of ADD for files and folders", though the build extracts it; and a `COPY`
+of it that a `tar -x` follows is not reported by DL3010, "Use `ADD` for extracting archives
+into an image".
+
+**Cause.** Both rules know an archive by its suffix, from one list
+([Rule.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule.hs#L243-L260))
+that has neither `.zst` nor `.tzst`. The build knows one by its content, with zstd among
+what it decompresses
+([unpack.go](https://github.com/moby/buildkit/blob/38b0e2ab2e9bc5fd3f622759ac92ad4b649f3bf4/solver/llbsolver/file/unpack.go#L60-L84),
+[compression.go](https://github.com/moby/go-archive/blob/6a97244bc508500258d8e984a043d61b138c53da/compression/compression.go#L103)).
+
+**Workaround.** godolint's list has both: nothing on the `ADD`, DL3010 on the `COPY` and its
+`tar`.
+
+**Lifts when** hadolint's list has them. Not reported upstream yet.
+
+## hadolint's DL3006 drops the registry before it looks at the name
+
+**Symptom.** Not run: read from the sources. `FROM myreg.io/scratch` and `FROM
+gcr.io/$PROJECT/base`, neither tagged, pass DL3006, "Always tag the version of an image
+explicitly".
+
+**Cause.** The rule reads the image's name without its registry: `scratch` behind any
+registry is taken for the empty image
+([DL3006.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3006.hs#L20)),
+and a name that starts with a variable once the registry is gone is taken for an earlier
+stage
+([DL3006.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Rule/DL3006.hs#L37-L39)).
+
+**Workaround.** godolint's port compares the whole name, registry included: both are
+reported.
+
+**Lifts when** hadolint keeps the registry in what it compares. Not reported upstream yet.
+
+## language-docker keeps the quotes of a value written without `=`
+
+**Symptom.** Not run: read from the sources. With a label schema that makes `version` a
+semantic version, `LABEL version "1.0.0"` is reported by DL3056, the value read with its
+quotes; the same holds of `ENV key "value"` for every rule that reads the value.
+
+**Cause.** In the old form, a key, a blank, a value, the value is everything up to the end
+of the line
+([Pairs.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/Pairs.hs#L43-L45)),
+where with `=` it is read as quoted and unquoted pieces, the quotes parsed away
+([Pairs.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/Pairs.hs#L23-L42)).
+The build hands the old form's value to the same word expansion as the new one's
+([line_parsers.go](https://github.com/moby/buildkit/blob/38b0e2ab2e9bc5fd3f622759ac92ad4b649f3bf4/frontend/dockerfile/parser/line_parsers.go#L152-L159),
+[commands.go](https://github.com/moby/buildkit/blob/38b0e2ab2e9bc5fd3f622759ac92ad4b649f3bf4/frontend/dockerfile/instructions/commands.go#L198-L203)),
+which removes them.
+
+**Workaround.** godolint reads the value with its quotes gone: that `LABEL` passes, and one
+that is no version is reported.
+
+**Lifts when** language-docker reads the old form's value as it reads the new one's. Not
+reported upstream yet.
+
+## language-docker hands hadolint a `RUN` heredoc as a shell script, whatever runs it
+
+**Symptom.** Not run: read from the sources. Two cases. A heredoc whose body opens with the
+shebang of another interpreter (`#!/usr/bin/env python3`) has its lines read as shell
+commands by every rule that looks for one: a line `sudo = 1` is reported by DL3004. And a
+`RUN` line that goes on after the heredoc word (`RUN <<EOF > /out`) has its body linted as
+the script, though nothing of that body runs.
+
+**Cause.** language-docker returns the body as the `RUN`'s arguments for any line that opens
+with a heredoc word, a redirection after the word consumed
+([Prelude.hs](https://github.com/hadolint/language-docker/blob/85c801badd642fd7e3efde3fda7492540e8a35c3/src/Language/Docker/Parser/Prelude.hs#L178-L231)),
+and hadolint parses those arguments as bash
+([Shell.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Shell.hs#L139-L156));
+only ShellCheck's own checks are skipped under a shebang hadolint does not know
+([Shell.hs](https://github.com/hadolint/hadolint/blob/1d901b9c0b0d0445d19b1a9128d89fa55bb4604e/src/Hadolint/Shell.hs#L86-L89)).
+The build runs a lone heredoc that has a shebang as a file, under its interpreter, and hands
+a line that is more than the one heredoc word to the shell as it is, the body as that
+command's input
+([convert.go](https://github.com/moby/buildkit/blob/38b0e2ab2e9bc5fd3f622759ac92ad4b649f3bf4/frontend/dockerfile/dockerfile2llb/convert.go#L1446-L1491),
+[parser.go](https://github.com/moby/buildkit/blob/38b0e2ab2e9bc5fd3f622759ac92ad4b649f3bf4/frontend/dockerfile/parser/parser.go#L437-L464)).
+
+**Workaround.** godolint's port reports neither, and reports DL3004 on a `sudo` in a heredoc
+that is the script.
+
+**Lifts when** language-docker says which heredoc is a shell script. Not reported upstream
+yet.
+
 ## go-fabric's mDNS needs a socket option x/net does not have on Windows
 
 **Symptom.** On Windows, a Matter controller built on `github.com/SukramJ/go-fabric` cannot
