@@ -32,6 +32,10 @@ var (
 	// ErrConflict is an edit the file's content refuses: the key is already
 	// listed otherwise, or already retired at another time.
 	ErrConflict = errors.New("conflicts with the file")
+	// ErrNotListed is a fingerprint no entry of the file has. It is an
+	// ErrArgument too: of the arguments Retire refuses, the one that says
+	// something of the file and not of what was typed.
+	ErrNotListed = errors.New("not listed")
 )
 
 // The options this package reads and writes, in the order it writes them.
@@ -315,6 +319,16 @@ func isTime(text string) bool {
 // machine that verifies, and one file would mean two windows on two machines.
 func isUTC(text string) bool { return isTime(text) && strings.HasSuffix(text, "Z") }
 
+// CheckTime refuses, as an ErrArgument, a time Add and Retire would refuse:
+// anything but YYYYMMDD, YYYYMMDDHHMM or YYYYMMDDHHMMSS followed by Z.
+func CheckTime(text string) error {
+	if !isUTC(text) {
+		return fmt.Errorf("%w: %q is not a UTC time (YYYYMMDD[HHMM[SS]]Z)", ErrArgument, text)
+	}
+
+	return nil
+}
+
 // instant is a time's digits padded to seconds, so two times compare as
 // text. Only meaningful between two UTC times.
 func instant(text string) string {
@@ -337,8 +351,10 @@ func (l *List) Add(principal, keyType, key, validAfter string) (changed bool, er
 		return false, fmt.Errorf("%w: %q is not a principal", ErrArgument, principal)
 	case !isKeyType(keyType):
 		return false, fmt.Errorf("%w: %q is not a key type", ErrArgument, keyType)
-	case validAfter != "" && !isUTC(validAfter):
-		return false, fmt.Errorf("%w: %q is not a UTC time (YYYYMMDD[HHMM[SS]]Z)", ErrArgument, validAfter)
+	case validAfter != "":
+		if err = CheckTime(validAfter); err != nil {
+			return false, err
+		}
 	}
 
 	if err := checkKey(keyType, key); err != nil {
@@ -381,8 +397,8 @@ func (e Entry) signsForGitNow() bool {
 // another time, or one that is not after the key's valid-after, is a
 // conflict, and a conflict on one entry leaves every entry as it was.
 func (l *List) Retire(fingerprint, validBefore string) (changed bool, err error) {
-	if !isUTC(validBefore) {
-		return false, fmt.Errorf("%w: %q is not a UTC time (YYYYMMDD[HHMM[SS]]Z)", ErrArgument, validBefore)
+	if err = CheckTime(validBefore); err != nil {
+		return false, err
 	}
 
 	var found, toRetire []int
@@ -407,7 +423,7 @@ func (l *List) Retire(fingerprint, validBefore string) (changed bool, err error)
 	}
 
 	if len(found) == 0 {
-		return false, fmt.Errorf("%w: no key with the fingerprint %s", ErrArgument, fingerprint)
+		return false, fmt.Errorf("%w: %w: no key with the fingerprint %s", ErrArgument, ErrNotListed, fingerprint)
 	}
 
 	// Only now: every entry of the key was judged before one is changed.
