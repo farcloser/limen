@@ -96,9 +96,11 @@ chapter; the procedure is limen's `skills/contribute`.
 - **Not yours to do:** merge by hand, push to `main` (but for the empty `Birth` commit that
   creates it on a new repository, the book's
   [creating a repository](https://github.com/farcloser/limen/blob/main/book/github.md#creating-a-repository)),
-  force-push a shared branch, tag a release. A release waits for an empty queue: no tag
-  while a pull request is open, a bot's included, unless the human parks it by number for
-  that tag (`PARKED_PRS`).
+  force-push a shared branch, tag a release, close a pull request that is not yours. A
+  release waits for an empty queue: no tag while a pull request is open, a bot's included,
+  unless the human parks it by number for that tag (`PARKED_PRS`). Your own pull request
+  you close when a later change of yours replaces it or makes it moot, with a comment
+  linking what did.
 
 ## Scope
 
@@ -135,6 +137,9 @@ chapter; the procedure is limen's `skills/contribute`.
 - **Read what the work needs, never the whole disk.** A targeted read outside the
   repositories is fine when the work calls for it; a filesystem-wide walk is not: no
   `find /`, `find ~`, disk-wide `mdfind`, or recursive grep over `/` or `~`.
+- **Never drive another application.** No Apple Events from a session (`osascript`,
+  AppleScript, System Events, `open -a`, accessibility or screen scripting) unless the
+  human said so for that task: the consent prompt lands on the human's screen.
 
 ## Communication
 

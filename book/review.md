@@ -191,8 +191,9 @@ minute; so an approved, armed pull request that sits is re-armed by the project 
 native stack is merged by the project manager, from the top layer through the asynchronous
 merge API (`PUT /repos/{owner}/{repo}/pulls/{top}/merge-async`), once every layer is green
 and approved; never from the middle, never partially ([a stack is merged
-whole](./agents.md)). Closing, tagging and dismissing alerts are @apostasie's, and a review
-that needs one of them says which and why, in one line, and ends.
+whole](./agents.md)). Closing a pull request its author has not closed, tagging and
+dismissing alerts are @apostasie's, and a review that needs one of them says which and why,
+in one line, and ends.
 
 **A 🛑 is argued, not obeyed.** The reviewer reads every repository and may miss what the
 owner knows of its own code: a guard in another file, a setting the rule keeps elsewhere, a

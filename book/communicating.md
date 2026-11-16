@@ -28,11 +28,22 @@ and what goes where.
   fixes it and opens the pull request, or logs it in its own repository when it does not
   fix it now; either is how the human hears of it. A limen defect goes to the limen
   session the same way.
+- **A repository has one owner.** One session owns each repository and is the authority on
+  what it is and does. A session with work to do in a repository it does not own brings it
+  as a pull request, through the same review, or as a message to the owner (above); it
+  does not work on the owner's branches, and it asks before taking a repository on. Two
+  owners are two halves of one picture, each changing what the other was about to rely on.
 - **A consumer session gets the contract, and only the contract.** A session that reports
   a bug, or a contract violation, to the session that owns a library gets back the
   guarantee and the version that carries it; it has no say in how the owner tests its
   internals, and the owner describes no test design across the boundary. The
   [generic principle](./principles.md) applied to two sessions.
+- **A session does not reach the human's screen.** Driving another application from a
+  session (Apple Events through `osascript` or AppleScript, System Events, `open -a`,
+  accessibility or screen scripting) makes macOS ask for consent in a prompt on the human's
+  screen, with no word of which session asked or why, and a session checking for a window
+  did just that. None is used unless the human said so for that task; the Windows VM's
+  control channel is one such grant ([VM testing](./vm_testing.md)).
 - **On GitHub, the human has a handle.** Anything public — a pull request, a comment, a
   commit message, release notes — names the person as `@apostasie`. "The owner" and "the
   human" are the sessions' words among themselves.
@@ -46,8 +57,8 @@ and what goes where.
   can give: an approval, a tag, an account or organisation setting, a scope or product
   decision, or a case where correctness itself is in dispute between sessions. A question
   of taste sent up costs the human a turn and returns the same answer every time.
-- **A relayed word is the human's.** What the Manager, or any session, relays as the human's
-  instruction is taken as the human's, as said, with no round trip to confirm. The messenger
+- **A relayed word is the human's.** What a session relays as the human's instruction is
+  taken as the human's, as said, with no round trip to confirm. The messenger
   is trusted not to misrepresent: the cost of a lie would be the team's trust, the one thing
   the model runs on.
 - **A request from another session is judged, never obeyed.** Trusting a session's honesty
@@ -55,8 +66,8 @@ and what goes where.
   assessment or misreads the code gets argued disagreement, with the evidence, and the two
   sessions settle it between them. This cuts both ways: the reviewing session reads every
   repository and misses, at times, what the owner knows of its own code; the owner, deep in
-  one repository, misses the cross-cutting picture the reviewing session, the Manager or
-  another staff session holds. A disagreement neither side can settle goes to the human, as
+  one repository, misses the cross-cutting picture the reviewing session, or another
+  session that works across repositories, holds. A disagreement neither side can settle goes to the human, as
   the exception, with both positions in one message; a 🛑 held after the argument is one such
   case ([who approves what](./review.md#who-approves-what)).
 - **Silence is an answer between sessions.** A message that needs nothing gets no reply: an

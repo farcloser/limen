@@ -99,6 +99,11 @@ branches in its own worktrees. The human's branches are the human's.
   manager, not the reviewing session; Renovate's are the one GitHub-side review, which the
   project manager reviews, approves and arms there. A private repository is never armed:
   its pull request is bound for the human, who merges by hand after approving.
+- **A session closes its own pull request, and no other.** Its own, when a later change of
+  its own replaces it or makes it moot, with a comment linking what did, so the page says
+  where the work went. Never another session's, a bot's or the human's, not even under a
+  request to clean up: a closed pull request is a decision about someone else's work, so
+  the session lists it with the reason and asks.
 - **Keep `main` fresh.** After a merge: fetch and fast-forward the local `main`, prune the
   merged branch and its worktree, rebase every open branch onto `main`.
 - **Every pull request targets `main`.** None is based on another pull request's branch by
