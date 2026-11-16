@@ -14,7 +14,7 @@ default:
 
 lint: build-lint-go do::lint::default do::lint::go::default do::lint::go::deadcode
 fix: build-lint-go do::fix::default do::fix::go::default
-test: do::test::go::default test-lint-go test-lint-converge
+test: do::test::go::unit do::test::go::race do::test::go::cover test-lint-go test-lint-converge
 security: do::security::default
 
 # limen-lint-go is the second binary of limen's release (see .release-go.yaml),
