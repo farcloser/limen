@@ -576,6 +576,23 @@ scheduled drift audit (https://github.com/farcloser/limen/issues/507; the catalo
 token: the governed fields are absent from anonymous responses, and absent classifies as
 `unverifiable`, never as passing.
 
+## Watching an organization
+
+Watching is the one thing about an organization that is an account's and not the
+organization's: GitHub keeps it per account and per repository, and has no setting that
+watches the repositories an organization gains. `limen github watch -org <name>` (the flag
+may be given several times) subscribes the account the token belongs to, to all activity in
+every repository of the organization that it has no subscription to, as the Watch button's
+"All Activity" does: the plan first, then consent, as `fix`. A repository already watched
+is counted and left; one the account ignores is named and left, since that is somebody's
+choice where no subscription is only the default; archived ones are passed over. Run again,
+or on a schedule with `-yes`, it picks up what was created since. The account is whoever
+the token is, and a session's token is the bot's: `-as <login>` refuses to run as anyone
+else, which is what a scheduled run carries. The token needs the `notifications` scope:
+without it GitHub answers a subscription's read with the 404 of a repository nobody
+watches, so every repository reads as unwatched, and the command takes a 404 on its first
+write for the missing scope, says so, and stops.
+
 ## Enforcement
 
 `limen github check [-repo owner/name]` / `check -org <name>` — or, through the recipes,
