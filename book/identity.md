@@ -227,6 +227,18 @@ home, which the `tools` recipes and the contribute skill do by themselves. For t
 command to run at all, the harness's own `env`, resolved through PATH outside the sandbox
 with the checkout's manifest, must not be a toolset link: limen's registry links no `env`.
 
+**The shared build cache is never cleared while a session builds.** The Go build cache
+under that root is every session's at once. `go clean -cache` on it, with another session's
+lane under way, removes entries that lane has just written and is about to read, and Go
+reports the miss as something else: a package of the standard library "is not in std", two
+runs in a row in one repository, then never again
+(https://github.com/farcloser/limen-install/issues/231). Nor does the cache need clearing.
+Every object in it is a package archive, stored once by its content: the standard library
+and each repository's dependencies, for every platform the lint lane covers and again under
+the race detector. Its size is the work's own, and a cache emptied was back at that size
+ninety minutes later; Go itself trims what no build has used for five days. A run that must
+start from an empty cache points `GOCACHE` at a directory of its own.
+
 **A session's `PATH` is the harness's, and no rc file changes it.** Before every Bash call
 the harness sources a shell snapshot it wrote at process start, and that snapshot's
 `export PATH=` is a literal copied from the harness's own process environment, not read back
