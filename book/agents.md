@@ -78,14 +78,17 @@ branches in its own worktrees. The human's branches are the human's.
   sha>`. A commit after that line is a new review: the same exchange, a new sha. A pull
   request that reached GitHub unreviewed, or at another head, is what the project manager
   refuses. Review discussion lives in the sessions, never on the pull request: GitHub shows
-  one reviewed change and the human's approval.
+  one reviewed change and the human's approval. Which session reads a change goes by what a
+  mistake in it would cost and what it takes to verify ([who approves
+  what](./review.md#who-approves-what)): what the project manager can verify itself it
+  reviews itself, in the same exchange, and logs its own line.
 - **Open at the reviewed head, bind, babysit.** Push the branch, open the pull request with
   a description drawn from the commit messages ([the shape of a pull
   request](#the-shape-of-a-pull-request)), bind it in the session's own PR pane, and own it
-  to green. A red that needs a redesign goes back to the reviewing session, a new review; an
-  environmental red (a links `503`, a flake whose cause is known) gets the reviewing
-  session's `bypass-safe: <org/repo> <branch> <sha> <run URL>` line to the project manager,
-  and the agent says so. The agent messages nobody about the pull request itself.
+  to green. A red that needs a redesign is a new head and a new review, routed as any
+  change; an environmental red (a links `503`, a flake whose cause is known) gets a
+  `bypass-safe: <org/repo> <branch> <sha> <run URL>` line from the session that reviewed the
+  head, the project manager's own when it did, and the agent says so. The agent messages nobody about the pull request itself.
 - **The project manager keeps the queue, and arms.** It watches GitHub itself and reads
   every session pull request's branch and head, matches them against the ledger of
   `reviewed:` lines, confirms the checks, arms GitHub's auto-merge (`gh pr merge --auto

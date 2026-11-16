@@ -164,24 +164,30 @@ review, the same exchange, a new sha. The reviewing session leaves nothing on a 
 pull request — no comment, no approval (the shared account cannot approve itself, every
 participant knows it, and nothing says so), no arming, which is the project manager's — and
 a red the author cannot fix is
-either a redesign, back in the worktree, or environmental, which the reviewing session says
-to the project manager as `bypass-safe: <org/repo> <branch> <sha> <run URL>`.
+either a redesign, back in the worktree for a new review, or environmental, which the
+reviewing session says to the project manager as `bypass-safe: <org/repo> <branch> <sha>
+<run URL>`. Of a head the project manager read itself (below), that line is its own.
 
-A trivial documentation-only pull request does not go to the reviewing session: it goes to
-the project manager, which reviews it, logs it and arms it. Trivial is prose alone and
-nothing decided in it: a typo, a wrap, a stale link or name, a sentence restating a fact the
-book already holds. A change that touches code, configuration, a workflow or a test goes to
-the reviewing session, a dependency bump excepted (below), and so does a documentation
-change that is not trivial: a new rule, a changed meaning, a chapter rewritten, a claim a
-reader would act on. A line that states a fact about an artifact or a mechanism, a release,
-a signature, a command's behaviour, is a claim, and when the project manager cannot verify
-it itself, that is doubt. In doubt, the reviewing session; the cost of a needless review is
-a turn, the cost of a skipped one is a wrong rule in the book.
+Which of the two reads a change goes by the impact of a mistake in it and the cost of
+verifying it, not by its label. The project manager takes a change when either is small:
+its correctness is easy to check, or a mistake in it would cost little. It reads it to the
+same bar, logs it and arms it: documentation whose instructions it checks against the tree,
+a small mechanical change, comments, a dependency bump (below). The reviewing session's read
+is the deep one and the scarce one, and it is kept for what is both hard to establish and
+costly when wrong: deep code, an optimization, an API change with wide ramifications. So a
+change that is hard to establish and cheap to get wrong is the project manager's, and so is
+one that would be costly and is easy to check. The examples are not the bar, and neither is
+"trivial": the project manager judges a change that is not trivial whenever it can verify
+it, and the author and the project manager decide where a change goes by weighing those two
+costs. A line that states a fact about an artifact or a mechanism, a release, a signature,
+a command's behaviour, is a claim the project manager verifies; one it cannot verify itself
+goes to the reviewing session. Routed by label, the deep read is spent on changes any
+careful reader could settle, and is late for the ones that need it.
 
 A pull request that only bumps dependencies, Renovate's or a session's, goes to the project
 manager, not the reviewing session. The project manager reviews it ([dependency
-bumps](#dependency-bumps)); a session's it logs, arms and binds for the human as it does a
-trivial documentation change; Renovate's, the one review on GitHub, it approves and arms
+bumps](#dependency-bumps)); a session's it logs, arms and binds for the human as it does any
+change it reviews itself; Renovate's, the one review on GitHub, it approves and arms
 (`gh pr merge --auto --merge`). The preset rebases a bump on every `main` commit and each
 rebase drops the approval, which the sweep gives again at the rebased head. Renovate re-arms
 after every rebase, so what holds a bump is the approval the project manager withholds.

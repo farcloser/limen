@@ -20,7 +20,7 @@ ssh-keygen -o -a 100 -t ed25519-sk -f ~/.ssh/id_ed25519_sk -C "you@farcloser.wor
   backup, a compromised process yield nothing. This is the property the model rests on, and
   why a key *file*, however well protected, is not acceptable for a person.
 - **The passphrase is a second factor against the token itself.** A stolen token is a
-  physical event the owner notices; until then, using it needs the passphrase too. It is
+  physical event its holder notices; until then, using it needs the passphrase too. It is
   asked once per plug-in, and again when the agent's cache expires.
 - **Touch is presence.** Every use needs a touch, so malware on the machine cannot sign or
   push in the background: each signature is one deliberate gesture. The opposite choice from
@@ -469,7 +469,7 @@ A key that stops answering after it worked is the exception: a locked screen, no
 rig ([the bot's key](#the-bots-key)). Nor is a limit of the rig an architectural input: a
 repository takes a submodule, a hook or a tool when that is the right design, judged on its
 merits alone; what the sandbox cannot do is worked around by the session, named as a
-workaround, and sent to the rig's owner to lift. A design bent around today's sandbox
+workaround, and sent to the human to lift. A design bent around today's sandbox
 outlives the limit and carries the bend forever.
 
 ## What stays manual

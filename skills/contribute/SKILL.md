@@ -150,7 +150,12 @@ eaten by a shell variable — in your tree, not in CI.
 ## 4. The review, in the worktree
 
 Nothing is pushed and no pull request exists until the change is reviewed.
-Message the reviewing session three things and end the turn:
+Who reads it goes by what a mistake would cost and what it takes to verify
+(AGENTS.md): the project manager for what it can verify itself or what
+costs little when wrong, a dependency-only change included; the reviewing
+session for what is both hard to establish and costly when wrong. The
+exchange is the same with either.
+Message that session three things and end the turn:
 
 ```
 <absolute worktree path>
@@ -158,13 +163,14 @@ base: $(git -C <path> rev-parse origin/HEAD)
 head: $(git -C <path> rev-parse HEAD)
 ```
 
-The reviewing session reads `git diff <base>..<head>` there and answers by
-message, in the shape of a review (`book/review.md`): ✅ with the head it
-read, or 🛑 and ⚠️ to settle. Answer each finding by message — fix it and
-amend (one commit per thing, step 2.5), or argue it with the evidence; a
-new head is a new review, say its sha. When the reviewing session has sent
-the project manager its line, `reviewed: <org/repo> <branch> <head sha>`,
-the head is the one to open; any other head is refused downstream.
+It reads `git diff <base>..<head>` there and answers by message, in the
+shape of a review (`book/review.md`): ✅ with the head it read, or 🛑 and ⚠️
+to settle. Answer each finding by message — fix it and amend (one commit
+per thing, step 2.5), or argue it with the evidence; a new head is a new
+review, say its sha. When the line `reviewed: <org/repo> <branch> <head
+sha>` is in the project manager's ledger, sent by the reviewing session or
+logged by the project manager for what it read itself, the head is the one
+to open; any other head is refused downstream.
 
 ## 5. Push, open the pull request at the reviewed head, own it
 
@@ -216,8 +222,9 @@ The PR pane says when the checks finish; a session does not poll CI. On
 red, read the failed logs (`gh run view --job <id> --log-failed`) and sort
 the red: one that needs a redesign goes back to step 4, a new review; an
 environmental one (a links `503`, a flake whose cause is known) is said to
-the reviewing session, which sends the project manager `bypass-safe:
-<org/repo> <branch> <sha> <run URL>`. A red check is yours to turn
+the session that reviewed the head, whose line to the project manager is
+`bypass-safe: <org/repo> <branch> <sha> <run URL>` (the project manager
+logs its own for a head it read itself). A red check is yours to turn
 green or to have named — never to leave for the human to find.
 
 Message nobody about the pull request. The project manager finds it on
