@@ -22,6 +22,17 @@ chapter of its own holds it; the links say where.
   difference) grows no export outside it because a caller wanted a home for a platform
   split: the caller keeps its helper private, or the thing goes where its general meaning
   lives.
+- **A defect in one of our systems is fixed where it is, never absorbed by another.** No
+  guard, retry, second reading or special case goes into one of our systems to work around,
+  absorb or handle a bug or a broken behaviour of another of ours: the fix goes into the
+  system that has the defect, on the spot. Duct tape hides the defect from the one place
+  that showed it, leaves every other consumer exposed, and stays in the consumer long after
+  anyone remembers what it was for. The one workaround tolerated is for a hard dependency on
+  an upstream we do not want to fork, and it is written down with what lifts it ([known
+  upstream bugs](./upstream.md)). A build script that read its archive back, because our
+  own `tar` had written a short one and exited 0, was shut for the fix in `tar`
+  (https://github.com/forkcloser/curl/pull/141,
+  https://github.com/forkcloser/compress/issues/87).
 - **Knowledge flows from a provider to its consumers, never back.** A provider — a
   library, a tool, a shipped configuration — defines a contract and knows nothing of who
   holds it: not their identity, their layout or their reasons. What a consumer needs from

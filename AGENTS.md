@@ -214,6 +214,12 @@ chapter; the procedure is limen's `skills/contribute`.
   a say in the owner's tests. The provider knows nothing of its consumers: what one needs
   is offered as a property of the contract any consumer can use, never as that consumer's
   name, path or variable in the provider.
+- **No duct tape over a defect of our own.** Never work around, absorb or handle in one of
+  our systems a bug or a broken behaviour of another of ours: it is fixed where it is, on
+  the spot, by you when the repository is yours and by its owning session, told at once,
+  when it is not. The one workaround tolerated is for a hard dependency on an upstream we
+  do not want to fork, and it goes in the book's
+  [known upstream bugs](https://github.com/farcloser/limen/blob/main/book/upstream.md).
 - **Tests are black-box, never bought with indirection.** External test package
   (`package foo_test`), no reach into private state, and no interface, function field, or
   other indirection in production code whose only purpose is a test's fake: that is bad
