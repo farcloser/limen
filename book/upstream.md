@@ -982,30 +982,29 @@ asserts that error there.
 **Lifts when** x/net implements the interface control message on Windows, or go-fabric
 does without it there. Not reported upstream yet.
 
-## OpenSSH's `LICENCE` leaves out a holder whose ISC code it compiles
+## libfido2's `LICENSE` leaves out a holder whose ISC code it compiles
 
-**Symptom.** A redistribution of OpenSSH portable that ships upstream's `LICENCE` as its
-notices does not carry Otto Moerbeek's copyright notice, which the ISC licence of two files
-it compiles asks to "appear in all copies". Found by forkcloser/openssh's audit
-(https://github.com/forkcloser/openssh/issues/69).
+**Symptom.** A redistribution of libfido2, or of a binary that links it, that ships
+upstream's `LICENSE` as its notices does not carry Otto Moerbeek's copyright notice, which
+the ISC licence of two files it compiles asks to "appear in all copies".
 
 **Cause.** `openbsd-compat/freezero.c` and `openbsd-compat/recallocarray.c` are his, under
-ISC, and are compiled where the platform has no `freezero(3)` or `recallocarray(3)`, macOS
-among them
-([freezero.c](https://github.com/openssh/openssh-portable/blob/d449e662b6b8b8cb20e852d8084c269af1c5e8f1/openbsd-compat/freezero.c),
-[recallocarray.c](https://github.com/openssh/openssh-portable/blob/d449e662b6b8b8cb20e852d8084c269af1c5e8f1/openbsd-compat/recallocarray.c)).
-`LICENCE` lists the holders of its ISC-style compatibility code by name, four of them, and
-he is not one
-([LICENCE](https://github.com/openssh/openssh-portable/blob/d449e662b6b8b8cb20e852d8084c269af1c5e8f1/LICENCE)).
-libfido2 carries the same two files, and its `LICENSE` does not carry the notice either
-([openbsd-compat](https://github.com/Yubico/libfido2/tree/b974e7cf2ee7392134cc12c08b76a068cf250dd8/openbsd-compat),
-[LICENSE](https://github.com/Yubico/libfido2/blob/b974e7cf2ee7392134cc12c08b76a068cf250dd8/LICENSE)).
-That the two files are compiled on macOS is the audit's finding, not rebuilt here.
+ISC
+([freezero.c](https://github.com/Yubico/libfido2/blob/b974e7cf2ee7392134cc12c08b76a068cf250dd8/openbsd-compat/freezero.c),
+[recallocarray.c](https://github.com/Yubico/libfido2/blob/b974e7cf2ee7392134cc12c08b76a068cf250dd8/openbsd-compat/recallocarray.c)).
+The build lists both for every platform
+([src/CMakeLists.txt](https://github.com/Yubico/libfido2/blob/b974e7cf2ee7392134cc12c08b76a068cf250dd8/src/CMakeLists.txt#L91-L102)),
+and each keeps its body where the platform has no `freezero(3)` or `recallocarray(3)`,
+macOS among them. `LICENSE` holds Yubico's notice alone
+([LICENSE](https://github.com/Yubico/libfido2/blob/b974e7cf2ee7392134cc12c08b76a068cf250dd8/LICENSE)).
 
-**Workaround.** A notices file is not taken from upstream's: forkcloser/openssh is to
-generate its own from the headers of the sources it compiles, so that the archive is
-complete whatever upstream's file says. The general rule is the one the finding teaches: a
-project's licence file is its authors' summary, and what a redistributor owes is in the
-headers of what it ships.
+**Workaround.** A notices file is not taken from upstream's. forkcloser/openssh, which
+links libfido2 statically, writes its package's notices from the headers of the sources it
+links
+([notices.sh](https://github.com/forkcloser/openssh/blob/ef44d88f08daad0f570cd9a5e8d40a1bae1c8e2f/notices.sh)),
+and its package test fails a `NOTICES` that does not name him
+([test-binary.sh](https://github.com/forkcloser/openssh/blob/ef44d88f08daad0f570cd9a5e8d40a1bae1c8e2f/test-binary.sh#L169-L183)).
+The general rule is the one the finding teaches: a project's licence file is its authors'
+summary, and what a redistributor owes is in the headers of what it ships.
 
-**Lifts when** upstream's files name him. Not reported upstream, by decision.
+**Lifts when** libfido2's `LICENSE` names him. Not reported upstream, by decision.
