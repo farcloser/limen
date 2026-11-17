@@ -158,6 +158,10 @@ Fork of https://github.com/<owner>/<repo> (`<branch>`).
   coming from upstream meets it. Nothing menial: tooling, lint, CI, formatting, dependency
   bumps, documentation and release bookkeeping stay out, whatever their number. A pull
   request that adds such a change adds its row.
+- **Upstream's bugs are recorded here, and only here.** A bug of upstream's that the fork
+  meets is a row of the third table, what upstream does wrong stated beside what the fork
+  does about it. The book's [known upstream bugs](./upstream.md) are for what we have not
+  forked, and take none of a fork's.
 - **A repackaging keeps the header and the third table.** A repository that builds and
   ships upstream's code at a pin (openssh, curl) takes upstream whole, so the two commit
   tables do not apply: its header says *Built from*, the upstream version or commit the pin
