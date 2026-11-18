@@ -43,6 +43,13 @@ Recipes do not run in your shell's environment; they run in one the `.justfile` 
   first, would take it and fail where the configured transport works. With no
   `core.sshCommand` the ambient value stays, since a sandbox's proxy may be the only route
   out; with neither, plain `ssh`.
+- **git on macOS is the developer directory's own.** `/usr/bin/git` is a shim of the same
+  kind as `/usr/bin/clang` below: it finds the real tool through `xcrun`, whose cache a
+  sandbox may not write and a reboot empties, and whose key holds the `SDKROOT` the recipes
+  export. Every git a recipe ran then paid the whole lookup, a second and a half where it
+  takes milliseconds, and wrote errors on stderr, which a test that reads a command's stderr
+  takes for the command's. So `PATH` carries the developer directory's
+  `usr/libexec/git-core` ahead of the base system: git's own programs and nothing else.
 - **The host's C compiler, for diagnostics and tests only.** cgo calls the C compiler it finds:
   Xcode's clang on macOS, `/usr/bin/gcc` on Linux, whatever the ambient `PATH` carries on
   Windows. On macOS the recipes name it: `CC`, `CXX` and `SDKROOT` point at the selected
