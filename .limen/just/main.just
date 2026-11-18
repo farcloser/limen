@@ -35,7 +35,15 @@ export GPG_BIN := if os() == 'windows' { '' } else { env_var_or_default('GPG_BIN
 # prepended to the ambient PATH there instead.
 hermetic_root := env_var_or_default('HERMETIC_ROOT_DIR', if os() == 'macos' { home_directory() / 'Library/Application Support/hermetic' } else if os() == 'windows' { env_var_or_default('LOCALAPPDATA', home_directory() / 'AppData/Local') / 'hermetic' } else { env_var_or_default('XDG_DATA_HOME', home_directory() / '.local/share') / 'hermetic' })
 hermetic_bin := hermetic_root / 'bin'
-export PATH := if os() == 'windows' { hermetic_bin + ';' + env_var('PATH') } else { hermetic_bin + ":/usr/bin:/bin:/usr/sbin:/sbin" }
+# git on macOS is the selected developer directory's own, never /usr/bin/git:
+# that one is a shim that runs xcrun, whose cache lives in the per-user temp
+# directory, which a sandbox may deny and a reboot empties, and is keyed by
+# SDKROOT (exported below) — every git then pays a full lookup and writes
+# errors on stderr. The directory named is git's own exec path, which holds
+# git's programs and nothing else; the developer directory's usr/bin would put
+# a hundred other tools ahead of the base system's.
+xcode_git := if xcode_dev == '' { '' } else if path_exists(xcode_dev / 'usr/libexec/git-core/git') == 'true' { xcode_dev / 'usr/libexec/git-core' } else { '' }
+export PATH := if os() == 'windows' { hermetic_bin + ';' + env_var('PATH') } else if xcode_git == '' { hermetic_bin + ":/usr/bin:/bin:/usr/sbin:/sbin" } else { hermetic_bin + ':' + xcode_git + ":/usr/bin:/bin:/usr/sbin:/sbin" }
 
 # A tool's link is its entry point: the shell looks the name up in the root's
 # bin and fails before hermetic runs when none is there, and a fresh root, or
@@ -98,7 +106,10 @@ export GOARCH := ''
 # where there is one, left as it is where there is none (a sandbox's proxy is
 # then the only route), and plain ssh last. Not `unexport` (it stops at the
 # module boundary) and not '' (git takes an empty command and cannot fork it).
-export GIT_SSH_COMMAND := `git config --get core.sshCommand 2>/dev/null || printf '%s' "${GIT_SSH_COMMAND:-${GIT_SSH:-ssh}}"`
+# An expression does not see the PATH exported above, so the developer
+# directory's git is put ahead here too; never as an empty element, which is
+# the current directory.
+export GIT_SSH_COMMAND := shell('PATH="${1:+$1:}$PATH"; git config --get core.sshCommand 2>/dev/null || printf "%s" "${GIT_SSH_COMMAND:-${GIT_SSH:-ssh}}"', xcode_git)
 
 # cgo on macOS compiles with the selected developer directory's own clang and
 # SDK (Xcode's toolchain, or the Command Line Tools'), never /usr/bin/clang:

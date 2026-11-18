@@ -362,7 +362,9 @@ closed for tools. Both left the write list with the agent root
 base tools showed it on 2026-10-12: Apple's `mktemp -d` ignores `TMPDIR` and dies there, and
 the `clang` shim runs `xcrun`, whose cache lives there. The fix is on the tool side, not the
 list: `mktemp -d "$TMPDIR/x.XXXXXX"` works sandboxed, and cgo builds pin `CC` and `SDKROOT`
-from `xcode-select -p`, which removes `xcrun` from the path.
+from `xcode-select -p`, which removes `xcrun` from the path. The `git` shim reads the same
+cache, and the recipes put the developer directory's own git ahead of it
+([recipes](./recipes.md)).
 
 **A file in `$TMPDIR` that nothing touches for four days is deleted at midnight.** The
 sandbox's `$TMPDIR` is a directory under `/tmp`, and macOS's `tmp_cleaner` (since 14.0)
