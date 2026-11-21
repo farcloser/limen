@@ -1,23 +1,23 @@
 {
   "checksums": [
     {
-      "id": "github_release/github.com/anchore/syft/v1.57.1/syft_1.57.1_darwin_arm64.tar.gz",
-      "checksum": "E0A74A5D2688D1254B4E17B71F068A83215E3625F846265BF6614C7BA06F3A96",
+      "id": "github_release/github.com/anchore/syft/v1.57.2/syft_1.57.2_darwin_arm64.tar.gz",
+      "checksum": "38AFBCC03A9D9AFAC2D7572432FD2C435E051E03930582EA90F4710FFB515224",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/anchore/syft/v1.57.1/syft_1.57.1_linux_amd64.tar.gz",
-      "checksum": "BF52519EB57F675D47C07D43213CB6DFF6449F3D6D1147FF6701ED91F44EEF0C",
+      "id": "github_release/github.com/anchore/syft/v1.57.2/syft_1.57.2_linux_amd64.tar.gz",
+      "checksum": "AD92BD3EC1B94A3DF01D4D0AEC199AFA9C42B72E86DA436FF5F837914D32706B",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/anchore/syft/v1.57.1/syft_1.57.1_linux_arm64.tar.gz",
-      "checksum": "AA3D3E07344F590BCCE8D31043B752DAA76C8A56C2AA34CEEEE63C6168152582",
+      "id": "github_release/github.com/anchore/syft/v1.57.2/syft_1.57.2_linux_arm64.tar.gz",
+      "checksum": "8EFE605309C98798E1EE0CFFDCF8C05CA26819B4CD44C0B03650F1E963E9BDB6",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/anchore/syft/v1.57.1/syft_1.57.1_windows_amd64.zip",
-      "checksum": "3A01FE865076BB548352195B77E88FA4649277861EA458EFE165C3A810B6DCC7",
+      "id": "github_release/github.com/anchore/syft/v1.57.2/syft_1.57.2_windows_amd64.zip",
+      "checksum": "0A10E03FFD124C304FD7E7491262DBA2E5F68EB12378B106D7525146675B2E3A",
       "algorithm": "sha256"
     },
     {
@@ -41,28 +41,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/cli/cli/v2.104.0/gh_2.104.0_linux_amd64.tar.gz",
-      "checksum": "98CB101AD87DBBD3F6B2F2BFCBD43197CCD07643140121D8A9CFAA91EADBC24E",
+      "id": "github_release/github.com/cli/cli/v2.105.0/gh_2.105.0_linux_amd64.tar.gz",
+      "checksum": "79E7AB5DB738C48777B696E374F8B428F0647DEBFB424F44D2F426370407FE2F",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/cli/cli/v2.104.0/gh_2.104.0_linux_arm64.tar.gz",
-      "checksum": "CB34CEFC6F4E77B90731374A2B737516BB8F3033C6CA46AA949E5344F68069E3",
+      "id": "github_release/github.com/cli/cli/v2.105.0/gh_2.105.0_linux_arm64.tar.gz",
+      "checksum": "B1278C75107423D818F1937FD92CAFC9E5E9B606631568F68D7FB816F5885A02",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/cli/cli/v2.104.0/gh_2.104.0_macOS_arm64.zip",
-      "checksum": "23B12706219B9892E44236F988444A24ADCF29284E16B35E03BA5B863FB6EB8E",
+      "id": "github_release/github.com/cli/cli/v2.105.0/gh_2.105.0_macOS_arm64.zip",
+      "checksum": "2A5D03103AE444927383B93D9FFD65579A26E2EB900CE1CF11F55258D5319DED",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/cli/cli/v2.104.0/gh_2.104.0_windows_amd64.zip",
-      "checksum": "08C06D10482F12C478018CD259F64ACBD5F625712CADF331AAD19BA973C879E5",
+      "id": "github_release/github.com/cli/cli/v2.105.0/gh_2.105.0_windows_amd64.zip",
+      "checksum": "8813A72C899900AFAA10E3FEC8FBC64B908C89DBFE837E95ED2FA500FC140627",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/cli/cli/v2.104.0/gh_2.104.0_windows_arm64.zip",
-      "checksum": "D56FBF5B9AD32E5985E3E7E1D8F4D28AE2994618986CD2CBA9B50AC710DFFE01",
+      "id": "github_release/github.com/cli/cli/v2.105.0/gh_2.105.0_windows_arm64.zip",
+      "checksum": "5282A09C7757210C6E2DFB11A56B11E14E646DF9B3B6A49F155465F5F881C3B7",
       "algorithm": "sha256"
     },
     {
@@ -321,8 +321,8 @@
       "algorithm": "sha256"
     },
     {
-      "id": "registries/github_content/github.com/aquaproj/aqua-registry/v4.587.0/registry.yaml",
-      "checksum": "729309DB5E7562072096CFB1EA4B8DE7A6DC41A9A9D57F2923784EEFD422F330",
+      "id": "registries/github_content/github.com/aquaproj/aqua-registry/v4.589.0/registry.yaml",
+      "checksum": "E785A69E1CEF8A92F09079E96B7156FA4515255FEE4D58C1E9DCDAB23D96DCA2",
       "algorithm": "sha256"
     }
   ]
