@@ -146,7 +146,14 @@ with an unnamed gap is not done.
   never shipped, so a compiler difference there changes what a test finds, never what a
   consumer runs.
 - **The mutation score has no lane yet.** It is run by hand with a single-point mutant
-  harness, before and after, and its numbers go in the pull request.
+  harness, before and after, and its numbers go in the pull request. A score is written
+  with the commit it was measured on, and is measured again, never carried, once the code
+  or a test changes: one of 0.893, measured on a tree whose tests were then cut, stayed in
+  the record while `main` stood at 0.798. A mutant is one only when the mutated tree
+  differs from the original, and a survivor is believed after that diff is read, as any
+  negative result is after its positive control
+  ([verify live](./review.md#verify-live-never-from-memory)): a `sed` pattern that BSD
+  `sed` does not know changed nothing, and the mutant it never made survived.
 
 ## Reporting
 
