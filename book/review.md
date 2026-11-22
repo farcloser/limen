@@ -59,6 +59,14 @@ correct, are the comments lean and meaningful, is the testing appropriate. Desig
 surface first; tests are where discipline slips, not where quality comes from. Each step
 below is done, or named as skipped with its reason; "done" with an unnamed gap is not done.
 
+The review comes before the first candidate of the release it prepares, never after it. A
+candidate offers the package as final, and every finding fixed after one is another
+candidate: a package tagged first and reviewed after merged thirteen pull requests in a
+day, four of them breaking, for its second candidate, and two speed regressions found
+later still (Performance, below) made a third and a fourth. The tag and the ask are both
+@apostasie's: a session that prepares a first candidate for a package that has had no
+review says so before the tag.
+
 - **Read all of it.** Every production file, every test, the package doc, the subpackages.
 - **Consumers.** Every exported symbol grepped across the fleet's clones. An unused export,
   gratuitous surface and a shape that makes callers awkward are findings; a consumer gets
@@ -72,7 +80,18 @@ below is done, or named as skipped with its reason; "done" with an unnamed gap i
   ([principles](./principles.md)).
 - **Tests.** The full pass of [what a package's tests establish](./testing.md#what-a-packages-tests-establish).
 - **Performance.** Where the package exists for speed, a benchmark kept as a guard and the
-  hot path read for the regression a green suite does not show.
+  hot path read for the regression a green suite does not show; and the last release
+  measured beside the head, in one table: every public operation, at small sizes and at
+  large, on each code path the package has (each kernel, the portable code, each
+  architecture). A ratio over the bound the review states before it measures is a finding.
+  A benchmark written with a change holds what that change was about: a key derivation
+  from 64 bytes was 1.8 times slower than the release before it, for a buffer grown to
+  serve large inputs, where no benchmark derived a key
+  ([forkcloser/blake3#191](https://github.com/forkcloser/blake3/pull/191)); writes of
+  1 MiB had a benchmark and were 1.18 times slower under one kernel, on a grain tuned under
+  another, and 1.9 times at 256 KiB, which had none
+  ([forkcloser/blake3#192](https://github.com/forkcloser/blake3/pull/192)). Both sat under
+  a green suite, and both were found by running the previous release beside `main`.
 - **A finding is a decision, not a fix.** A design finding is walked with @apostasie one at
   a time and decided, keep, accept or fix, before any fix is written; a lock order that
   reads as a hazard may be the fix for a race, and a panic on an invalid root may be the
