@@ -484,6 +484,34 @@ output to the frame count STREAMINFO declares.
 **Lifts when** a CSCore release bounds that read, or testbin stops building `cscoreflac`. Not
 reported upstream yet.
 
+## Symphonia's FLAC decoder returns wrong samples for a 32-bit stereo stream
+
+**Symptom.** A 32-bit stereo stream decodes to other samples than were encoded, with no
+error. forkcloser/testbin's `symphonia` program, around
+[Symphonia](https://github.com/pdeljanov/Symphonia)'s decoder, returned `flac`'s 32-bit
+encoding of raw PCM with bytes that differ from the input from the 65537th on, and exit
+status 0, on Linux, macOS and Windows
+([run 44241471317](https://github.com/forkcloser/testbin/actions/runs/44241471317/job/134590146011));
+the 8, 16 and 24-bit encodings of the same bytes came back exact. Another input of the same
+kind came back right: it depends on the data.
+
+**Cause.** In a frame coded as left and side, right and side or mid and side, the side
+channel is one bit wider than the samples: 33 bits in a 32-bit stream. Symphonia reads that
+subframe at `bits_per_sample + 1` into the `i32` buffer every channel shares
+([decoder.rs](https://github.com/pdeljanov/Symphonia/blob/ee35874b571a35a9a6e15d3bc9a3aaf8f11fbeee/symphonia-bundle-flac/src/decoder.rs#L193-L226))
+and undoes the stereo coding in `i32`
+([decoder.rs](https://github.com/pdeljanov/Symphonia/blob/ee35874b571a35a9a6e15d3bc9a3aaf8f11fbeee/symphonia-bundle-flac/src/decoder.rs#L32-L82)),
+so the side channel loses its top bit wherever it uses it. A frame whose channels are coded
+on their own decodes right. That the frames of the stream above which came back wrong are
+side-coded was not checked: the stream was not kept.
+
+**Workaround.** None. testbin's `symphonia` hands on a 32-bit stream's samples as Symphonia
+gives them, and its round-trip test stops at 24 bits, where the decoder is exact.
+
+**Lifts when** a Symphonia release decodes a 33-bit side channel; then that test runs at 32
+bits too and this entry goes. Reported upstream by others (https://github.com/pdeljanov/Symphonia/issues/585),
+with a fix proposed (https://github.com/pdeljanov/Symphonia/pull/587).
+
 ## Renovate's release-age check stays pending on a Docker digest update
 
 **Symptom.** A pull request that moves an image pinned as `<tag>@sha256:…` to the tag's new
