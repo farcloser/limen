@@ -1036,3 +1036,31 @@ The general rule is the one the finding teaches: a project's licence file is its
 summary, and what a redistributor owes is in the headers of what it ships.
 
 **Lifts when** libfido2's `LICENSE` names him. Not reported upstream, by decision.
+
+## x/image's `opentype.Face` kerns by the same pixels at every size
+
+**Symptom.** A face made by `opentype.NewFace` moves a kerned pair by the same number of
+pixels whatever the face's size. Arial's `A` and `V`, at 72 dpi: -2.375 px at 7, 14 and 140
+points, where the font's kern at those sizes is -0.52, -1.05 and -10.39 px. `font.Drawer`
+and `font.MeasureString` take the face's kern, so kerned text is measured and drawn too
+tight at small sizes and too loose at large ones, and right only where the face's pixels
+per em are a sixty-fourth of the font's units per em.
+
+**Cause.** `(*Face).Kern` hands `sfnt.Font.Kern` the font's units per em where that
+function wants the face's pixels per em
+([opentype.go](https://github.com/golang/image/blob/884d13f747188b6b8581f58ddb403e7a98874f3c/font/opentype/opentype.go#L142-L150));
+every other call the face makes passes its scale. `sfnt.Font.Kern` multiplies the pair's
+kern by what it is given and divides by the units per em
+([sfnt.go](https://github.com/golang/image/blob/884d13f747188b6b8581f58ddb403e7a98874f3c/font/sfnt/sfnt.go#L1663-L1681)),
+so the kern comes back as the font's units read as 26.6 fixed-point pixels.
+
+**Workaround.** forkcloser/go-graphviz, the one repository that uses the package, gives its
+face a `Kern` of its own, which asks `sfnt.Font.Kern` with the face's pixels per em
+([fontmatch.go](https://github.com/forkcloser/go-graphviz/blob/2af9a2abbcd9bc6a4d3e3586a37c00031beac0ee/gvc/fontmatch.go#L993-L1010)),
+and a test holds it with a font that has a kern table
+([kern_test.go](https://github.com/forkcloser/go-graphviz/blob/2af9a2abbcd9bc6a4d3e3586a37c00031beac0ee/kern_test.go)).
+
+**Lifts when** an x/image release passes the face's scale to `sfnt.Font.Kern`; then
+go-graphviz's own `Kern` goes, and this entry with it. Reported upstream by others, with
+the one-line fix named (https://github.com/golang/go/issues/46727); the issue is closed and
+the line is as it was.
