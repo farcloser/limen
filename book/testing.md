@@ -47,6 +47,16 @@ usefulness, its design and its correctness first; its tests prove what those dec
   a VM the project boots, for the rest. Time is the hard case: a time namespace offsets
   only the monotonic clocks, in the vDSO as in the syscall, and the wall clock it cannot
   touch, so a wall-clock fault needs the VM.
+- **A test is safe to fail.** A test fails the day the code breaks, and under a mutation
+  run it fails on purpose, mutant after mutant. A test of a refusal that stands in front of
+  a command with an effect on the machine (a service booted out, a key deleted, a file
+  removed outside the test's own directory) is built so that the command cannot take effect
+  when the refusal does not hold: behind a boundary the test owns, a child process with a
+  home of its own, a stand-in first on `PATH`, a temporary directory. Where the only such
+  boundary would be a seam opened in the code, the test is not written and the gap is
+  named. The test of an installer's refusal of a relative path met that refusal broken,
+  under a mutation run, and went on to run `launchctl bootout` on the user's own agent;
+  only the sandbox, which denies `launchctl`, stopped it.
 
 ## What a package's tests establish
 
@@ -146,7 +156,14 @@ with an unnamed gap is not done.
   never shipped, so a compiler difference there changes what a test finds, never what a
   consumer runs.
 - **The mutation score has no lane yet.** It is run by hand with a single-point mutant
-  harness, before and after, and its numbers go in the pull request.
+  harness, before and after, and its numbers go in the pull request. A score is written
+  with the commit it was measured on, and is measured again, never carried, once the code
+  or a test changes: one of 0.893, measured on a tree whose tests were then cut, stayed in
+  the record while `main` stood at 0.798. A mutant is one only when the mutated tree
+  differs from the original, and a survivor is believed after that diff is read, as any
+  negative result is after its positive control
+  ([verify live](./review.md#verify-live-never-from-memory)): a `sed` pattern that BSD
+  `sed` does not know changed nothing, and the mutant it never made survived.
 
 ## Reporting
 

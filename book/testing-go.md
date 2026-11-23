@@ -99,3 +99,5 @@ format: `GOTESTSUM_FORMAT=standard-verbose just do test go` shows it.
 | A cross-process contract tested with the test binary as the other holder; its 255-character key found a lock sidecar name too long for Windows | https://github.com/mycophonic/primordium/pull/205, https://github.com/mycophonic/primordium/pull/206 |
 | Recovery under live peers, a child killed between the journal write and the end of the grow | https://github.com/mycophonic/primordium/pull/212, https://github.com/mycophonic/primordium/pull/214 |
 | A buffer sized by a benchmark: 32 KiB to 4 MiB within noise, 16 MiB slower, a pool no effect | https://github.com/mycophonic/primordium/pull/213 |
+| A refusal's test met the refusal broken, under a mutation run, and went on to run `launchctl bootout` on the user's own agent, which only the sandbox stopped; the test was not restored and the gap is named | https://github.com/forkcloser/taciturn/issues/98 |
+| A mutation score measured again on `main` as it stood: 0.798, where the record carried 0.893 from a tree whose tests were since cut | https://github.com/forkcloser/taciturn/issues/98 |
