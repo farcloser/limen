@@ -161,11 +161,14 @@ with an unnamed gap is not done.
   harness, before and after, and its numbers go in the pull request. A score is written
   with the commit it was measured on, and is measured again, never carried, once the code
   or a test changes: one of 0.893, measured on a tree whose tests were then cut, stayed in
-  the record while `main` stood at 0.798. A mutant is one only when the mutated tree
-  differs from the original, and a survivor is believed after that diff is read, as any
-  negative result is after its positive control
-  ([verify live](./review.md#verify-live-never-from-memory)): a `sed` pattern that BSD
-  `sed` does not know changed nothing, and the mutant it never made survived.
+  the record while `main` stood at 0.798. A mutant is one only when the program built from
+  it differs, and a survivor is believed after that is shown, as any negative result is
+  after its positive control ([verify live](./review.md#verify-live-never-from-memory)).
+  The diff of the mutated tree shows that the edit was made: a `sed` pattern that BSD `sed`
+  does not know changed nothing, and the mutant it never made survived. It does not show
+  that the edit reached the binary: a leak planted as a `malloc` whose result nothing reads
+  is removed by the compiler, under a diff that reads right. A mutant planted to prove that
+  a test sees a defect is checked by the figures the test prints under it.
 
 ## Reporting
 
