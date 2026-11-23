@@ -105,8 +105,10 @@ with an unnamed gap is not done.
    pitfalls table).
 8. **Speed is guarded where the package exists for it**: a benchmark kept beside the tests,
    on the shape the real consumer runs, read for the regression a green test cannot show,
-   and run before and after a change to the hot path. A buffer size or a pool is chosen by
-   that measurement, never by reflex.
+   and run before and after a change to the hot path. A change that makes one shape faster
+   is measured on the shapes beside it too, against the base: a structure kept to spare one
+   shape a walk is paid for by the shapes that never made the walk. A buffer size or a pool
+   is chosen by that measurement, never by reflex.
 
 ## When a test goes
 
