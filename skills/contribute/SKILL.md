@@ -293,6 +293,46 @@ without an unmerged one is either a layer of a GitHub native stack, or a
 branch with no pull request yet, opened against `main` once the other has
 merged. Say what it stacks on in the body ("stacked on <URL>").
 
+A native stack is made with `gh stack`, and with nothing else. Neither of
+these is one, and the project manager refuses both:
+
+- a pull request opened on another pull request's branch by hand
+  (`gh pr create --base claudio/<date>-<lower>`);
+- a pull request on `main` whose branch carries another open pull request's
+  commits.
+
+For layers that have no pull request yet, each reviewed (step 4) and pushed
+with plain git (step 5), from the top layer's worktree:
+
+```
+gh stack init claudio/<date>-<lower> claudio/<date>-<upper>   # bottom to top; adopts a branch that exists, creates one that does not
+gh stack submit --auto   # one draft pull request a layer, each on the layer below, and the stack recorded on GitHub
+gh pr edit <n> --title "…" --body "…" --add-label internal   # per layer; the label only when it applies
+gh pr ready <n>   # per layer, after the edit
+```
+
+`gh` has no `-C` and acts where the shell stands, and `init` moves that
+checkout to the top branch: run from the clone, it would put the human's
+checkout on the bot's branch. A mistyped name makes a branch instead of
+failing.
+
+`submit --auto` writes each draft's title and body itself: the title is the
+commit's subject, or the branch's name when the layer has several commits;
+the body is the commit's body and then a banner linking the tool, which the
+agreement bars from a pull request body. The drafts are what
+keeps that banner from being announced: each is edited first, and made ready
+second.
+
+For pull requests already open, by number, bottom to top:
+
+```
+gh stack link <lower pr> <upper pr>
+```
+
+`link` sets the base of a pull request that is not on the layer below, and
+refuses one whose auto-merge is armed: tell the project manager, which
+disarms it, before the `link`.
+
 A stack is reviewed and merged whole. Every layer is held to `main`'s
 ruleset at once: one unsigned commit, or one layer without its approval,
 refuses the whole merge and nothing lands. So:
