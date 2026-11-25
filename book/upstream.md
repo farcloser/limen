@@ -610,6 +610,36 @@ pull request's checks or with `gh api -X POST repos/<owner>/<repo>/actions/runs/
 **Lifts when** a filtered listing returns every run of a head as soon as the unfiltered one
 does. Not reported upstream yet.
 
+## GitHub cancels a macOS job it found no runner for
+
+**Symptom.** The macOS leg of `limen / verify` ends cancelled without having run: its
+record has no runner name, no step and no log, and the gate that needs it fails. In
+forkcloser/erofs the leg of two pull requests waited 58 and 54 minutes on 2026-11-23
+(https://github.com/forkcloser/erofs/actions/runs/45233550752/job/137899191714,
+https://github.com/forkcloser/erofs/actions/runs/45230904371/job/137889861768), and the
+rerun of each was cancelled the same way two days later, after 20 and 18
+(https://github.com/forkcloser/erofs/actions/runs/45233550752/job/139375792485,
+https://github.com/forkcloser/erofs/actions/runs/45230904371/job/139375780452). The other
+legs of both runs, Linux and Windows on both architectures, had finished within seven
+minutes of their start.
+
+**Cause.** GitHub's, by its own account. Each cancelled job carries the annotation "The job
+was not acquired by Runner of type hosted even after multiple attempts", under the notice
+"Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer
+queue times."; `gh api repos/<owner>/<repo>/check-runs/<job id>/annotations` prints them.
+Nothing of ours has run when the job is cancelled.
+
+**Workaround.** None in the workflow: a job that was given no runner executes no step, so
+there is no place for a retry or a timeout of ours. The leg is rerun, and named on the pull
+request, after its annotations are read: a macOS leg cancelled once a runner had taken it
+is not this bug, nor is one the caller's concurrency group cancelled, whose annotation
+reads "Canceling since a higher priority waiting request for … exists". A rerun can be
+cancelled again, as both examples were, and the pull request stays red until one is given
+a runner.
+
+**Lifts when** GitHub no longer cancels a macOS job that waits for a runner. Not reported
+upstream.
+
 ## cargo relinks nothing when only `SOURCE_DATE_EPOCH` changes
 
 **Symptom.** A Windows executable built in a target directory kept from an earlier commit is
