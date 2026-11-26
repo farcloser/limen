@@ -142,6 +142,8 @@ func Run(version string, args []string, stdout, stderr io.Writer) int {
 		return runBootstrap(ctx, version, args[1:], stdout, stderr)
 	case cmdGithub:
 		return runGithub(ctx, args[1:], stdout, stderr)
+	case cmdGuard:
+		return runGuard(ctx, args[1:], stdout, stderr)
 	case cmdPins:
 		return runPins(ctx, args[1:], stdout, stderr)
 	case cmdSigners:
@@ -602,6 +604,9 @@ Usage:
   limen github fix [-repo] [-org] [-yes]  Repair the fixable GitHub settings
   limen github signers rollout <fingerprint>   Retire a signing key by pull request, in every repository that lists it
   limen github watch -org name            Watch every repository of an organization, as the token's account
+  limen guard -memory <MiB> [-dir <directory>] -- <command> [args…]
+                                          Run the command, in the directory when one is given, and
+                                          end any process of it that holds more memory than the limit
   limen pins get <name> <field>           Print a pinned artifact's version, url, or sha256
   limen pins refresh [-all] [path]        Recompute stale digests in pins.yaml, verified
   limen signers add <principal> <key>     List a signing key in .lint-signers
@@ -624,5 +629,7 @@ Exit codes:
   0  success (check: all passed; fix/bootstrap: all rules resolved)
   1  check: a rule failed; fix/bootstrap: a rule needs manual attention
   2  usage error
+guard exits as its command does, and 1 when the command exits 0 with one of
+its processes killed.
 `)
 }

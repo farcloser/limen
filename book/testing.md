@@ -152,6 +152,18 @@ with an unnamed gap is not done.
   that was never registered came out.
 - **Fuzzing is CI's own job**, on one leg, with the corpus cached between runs, feeding the
   gate like a failing test ([github](./github.md#fuzz)); it is not in the aggregate.
+- **A fuzz run is bounded in memory as it is in time.** The fuzzer starts a worker process a
+  core and bounds none of them, and a target allocates what its input tells it to: a run
+  left to itself takes the machine's memory, and several at once all of it, long before a
+  deadline fires. So the lane counts its workers and runs under a guard that ends any
+  process of the run past a limit, the coordinator as well as a worker. The guard asks the
+  process to quit before it kills it: a worker that exits leaves its input behind as a
+  finding, with the stacks that say what was allocating, and the fuzzer keeps nothing of a
+  worker that was killed. The guard reads the processes on each tick, so the limit is what
+  a process settles under, not a ceiling on its last burst; and it bounds each process, so
+  a run's ceiling is the limit times the workers and the coordinator. Where a platform
+  gives the guard nothing to read, nothing is fuzzed there. A lane that plants defects and
+  runs the suite on each is held to the same two bounds.
 - **Benchmarks and profiles are `perf`**: reports that judge nothing, run by hand, never in
   CI.
 - **The race detector runs on the host's C toolchain** by a named exception: a diagnostic is
