@@ -571,6 +571,149 @@ func configurationsResponse(targetType, securityUpdates string) stubResponse {
 		`", "enforcement": "enforced", "dependabot_security_updates": "` + securityUpdates + `"}]`}
 }
 
+// planned returns the change an audit planned for a check, and fails the test
+// when there is none.
+func planned(t *testing.T, changes []github.Change, check string) *github.Change {
+	t.Helper()
+
+	for index, change := range changes {
+		if change.Check == check {
+			return &changes[index]
+		}
+	}
+
+	t.Fatalf("no change planned for %s", check)
+
+	return nil
+}
+
+// calls is what a stub was asked, one request a line with its payload.
+func calls(t *testing.T, logPath string) string {
+	t.Helper()
+
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading call log: %v", err)
+	}
+
+	return string(log)
+}
+
+// TestAuditOrgSecurityConfigurationCreated: an organization with no default
+// code security configuration fails, and the fix creates the canonical one
+// and sets it as the default for new repositories. The request carries the
+// field GitHub refuses the others without, and leaves Dependabot's security
+// updates off: the configuration the fixer creates must pass the fixer's own
+// check of them.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestAuditOrgSecurityConfigurationCreated(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/code-security/configurations/defaults"] = stubResponse{Body: `[]`}
+	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = stubResponse{Body: `[]`}
+	responses["POST orgs/test-org/code-security/configurations"] = stubResponse{
+		Body: `{"id": 4242, "name": "limen", "target_type": "organization"}`,
+	}
+	responses["PUT orgs/test-org/code-security/configurations/4242/defaults"] = stubResponse{}
+
+	logPath := stubGH(t, responses)
+
+	findings, changes := github.AuditOrg(t.Context(), testOrg, nil)
+
+	finding, found := findingByCheck(findings, "org-code-security-configuration")
+	if !found || finding.Status != github.StatusFail {
+		t.Fatalf("an organization with no default configuration must fail, got %v", finding.Status)
+	}
+
+	if err := planned(t, changes, "org-code-security-configuration").Apply(t.Context()); err != nil {
+		t.Fatalf("applying: %v", err)
+	}
+
+	asked := calls(t, logPath)
+
+	for _, want := range []string{
+		"POST orgs/test-org/code-security/configurations",
+		`"name":"limen"`,
+		`"advanced_security":"enabled"`,
+		`"dependency_graph":"enabled"`,
+		`"dependabot_alerts":"enabled"`,
+		`"private_vulnerability_reporting":"enabled"`,
+		`"secret_scanning":"enabled"`,
+		`"secret_scanning_push_protection":"enabled"`,
+		`"dependabot_security_updates":"disabled"`,
+		`"code_scanning_default_setup":"not_set"`,
+		`"enforcement":"enforced"`,
+		"PUT orgs/test-org/code-security/configurations/4242/defaults",
+		`"default_for_new_repos":"all"`,
+	} {
+		if !strings.Contains(asked, want) {
+			t.Errorf("the fix did not send %s:\n%s", want, asked)
+		}
+	}
+
+	if strings.Contains(asked, "secret_protection") {
+		t.Errorf("the fix sent the field GitHub refuses the request with:\n%s", asked)
+	}
+}
+
+// TestAuditOrgSecurityConfigurationSetNotDuplicated: an organization that
+// already owns the canonical configuration, and has no default, has it set
+// and no second one created. That is the state a run leaves when its first
+// request went through and its second did not.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestAuditOrgSecurityConfigurationSetNotDuplicated(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/code-security/configurations/defaults"] = stubResponse{Body: `[]`}
+	responses["GET orgs/test-org/code-security/configurations?per_page=100"] = stubResponse{
+		Body: `[{"id": 7, "name": "limen", "target_type": "organization", "enforcement": "enforced",` +
+			` "dependabot_security_updates": "disabled"},` +
+			`{"id": 8, "name": "limen", "target_type": "global", "enforcement": "enforced",` +
+			` "dependabot_security_updates": "disabled"}]`,
+	}
+	responses["PUT orgs/test-org/code-security/configurations/7/defaults"] = stubResponse{}
+
+	logPath := stubGH(t, responses)
+
+	_, changes := github.AuditOrg(t.Context(), testOrg, nil)
+
+	if err := planned(t, changes, "org-code-security-configuration").Apply(t.Context()); err != nil {
+		t.Fatalf("applying: %v", err)
+	}
+
+	asked := calls(t, logPath)
+
+	if strings.Contains(asked, "POST orgs/test-org/code-security/configurations") {
+		t.Errorf("a second configuration was created beside the organization's own:\n%s", asked)
+	}
+
+	if !strings.Contains(asked, "PUT orgs/test-org/code-security/configurations/7/defaults") {
+		t.Errorf("the organization's own configuration was not set as the default:\n%s", asked)
+	}
+}
+
+// TestAuditOrgSecurityConfigurationOfItsOwn: an organization whose default
+// is a configuration under another name passes, and nothing is planned: the
+// floor is that a default exists.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestAuditOrgSecurityConfigurationOfItsOwn(t *testing.T) {
+	stubGH(t, compliantOrgResponses())
+
+	findings, changes := github.AuditOrg(t.Context(), testOrg, nil)
+
+	finding, found := findingByCheck(findings, "org-code-security-configuration")
+	if !found || finding.Status != github.StatusOK {
+		t.Fatalf("a default under another name must pass, got %v", finding.Status)
+	}
+
+	for _, change := range changes {
+		if change.Check == "org-code-security-configuration" {
+			t.Errorf("a change was planned for an organization that has a default: %s", change.Summary)
+		}
+	}
+}
+
 // TestAuditOrgDependabotSecurityUpdatesFixed: an organization-owned
 // configuration that enables Dependabot security updates fails and is
 // patched back to disabled. This is the setting the REPOSITORY check cannot
