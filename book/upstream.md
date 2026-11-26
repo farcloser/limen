@@ -297,6 +297,45 @@ finds it at the expected size writes nothing
 same function's other race, two temporary files of one name, is
 https://github.com/golang/go/issues/82911; the Windows one is not reported upstream yet.
 
+## Go's arm64 compiler reads past a slice, ahead of the length test that guards the read
+
+**Symptom.** A program dies with `unexpected fault address` and `fatal error: fault`, under
+SIGBUS on macOS, in a function that reads a value at the start of a slice and, only when the
+slice is long enough, the value right after it:
+
+```go
+block := binary.LittleEndian.Uint32(entry)
+if len(entry) == 8 {
+	block = binary.LittleEndian.Uint32(entry[4:])
+}
+```
+
+On arm64 alone, and only when the slice ends where readable memory ends: the last page of a
+mapping, or the edge of the heap, where a 64 KiB buffer met it on the first run of a new
+function in forkcloser/erofs. Anywhere else the four bytes past the end are read and
+dropped, and nothing shows. A program of thirty lines shows it every time: it maps two
+pages, takes read access from the second, and decodes the last four bytes of the first.
+
+**Cause.** The compiler joins the two reads into one load of a pair, `LDPW (R0), (R2, R4)`,
+and puts it where the first read was, ahead of the comparison of the length with 8, behind
+the first read's own bounds check alone. The second word is read whenever the first is.
+The Go line pinned when this was written does it in its first release, in its newest and in
+one between, on macOS; the newest emits the same instruction for Linux. The last release of
+the line before compiles the same program with the second read after the test, and so does
+the pinned one for amd64. A change that the affected line has and the line before has not
+pairs "a load with a load in a subsequent block"
+(https://github.com/golang/go/commit/c8df1410d50f69b50eb5e643d15b6a3aab0ada06); that it is
+the cause was not shown by building without it.
+
+**Workaround.** None in the recipes. `-gcflags=all=-d=ssa/pair/off` turns the pairing off,
+and the program above then runs and reads nothing past its slice. A binary is checked by
+its disassembly (`go tool objdump`): each `LDP` or `LDPW` whose base is not the stack
+pointer is read for a test that stands between the two reads in the source and after the
+instruction in the code.
+
+**Lifts when** a Go release puts the second read back behind its test: the program above
+then prints its answer. Not reported upstream.
+
 ## go-toml names a multi-byte character by its first byte
 
 **Symptom.** A TOML error about a character outside ASCII names a character the file does
