@@ -105,8 +105,10 @@ with an unnamed gap is not done.
    pitfalls table).
 8. **Speed is guarded where the package exists for it**: a benchmark kept beside the tests,
    on the shape the real consumer runs, read for the regression a green test cannot show,
-   and run before and after a change to the hot path. A buffer size or a pool is chosen by
-   that measurement, never by reflex.
+   and run before and after a change to the hot path. A change that makes one shape faster
+   is measured on the shapes beside it too, against the base: a structure kept to spare one
+   shape a walk is paid for by the shapes that never made the walk. A buffer size or a pool
+   is chosen by that measurement, never by reflex.
 
 ## When a test goes
 
@@ -159,11 +161,14 @@ with an unnamed gap is not done.
   harness, before and after, and its numbers go in the pull request. A score is written
   with the commit it was measured on, and is measured again, never carried, once the code
   or a test changes: one of 0.893, measured on a tree whose tests were then cut, stayed in
-  the record while `main` stood at 0.798. A mutant is one only when the mutated tree
-  differs from the original, and a survivor is believed after that diff is read, as any
-  negative result is after its positive control
-  ([verify live](./review.md#verify-live-never-from-memory)): a `sed` pattern that BSD
-  `sed` does not know changed nothing, and the mutant it never made survived.
+  the record while `main` stood at 0.798. A mutant is one only when the program built from
+  it differs, and a survivor is believed after that is shown, as any negative result is
+  after its positive control ([verify live](./review.md#verify-live-never-from-memory)).
+  The diff of the mutated tree shows that the edit was made: a `sed` pattern that BSD `sed`
+  does not know changed nothing, and the mutant it never made survived. It does not show
+  that the edit reached the binary: a leak planted as a `malloc` whose result nothing reads
+  is removed by the compiler, under a diff that reads right. A mutant planted to prove that
+  a test sees a defect is checked by the figures the test prints under it.
 
 ## Reporting
 
