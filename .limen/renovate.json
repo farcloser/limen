@@ -158,7 +158,7 @@
         ".limen/hermetic.yaml"
       ],
       "matchDepNames": [
-        "!/^(github\\.com/)?(farcloser|forkcloser|mycophonic)/[^/]+$/"
+        "!/^(github\\.com/)?(duncanite|farcloser|forkcloser|mycophonic)/[^/]+$/"
       ],
       "groupName": "aqua tools"
     },
@@ -184,7 +184,7 @@
         "digest"
       ],
       "matchDepNames": [
-        "!/^(github\\.com/)?(farcloser|forkcloser|mycophonic)/[^/]+$/"
+        "!/^(github\\.com/)?(duncanite|farcloser|forkcloser|mycophonic)/[^/]+$/"
       ],
       "groupName": "go modules"
     },
