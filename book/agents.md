@@ -197,11 +197,12 @@ The human sets the priorities; the agent measures scope before it moves.
   cause and a fix pull request at once, ahead of the ask in hand: from whoever noticed it,
   or from the session that owns the repository, told what, why and where. Rerun-and-move-on
   is how a test that orders goroutines with sleeps stays red on the slowest runner for
-  weeks. The exceptions are flakes whose cause is known and whose fix was declined, each in
-  [known upstream bugs](./upstream.md): windows-11-arm's silent exit 4 or 127
-  ([windows](./windows.md#bash-dies-under-emulation)), an aqua download that stalls with no
-  timeout, a GitHub `503` on a link that outlasts the links lane's re-check. Each is rerun,
-  and named on the pull request.
+  weeks. The exceptions are flakes whose cause is known and whose fix was declined or is
+  not ours to make, each in [known upstream bugs](./upstream.md): windows-11-arm's silent
+  exit 4 or 127 ([windows](./windows.md#bash-dies-under-emulation)), an aqua download that
+  stalls with no timeout, a GitHub `503` on a link that outlasts the links lane's re-check,
+  a macOS job GitHub cancels for want of a runner. Each is rerun, and named on the pull
+  request.
 - **Scratch is scratch.** `AUDIT.md` and its kind hold notes to be judged; what survives
   becomes code, tests or book prose. They live under `_scratch/` at the repository root,
   which every `.gitignore` ignores (`/_scratch` is a required pattern), nowhere else, and
