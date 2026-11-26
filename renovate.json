@@ -4,7 +4,8 @@
     "The canonical Renovate configuration is .limen/renovate.json, content-pinned like the rest of .limen/, so a fix there reaches this repository with its next limen bump, in the bump's diff. extends reads it by this repository's own name (local>owner/name//.limen/renovate): Renovate refuses a relative reference in a repository's own config. The `renovate` rule writes that reference from the origin remote and rewrites it after a rename or a fork. Everything below is the project's own — overrides and additions go here, next to the reference.",
     "forkProcessing: Renovate skips forked repositories by default under an all-repositories App installation, and it skips them before reading any config beyond this file — so the setting cannot live in the shared preset, and cannot live in a renovate.json5 either: only the onboarding config file name, renovate.json, is read through the platform API at that point. Every repository that is a GitHub fork is silently never processed without it.",
     "gitIgnoredAuthors: the update-aqua-checksum workflow pushes a fix-up commit onto Renovate's branches as github-actions[bot]; without this, Renovate treats the branch as human-modified and stops rebasing it. The `renovate` rule keeps the address here.",
-    "customManagers: the preset's constraints.gomodMod is a pin no manager watches — Renovate's own config manager marks that constraint unsupported and never scans a preset file — so this repository, the preset's author, watches it here: the tag of marwan-at-work/mod, proposed like any other bump."
+    "customManagers: the preset's constraints.gomodMod is a pin no manager watches — Renovate's own config manager marks that constraint unsupported and never scans a preset file — so this repository, the preset's author, watches it here: the tag of marwan-at-work/mod, proposed like any other bump.",
+    "packageRules, uutils/coreutils: release 0.13.0 has no macOS archive (it was published before its macOS jobs had uploaded, and a published release takes no more assets), so the pin cannot move to it: the checksum workflow finds no darwin asset to record, writes nothing, and every lane then fails on aqua's `checksum is required`. That one version is left out; the release after it is proposed as usual. The rule goes in the change that moves the pin past it, with its entry in the book's known upstream bugs."
   ],
   "extends": ["local>farcloser/limen//.limen/renovate"],
   "forkProcessing": "enabled",
@@ -19,6 +20,12 @@
       "depNameTemplate": "marwan-at-work/mod",
       "datasourceTemplate": "github-tags",
       "versioningTemplate": "semver-coerced"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDepNames": ["uutils/coreutils"],
+      "allowedVersions": "!/^0\\.13\\.0$/"
     }
   ]
 }

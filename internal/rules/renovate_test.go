@@ -253,9 +253,10 @@ func TestCanonicalSeed(t *testing.T) {
 }
 
 // TestOwnConfigIsTheSeed: limen's own renovate.json is the seed as `limen
-// fix` leaves it in limen — its reference added — plus the one manager only the preset's author needs, and its
-// description
-// entry. Prose fixed in one and not the other fails here.
+// fix` leaves it in limen — its reference added — plus what is limen's own
+// as a project: the one manager only the preset's author needs, the package
+// rules that hold one of its pins, and the description entry of each. Prose
+// fixed in one and not the other fails here.
 func TestOwnConfigIsTheSeed(t *testing.T) {
 	t.Parallel()
 
@@ -281,6 +282,7 @@ func TestOwnConfigIsTheSeed(t *testing.T) {
 	}
 
 	delete(got, "customManagers")
+	delete(got, "packageRules")
 
 	description, isList := got["description"].([]any)
 	if !isList {
@@ -290,12 +292,13 @@ func TestOwnConfigIsTheSeed(t *testing.T) {
 	got["description"] = slices.DeleteFunc(slices.Clone(description), func(entry any) bool {
 		text, isString := entry.(string)
 
-		return isString && strings.HasPrefix(text, "customManagers:")
+		return isString &&
+			(strings.HasPrefix(text, "customManagers:") || strings.HasPrefix(text, "packageRules,"))
 	})
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf(
-			"limen's renovate.json, its own manager aside, is not the seed as fix leaves it:\ngot  %v\nwant %v",
+			"limen's renovate.json, its own manager and rules aside, is not the seed as fix leaves it:\ngot  %v\nwant %v",
 			got,
 			want,
 		)

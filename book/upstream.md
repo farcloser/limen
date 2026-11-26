@@ -1064,3 +1064,24 @@ and a test holds it with a font that has a kern table
 go-graphviz's own `Kern` goes, and this entry with it. Reported upstream by others, with
 the one-line fix named (https://github.com/golang/go/issues/46727); the issue is closed and
 the line is as it was.
+
+## uutils/coreutils published a release without its macOS archives
+
+**Symptom.** The `aqua tools` pull request that moves the coreutils pin is red on every
+lane, Linux and Windows included: aqua refuses to install with "checksum is required". The
+checksum workflow's own job says why: `hermetic update-checksum` stops on "the asset isn't
+found" for the `apple-darwin` archive, and writes no checksum for any platform
+([job](https://github.com/farcloser/limen/actions/runs/45136312233/job/137563326540)). The
+release lists its Linux and Windows archives and neither macOS one.
+
+**Cause.** Upstream's release workflow published the release before its macOS jobs had
+uploaded. GitHub takes no asset on a published release, so both uploads were refused, and
+that release will never hold them.
+
+**Workaround.** limen's own [`renovate.json`](../renovate.json) leaves that one version out
+for `uutils/coreutils` (`allowedVersions`): the pin stays where it is, and the rest of the
+group moves.
+
+**Lifts when** uutils publishes a release that has its macOS archives: the pin moves to it,
+and the rule and this entry go in that change. Reported upstream by others
+(https://github.com/uutils/coreutils/issues/16744).
