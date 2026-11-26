@@ -42,15 +42,18 @@ jobs:
           # and the version follows the cached paths, so two entries caching
           # different paths under one key are two families, never each
           # other's older generation. The first of each family is kept, the
-          # rest deleted. Only the canonical prefixes; whatever else is in the
-          # store is not ours to judge.
+          # rest deleted. Only the canonical prefixes, and `project-`: the
+          # prefix a project gives the entries of its own that it wants kept
+          # the same way, whose keys end, as the canonical ones do, in the
+          # content hash, the day, or both. Whatever else is in the store is
+          # not ours to judge.
           default_branch=$(gh api "repos/$GH_REPO" --jq .default_branch)
           entries=$(gh cache list --ref "refs/heads/$default_branch" --limit 500 --sort created_at --order desc \
             --json id,key,version,sizeInBytes --jq '.[] | "\(.id)\t\(.key)\t\(.version)\t\(.sizeInBytes)"')
           kept=
           while IFS=$'\t' read -r id key version size; do
             case "$key" in
-              aqua-pkgs-*|go-*|rust-*|fuzz-corpus-*|win-image-*) ;;
+              aqua-pkgs-*|go-*|rust-*|fuzz-corpus-*|win-image-*|project-*) ;;
               *) continue ;;
             esac
             family=$(printf '%s' "$key" | sed -E 's/-[0-9]{8}$//; s/(-[0-9a-f]{64})+$//; s/-+$//; s/^(go-(lint-)?[^-]+-[^-]+)-go[0-9][^-]*$/\1/')

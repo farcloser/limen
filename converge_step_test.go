@@ -31,7 +31,14 @@ const checksumWorkflow = ".github/workflows/limen-update-aqua-checksum.yaml"
 func liftStep(t *testing.T, job, marker string) string {
 	t.Helper()
 
-	data, err := os.ReadFile(checksumWorkflow)
+	return liftStepFrom(t, checksumWorkflow, job, marker)
+}
+
+// liftStepFrom is liftStep for any workflow file written the same way.
+func liftStepFrom(t *testing.T, workflow, job, marker string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(workflow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +73,7 @@ func liftStep(t *testing.T, job, marker string) string {
 	}
 
 	if len(script) == 0 {
-		t.Fatalf("%s: no run block found for the step of job %s that holds %q", checksumWorkflow, job, marker)
+		t.Fatalf("%s: no run block found for the step of job %s that holds %q", workflow, job, marker)
 	}
 
 	return strings.Join(script, "\n") + "\n"
