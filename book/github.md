@@ -174,7 +174,7 @@ declaring only where the code is on that list.
   applies to public repositories, GitHub's rule. Whatever else a repository allows stays.
   Actions switched off at the repository fails the same check: the required checks can then
   never run, and a pull request waits on an empty check suite with nothing naming the cause
-  (forkcloser/xz, two hours of it). This mirrors the canonical workflows' own construction:
+  (forkcloser/go-xz, two hours of it). This mirrors the canonical workflows' own construction:
   one SHA-pinned first-party action, everything else through aqua and `just`.
 - **A secret stays behind an environment.** A repository or organisation secret is one every account
   with write access reads (why: the tree's [`secrets`

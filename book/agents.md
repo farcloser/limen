@@ -138,7 +138,7 @@ branches in its own worktrees. The human's branches are the human's.
   approvals too: once the other merges, GitHub dismisses the approval it has, "The
   merge-base changed after approval.", and each one given after, until the branch is
   rebased onto `main` (twice each on https://github.com/forkcloser/dot/pull/163 and
-  https://github.com/forkcloser/erofs/pull/307). GitHub knows neither as a stack, and the
+  https://github.com/forkcloser/go-erofs/pull/307). GitHub knows neither as a stack, and the
   project manager refuses both: it does not log, bind or arm them.
 - **A stack is merged whole, from the top.** Every layer is reviewed and opened the same
   way, and held to `main`'s rules at once (one unsigned commit, one layer without its

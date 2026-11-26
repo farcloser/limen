@@ -32,7 +32,7 @@ chapter of its own holds it; the links say where.
   upstream bugs](./upstream.md)). A build script that read its archive back, because our
   own `tar` had written a short one and exited 0, was shut for the fix in `tar`
   (https://github.com/forkcloser/curl/pull/141,
-  https://github.com/forkcloser/compress/issues/87).
+  https://github.com/forkcloser/go-compress/issues/87).
 - **Knowledge flows from a provider to its consumers, never back.** A provider — a
   library, a tool, a shipped configuration — defines a contract and knows nothing of who
   holds it: not their identity, their layout or their reasons. What a consumer needs from

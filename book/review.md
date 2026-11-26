@@ -87,10 +87,10 @@ review says so before the tag.
   A benchmark written with a change holds what that change was about: a key derivation
   from 64 bytes was 1.8 times slower than the release before it, for a buffer grown to
   serve large inputs, where no benchmark derived a key
-  ([forkcloser/blake3#191](https://github.com/forkcloser/blake3/pull/191)); writes of
+  ([forkcloser/go-blake3#191](https://github.com/forkcloser/go-blake3/pull/191)); writes of
   1 MiB had a benchmark and were 1.18 times slower under one kernel, on a grain tuned under
   another, and 1.9 times at 256 KiB, which had none
-  ([forkcloser/blake3#192](https://github.com/forkcloser/blake3/pull/192)). Both sat under
+  ([forkcloser/go-blake3#192](https://github.com/forkcloser/go-blake3/pull/192)). Both sat under
   a green suite, and both were found by running the previous release beside `main`.
 - **A finding is a decision, not a fix.** A design finding is walked with @apostasie one at
   a time and decided, keep, accept or fix, before any fix is written; a lock order that

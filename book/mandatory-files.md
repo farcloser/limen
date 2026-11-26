@@ -499,7 +499,7 @@ nowhere else; with neither, a tree with a commit link fails the lane and says so
 **A link resolves at lint time, not at release time.** The checker fetches every URL in the
 tree as it is, so a link to something the change itself is preparing is a 404 until that
 thing exists: a changelog section's `compare/v1.0.1...v1.0.2` written before the tag failed
-every verify leg of https://github.com/forkcloser/xz/pull/97. A page written before the tag
+every verify leg of https://github.com/forkcloser/go-xz/pull/97. A page written before the tag
 links only what exists; the tag's own release page carries the comparison.
 
 ## Why these

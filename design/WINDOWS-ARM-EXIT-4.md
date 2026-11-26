@@ -35,9 +35,9 @@ Failing jobs known at the time of writing, all `verify (windows-11-arm)`:
 | https://github.com/farcloser/limen/actions/runs/31934294436/job/95133731509 | 2026-08-16 | `shell` | 0.77 s |
 | https://github.com/farcloser/ossein-kernel/actions/runs/34048123199/job/101526778215 | 2026-09-06 | `dockerfile` | 2.4 s |
 | https://github.com/farcloser/limen/actions/runs/34738713883/job/103674659220 | 2026-09-13 | `shell` | 0.80 s |
-| https://github.com/forkcloser/xz/actions/runs/35175399273/job/105055953562 | 2026-09-17 | `dockerfile` | 7.6 s |
+| https://github.com/forkcloser/go-xz/actions/runs/35175399273/job/105055953562 | 2026-09-17 | `dockerfile` | 7.6 s |
 | https://github.com/forkcloser/dot/actions/runs/35489438120/job/106022264314 | 2026-09-20 | `just` | 1.5 s |
-| https://github.com/forkcloser/xz/actions/runs/35807977137/job/107012994615 | 2026-09-23 | `dockerfile` | 7.6 s |
+| https://github.com/forkcloser/go-xz/actions/runs/35807977137/job/107012994615 | 2026-09-23 | `dockerfile` | 7.6 s |
 | https://github.com/farcloser/ossein-kernel/actions/runs/36176015596/job/108207267522 | 2026-09-25 | `shell` | 0.84 s |
 | https://github.com/forkcloser/godolint/actions/runs/36486203210/job/109143584013 | 2026-09-28 | `just` | 0.83 s |
 | https://github.com/forkcloser/godolint/actions/runs/36515367786/job/109236338189 | 2026-09-29 | `just` | 1.3 s |

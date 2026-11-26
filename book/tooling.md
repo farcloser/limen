@@ -116,7 +116,7 @@ each is verified on install against its upstream's signed release (cosign over t
 bound to the release workflow, and goreleaser's attestation), where a build here would fetch
 and compile each one's whole module graph inside the most privileged job and leave the binary
 that signs and attests our release, and writes our SBOMs, with no provenance of its own;
-`forkcloser/compress`, whose programs (`tar`, `xz`, `zip` and the rest) answer to bare names
+`forkcloser/go-compress`, whose programs (`tar`, `xz`, `zip` and the rest) answer to bare names
 on every PATH, a build script's and a shell's, where a tool built into `.build/tools/` is
 reached only by its path; and `farcloser/ossein`, which links Virtualization.framework
 through cgo. Everything else Go is a tool directive, the test runner (gotestsum) and the YAML
@@ -261,7 +261,7 @@ published. Two reasons, each enough on its own:
   and its failures are silent waits: erofs's cross-build job stalled on `apt-get install mingw-w64`
   three times in a day, twenty minutes each with nothing in the log, during an Azure mirror
   failover ([actions/runner-images#15040](https://github.com/actions/runner-images/issues/15040)).
-  Bounding and logging the step ([forkcloser/erofs#196](https://github.com/forkcloser/erofs/pull/196))
+  Bounding and logging the step ([forkcloser/go-erofs#196](https://github.com/forkcloser/go-erofs/pull/196))
   makes the stall visible; dropping apt is the fix.
 
 Two things are not CI runner steps and stay as they are: a container image a repository

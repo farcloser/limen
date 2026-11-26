@@ -811,7 +811,7 @@ func (a *auditor) auditActionsAllowed() {
 	case !permissions.Enabled:
 		// Off is not "restricted": every check the rulesets require can then
 		// never run, and a pull request waits on an empty check suite with
-		// nothing naming the cause (forkcloser/xz, two hours of it).
+		// nothing naming the cause (forkcloser/go-xz, two hours of it).
 		a.flag(checkActionsAllowed, StatusFail, "disabled", "enabled, selected",
 			"Actions are disabled for the repository — the required checks can never run; enable them with "+
 				"GitHub-owned actions plus a pinned allowlist",

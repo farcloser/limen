@@ -139,7 +139,7 @@ Reporting it upstream is pending a decision.
 
 **Symptom.** A step that runs a tool for the first time on a runner hangs with no output
 until the job's `timeout-minutes` cancels it. A rerun passes
-(https://github.com/forkcloser/erofs/actions/runs/37509453884/job/112428768665).
+(https://github.com/forkcloser/go-erofs/actions/runs/37509453884/job/112428768665).
 
 **Cause.** A lazy install, the first run of a tool through its aqua link, downloads the
 package with Go's `http.DefaultClient`
@@ -250,9 +250,9 @@ touching the handle, as the other methods do. Not reported upstream yet.
 
 **Symptom.** A test writes an executable (`os.WriteFile`, closed before use) and runs it, in
 a package whose other tests run child processes in parallel; now and then the run fails with
-"text file busy" (ETXTBSY), and a rerun passes. Seen on forkcloser/compress, `tar -I` on a
+"text file busy" (ETXTBSY), and a rerun passes. Seen on forkcloser/go-compress, `tar -I` on a
 filter script the test had just written
-([run 42761685321](https://github.com/forkcloser/compress/actions/runs/42761685321/job/129648982339)).
+([run 42761685321](https://github.com/forkcloser/go-compress/actions/runs/42761685321/job/129648982339)).
 
 **Cause.** `fork` copies every descriptor into the child, close-on-exec ones included, and
 they close only at the child's `exec`. A child forked by another goroutine between the
@@ -312,7 +312,7 @@ if len(entry) == 8 {
 
 On arm64 alone, and only when the slice ends where readable memory ends: the last page of a
 mapping, or the edge of the heap, where a 64 KiB buffer met it on the first run of a new
-function in forkcloser/erofs. Anywhere else the four bytes past the end are read and
+function in forkcloser/go-erofs. Anywhere else the four bytes past the end are read and
 dropped, and nothing shows. A program of thirty lines shows it every time: it maps two
 pages, takes read access from the second, and decodes the last four bytes of the first.
 
@@ -491,8 +491,8 @@ the runs pass with `GODEBUG=asyncpreemptoff=1`.
 **Workaround.** `-force_emulate skx` (repeatable; skx holds AVX-512 F/CD/VL/BW/DQ, so a
 kernel using icl-or-later sets adds those too): the state then lives in the emulator on
 every host. Measured on the AVX-512 host:
-eight of eight plain runs fail, nine of nine forced runs pass (forkcloser/blake3's lane,
-https://github.com/forkcloser/blake3/pull/137). That the kernels ran is proven from inside
+eight of eight plain runs fail, nine of nine forced runs pass (forkcloser/go-blake3's lane,
+https://github.com/forkcloser/go-blake3/pull/137). That the kernels ran is proven from inside
 the binary (a required-ISA check), not from SDE's instruction mix.
 
 **Lifts when** an SDE or Pin release preserves AVX-512 state across signals for natively
@@ -653,12 +653,12 @@ does. Not reported upstream yet.
 
 **Symptom.** The macOS leg of `limen / verify` ends cancelled without having run: its
 record has no runner name, no step and no log, and the gate that needs it fails. In
-forkcloser/erofs the leg of two pull requests waited 58 and 54 minutes on 2026-11-23
-(https://github.com/forkcloser/erofs/actions/runs/45233550752/job/137899191714,
-https://github.com/forkcloser/erofs/actions/runs/45230904371/job/137889861768), and the
+forkcloser/go-erofs the leg of two pull requests waited 58 and 54 minutes on 2026-11-23
+(https://github.com/forkcloser/go-erofs/actions/runs/45233550752/job/137899191714,
+https://github.com/forkcloser/go-erofs/actions/runs/45230904371/job/137889861768), and the
 rerun of each was cancelled the same way two days later, after 20 and 18
-(https://github.com/forkcloser/erofs/actions/runs/45233550752/job/139375792485,
-https://github.com/forkcloser/erofs/actions/runs/45230904371/job/139375780452). The other
+(https://github.com/forkcloser/go-erofs/actions/runs/45233550752/job/139375792485,
+https://github.com/forkcloser/go-erofs/actions/runs/45230904371/job/139375780452). The other
 legs of both runs, Linux and Windows on both architectures, had finished within seven
 minutes of their start.
 

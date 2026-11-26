@@ -156,7 +156,7 @@ refuses a device number a 32-bit field would truncate; xz `format.go` rejects a 
 wraps negative as corrupt), and the silence names that check. Never a file-level or
 module-level exclusion, however many findings: erofs answers 91 one by one, and answering
 them found four real truncations in a reader that had been fuzzed
-(https://github.com/forkcloser/erofs/pull/95, https://github.com/forkcloser/erofs/pull/96).
+(https://github.com/forkcloser/go-erofs/pull/95, https://github.com/forkcloser/go-erofs/pull/96).
 Each finding is a place where an untrusted number meets a fixed width, which is where a
 format reader breaks.
 
