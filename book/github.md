@@ -399,7 +399,11 @@ The decided merge model, enforced by the repository settings and the `limen:main
   entry's version, which GitHub derives from the cached paths: two entries under one key over
   different paths are two families, never each other's older generation (the verify and
   security Go caches were exactly that until `go-lint-` split them, and a family on the key
-  alone had each delete the other in turn). A pull request restores `main`'s caches through the
+  alone had each delete the other in turn). A project's own caches are pruned the same way
+  when their key starts with `project-` and ends as the canonical ones do, in the content
+  hash, the day, or both: `project-downloads-<os>-<arch>-<hash>` keeps its newest entry and
+  loses the one a changed pin superseded. Under any other name an entry is left alone, and
+  lingers until GitHub evicts something. A pull request restores `main`'s caches through the
   fallback keys and pays for what its change touched, which is what a pull request should
   pay for.
 

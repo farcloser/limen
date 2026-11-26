@@ -10,8 +10,9 @@
 # eviction (and the caches that accumulate, Go's and the fuzz corpus, start
 # one a day). This keeps one generation per key on the default branch: after
 # each ci run there, and once a day, every entry under a canonical prefix that
-# is not the newest of its family is deleted. The steps are limen's reusable
-# workflow.
+# is not the newest of its family is deleted, and every such entry under
+# `project-`, the prefix for a project's own caches. The steps are limen's
+# reusable workflow.
 name: caches
 
 on:
