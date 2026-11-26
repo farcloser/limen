@@ -83,6 +83,26 @@ race: (_banner "test go" "race") _prepare (_go-tool "gotestsum" "gotest.tools/go
 # "context deadline exceeded" as fuzztime expires mid-iteration, so exit 1
 # without a new file is retried once. No Fuzz* targets, or no go.mod at all:
 # says so and passes.
+#
+# A fuzz run is bounded in memory as well as in time. `go test -fuzz` starts
+# one worker process a core and bounds none of them: a target that allocates
+# on its input's say takes the machine's memory, several runs at once all of
+# it. So the workers are counted (TEST_GO_FUZZ_WORKERS, default 4, or the
+# machine's processors when it has fewer), and each
+# run goes under `limen guard`, which ends any process of it that holds more
+# than TEST_GO_FUZZ_MEMORY (MiB a process, default 2048). The lane's ceiling
+# is the two multiplied, plus the coordinator. A worker ended so is a finding
+# like any other: the coordinator writes the input it was on under
+# testdata/fuzz/. The guard reads a process group's memory on macOS and
+# Linux; where it cannot (Windows), nothing is fuzzed, and the lane says so
+# and passes, as `race` does without a detector: CI fuzzes on Linux.
+#
+# What runs under the guard is the test binary, not `go test`. A package's
+# binary is built first, outside the guard: the compiler and the linker are
+# not the run, and the first fuzz build of a toolchain compiles the standard
+# library again, `runtime` with it, which holds more than a limit set low
+# for a small target allows. The binary is then started as `go test` starts
+# it, in the package's directory, with the corpus cache `go test` gives it.
 fuzz: (_banner "test go" "fuzz") _prepare
     #!/usr/bin/env bash
     set -euo pipefail
@@ -90,8 +110,28 @@ fuzz: (_banner "test go" "fuzz") _prepare
         echo "no go.mod — not a Go module, nothing to fuzz (skipped, not failed)."
         exit 0
     fi
+    if [ "$(go env GOHOSTOS)" = windows ]; then
+        echo "fuzz: SKIPPED — limen guard cannot bound a process's memory on windows, and nothing is fuzzed unguarded." >&2
+        exit 0
+    fi
     export CGO_ENABLED="{{ go_cgo }}"
     fuzztime="${TEST_GO_FUZZ_TIME:-10s}"
+    # Never more workers by default than the machine has processors.
+    processors=$(getconf _NPROCESSORS_ONLN)
+    default_workers=4
+    if [ "$processors" -lt "$default_workers" ]; then default_workers=$processors; fi
+    workers="${TEST_GO_FUZZ_WORKERS:-$default_workers}"
+    memory="${TEST_GO_FUZZ_MEMORY:-2048}"
+    # Fail CLOSED on a malformed bound, as the coverage minimum does: a typo
+    # must not leave the run unbounded.
+    for bound in "TEST_GO_FUZZ_WORKERS=$workers" "TEST_GO_FUZZ_MEMORY=$memory"; do
+        case "${bound#*=}" in
+            ''|*[!0-9]*|0)
+                echo "${bound%%=*} must be a whole number above zero (got '${bound#*=}')." >&2
+                exit 2
+                ;;
+        esac
+    done
     # Crasher count for a target: the directory does not exist until the first
     # finding, and a missing directory is zero, not an error (pipefail).
     crashers() {
@@ -99,18 +139,32 @@ fuzz: (_banner "test go" "fuzz") _prepare
     }
     found=0
     fail=0
-    for pkg in $(go list ./...); do
+    built=0
+    # Where `go test -fuzz` keeps what it found for a package, by import path.
+    corpus="$(go env GOCACHE)/fuzz"
+    # Listed in a statement of its own: a `go list` that fails inside the
+    # loop's own substitution lists nothing, and the lane would pass on "no
+    # Fuzz* targets".
+    packages=$(go list ./...)
+    for pkg in $packages; do
         targets=$(go test -count=1 -run '^$' -list '^Fuzz' "$pkg" | grep '^Fuzz' || true)
         [ -n "$targets" ] || continue
         dir=$(go list -f '{{{{.Dir}}' "$pkg")
+        # The package's fuzz binary, built once for its targets.
+        built=$((built + 1))
+        binary="$LIMEN_BUILD/fuzz/$built/fuzz.test"
+        mkdir -p "${binary%/*}"
+        go test -c -fuzz '^Fuzz' -o "$binary" "$pkg"
         for target in $targets; do
             found=1
             echo "fuzzing $pkg $target for $fuzztime"
             before=$(crashers "$dir/testdata/fuzz/$target")
             ok=0
             for attempt in 1 2; do
-                if go test -count=1 -timeout "${TEST_GO_TIMEOUT:-10m}" \
-                    -run "^${target}\$" -fuzz "^${target}\$" -fuzztime "$fuzztime" "$pkg"; then
+                if ${LIMEN_BIN:-limen} guard -memory "$memory" -dir "$dir" -- \
+                    "$binary" -test.paniconexit0 -test.fuzzcachedir="$corpus/$pkg" \
+                    -test.count=1 -test.timeout="${TEST_GO_TIMEOUT:-10m}" -test.parallel="$workers" \
+                    -test.run="^${target}\$" -test.fuzz="^${target}\$" -test.fuzztime="$fuzztime"; then
                     ok=1
                     break
                 fi
