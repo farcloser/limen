@@ -32,14 +32,14 @@ packages:
   - name: casey/just@1.59.0
   - name: koalaman/shellcheck@v0.11.0
   - name: lycheeverse/lychee@lychee-v0.24.2
-  - name: goreleaser/goreleaser@v2.20.2
+  - name: goreleaser/goreleaser@v2.20.3
   - name: sigstore/cosign@v3.1.4
   # The SBOM generator the release lane runs over every archive (book/releasing.md).
   - name: anchore/syft@v1.57.2
   - name: jqlang/jq@jq-1.8.2
   - name: cli/cli@v2.105.0
   # --- spec tooling (local registry; see .limen/hermetic-registry.yaml) ---
-  - name: quint-co/quint@v0.33.1
+  - name: quint-co/quint@v0.34.0
     registry: local
   - name: forkcloser/curl@v8.23.0.2
     registry: local
