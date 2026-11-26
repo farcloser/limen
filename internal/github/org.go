@@ -103,14 +103,14 @@ var (
 	errOrgHookScope = errors.New(
 		"the org webhooks API needs the admin:org_hook scope (gh auth refresh -h github.com -s admin:org_hook)",
 	)
-	// Renders after a "cannot verify: " prefix. Says outright that nothing has
-	// to be created: the previous wording ended on the UI path "… → Personal
-	// access tokens" and then said "configure them", which reads as an
-	// instruction to create a token — the opposite of what this check wants.
-	errPATPolicyUnconfigured = errors.New(
-		"the grant list is not exposed (404) because this organization has not chosen a" +
-			" fine-grained PAT policy. Nothing needs creating — zero grants is the passing state;" +
-			" decide the policy at Settings → Third-party Access → Personal access tokens",
+	// Renders after a "cannot verify: " prefix. It sends nobody to a setting:
+	// an earlier wording blamed the 404 on a token policy the organization had
+	// "not chosen", and an owner who went and chose one got the same 404. No
+	// setting of the organization changes who the endpoint answers.
+	errPATInventoryAppsOnly = errors.New(
+		"GitHub serves an organization's fine-grained token grants to GitHub App tokens only, and" +
+			" answers a personal token 404, whatever the organization's token policy. Audit with an" +
+			" App's token, or declare the check in " + OverridePath + " with that reason",
 	)
 )
 
@@ -1032,7 +1032,7 @@ func (a *auditor) auditOrgPATGrants() {
 	outcome := a.client.getJSONAllPages(a.ctx, "/personal-access-tokens?per_page=100", &grants)
 	if outcome.err != nil || outcome.notFound {
 		if outcome.notFound {
-			a.unverifiable(errPATPolicyUnconfigured, checkOrgPATGrants)
+			a.unreadableByThisToken(errPATInventoryAppsOnly, checkOrgPATGrants)
 
 			return
 		}

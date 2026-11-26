@@ -120,7 +120,7 @@ Every declarable identifier, grouped (a test pins this list to the live check ca
 # org-actions-secrets: <reason>
 # org-teams: <reason>
 # org-agents-team: <reason>
-# org-personal-access-tokens: <reason>
+# org-personal-access-tokens: <reason>  # read by GitHub App tokens only: declared where the audit runs with a personal token
 # org-profile-description: <reason>
 # org-community-health-repo: <reason>
 # org-community-health-content: <reason>
@@ -557,7 +557,18 @@ working directory, canonically the org's `.github` repository). The catalog:
 - **Standing inventories**: installed GitHub Apps, org webhooks (HTTPS + secret + TLS verification),
   org-level Actions secrets (names only, each an advisory naming the environment move), teams,
   fine-grained PAT grants — visible on every audit, so a grant nobody remembers making has nowhere
-  to hide.
+  to hide. The last is visible to a GitHub App's token alone: GitHub answers a personal token
+  404 on that list, whatever the organization's token policy, so under one the check is
+  `unverifiable` and no setting clears it. An organization audited with a personal token
+  declares it, with that reason, and reads clean:
+
+  ```yaml
+  org-personal-access-tokens: read by GitHub App tokens only; audited with a personal token
+  ```
+
+  It is the one `unverifiable` a declaration covers, because it is the one no token of the
+  audit's kind can ever read. A check left unanswered by a failed request, or by a scope the
+  token lacks, stays `unverifiable` under any declaration.
 - **The agents team, organization-wide**: the team exists, has members, and holds write on
   every repository that is not archived; the org view of the per-repository `agents-team`
   check, so one audit lists every repository created without the grant, and `fix -org`

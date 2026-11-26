@@ -720,3 +720,82 @@ func TestOrgSecretIsAdvisory(t *testing.T) { //nolint:paralleltest // serial: se
 		t.Errorf("a secret is never moved by a fix: %+v", changes)
 	}
 }
+
+// TestAuditOrgTokenInventoryUnreadable: GitHub serves the fine-grained token
+// grants to App tokens only, and answers a personal token 404. The check is
+// unverifiable then, and says why. It sends the owner to no setting: an
+// earlier wording blamed a token policy "not chosen", and choosing one
+// changed nothing.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestAuditOrgTokenInventoryUnreadable(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/personal-access-tokens?per_page=100"] = stubResponse{NotFound: true}
+
+	stubGH(t, responses)
+
+	findings, _ := github.AuditOrg(t.Context(), testOrg, nil)
+
+	finding, found := findingByCheck(findings, "org-personal-access-tokens")
+	if !found || finding.Status != github.StatusUnverifiable {
+		t.Fatalf("an inventory the token cannot read must be unverifiable, got %v", finding.Status)
+	}
+
+	if !strings.Contains(finding.Message, "GitHub App tokens only") {
+		t.Errorf("the finding does not say who the endpoint answers: %s", finding.Message)
+	}
+
+	for _, wrong := range []string{"has not chosen", "Settings", "policy at"} {
+		if strings.Contains(finding.Message, wrong) {
+			t.Errorf("the finding sends the owner to a setting (%q): %s", wrong, finding.Message)
+		}
+	}
+}
+
+// TestAuditOrgTokenInventoryDeclared: an organization audited with a
+// personal token declares the check with its reason, and reads clean; the
+// finding carries the reason.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestAuditOrgTokenInventoryDeclared(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/personal-access-tokens?per_page=100"] = stubResponse{NotFound: true}
+
+	stubGH(t, responses)
+
+	reason := "read by GitHub App tokens only; audited with a personal token"
+
+	findings, _ := github.AuditOrg(t.Context(), testOrg, map[string]string{"org-personal-access-tokens": reason})
+
+	finding, found := findingByCheck(findings, "org-personal-access-tokens")
+	if !found || finding.Status != github.StatusOK || !strings.Contains(finding.Message, reason) {
+		t.Fatalf("a declared inventory must read ok with its reason, got %v: %s", finding.Status, finding.Message)
+	}
+}
+
+// TestAuditOrgDeclarationCoversNoOtherUnverifiable: the declaration covers
+// the one check no token of ours can read. A check that a failed request
+// left unanswered stays unverifiable, declared or not: a declaration is not
+// a way to stop reading what can be read.
+//
+//nolint:paralleltest // serial by design: sets the process environment.
+func TestAuditOrgDeclarationCoversNoOtherUnverifiable(t *testing.T) {
+	responses := compliantOrgResponses()
+	responses["GET orgs/test-org/personal-access-tokens?per_page=100"] = stubResponse{Fail: true}
+	responses["GET orgs/test-org/hooks?per_page=100"] = stubResponse{Fail: true}
+
+	stubGH(t, responses)
+
+	findings, _ := github.AuditOrg(t.Context(), testOrg, map[string]string{
+		"org-personal-access-tokens": "declared",
+		"org-webhooks":               "declared",
+	})
+
+	for _, check := range []string{"org-personal-access-tokens", "org-webhooks"} {
+		finding, found := findingByCheck(findings, check)
+		if !found || finding.Status != github.StatusUnverifiable {
+			t.Errorf("%s: a request that failed must stay unverifiable under a declaration, got %v: %s",
+				check, finding.Status, finding.Message)
+		}
+	}
+}
