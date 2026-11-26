@@ -497,6 +497,9 @@ Three things, all one-time, all deliberately human:
    authentication key and a signing key.
 3. Running `limen-install-agent`, which does everything else and verifies.
 
+A new organization repeats the first for the bot and the third for the machine, among its
+other steps: [creating and onboarding an organization](./organizations.md).
+
 The working agreement itself needs no machine step: it travels with every repository as the
 content-pinned `AGENTS.md` (imported by a seeded `CLAUDE.md`), one of the
 [mandatory files](./mandatory-files.md#canonical-agentsmd), so it loads whichever repository

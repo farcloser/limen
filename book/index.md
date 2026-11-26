@@ -23,6 +23,8 @@ every language, and a sub-document holds one language's form.
   - [Project tooling](./tooling.md): aqua, the Go-built tools, `pins.yaml`, Renovate, the
     checksum workflow, machine setup.
   - [GitHub settings](./github.md): rulesets, the CI and security lanes, the audit.
+  - [Creating and onboarding an organization](./organizations.md): the steps in order, from
+    an empty organization to its first governed repository; moving a repository in.
   - [Windows](./windows.md): what the Windows legs run and what differs there;
     [testing in a VM](./vm_testing.md).
   - [Known upstream bugs](./upstream.md): bugs in tools we pin, with their workarounds and lifts.
