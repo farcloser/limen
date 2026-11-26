@@ -121,28 +121,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0.2/curl_8.23.0.2_darwin_arm64.tar.gz",
-      "checksum": "2B15D793B8C97CD7E29C49982DA11AD1BB2A1387815A9BF4BF4661C7763E2E6E",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.3/curl_8.23.0.3_darwin_arm64.tar.gz",
+      "checksum": "A83FB073C96A8D6C17AB46476BBA224F51229435FC2CCEFD0AFA5BB17B0BE640",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0.2/curl_8.23.0.2_linux_amd64.tar.gz",
-      "checksum": "253D692817FE45CE6720AD2722E3314A9E7CFA92B713C8037969AFFDF2E2B114",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.3/curl_8.23.0.3_linux_amd64.tar.gz",
+      "checksum": "E7AAD01BDB45CC14852C6EF9B2C010165FF6233CEAC6B2907A7340BAEEA70709",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0.2/curl_8.23.0.2_linux_arm64.tar.gz",
-      "checksum": "22B9EACDDF11C3152B8A52C984D163513789B1E31137A2AC2943DBA1AF29F0A1",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.3/curl_8.23.0.3_linux_arm64.tar.gz",
+      "checksum": "4D093D0AE0D032DB9A7631F34D368724B72102505E7572BE6A27B7399BC09E4E",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0.2/curl_8.23.0.2_windows_amd64.tar.gz",
-      "checksum": "74E9C1103D68A23DB37C6FA52A2F088AA8A7DBD480AE8456141A50F6C398159B",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.3/curl_8.23.0.3_windows_amd64.tar.gz",
+      "checksum": "899135E839EAB1DD97F366407337136461696D36C1F55B17AD1DA87D25C9A27E",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/forkcloser/curl/v8.23.0.2/curl_8.23.0.2_windows_arm64.tar.gz",
-      "checksum": "63375A4FAA2A8817E28A4816BB87C66CA372C7D042B307426F8F430C42E4C6B7",
+      "id": "github_release/github.com/forkcloser/curl/v8.23.0.3/curl_8.23.0.3_windows_arm64.tar.gz",
+      "checksum": "90F8C03774EB3E0F9361F18B6B751E94F505E67385485336AB9B82A17660129A",
       "algorithm": "sha256"
     },
     {
