@@ -48,11 +48,14 @@ built on `os.Rename` is atomic against readers on every platform but windows.
 Measured on the VM (https://github.com/mycophonic/primordium/pull/152): four goroutines
 reading a file in a loop through share-delete handles while a writer renamed a temp file
 over it 200 times. With `os.Rename`, 2 to 10 of 200 writes landed; with the POSIX rename,
-200 of 200. No reader saw a torn file either way. The fleet's primitive is primordium's
-`xos.Rename` (https://github.com/mycophonic/primordium/pull/168): the POSIX rename on a
-volume that has it, `os.Rename` where the request itself is refused (FAT, exFAT, some
+200 of 200. No reader saw a torn file either way. The fleet's primitive is `xos.Rename`,
+in https://github.com/forkcloser/xos, written in primordium
+(https://github.com/mycophonic/primordium/pull/168) and moved out since: the POSIX rename
+on a volume that has it, `os.Rename` where the request itself is refused (FAT, exFAT, some
 shares, older Windows), and `os.Rename` for a directory source, since the POSIX rename would
-replace an empty directory in its way. Its `WriteFile` renames through it. A consumer that
+replace an empty directory in its way. primordium's `filesystem.WriteFile` writes a
+temporary file and renames through it; xos's own `WriteFile` writes in place, as
+`os.WriteFile` does, and replaces nothing. A consumer that
 replaces a file readers may hold open does it with `xos.Rename`, never with `os.Rename`. A
 file a peer *maps* is out of reach of either rename: it is rebuilt in place
 ([boundaries](./boundaries-go.md#a-shared-mapping-is-extended-never-shrunk-and-rebuilt-in-place)).
