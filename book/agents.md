@@ -134,8 +134,12 @@ branches in its own worktrees. The human's branches are the human's.
   armed, so the project manager disarms it first. Two things pass for a stack and are not
   one: a pull request opened on another's branch by hand (`gh pr create --base <lower
   branch>`), and a pull request on `main` whose branch carries another open pull request's
-  commits, so that its diff shows that one's change inside its own. GitHub knows neither as
-  a stack, and the project manager refuses both: it does not log, bind or arm them.
+  commits, so that its diff shows that one's change inside its own. The second loses its
+  approvals too: once the other merges, GitHub dismisses the approval it has, "The
+  merge-base changed after approval.", and each one given after, until the branch is
+  rebased onto `main` (twice each on https://github.com/forkcloser/dot/pull/163 and
+  https://github.com/forkcloser/erofs/pull/307). GitHub knows neither as a stack, and the
+  project manager refuses both: it does not log, bind or arm them.
 - **A stack is merged whole, from the top.** Every layer is reviewed and opened the same
   way, and held to `main`'s rules at once (one unsigned commit, one layer without its
   approval, and nothing lands). GitHub refuses auto-merge on a stack's
