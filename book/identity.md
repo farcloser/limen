@@ -257,7 +257,7 @@ carries a link for every tool any repository ever pinned there, so `xz` is found
 `.hermetic/hermetic.yaml`, found by hermetic's walk upward from the current directory, then
 the root's own pins, the toolset's, and a tool neither declares fails with the library's
 error 004, "command is not found", whatever the host has installed. On 2026-10-14
-forkcloser/compress's interop tests looked `xz` and
+forkcloser/go-compress's interop tests looked `xz` and
 `zstd` up through a `just` recipe's hermetic `PATH` and were red in every session, while
 CI, on a runner with both tools, stayed green. A tool a repository runs, tests included,
 is pinned in that repository's `.hermetic/hermetic.yaml`; one no registry carries (xz and zstd, as of

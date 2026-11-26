@@ -17,7 +17,7 @@ exported `Err*` per module, each documented by what a caller should do on it; th
 carries the specifics (which field, which offset), the sentinel the class. A module whose
 every fault is one sentinel has told its caller nothing: erofs reported every malformed
 image and every bad argument as `fs.ErrInvalid`, so a caller could not tell a corrupt image
-from a misspelled path (https://github.com/forkcloser/erofs/pull/108 added `ErrCorrupt`).
+from a misspelled path (https://github.com/forkcloser/go-erofs/pull/108 added `ErrCorrupt`).
 A module whose faults are bare messages has told its caller nothing either: go-graphviz's
 generated binding returned `errors.New("… is not loaded")` and `fmt.Errorf("cannot find
 lookup function …")`, matchable only by text

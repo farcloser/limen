@@ -16,7 +16,7 @@ once, and a library never does. What a library never does is choose an output of
 with its own writer and format. That is the upstream smell to remove on fork: xz's
 `reader.go` and `lzma/reader2.go` printed headers and chunk headers through upstream's own
 `internal/xlog` under `-vv`, with the format's `String` methods existing only to feed it
-(https://github.com/forkcloser/xz/pull/96 deleted the package, the dumps and the methods);
+(https://github.com/forkcloser/go-xz/pull/96 deleted the package, the dumps and the methods);
 a trace of that kind, worth keeping, is a `slog.Debug` record the application's handler
 shows or drops. What a library has to say to its caller is still a returned error or a
 returned value: a log record is for the operator, never a substitute for either.
