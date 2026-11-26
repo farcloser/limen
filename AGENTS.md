@@ -94,10 +94,16 @@ chapter; the procedure is limen's `skills/contribute`.
   and the exclusion that runs farclauder outside it matches the call's text, which the `~`
   form does not (the book's
   [identity](https://github.com/farcloser/limen/blob/main/book/identity.md)).
-- **A native stack** is reviewed and opened layer by layer the same way; the project
-  manager merges it from the top once every layer is approved, never from the middle. A
-  lower layer merged alone comes back rebased and signed by GitHub, which `lint commits`
-  rejects.
+- **A stack is GitHub's native stack, made with `gh stack`** and nothing else: `gh stack
+  init <bottom> … <top>` then `gh stack submit --auto` for branches with no pull request
+  yet, run from the top layer's worktree; `gh stack link <lower pr> <upper pr>` for pull
+  requests already open. `submit` opens drafts whose title and body are the tool's, its
+  banner included: each gets its own with `gh pr edit`, then `gh pr ready`. A pull request
+  opened by hand on another's branch, and one on `main` that carries another open pull
+  request's commits, are not stacks, and the project manager refuses both. Each layer is
+  reviewed the same way as any change; the project manager merges the stack from the top
+  once every layer is approved, never from the middle. A lower layer merged alone comes
+  back rebased and signed by GitHub, which `lint commits` rejects.
 - **Not yours to do:** merge by hand, push to `main` (but for the empty `Birth` commit that
   creates it on a new repository, the book's
   [creating a repository](https://github.com/farcloser/limen/blob/main/book/github.md#creating-a-repository)),

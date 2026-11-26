@@ -120,6 +120,22 @@ branches in its own worktrees. The human's branches are the human's.
   The check is exact only between branches on the same base: a head that no longer merges
   with `main` is measured after its rebase, since against a stale base every commit `main`
   gained reads as that side's change. The body names what it stacks on.
+- **A stack is GitHub's native stack, made with `gh stack`.** For branches with no pull
+  request yet, each reviewed and pushed, `gh stack init <bottom> … <top>` adopts them in
+  that order and `gh stack submit --auto` opens one draft pull request a layer, each on the
+  layer below, and records the stack on GitHub. A draft's title and body are the tool's:
+  the body is the commit's, then a banner that links the tool, which no pull request body
+  here carries. So each draft gets its title, body and label with `gh pr edit`, and only
+  then `gh pr ready`: what GitHub announces is the edited pull request. `init` moves the
+  checkout it runs in to the top branch, and `gh` acts where the shell stands, so the
+  commands run from the top layer's worktree, never from the clone. For pull requests
+  already open, `gh stack link <lower pr> <upper pr>`, bottom to top, makes them a stack
+  and corrects a base that is not the layer below; it refuses one whose auto-merge is
+  armed, so the project manager disarms it first. Two things pass for a stack and are not
+  one: a pull request opened on another's branch by hand (`gh pr create --base <lower
+  branch>`), and a pull request on `main` whose branch carries another open pull request's
+  commits, so that its diff shows that one's change inside its own. GitHub knows neither as
+  a stack, and the project manager refuses both: it does not log, bind or arm them.
 - **A stack is merged whole, from the top.** Every layer is reviewed and opened the same
   way, and held to `main`'s rules at once (one unsigned commit, one layer without its
   approval, and nothing lands). GitHub refuses auto-merge on a stack's
