@@ -156,28 +156,28 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.2/goreleaser_Darwin_all.tar.gz",
-      "checksum": "CFE608963D9B00656DA24BF356C0A067E2E92CE99710BE4AC19E418A3A695EC3",
+      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.3/goreleaser_Darwin_all.tar.gz",
+      "checksum": "E2C896685FCDB3EC255CE30E86AB073D56F3C02EB539061E749E98D9BE1FC2B6",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.2/goreleaser_Linux_arm64.tar.gz",
-      "checksum": "F0FA989C3531348E8F975AAC647EB187A09046F8A34C54E0B79BED66C84B7F96",
+      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.3/goreleaser_Linux_arm64.tar.gz",
+      "checksum": "CFCE0AFC7BCC14447DF211CC10C0012CFC395646070BCF23E840B16CBCE6D204",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.2/goreleaser_Linux_x86_64.tar.gz",
-      "checksum": "F3D24969A7389A46613875711D15A96D8F6EF1553D84C6ACE09D69AC1E7D44C0",
+      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.3/goreleaser_Linux_x86_64.tar.gz",
+      "checksum": "A36D5D7D07A5E538E052CEF2A9F93F1CD4AF493CF5A3712B9177C1EBE360F0E7",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.2/goreleaser_Windows_arm64.zip",
-      "checksum": "CF152A7D59E3D7D9CF278C7463E3F2B26CC28555E8FDEA95C1DCFA773CB385F1",
+      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.3/goreleaser_Windows_arm64.zip",
+      "checksum": "77D4BE0ACC0ECE90EB7A067C5B317824C2B99AD7F4636915AF2B73F767230219",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.2/goreleaser_Windows_x86_64.zip",
-      "checksum": "D230D6DEF8B6059B277D472A2790501516B429FFE83B91469DAAD8B7736B8A5D",
+      "id": "github_release/github.com/goreleaser/goreleaser/v2.20.3/goreleaser_Windows_x86_64.zip",
+      "checksum": "EF69177888FD7F4048A101F3CCA8CC62A56B05B246201798FCA5214304BA693D",
       "algorithm": "sha256"
     },
     {
@@ -241,23 +241,23 @@
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/quint-co/quint/v0.33.1/quint-linux-amd64",
-      "checksum": "ACD153075B7EDC6FC8F889930C5FF3EBDF94ADA381A45A26A2D41B18B9F10DB7",
+      "id": "github_release/github.com/quint-co/quint/v0.34.0/quint-linux-amd64",
+      "checksum": "5091D7D1EA944E794D9106C7E62E3B844D70F77DDBBCBB4FEB5EE5A6025B5AC7",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/quint-co/quint/v0.33.1/quint-linux-arm64",
-      "checksum": "FFC0549933DB6787FFB932AA5C0E9A778018FE027E10D21CE4895C57502C11FC",
+      "id": "github_release/github.com/quint-co/quint/v0.34.0/quint-linux-arm64",
+      "checksum": "A077B08BD912A9E44566B322FFCE138AA5F60FE1D944A92D61A5DD98F7CDFD61",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/quint-co/quint/v0.33.1/quint-macos-arm64",
-      "checksum": "8744447E5C641291A28D29848A4FD22E0D18237E9964934545E6270B78D2B8E3",
+      "id": "github_release/github.com/quint-co/quint/v0.34.0/quint-macos-arm64",
+      "checksum": "8CFCB43B8EBFAA91E931EAD55B93BD4FC7DBCBBD10AA99C05184FD9D7A2E4E35",
       "algorithm": "sha256"
     },
     {
-      "id": "github_release/github.com/quint-co/quint/v0.33.1/quint-pc-amd64.exe",
-      "checksum": "E2BFD802D1FA79A764216AC9D7948535F6EFFA6C68A0EBC5745D433709EB0C6D",
+      "id": "github_release/github.com/quint-co/quint/v0.34.0/quint-pc-amd64.exe",
+      "checksum": "27134177A514B7BCF0D05BC73154AD8C1C05A0E3ECECAF80978823337FDB1C59",
       "algorithm": "sha256"
     },
     {
@@ -321,8 +321,8 @@
       "algorithm": "sha256"
     },
     {
-      "id": "registries/github_content/github.com/aquaproj/aqua-registry/v4.589.0/registry.yaml",
-      "checksum": "E785A69E1CEF8A92F09079E96B7156FA4515255FEE4D58C1E9DCDAB23D96DCA2",
+      "id": "registries/github_content/github.com/aquaproj/aqua-registry/v4.591.0/registry.yaml",
+      "checksum": "6224AE00F7A355FBD542BCCEFAC3133B25B9A5868E601DE47065E02B1937F81B",
       "algorithm": "sha256"
     }
   ]
