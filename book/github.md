@@ -553,7 +553,13 @@ working directory, canonically the org's `.github` repository). The catalog:
   inventory (baseline: none).
 - **Security configuration**: a default code security configuration exists for new
   repositories (the mechanism GitHub replaced the legacy per-org security fields with).
-  Advisory: creating the canonical configuration is a human act.
+  An organization with none fails, and `fix -org` creates one named `limen` and sets it as
+  the default: the dependency graph, Dependabot's alerts, secret scanning with push
+  protection and private vulnerability reporting enabled, Dependabot's security updates
+  disabled, code scanning left to each repository, enforced. It carries
+  `advanced_security: enabled`, which GitHub requires beside secret scanning and refuses
+  the request without, on a free plan too. An organization that already has a default of
+  its own, under any name, passes as it is.
 - **Standing inventories**: installed GitHub Apps, org webhooks (HTTPS + secret + TLS verification),
   org-level Actions secrets (names only, each an advisory naming the environment move), teams,
   fine-grained PAT grants — visible on every audit, so a grant nobody remembers making has nowhere

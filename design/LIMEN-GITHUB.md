@@ -309,7 +309,8 @@ Built: every row (`org-actions-enabled-repositories`, `org-actions-allowed`,
 | Dependabot security updates in every org-owned configuration | **disabled** — the org half of R1: while a configuration says `enabled`, the repository-level `DELETE /automated-security-fixes` answers 422, so the repo check cannot reach the floor on its own. Disabled at the org, not `not_set`: unsetting merely unlocks the repo toggle and every repository created later is born enabled again. Configurations this org does not own (`target_type` `global`/`enterprise`) are advisory — detaching is a human act | ✓ | `PATCH /orgs/{o}/code-security/configurations/{id}` |
 | Security manager team | defined if org grows beyond one human | adv | `PUT /orgs/{o}/security-managers/teams/{t}` |
 
-Built: `org-code-security-configuration` (advisory: creating one is a human act),
+Built: `org-code-security-configuration` (with its fix: the canonical configuration is
+created and set as the default when the organization has none),
 `org-dependabot-security-updates` (with its fix).
 
 Dropped: the security-manager team. The row's own condition, an organization beyond one

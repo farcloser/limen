@@ -46,6 +46,17 @@ const (
 // organization owns, and so the only one it may PATCH.
 const securityConfigOrgTarget = "organization"
 
+// The configuration the fixer creates for an organization that has no
+// default: its name, and where new repositories take it from.
+const (
+	securityConfigName        = "limen"
+	securityConfigDescription = "limen floor; Renovate is the one dependency bot"
+	securityConfigDefaultFor  = "all"
+	securityConfigNotSet      = "not_set"
+	securityConfigEnforced    = "enforced"
+	securityConfigsPath       = "/code-security/configurations"
+)
+
 // knownOrgChecks is every org-level identifier, merged into knownChecks for
 // override-file validation.
 func knownOrgChecks() map[string]bool {
@@ -142,6 +153,28 @@ type orgSecurityDefault struct {
 	Configuration      orgNamed `json:"configuration"`
 }
 
+// orgSecurityConfigurationRequest is the configuration the fixer creates, as
+// GitHub takes it. AdvancedSecurity is not ours to leave out: with secret
+// scanning enabled and that field absent, or carried by the newer
+// secret_protection field in its place, GitHub refuses the request ("GitHub
+// advanced security must be enabled when any GHAS feature is set to
+// enabled", 400; a free-plan organization, 2026-11-26). Dependabot security
+// updates are disabled, the floor auditOrgDependabotSecurityUpdates asserts.
+// Code scanning is left unset: it is a repository's opt-in.
+type orgSecurityConfigurationRequest struct {
+	Name                         string `json:"name"`
+	Description                  string `json:"description"`
+	AdvancedSecurity             string `json:"advanced_security"`
+	DependencyGraph              string `json:"dependency_graph"`
+	DependabotAlerts             string `json:"dependabot_alerts"`
+	DependabotSecurityUpdates    string `json:"dependabot_security_updates"`
+	SecretScanning               string `json:"secret_scanning"`
+	SecretScanningPushProtection string `json:"secret_scanning_push_protection"`
+	PrivateVulnerabilityReports  string `json:"private_vulnerability_reporting"`
+	CodeScanningDefaultSetup     string `json:"code_scanning_default_setup"`
+	Enforcement                  string `json:"enforcement"`
+}
+
 type orgSecurityConfiguration struct {
 	Name string `json:"name"`
 	// TargetType is "organization" for a configuration this org owns,
@@ -159,11 +192,10 @@ type orgSecurityConfiguration struct {
 // the command runs (canonically the org's .github repository). It returns
 // the findings and the changes a fix run would apply.
 //
-// Deliberate v1 scopes, named: the code-security configuration and the
-// community-health repository report advisories rather than auto-fixes
-// (creating configurations and repositories is a human act), and org rulesets
-// are absent entirely — their migration from the per-repo rulesets is phase 4
-// of the design.
+// Deliberate v1 scopes, named: the community-health repository reports
+// advisories rather than auto-fixes (creating a repository is a human act),
+// and org rulesets are absent entirely — their migration from the per-repo
+// rulesets is phase 4 of the design.
 func AuditOrg(ctx context.Context, org string, overrides map[string]string) ([]Finding, []Change) {
 	aud := &auditor{
 		ctx:           ctx,
@@ -717,11 +749,13 @@ func (a *auditor) auditOrgSelfHostedRunners() {
 	}
 }
 
-// auditOrgSecurityConfiguration is O3, advisory in v1 (a named deviation
-// from the design's fixable ✓): GitHub is closing the legacy per-org
-// security fields down in favor of code security configurations, and
-// creating a canonical configuration is a payload-heavy human decision —
-// v1 verifies one is set as the default for new repositories.
+// auditOrgSecurityConfiguration is O3: a code security configuration is the
+// default for new repositories. GitHub is closing the legacy per-org security
+// fields down in favor of configurations, so this is where a repository
+// created tomorrow gets its settings from. An organization with no default
+// fails, and the fix creates the canonical configuration and sets it: its
+// fields were a human's to decide once, and are orgSecurityConfigurationRequest's.
+// An organization that has a default of its own, whatever its name, passes.
 func (a *auditor) auditOrgSecurityConfiguration() {
 	var defaults []orgSecurityDefault
 
@@ -733,11 +767,16 @@ func (a *auditor) auditOrgSecurityConfiguration() {
 	case len(defaults) == 0:
 		a.flag(
 			checkOrgSecurityConfig,
-			StatusAdvisory,
+			StatusFail,
 			"(none)",
 			"one canonical configuration, default for new repositories",
-			"no default code security configuration — new repositories are born unconfigured; create one and set it as default",
-			nil,
+			"no default code security configuration — new repositories are born unconfigured",
+			&Change{
+				Check: checkOrgSecurityConfig,
+				Summary: "code security configuration " + securityConfigName +
+					": set as the default for new repositories, created first unless the organization owns one",
+				apply: setDefaultSecurityConfiguration,
+			},
 		)
 	default:
 		var described []string
@@ -748,6 +787,48 @@ func (a *auditor) auditOrgSecurityConfiguration() {
 		a.flag(checkOrgSecurityConfig, StatusOK, "", "",
 			"default code security configuration: "+strings.Join(described, listSeparator), nil)
 	}
+}
+
+// setDefaultSecurityConfiguration makes the canonical configuration the
+// default for new repositories, creating it first when the organization does
+// not own one of that name: a run that created it and failed on the second
+// request leaves one behind, which the next run sets and does not duplicate.
+func setDefaultSecurityConfiguration(ctx context.Context, org client) error {
+	var configurations []orgSecurityConfiguration
+
+	outcome := org.getJSONAllPages(ctx, securityConfigsPath+"?per_page=100", &configurations)
+	if outcome.err != nil || outcome.notFound {
+		return orNotFound(outcome)
+	}
+
+	var canonical orgSecurityConfiguration
+
+	for _, configuration := range configurations {
+		if configuration.Name == securityConfigName && configuration.TargetType == securityConfigOrgTarget {
+			canonical = configuration
+		}
+	}
+
+	if canonical.ID == 0 {
+		if err := org.createJSON(ctx, securityConfigsPath, orgSecurityConfigurationRequest{
+			Name:                         securityConfigName,
+			Description:                  securityConfigDescription,
+			AdvancedSecurity:             enabledValue,
+			DependencyGraph:              enabledValue,
+			DependabotAlerts:             enabledValue,
+			DependabotSecurityUpdates:    disabledValue,
+			SecretScanning:               enabledValue,
+			SecretScanningPushProtection: enabledValue,
+			PrivateVulnerabilityReports:  enabledValue,
+			CodeScanningDefaultSetup:     securityConfigNotSet,
+			Enforcement:                  securityConfigEnforced,
+		}, &canonical); err != nil {
+			return err
+		}
+	}
+
+	return org.writeJSON(ctx, methodPut, securityConfigsPath+"/"+strconv.Itoa(canonical.ID)+"/defaults",
+		map[string]any{"default_for_new_repos": securityConfigDefaultFor})
 }
 
 // auditOrgDependabotSecurityUpdates is the organization half of R1's "one
