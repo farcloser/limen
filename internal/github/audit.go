@@ -310,6 +310,27 @@ func (a *auditor) unverifiable(err error, checks ...string) {
 	}
 }
 
+// unreadableByThisToken records a check whose endpoint GitHub serves to
+// another kind of token than the audit's, whatever that token is granted:
+// nothing the audited organization sets makes it answer. Such a check is
+// unverifiable, and it is the one kind of unverifiable a declaration covers.
+// A check a better-scoped token would answer is never declared away, and
+// neither is a declaration limen goes on checking (the owner roster) or an
+// opt-in: those go through unverifiable.
+func (a *auditor) unreadableByThisToken(err error, check string) {
+	if !a.exempted(check) {
+		a.unverifiable(err, check)
+
+		return
+	}
+
+	a.findings = append(a.findings, Finding{
+		Check:   check,
+		Status:  StatusOK,
+		Message: "exempted by " + OverridePath + ": " + a.overrides[check],
+	})
+}
+
 // patchSettings describes one field of the consolidated PATCH against the
 // audited target object (the repository or the organization) and returns the
 // change entry carrying it. The fields ride ON the change and are staged into
