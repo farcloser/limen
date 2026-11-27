@@ -15,6 +15,16 @@ import (
 	"github.com/farcloser/limen/internal/guard"
 )
 
+const (
+	// answeredWithin is well under the grace a group asked to quit is given
+	// (a second), and well over what a few processes take to print a few
+	// stacks and exit.
+	answeredWithin = 600 * time.Millisecond
+	// parentGone is the time given a parent to answer a request to quit and
+	// exit, before the test goes on.
+	parentGone = 150 * time.Millisecond
+)
+
 // What the guard does with a signal sent to it, read from outside: the guard
 // is a process of its own here, since a test cannot stop or quit the process
 // it runs in.
@@ -30,7 +40,7 @@ type guardProcess struct {
 
 // startGuard starts the guard as a process a test can signal, and returns
 // once its command has announced its process identifier, with it.
-func startGuard(t *testing.T, part string) (*guardProcess, int) {
+func startGuard(t *testing.T, part string, env ...string) (*guardProcess, int) {
 	t.Helper()
 
 	if !guard.Supported() {
@@ -46,7 +56,13 @@ func startGuard(t *testing.T, part string) (*guardProcess, int) {
 
 	cmd := exec.Command(os.Args[0])
 
-	cmd.Env = append(os.Environ(), helperEnv+"="+guardOf+part)
+	// A part that names its guard is taken as it is; any other is guarded
+	// by the plain one.
+	if !strings.HasPrefix(part, pipedGuardOf) {
+		part = guardOf + part
+	}
+
+	cmd.Env = append(append(os.Environ(), helperEnv+"="+part), env...)
 	cmd.Stdout = output
 	cmd.Stderr = output
 
@@ -140,22 +156,139 @@ func TestARequestToQuitGoesToTheCommand(t *testing.T) {
 	}
 }
 
-// The request goes to every process of the group, not to its leader alone:
-// each says where it was.
+// The request goes to every process of the group, not to its leader alone,
+// and each is given the time to say where it was: the leader's end does not
+// cut the others short. The child here has hundreds of goroutines to print
+// and its parent three; the parent is gone long before the child has done.
+//
+// Twice, for the two ways a guard learns that its command has ended: at
+// once, when the command writes to files, and when the last holder of its
+// pipe has gone, when it writes to the guard.
 func TestARequestToQuitGoesToTheWholeGroup(t *testing.T) {
 	t.Parallel()
 
-	started, pid := startGuard(t, "parent of an announced linger")
+	for name, part := range both("parent of a crowded linger") {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			childStacks := filepath.Join(t.TempDir(), "stacks")
+			started, pid := startGuard(t, part, stacksEnv+"="+childStacks)
+
+			if err := started.cmd.Process.Signal(syscall.SIGQUIT); err != nil {
+				t.Fatal(err)
+			}
+
+			started.wait(t)
+			waitGone(t, pid)
+
+			if written := started.read(t); strings.Count(written, "SIGQUIT: quit") != 1 {
+				t.Errorf("want the parent's stacks, once:\n%.2000s", written)
+			}
+
+			printed, err := os.ReadFile(childStacks)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if strings.Count(string(printed), "SIGQUIT: quit") != 1 {
+				t.Fatalf("the request did not reach the child:\n%.2000s", printed)
+			}
+
+			// Under the race detector a traceback can fail part way (underRace).
+			whole := strings.Count(string(printed), "guard_test.parked(")
+			if !underRace && whole != parkedGoroutines {
+				t.Errorf("the child printed %d of its %d goroutines before it was ended", whole, parkedGoroutines)
+			}
+		})
+	}
+}
+
+// both is the two ways a guard's command writes, as parts' prefixes: to
+// files, or to the guard through a pipe.
+func both(part string) map[string]string {
+	return map[string]string{"writing to files": part, "writing to a pipe": pipedGuardOf + part}
+}
+
+// A group whose leader answered the request and went, and in which a process
+// did not, is killed when its grace is over, and the guard ends then: it
+// does not stay behind a process nobody can reach for as long as it lives.
+func TestAGroupAskedToQuitIsNotWaitedForBeyondItsGrace(t *testing.T) {
+	t.Parallel()
+
+	for name, part := range both("parent of a deaf linger") {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			started, pid := startGuard(t, part)
+
+			if err := started.cmd.Process.Signal(syscall.SIGQUIT); err != nil {
+				t.Fatal(err)
+			}
+
+			// The deaf process would stay half a minute.
+			started.wait(t)
+			waitGone(t, pid)
+		})
+	}
+}
+
+// A group that answers the request is not kept waiting for the rest of its
+// grace: the guard ends when the group is empty.
+func TestAGroupThatAnswersARequestToQuitEndsTheGuardAtOnce(t *testing.T) {
+	t.Parallel()
+
+	if underRace {
+		t.Skip("a process built with the race detector does not always answer the request (underRace)")
+	}
+
+	for name, part := range both("parent of an announced linger") {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			started, pid := startGuard(t, part)
+			asked := time.Now()
+
+			if err := started.cmd.Process.Signal(syscall.SIGQUIT); err != nil {
+				t.Fatal(err)
+			}
+
+			started.wait(t)
+			waitGone(t, pid)
+
+			// Two processes with a handful of goroutines each print their
+			// stacks in milliseconds; a guard that waited out the grace
+			// would take its whole second.
+			if took := time.Since(asked); took > answeredWithin {
+				t.Errorf("the guard ended %s after the request, with a group that had answered it", took)
+			}
+		})
+	}
+}
+
+// A guard waiting out a group's grace still answers a signal that ends it.
+func TestAGuardWaitingOutAGraceStillEndsOnASignal(t *testing.T) {
+	t.Parallel()
+
+	started, pid := startGuard(t, "parent of a deaf linger")
+	asked := time.Now()
 
 	if err := started.cmd.Process.Signal(syscall.SIGQUIT); err != nil {
+		t.Fatal(err)
+	}
+
+	// Time for the parent to print its stacks and go, which leaves the guard
+	// waiting for the deaf child.
+	time.Sleep(parentGone)
+
+	if err := started.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
 
 	started.wait(t)
 	waitGone(t, pid)
 
-	if written := started.read(t); strings.Count(written, "SIGQUIT: quit") != 2 {
-		t.Errorf("want two sets of stacks, the parent's and its child's:\n%s", written)
+	if took := time.Since(asked); took > answeredWithin {
+		t.Errorf("the guard ended %s after the request: it sat out the grace instead of ending on the signal", took)
 	}
 }
 

@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -21,6 +23,10 @@ import (
 // The guarded commands are this test binary itself, started with helperEnv
 // set: TestMain then plays the named part instead of running the suite.
 const helperEnv = "LIMEN_GUARD_HELPER"
+
+// stacksEnv names the file a helper's child prints its stacks to, where a
+// part gives its child one.
+const stacksEnv = "LIMEN_GUARD_STACKS"
 
 const (
 	mebibyte = 1 << 20
@@ -44,8 +50,14 @@ const (
 	countEvery = 10 * time.Millisecond
 	// crowd is more processes than the guard's first listing of a group holds.
 	crowd = 80
-	// guardOf starts the name of a part that is the guard itself.
-	guardOf = "guard of "
+	// parkedGoroutines is how many goroutines a crowded process parks, and
+	// settle the time it gives them to block.
+	parkedGoroutines = 300
+	settle           = 100 * time.Millisecond
+	// guardOf starts the name of a part that is the guard itself, and
+	// pipedGuardOf that of one whose command writes to it through a pipe.
+	guardOf      = "guard of "
+	pipedGuardOf = "piped guard of "
 )
 
 func TestMain(m *testing.M) {
@@ -98,9 +110,48 @@ func play(part string) int {
 		say(os.Getpid())
 		time.Sleep(lingerFor)
 	case "parent of an announced linger":
-		// Two processes in the group: the parent is silent until its child
-		// has announced itself, then waits for it.
+		// A parent and a child that both answer a request to quit at once.
 		_ = helper("announced linger").Run()
+	case "parent of a deaf linger":
+		// A parent that answers a request to quit, and a child that does not.
+		_ = helper("deaf announced linger").Run()
+	case "parent of a crowded linger":
+		// Two processes in the group: the parent is silent until its child
+		// has announced itself, then waits for it. The child's stacks go to
+		// a file of their own: written beside the parent's, the two would
+		// land inside each other's lines.
+		stacks, err := os.Create(os.Getenv(stacksEnv))
+		if err != nil {
+			say(err)
+
+			return 1
+		}
+
+		child := helper("crowded linger")
+		child.Stderr = stacks
+
+		_ = child.Run()
+	case "crowded linger":
+		// A process with a great many goroutines, whose stacks take longer
+		// to print than its parent's: asked to quit with its parent, it is
+		// still printing when its parent has gone.
+		block := make(chan struct{})
+
+		var entered sync.WaitGroup
+
+		for range parkedGoroutines {
+			entered.Add(1)
+
+			go parked(&entered, block)
+		}
+
+		// Announced once every goroutine is inside parked and has had the
+		// time to block there: one still running on another thread when the
+		// request comes has no stack to print.
+		entered.Wait()
+		time.Sleep(settle)
+		say(os.Getpid())
+		time.Sleep(lingerFor)
 	case "counter":
 		// One line every few milliseconds, for as long as nothing stops it.
 		say(os.Getpid())
@@ -124,7 +175,18 @@ func play(part string) int {
 	default:
 		// "guard of <part>": this binary as the guard itself, a process a
 		// test can signal, with another part as its command.
+		// "piped guard of <part>": the same, the command's output reaching
+		// the guard through a pipe, as it does when the guard's caller gives
+		// it anything but a file. The guard then waits for the command until
+		// the last process holding the pipe has gone.
+		var stdout, stderr io.Writer = os.Stdout, os.Stderr
+
 		inner, isGuard := strings.CutPrefix(part, guardOf)
+		if piped, isPiped := strings.CutPrefix(part, pipedGuardOf); isPiped {
+			inner, isGuard = piped, true
+			stdout, stderr = notAFile{os.Stdout}, notAFile{os.Stderr}
+		}
+
 		if !isGuard {
 			say("no such part:", part)
 
@@ -133,8 +195,8 @@ func play(part string) int {
 
 		result, err := guard.Run(context.Background(), guard.Options{
 			Limit:  limit,
-			Stdout: os.Stdout,
-			Stderr: os.Stderr,
+			Stdout: stdout,
+			Stderr: stderr,
 			Report: os.Stderr,
 		}, "env", helperEnv+"="+inner, os.Args[0])
 		if err != nil {
@@ -145,6 +207,19 @@ func play(part string) int {
 	}
 
 	return 0
+}
+
+// notAFile hides a file from os/exec, which hands a command a file as it is
+// and anything else through a pipe.
+type notAFile struct{ io.Writer }
+
+// parked is where the goroutines of a crowded process wait: a name to count
+// in its stacks.
+//
+//go:noinline
+func parked(entered *sync.WaitGroup, block <-chan struct{}) {
+	entered.Done()
+	<-block
 }
 
 // hog takes memory in steps, touching every page, and holds it a while.

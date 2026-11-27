@@ -218,6 +218,12 @@ type watcher struct {
 // watch reads the group on every tick until the command ends, and returns how
 // many processes it ended. It waits for the command in every case, so the
 // caller may read its state.
+//
+// A group that was asked to quit is watched on after its command has ended,
+// until it is empty or its grace is over: the command is often the first to
+// have said where it was, and the processes it started are still saying it.
+// The guard goes on reading signals, the context and the group meanwhile. A
+// group that was not asked to quit is not waited for.
 func watch(
 	ctx context.Context, opts Options, watched processGroup, ended <-chan struct{}, signals <-chan os.Signal,
 ) (int, error) {
@@ -226,53 +232,83 @@ func watch(
 
 	state := &watcher{opts: opts, watched: watched, asked: map[int]time.Time{}}
 
+	// commandEnded is ended until it has been received from; draining is
+	// true from then on.
+	commandEnded, draining := ended, false
+
 	for {
-		var err error
+		var (
+			err     error
+			settled bool
+		)
 
 		select {
-		case <-ended:
-			return state.killed, nil
+		case <-commandEnded:
+			if state.quitAt.IsZero() {
+				return state.killed, nil
+			}
+
+			commandEnded, draining = nil, true
 		case <-ctx.Done():
 			err = fmt.Errorf("guard: %w", ctx.Err())
 		case received := <-signals:
-			switch watched.relay(received) {
-			case relayedEnd:
-				err = fmt.Errorf("guard: %w: %s", ErrSignal, received)
-			case relayedQuit:
-				state.quitAt = time.Now()
-			case relayedOn:
-			}
+			err = state.signalled(received)
 		case now := <-ticker.C:
-			err = state.sweep(now)
+			settled, err = state.sweep(now)
 		}
 
 		if err != nil {
 			watched.killAll()
-			<-ended
+
+			if !draining {
+				<-ended
+			}
 
 			return state.killed, err
+		}
+
+		if draining && settled {
+			return state.killed, nil
 		}
 	}
 }
 
+// signalled passes a signal the guard received on to the group, and returns
+// an error for one that ends the guard.
+func (state *watcher) signalled(received os.Signal) error {
+	switch state.watched.relay(received) {
+	case relayedEnd:
+		return fmt.Errorf("guard: %w: %s", ErrSignal, received)
+	case relayedQuit:
+		state.quitAt = time.Now()
+	case relayedOn:
+	}
+
+	return nil
+}
+
 // sweep reads every process of the group once and ends those past the limit.
+// It reports the group settled when nothing of it is left to watch: it is
+// empty, or was killed whole here.
 //
 // A group whose leader is gone is killed whole. The command has ended then,
 // and what it left running holds its output open: the wait for the command
-// would last as long as the longest of them.
-func (state *watcher) sweep(now time.Time) error {
+// would last as long as the longest of them. Not so a group that was asked
+// to quit: it keeps its grace whole, its leader gone or not, and is killed
+// when the grace is over.
+func (state *watcher) sweep(now time.Time) (bool, error) {
 	pids, err := state.watched.members()
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrBlind, err)
+		return false, fmt.Errorf("%w: %w", ErrBlind, err)
 	}
 
-	// A group asked to quit that is still there a grace later is killed too.
-	quitOverdue := !state.quitAt.IsZero() && now.Sub(state.quitAt) >= grace
+	quitting := !state.quitAt.IsZero()
+	leaderGone := !slices.Contains(pids, state.watched.leader())
 
-	if quitOverdue || !slices.Contains(pids, state.watched.leader()) {
+	if (leaderGone && !quitting) || (quitting && now.Sub(state.quitAt) >= grace) {
 		state.watched.killAll()
 
-		return nil
+		return true, nil
 	}
 
 	for _, pid := range pids {
@@ -282,7 +318,7 @@ func (state *watcher) sweep(now time.Time) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("%w: process %d: %w", ErrBlind, pid, err)
+			return false, fmt.Errorf("%w: process %d: %w", ErrBlind, pid, err)
 		}
 
 		if held > state.opts.Limit {
@@ -290,7 +326,7 @@ func (state *watcher) sweep(now time.Time) error {
 		}
 	}
 
-	return nil
+	return len(pids) == 0, nil
 }
 
 // end asks a process over the limit to quit, and kills it when it was asked
