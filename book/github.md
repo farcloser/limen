@@ -525,7 +525,9 @@ rows and leave the organization's governed fields unread.
 `limen github check -org <name>` (and `fix -org <name>`) audits the organization's own
 settings, the layer that decides what every *new* repository is born with. The same floor
 semantics, verdict classes and exceptions file apply (org runs read the exceptions from the
-working directory, canonically the org's `.github` repository). The catalog:
+working directory, canonically the org's `.github` repository). The order in which a new
+organization meets each item is in
+[creating and onboarding an organization](./organizations.md). The catalog:
 
 - **Membership floor**: members' default repository permission capped at read, no
   member-created public repositories or public Pages sites, no forking of private
